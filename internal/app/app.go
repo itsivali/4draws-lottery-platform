@@ -20,6 +20,7 @@ import (
 	"github.com/riverqueue/river/riverdriver/riverpgxv5"
 	"github.com/valkey-io/valkey-go"
 
+	"github.com/itsivali/lottery-platform/internal/alerts"
 	"github.com/itsivali/lottery-platform/internal/api"
 	"github.com/itsivali/lottery-platform/internal/audit"
 	"github.com/itsivali/lottery-platform/internal/draws"
@@ -194,9 +195,11 @@ func (a *App) StartWorkers(ctx context.Context) error {
 	game.AddWorkers(workers, a.game)
 	draws.AddWorkers(workers, a.draws)
 	payouts.AddWorkers(workers, a.payouts)
+	alerts.AddWorkers(workers, a.alerts())
 	wc, err := river.NewClient(riverpgxv5.New(a.pool), &river.Config{
-		Schema: db.RiverSchema, Workers: workers, PeriodicJobs: slices.Concat(payments.PeriodicJobs(), game.PeriodicJobs(), draws.PeriodicJobs(), payouts.PeriodicJobs()),
-		Queues: map[string]river.QueueConfig{river.QueueDefault: {MaxWorkers: 10}},
+		Schema: db.RiverSchema, Workers: workers,
+		PeriodicJobs: slices.Concat(payments.PeriodicJobs(), game.PeriodicJobs(), draws.PeriodicJobs(), payouts.PeriodicJobs(), alerts.PeriodicJobs()),
+		Queues:       map[string]river.QueueConfig{river.QueueDefault: {MaxWorkers: 10}},
 	})
 	if err != nil {
 		return err
@@ -206,6 +209,28 @@ func (a *App) StartWorkers(ctx context.Context) error {
 	}
 	a.workers = wc
 	return nil
+}
+
+// ReconciliationStaleAfter is how long after its last run a daily reconciliation counts as not running.
+const ReconciliationStaleAfter = 26 * time.Hour
+
+// alerts builds the alert watch: late draws, failed or missing reconciliations (a failed one freezes payouts), and
+// withheld tax nearing its remittance deadline, sent to ALERT_WEBHOOK_URL (else logged) with ALERT_HEARTBEAT_URL pinged.
+func (a *App) alerts() *alerts.Service {
+	hc := &http.Client{Timeout: 10 * time.Second}
+	clk := clock.Postgres{}
+	var n alerts.Notifier
+	if u := a.cfg.Alerts.WebhookURL; u != "" {
+		n = alerts.Webhook{URL: u, Client: hc}
+	}
+	cfg := alerts.Config{}
+	if u := a.cfg.Alerts.HeartbeatURL; u != "" {
+		cfg.Heartbeat = alerts.Heartbeat(u, hc)
+	}
+	return alerts.NewService(a.pool, clk, n, audit.NewWriter(), cfg,
+		alerts.DrawsOverdue(a.draws.Overdue),
+		alerts.ReconciliationCheck(a.pool, clk, ReconciliationStaleAfter),
+		alerts.RemittanceCheck(a.pool, clk, a.cfg.Alerts.KRARemitWarnAfter, a.cfg.Alerts.KRARemitDueAfter))
 }
 
 // StopStreams ends every open payment stream and refuses new ones. The server calls it when shutdown begins, since

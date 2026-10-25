@@ -69,13 +69,13 @@ confirmed paid, the draw becomes `paid`.
 
 ## Tax withheld (KRA)
 
-Each paid payout with tax withheld adds one `withholding_tax` event to `audit.kra_outbox` (payout, payee id, gross,
-tax, net, rate, receipt, time). Export the events not yet exported as JSON lines; they are marked exported only when
-the whole export was written:
+Each paid payout with tax withheld adds one `withholding_tax` event to the KRA feed. Events are remitted in numbered
+batches, prepared and remitted by two different people: see [tax](tax.md).
 
-```sh
-go run ./cmd/lotteryctl tax export > withholding-$(date +%F).jsonl
-```
+## Payout freeze
+
+While a failed reconciliation's alert is open, no payout is sent. They wait in `pending` and go out once a person
+acknowledges the alert: see [alerts](alerts.md).
 
 ## Reconciliation
 

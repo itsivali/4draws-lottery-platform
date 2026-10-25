@@ -39,6 +39,22 @@ func (q *Queries) ApprovePayout(ctx context.Context, arg ApprovePayoutParams) er
 	return err
 }
 
+const assignKRABatch = `-- name: AssignKRABatch :exec
+UPDATE audit.kra_outbox SET batch_id = $1, exported_at = coalesce(exported_at, $2::timestamptz)
+WHERE id = ANY($3::bigint[])
+`
+
+type AssignKRABatchParams struct {
+	BatchID *string
+	At      time.Time
+	Ids     []int64
+}
+
+func (q *Queries) AssignKRABatch(ctx context.Context, arg AssignKRABatchParams) error {
+	_, err := q.db.Exec(ctx, assignKRABatch, arg.BatchID, arg.At, arg.Ids)
+	return err
+}
+
 const callbacks = `-- name: Callbacks :many
 SELECT kind, originator, raw, received_at FROM payouts.b2c_callbacks WHERE payout_id = $1 ORDER BY received_at, id
 `
@@ -165,6 +181,42 @@ func (q *Queries) InsertCallback(ctx context.Context, arg InsertCallbackParams) 
 	return err
 }
 
+const insertKRABatch = `-- name: InsertKRABatch :one
+INSERT INTO audit.kra_batches (batch_no, events, first_event_at, last_event_at, gross_kes, tax_kes, file_sha256, prepared_by, prepared_at)
+VALUES ($1, $2, $3, $4, $5, $6,
+        $7, $8, $9)
+RETURNING id
+`
+
+type InsertKRABatchParams struct {
+	BatchNo      int64
+	Events       int32
+	FirstEventAt time.Time
+	LastEventAt  time.Time
+	GrossKes     int64
+	TaxKes       int64
+	FileSha256   string
+	PreparedBy   string
+	At           time.Time
+}
+
+func (q *Queries) InsertKRABatch(ctx context.Context, arg InsertKRABatchParams) (string, error) {
+	row := q.db.QueryRow(ctx, insertKRABatch,
+		arg.BatchNo,
+		arg.Events,
+		arg.FirstEventAt,
+		arg.LastEventAt,
+		arg.GrossKes,
+		arg.TaxKes,
+		arg.FileSha256,
+		arg.PreparedBy,
+		arg.At,
+	)
+	var id string
+	err := row.Scan(&id)
+	return id, err
+}
+
 const insertKRAEvent = `-- name: InsertKRAEvent :exec
 INSERT INTO audit.kra_outbox (event_type, payload, created_at) VALUES ($1, $2, $3)
 ON CONFLICT DO NOTHING
@@ -284,6 +336,164 @@ func (q *Queries) JournalAmountMismatch(ctx context.Context) ([]string, error) {
 	return items, nil
 }
 
+const kRABatchByNo = `-- name: KRABatchByNo :one
+SELECT id, batch_no, events, first_event_at, last_event_at, gross_kes, tax_kes, file_sha256, prepared_by, prepared_at, prn, remitted_kes, remitted_by, remitted_at FROM audit.kra_batches WHERE batch_no = $1
+`
+
+func (q *Queries) KRABatchByNo(ctx context.Context, batchNo int64) (AuditKraBatch, error) {
+	row := q.db.QueryRow(ctx, kRABatchByNo, batchNo)
+	var i AuditKraBatch
+	err := row.Scan(
+		&i.ID,
+		&i.BatchNo,
+		&i.Events,
+		&i.FirstEventAt,
+		&i.LastEventAt,
+		&i.GrossKes,
+		&i.TaxKes,
+		&i.FileSha256,
+		&i.PreparedBy,
+		&i.PreparedAt,
+		&i.Prn,
+		&i.RemittedKes,
+		&i.RemittedBy,
+		&i.RemittedAt,
+	)
+	return i, err
+}
+
+const kRABatchEvents = `-- name: KRABatchEvents :many
+SELECT id, event_type, payload, created_at FROM audit.kra_outbox WHERE batch_id = $1 ORDER BY id
+`
+
+type KRABatchEventsRow struct {
+	ID        int64
+	EventType string
+	Payload   []byte
+	CreatedAt time.Time
+}
+
+func (q *Queries) KRABatchEvents(ctx context.Context, batchID *string) ([]KRABatchEventsRow, error) {
+	rows, err := q.db.Query(ctx, kRABatchEvents, batchID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []KRABatchEventsRow
+	for rows.Next() {
+		var i KRABatchEventsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.EventType,
+			&i.Payload,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const kRABatchTotalsMismatch = `-- name: KRABatchTotalsMismatch :many
+SELECT b.batch_no::text FROM audit.kra_batches b
+CROSS JOIN LATERAL (SELECT count(*) AS n, coalesce(sum((o.payload->>'tax_kes')::bigint), 0)::bigint AS tax,
+                           coalesce(sum((o.payload->>'gross_kes')::bigint), 0)::bigint AS gross
+                    FROM audit.kra_outbox o WHERE o.batch_id = b.id) e
+WHERE e.n <> b.events OR e.tax <> b.tax_kes OR e.gross <> b.gross_kes
+`
+
+// a batch whose control totals are not those of its events
+func (q *Queries) KRABatchTotalsMismatch(ctx context.Context) ([]string, error) {
+	rows, err := q.db.Query(ctx, kRABatchTotalsMismatch)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var b_batch_no string
+		if err := rows.Scan(&b_batch_no); err != nil {
+			return nil, err
+		}
+		items = append(items, b_batch_no)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const kRABatches = `-- name: KRABatches :many
+SELECT id, batch_no, events, first_event_at, last_event_at, gross_kes, tax_kes, file_sha256, prepared_by, prepared_at, prn, remitted_kes, remitted_by, remitted_at FROM audit.kra_batches ORDER BY batch_no DESC LIMIT $1
+`
+
+func (q *Queries) KRABatches(ctx context.Context, maxRows int32) ([]AuditKraBatch, error) {
+	rows, err := q.db.Query(ctx, kRABatches, maxRows)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AuditKraBatch
+	for rows.Next() {
+		var i AuditKraBatch
+		if err := rows.Scan(
+			&i.ID,
+			&i.BatchNo,
+			&i.Events,
+			&i.FirstEventAt,
+			&i.LastEventAt,
+			&i.GrossKes,
+			&i.TaxKes,
+			&i.FileSha256,
+			&i.PreparedBy,
+			&i.PreparedAt,
+			&i.Prn,
+			&i.RemittedKes,
+			&i.RemittedBy,
+			&i.RemittedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const kRAEventMismatch = `-- name: KRAEventMismatch :many
+SELECT o.id::text FROM audit.kra_outbox o
+LEFT JOIN payouts.payouts p ON p.id::text = o.payload->>'payout_id'
+WHERE o.event_type = 'withholding_tax'
+  AND (p.id IS NULL OR p.status <> 'succeeded' OR (o.payload->>'tax_kes')::bigint <> p.tax_kes OR (o.payload->>'gross_kes')::bigint <> p.gross_kes)
+`
+
+// a withholding event that is not its payout's: another tax or gross, or a payout that did not succeed
+func (q *Queries) KRAEventMismatch(ctx context.Context) ([]string, error) {
+	rows, err := q.db.Query(ctx, kRAEventMismatch)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var o_id string
+		if err := rows.Scan(&o_id); err != nil {
+			return nil, err
+		}
+		items = append(items, o_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const livePayoutTotals = `-- name: LivePayoutTotals :one
 SELECT coalesce(sum(net_kes), 0)::bigint AS net_kes, coalesce(sum(tax_kes), 0)::bigint AS tax_kes, count(*)::bigint AS payouts
 FROM payouts.payouts WHERE status <> 'failed'
@@ -299,6 +509,32 @@ func (q *Queries) LivePayoutTotals(ctx context.Context) (LivePayoutTotalsRow, er
 	row := q.db.QueryRow(ctx, livePayoutTotals)
 	var i LivePayoutTotalsRow
 	err := row.Scan(&i.NetKes, &i.TaxKes, &i.Payouts)
+	return i, err
+}
+
+const lockKRABatchByNo = `-- name: LockKRABatchByNo :one
+SELECT id, batch_no, events, first_event_at, last_event_at, gross_kes, tax_kes, file_sha256, prepared_by, prepared_at, prn, remitted_kes, remitted_by, remitted_at FROM audit.kra_batches WHERE batch_no = $1 FOR UPDATE
+`
+
+func (q *Queries) LockKRABatchByNo(ctx context.Context, batchNo int64) (AuditKraBatch, error) {
+	row := q.db.QueryRow(ctx, lockKRABatchByNo, batchNo)
+	var i AuditKraBatch
+	err := row.Scan(
+		&i.ID,
+		&i.BatchNo,
+		&i.Events,
+		&i.FirstEventAt,
+		&i.LastEventAt,
+		&i.GrossKes,
+		&i.TaxKes,
+		&i.FileSha256,
+		&i.PreparedBy,
+		&i.PreparedAt,
+		&i.Prn,
+		&i.RemittedKes,
+		&i.RemittedBy,
+		&i.RemittedAt,
+	)
 	return i, err
 }
 
@@ -339,20 +575,6 @@ func (q *Queries) LockPayout(ctx context.Context, id string) (PayoutsPayout, err
 		&i.DebtOffsetKes,
 	)
 	return i, err
-}
-
-const markKRAExported = `-- name: MarkKRAExported :exec
-UPDATE audit.kra_outbox SET exported_at = $1 WHERE id = ANY($2::bigint[])
-`
-
-type MarkKRAExportedParams struct {
-	At  *time.Time
-	Ids []int64
-}
-
-func (q *Queries) MarkKRAExported(ctx context.Context, arg MarkKRAExportedParams) error {
-	_, err := q.db.Exec(ctx, markKRAExported, arg.At, arg.Ids)
-	return err
 }
 
 const markSent = `-- name: MarkSent :exec
@@ -415,6 +637,29 @@ func (q *Queries) MissingKRAEvents(ctx context.Context) ([]string, error) {
 	return items, nil
 }
 
+const nextKRABatchNo = `-- name: NextKRABatchNo :one
+SELECT (coalesce(max(batch_no), 0) + 1)::bigint FROM audit.kra_batches
+`
+
+// called under the batch advisory lock, so numbers have no gaps
+func (q *Queries) NextKRABatchNo(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, nextKRABatchNo)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const pRNUsed = `-- name: PRNUsed :one
+SELECT EXISTS (SELECT 1 FROM audit.kra_batches WHERE prn = $1)::bool
+`
+
+func (q *Queries) PRNUsed(ctx context.Context, prn *string) (bool, error) {
+	row := q.db.QueryRow(ctx, pRNUsed, prn)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const payoutByKey = `-- name: PayoutByKey :one
 SELECT id FROM payouts.payouts WHERE user_id = $1 AND idempotency_key = $2
 `
@@ -451,6 +696,18 @@ func (q *Queries) PayoutByStatusOriginator(ctx context.Context, statusOriginator
 	var id string
 	err := row.Scan(&id)
 	return id, err
+}
+
+const payoutsFrozen = `-- name: PayoutsFrozen :one
+SELECT EXISTS (SELECT 1 FROM audit.alerts WHERE freezes = 'payouts' AND resolved_at IS NULL)::bool
+`
+
+// an open alert that freezes payouts (closed only by a person: lotteryctl alerts ack)
+func (q *Queries) PayoutsFrozen(ctx context.Context) (bool, error) {
+	row := q.db.QueryRow(ctx, payoutsFrozen)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
 }
 
 const payoutsInStatus = `-- name: PayoutsInStatus :many
@@ -529,42 +786,6 @@ func (q *Queries) PayoutsWithoutJournal(ctx context.Context) ([]string, error) {
 			return nil, err
 		}
 		items = append(items, id)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const pendingKRAEvents = `-- name: PendingKRAEvents :many
-SELECT id, event_type, payload, created_at FROM audit.kra_outbox WHERE exported_at IS NULL ORDER BY id LIMIT $1 FOR UPDATE
-`
-
-type PendingKRAEventsRow struct {
-	ID        int64
-	EventType string
-	Payload   []byte
-	CreatedAt time.Time
-}
-
-func (q *Queries) PendingKRAEvents(ctx context.Context, maxRows int32) ([]PendingKRAEventsRow, error) {
-	rows, err := q.db.Query(ctx, pendingKRAEvents, maxRows)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []PendingKRAEventsRow
-	for rows.Next() {
-		var i PendingKRAEventsRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.EventType,
-			&i.Payload,
-			&i.CreatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -740,6 +961,73 @@ func (q *Queries) ReceiptPaid(ctx context.Context, mpesaReceipt *string) (bool, 
 	return column_1, err
 }
 
+const recordKRARemittance = `-- name: RecordKRARemittance :exec
+UPDATE audit.kra_batches SET prn = $1, remitted_kes = $2, remitted_by = $3,
+  remitted_at = $4
+WHERE id = $5
+`
+
+type RecordKRARemittanceParams struct {
+	Prn         *string
+	RemittedKes *int64
+	RemittedBy  *string
+	At          *time.Time
+	ID          string
+}
+
+func (q *Queries) RecordKRARemittance(ctx context.Context, arg RecordKRARemittanceParams) error {
+	_, err := q.db.Exec(ctx, recordKRARemittance,
+		arg.Prn,
+		arg.RemittedKes,
+		arg.RemittedBy,
+		arg.At,
+		arg.ID,
+	)
+	return err
+}
+
+const remittanceJournalMismatch = `-- name: RemittanceJournalMismatch :many
+SELECT b.batch_no::text FROM audit.kra_batches b
+WHERE (SELECT count(*) FROM ledger.ledger_journals j WHERE j.kind = 'tax_remittance' AND j.reference_type = 'kra_batch' AND j.reference_id = b.id)
+      <> CASE WHEN b.prn IS NULL THEN 0 ELSE 1 END
+   OR (b.prn IS NOT NULL AND coalesce((SELECT sum(e.amount_kes) FROM ledger.ledger_journals j
+          JOIN ledger.ledger_entries e ON e.journal_id = j.id JOIN ledger.ledger_accounts a ON a.id = e.account_id
+          WHERE j.kind = 'tax_remittance' AND j.reference_type = 'kra_batch' AND j.reference_id = b.id
+            AND a.code = 'TAX_PAYABLE' AND e.direction = 'D'), 0) <> b.remitted_kes)
+`
+
+// a remitted batch without exactly one remittance journal of its tax, or a remittance journal for an unremitted batch
+func (q *Queries) RemittanceJournalMismatch(ctx context.Context) ([]string, error) {
+	rows, err := q.db.Query(ctx, remittanceJournalMismatch)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var b_batch_no string
+		if err := rows.Scan(&b_batch_no); err != nil {
+			return nil, err
+		}
+		items = append(items, b_batch_no)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const remittedTax = `-- name: RemittedTax :one
+SELECT coalesce(sum(remitted_kes), 0)::bigint FROM audit.kra_batches
+`
+
+func (q *Queries) RemittedTax(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, remittedTax)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const resultPayouts = `-- name: ResultPayouts :one
 SELECT count(*)::int AS attempts, count(*) FILTER (WHERE status <> 'failed')::int AS live
 FROM payouts.payouts WHERE draw_result_id = $1
@@ -848,6 +1136,44 @@ func (q *Queries) TaxRateText(ctx context.Context, id string) (string, error) {
 	var column_1 string
 	err := row.Scan(&column_1)
 	return column_1, err
+}
+
+const unbatchedKRAEvents = `-- name: UnbatchedKRAEvents :many
+SELECT id, event_type, payload, created_at FROM audit.kra_outbox WHERE batch_id IS NULL AND event_type = 'withholding_tax'
+ORDER BY id LIMIT $1 FOR UPDATE
+`
+
+type UnbatchedKRAEventsRow struct {
+	ID        int64
+	EventType string
+	Payload   []byte
+	CreatedAt time.Time
+}
+
+// withholding events in no batch yet (events exported before batches existed are batched too: they were never remitted)
+func (q *Queries) UnbatchedKRAEvents(ctx context.Context, maxRows int32) ([]UnbatchedKRAEventsRow, error) {
+	rows, err := q.db.Query(ctx, unbatchedKRAEvents, maxRows)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []UnbatchedKRAEventsRow
+	for rows.Next() {
+		var i UnbatchedKRAEventsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.EventType,
+			&i.Payload,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const withdrawalsSince = `-- name: WithdrawalsSince :one

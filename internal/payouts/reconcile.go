@@ -13,7 +13,7 @@ import (
 )
 
 // Report is one payout reconciliation run. Mismatches break an invariant between payouts, their journals, the B2C float,
-// the tax withheld and the KRA feed; they must never happen (a bug or tampering: investigate).
+// the tax withheld, the KRA feed and its remittance batches; they must never happen (a bug or tampering: investigate).
 type Report struct {
 	RanAt      time.Time           `json:"ran_at"`
 	OK         bool                `json:"ok"`
@@ -41,6 +41,9 @@ func (s *Service) Reconcile(ctx context.Context) (Report, error) {
 			"journal_amount_mismatch":  q.JournalAmountMismatch,
 			"prize_amount_mismatch":    q.PrizeAmountMismatch,
 			"missing_kra_event":        q.MissingKRAEvents,
+			"kra_event_mismatch":       q.KRAEventMismatch,
+			"kra_batch_totals":         q.KRABatchTotalsMismatch,
+			"remittance_journal":       q.RemittanceJournalMismatch,
 		} {
 			ids, err := check(ctx)
 			if err != nil {
@@ -63,14 +66,19 @@ func (s *Service) Reconcile(ctx context.Context) (Report, error) {
 			return err
 		}
 		r.Totals["payouts_live"], r.Totals["net_kes"], r.Totals["tax_withheld_kes"] = live.Payouts, live.NetKes, live.TaxKes
-		r.Totals["b2c_float_credit_kes"], r.Totals["tax_payable_kes"] = float, tax
-		// every payout not failed moved its net out through the float and its tax to TAX_PAYABLE (payouts are the only
-		// postings to either account)
+		remitted, err := q.RemittedTax(ctx)
+		if err != nil {
+			return err
+		}
+		r.Totals["b2c_float_credit_kes"], r.Totals["tax_payable_kes"], r.Totals["tax_remitted_kes"] = float, tax, remitted
+		// every payout not failed moved its net out through the float and its tax to TAX_PAYABLE, and each remitted
+		// batch paid its tax out of TAX_PAYABLE (these are the only postings to either account)
 		if float != live.NetKes {
 			r.Mismatches["b2c_float"] = []string{"B2C_FLOAT " + strconv.FormatInt(float, 10) + " != net of live payouts " + strconv.FormatInt(live.NetKes, 10)}
 		}
-		if tax != live.TaxKes {
-			r.Mismatches["tax_payable"] = []string{"TAX_PAYABLE " + strconv.FormatInt(tax, 10) + " != tax of live payouts " + strconv.FormatInt(live.TaxKes, 10)}
+		if tax != live.TaxKes-remitted {
+			r.Mismatches["tax_payable"] = []string{"TAX_PAYABLE " + strconv.FormatInt(tax, 10) + " != tax of live payouts " +
+				strconv.FormatInt(live.TaxKes, 10) + " - remitted " + strconv.FormatInt(remitted, 10)}
 		}
 		r.OK = len(r.Mismatches) == 0
 		return nil

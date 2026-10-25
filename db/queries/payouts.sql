@@ -102,11 +102,76 @@ FROM payouts.payouts WHERE draw_result_id = $1;
 INSERT INTO audit.kra_outbox (event_type, payload, created_at) VALUES (sqlc.arg(event_type), sqlc.arg(payload), sqlc.arg(at))
 ON CONFLICT DO NOTHING;
 
--- name: PendingKRAEvents :many
-SELECT id, event_type, payload, created_at FROM audit.kra_outbox WHERE exported_at IS NULL ORDER BY id LIMIT sqlc.arg(max_rows) FOR UPDATE;
+-- name: UnbatchedKRAEvents :many
+-- withholding events in no batch yet (events exported before batches existed are batched too: they were never remitted)
+SELECT id, event_type, payload, created_at FROM audit.kra_outbox WHERE batch_id IS NULL AND event_type = 'withholding_tax'
+ORDER BY id LIMIT sqlc.arg(max_rows) FOR UPDATE;
 
--- name: MarkKRAExported :exec
-UPDATE audit.kra_outbox SET exported_at = sqlc.arg(at) WHERE id = ANY(sqlc.arg(ids)::bigint[]);
+-- name: NextKRABatchNo :one
+-- called under the batch advisory lock, so numbers have no gaps
+SELECT (coalesce(max(batch_no), 0) + 1)::bigint FROM audit.kra_batches;
+
+-- name: InsertKRABatch :one
+INSERT INTO audit.kra_batches (batch_no, events, first_event_at, last_event_at, gross_kes, tax_kes, file_sha256, prepared_by, prepared_at)
+VALUES (sqlc.arg(batch_no), sqlc.arg(events), sqlc.arg(first_event_at), sqlc.arg(last_event_at), sqlc.arg(gross_kes), sqlc.arg(tax_kes),
+        sqlc.arg(file_sha256), sqlc.arg(prepared_by), sqlc.arg(at))
+RETURNING id;
+
+-- name: AssignKRABatch :exec
+UPDATE audit.kra_outbox SET batch_id = sqlc.arg(batch_id), exported_at = coalesce(exported_at, sqlc.arg(at)::timestamptz)
+WHERE id = ANY(sqlc.arg(ids)::bigint[]);
+
+-- name: KRABatchByNo :one
+SELECT * FROM audit.kra_batches WHERE batch_no = $1;
+
+-- name: LockKRABatchByNo :one
+SELECT * FROM audit.kra_batches WHERE batch_no = $1 FOR UPDATE;
+
+-- name: KRABatchEvents :many
+SELECT id, event_type, payload, created_at FROM audit.kra_outbox WHERE batch_id = $1 ORDER BY id;
+
+-- name: KRABatches :many
+SELECT * FROM audit.kra_batches ORDER BY batch_no DESC LIMIT sqlc.arg(max_rows);
+
+-- name: PRNUsed :one
+SELECT EXISTS (SELECT 1 FROM audit.kra_batches WHERE prn = $1)::bool;
+
+-- name: RecordKRARemittance :exec
+UPDATE audit.kra_batches SET prn = sqlc.arg(prn), remitted_kes = sqlc.arg(remitted_kes), remitted_by = sqlc.arg(remitted_by),
+  remitted_at = sqlc.arg(at)
+WHERE id = sqlc.arg(id);
+
+-- name: RemittedTax :one
+SELECT coalesce(sum(remitted_kes), 0)::bigint FROM audit.kra_batches;
+
+-- name: KRABatchTotalsMismatch :many
+-- a batch whose control totals are not those of its events
+SELECT b.batch_no::text FROM audit.kra_batches b
+CROSS JOIN LATERAL (SELECT count(*) AS n, coalesce(sum((o.payload->>'tax_kes')::bigint), 0)::bigint AS tax,
+                           coalesce(sum((o.payload->>'gross_kes')::bigint), 0)::bigint AS gross
+                    FROM audit.kra_outbox o WHERE o.batch_id = b.id) e
+WHERE e.n <> b.events OR e.tax <> b.tax_kes OR e.gross <> b.gross_kes;
+
+-- name: RemittanceJournalMismatch :many
+-- a remitted batch without exactly one remittance journal of its tax, or a remittance journal for an unremitted batch
+SELECT b.batch_no::text FROM audit.kra_batches b
+WHERE (SELECT count(*) FROM ledger.ledger_journals j WHERE j.kind = 'tax_remittance' AND j.reference_type = 'kra_batch' AND j.reference_id = b.id)
+      <> CASE WHEN b.prn IS NULL THEN 0 ELSE 1 END
+   OR (b.prn IS NOT NULL AND coalesce((SELECT sum(e.amount_kes) FROM ledger.ledger_journals j
+          JOIN ledger.ledger_entries e ON e.journal_id = j.id JOIN ledger.ledger_accounts a ON a.id = e.account_id
+          WHERE j.kind = 'tax_remittance' AND j.reference_type = 'kra_batch' AND j.reference_id = b.id
+            AND a.code = 'TAX_PAYABLE' AND e.direction = 'D'), 0) <> b.remitted_kes);
+
+-- name: KRAEventMismatch :many
+-- a withholding event that is not its payout's: another tax or gross, or a payout that did not succeed
+SELECT o.id::text FROM audit.kra_outbox o
+LEFT JOIN payouts.payouts p ON p.id::text = o.payload->>'payout_id'
+WHERE o.event_type = 'withholding_tax'
+  AND (p.id IS NULL OR p.status <> 'succeeded' OR (o.payload->>'tax_kes')::bigint <> p.tax_kes OR (o.payload->>'gross_kes')::bigint <> p.gross_kes);
+
+-- name: PayoutsFrozen :one
+-- an open alert that freezes payouts (closed only by a person: lotteryctl alerts ack)
+SELECT EXISTS (SELECT 1 FROM audit.alerts WHERE freezes = 'payouts' AND resolved_at IS NULL)::bool;
 
 -- name: PayoutsWithoutJournal :many
 SELECT p.id FROM payouts.payouts p

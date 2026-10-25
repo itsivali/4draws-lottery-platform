@@ -27,6 +27,7 @@ const (
 	TaxPayable      = "TAX_PAYABLE"
 	Suspense        = "SUSPENSE"
 	PlayerDebt      = "PLAYER_DEBT"
+	OperatorBank    = "OPERATOR_BANK"
 )
 
 var prizePools = map[string]string{
@@ -36,7 +37,7 @@ var prizePools = map[string]string{
 
 var knownAccounts = map[string]bool{
 	WalletLiability: true, MpesaClearing: true, B2CFloat: true, StakesRevenue: true, ExciseExpense: true,
-	ExcisePayable: true, TaxPayable: true, Suspense: true, PlayerDebt: true, "REFUNDS": true,
+	ExcisePayable: true, TaxPayable: true, Suspense: true, PlayerDebt: true, OperatorBank: true, "REFUNDS": true,
 	"PRIZE_POOL_DAILY": true, "PRIZE_POOL_WEEKLY": true, "PRIZE_POOL_MONTHLY": true, "PRIZE_POOL_QUARTERLY": true,
 }
 
@@ -301,6 +302,14 @@ func prizeParts(drawType, user string, gross int64, tax TaxRule, offset int64) (
 		return "", 0, errors.New("ledger: a debt offset needs the player")
 	}
 	return pool, t, nil
+}
+
+// TaxRemittance records withheld tax paid to KRA from the operator's bank account, once per remittance batch.
+func TaxRemittance(batchID string, amount int64) (Posting, error) {
+	if err := positive(amount); err != nil {
+		return Posting{}, err
+	}
+	return build("tax_remittance", "kra_batch", batchID, "", nil, d(TaxPayable, amount, ""), c(OperatorBank, amount, ""))
 }
 
 // DebtRecovery takes back, from a later deposit, money a player owes after a reversal. It is keyed on the payment

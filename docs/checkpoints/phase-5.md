@@ -113,6 +113,8 @@ Prize payouts for approved draws (`PrizePayout`, a failure posting that returns 
   retry-prize`). The draws schedule marks an approved draw `paid` once every prize has a confirmed payout.
 - KRA feed: one `withholding_tax` event per paid payout with tax (unique index, migration `00024`); `ExportTax` /
   `lotteryctl tax export` writes them as JSON lines and marks them exported only when the write succeeded.
+  Superseded on 2026-10-25 by numbered remittance batches with control totals, a file hash and a two-person
+  remittance (migration `00026`, `docs/runbooks/tax.md`).
 - Reconciliation (`payouts.reconciliation_runs`, daily job, `lotteryctl payouts reconcile`): journals per payout and
   their amounts, failure reversals, prize amounts, KRA events, `B2C_FLOAT` and `TAX_PAYABLE` against live payouts; the
   draw reconciliation now subtracts prizes paid out from the pools.

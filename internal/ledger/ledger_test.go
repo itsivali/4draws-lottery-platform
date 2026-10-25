@@ -395,6 +395,21 @@ func TestPrizePayoutWithDebt_RepaysDebtAfterTaxAndReversesExactly(t *testing.T) 
 	})
 }
 
+func TestTaxRemittance_PaysTaxPayableFromTheBank(t *testing.T) {
+	p, err := ledger.TaxRemittance(ref, 340)
+	if err != nil || p.Journal.Kind != "tax_remittance" || p.Journal.RefType != "kra_batch" || len(p.WalletTxs) != 0 {
+		t.Fatalf("%+v %v", p, err)
+	}
+	for _, e := range p.Journal.Entries {
+		if (e.Account == ledger.TaxPayable) != (e.Dir == ledger.Debit) || e.AmountKES != 340 {
+			t.Fatalf("entry %+v", e)
+		}
+	}
+	if _, err := ledger.TaxRemittance(ref, 0); err == nil {
+		t.Error("TaxRemittance(0) accepted")
+	}
+}
+
 func TestPrizePayout_DoesNotTouchTheWallet(t *testing.T) {
 	p, err := ledger.PrizePayout(ref, "weekly", 10_000, rate(t, "0.2", ledger.HalfUp))
 	if err != nil {

@@ -10,10 +10,11 @@ Read this first at the start of every session.
   (public results API, `tools/verifier draw`, daily draw reconciliation, late-step monitoring; branch
   `feat/draws-results`, 2026-10-25). Not yet seen live: a draw signed and approved by two officials on Render.
   **Phase 5 — Payouts: built (2026-10-25)** (`docs/checkpoints/phase-5.md`, runbook `docs/runbooks/payouts.md`): B2C
-  client and mock, withdrawals, prize payouts, KRA withholding feed, payout reconciliation. Stacked PRs #34 → #35 →
-  #36 → slice 3, each green locally; **merging needs the owner** (the agent may not merge). To try it in the sandbox:
-  set `DARAJA_B2C_SHORTCODE=600992` on Render after the merges. **Next: phase 6 (web app and back office) — not
-  started, by the owner's instruction.**
+  client and mock, withdrawals, prize payouts, KRA withholding feed, payout reconciliation — merged (#34–#37,
+  2026-10-25). Follow-ups on the owner's decisions of 2026-10-25: prizes repay winners' debt and certificates name no
+  winners (PR #38); KRA remittance batches (`docs/runbooks/tax.md`) and alerts with a payout freeze
+  (`docs/runbooks/alerts.md`) (PR stacked on #38). To try payouts in the sandbox: set `DARAJA_B2C_SHORTCODE=600992`
+  on Render. **Next: phase 6 (web app and back office) — not started, by the owner's instruction.**
   Phase 2 detail (`docs/checkpoints/phase-2.md`). Slices 1
   (Daraja client + mock), 2 (STK top-up, ADR 0006) and 4 (reversals, player debt, internal reconciliation, ADR 0007)
   are merged and live. **Slice 3 (C2B paybill, ADR 0008) is merged and live (2026-10-24, #18, #19)**; its sandbox
@@ -98,12 +99,15 @@ Read this first at the start of every session.
 
 - **Payouts (phase 5) placeholders:** withholding on winnings 20% (`winnings_wht`), none on withdrawals
   (`withdrawal_wht` 0%); withdrawals KES 50–150,000, 3 a day; manual approval above KES 100,000. Confirm with a tax
-  adviser and set them. How is the KRA feed (`lotteryctl tax export`) to be submitted (proposal given to the owner
-  2026-10-25: numbered remittance batches with control totals, tied to TAX_PAYABLE and the KRA payment reference)?
+  adviser and set them.
 - **Settled 2026-10-25:** a prize first repays the winner's debt from a reversed top-up; public certificates name
-  winning entries only, never players (the entry list stays regulator-only).
-- **Alerts:** late draws are logged as `draw overdue` and failed reconciliations as `draw reconciliation found
-  mismatches`, but nothing pages anyone yet (the free plan has no log alerts). Who should be alerted, and how?
+  winning entries only, never players (the entry list stays regulator-only); withheld tax is remitted in numbered
+  batches, prepared and remitted by two different people (`docs/runbooks/tax.md`); alerts go to a webhook with a
+  heartbeat, and a failed reconciliation freezes payouts until acknowledged (`docs/runbooks/alerts.md`).
+- **KRA:** how the return is filed (iTax upload, API, adviser); the remittance deadline (alerts use 72 h / 120 h
+  placeholders); whether to keep payees' ID numbers (encrypted) for withholding certificates — only a hash is stored.
+- **Alerts setup:** create the channel and set `ALERT_WEBHOOK_URL`; create a healthchecks.io check (notifying a phone)
+  and set `ALERT_HEARTBEAT_URL`; name who is on call and who may lift a payout freeze.
 
 - Confirm the 5% deposit excise version with a tax adviser before production.
 - Does GRA accept phone verification by M-Pesa confirmation instead of SMS OTP (ADR 0005), and manual identity checks

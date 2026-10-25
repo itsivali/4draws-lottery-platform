@@ -19,6 +19,7 @@ import (
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/riverdriver/riverpgxv5"
 
+	"github.com/itsivali/lottery-platform/internal/alerts"
 	"github.com/itsivali/lottery-platform/internal/app"
 	"github.com/itsivali/lottery-platform/internal/audit"
 	"github.com/itsivali/lottery-platform/internal/draws"
@@ -66,13 +67,22 @@ const usage = `usage:
   lotteryctl payouts settle-failed -payout ID -reason TEXT -operator NAME    (a manual payout not on the statement)
   lotteryctl payouts retry-prize -result ID -operator NAME                   (a prize whose payout failed)
   lotteryctl payouts reconcile
-  lotteryctl tax export                (withholding tax events not yet exported, as JSON lines; marks them exported)`
+  lotteryctl tax batch -operator NAME                    (freeze the withholding not yet batched into the next numbered batch)
+  lotteryctl tax file -batch N                           (the batch's file, rebuilt and checked against its SHA-256)
+  lotteryctl tax remit -batch N -prn PRN -amount KES -operator NAME   (record the KRA payment; not the preparer)
+  lotteryctl tax batches
+  lotteryctl alerts list [-all]
+  lotteryctl alerts ack -alert ID -note TEXT -operator NAME   (stops reminders; closes a payout freeze)
+  lotteryctl alerts watch                                (run the checks and send what is due now)`
 
 type command struct {
 	name                               string
 	receipt, reason, operator, payment string
 	user, refundRef, msisdn, account   string
 	draw, payout, state, result        string
+	prn, alert, note                   string
+	all                                bool
+	batch                              int64
 	amount                             int64
 	days, slots, lucky                 int
 	price                              int64
@@ -107,12 +117,19 @@ var flagsOf = map[string][]string{
 	"payouts settle-failed":    {"payout", "reason", "operator"},
 	"payouts retry-prize":      {"result", "operator"},
 	"payouts reconcile":        nil,
-	"tax export":               nil,
+	"tax batch":                {"operator"},
+	"tax file":                 {"batch"},
+	"tax remit":                {"batch", "prn", "amount", "operator"},
+	"tax batches":              nil,
+	"alerts list":              nil,
+	"alerts ack":               {"alert", "note", "operator"},
+	"alerts watch":             nil,
 }
 
 // optionalOf lists, per command, the flags it may take; the rest of a command's flags are as in flagsOf.
 var optionalOf = map[string][]string{
 	"game simulate": {"days", "slots", "lucky", "price"},
+	"alerts list":   {"all"},
 }
 
 func parse(args []string) (command, error) {
@@ -140,6 +157,11 @@ func parse(args []string) (command, error) {
 	fs.StringVar(&c.state, "state", "", "payout state")
 	fs.StringVar(&c.result, "result", "", "draw result (prize) id")
 	fs.Int64Var(&c.amount, "amount", 0, "amount, whole KES")
+	fs.Int64Var(&c.batch, "batch", 0, "KRA remittance batch number")
+	fs.StringVar(&c.prn, "prn", "", "KRA payment registration number")
+	fs.StringVar(&c.alert, "alert", "", "alert id")
+	fs.StringVar(&c.note, "note", "", "what was found and done (audited)")
+	fs.BoolVar(&c.all, "all", false, "include resolved alerts")
 	fs.IntVar(&c.days, "days", 0, "simulated player-days per number of plays")
 	fs.IntVar(&c.slots, "slots", 0, "slot count")
 	fs.IntVar(&c.lucky, "lucky", 0, "lucky slots")
@@ -148,7 +170,9 @@ func parse(args []string) (command, error) {
 		return command{}, bad
 	}
 	set := map[string]bool{}
-	fs.Visit(func(f *flag.Flag) { set[f.Name] = f.Value.String() != "" && f.Value.String() != "0" })
+	fs.Visit(func(f *flag.Flag) {
+		set[f.Name] = f.Value.String() != "" && f.Value.String() != "0" && f.Value.String() != "false"
+	})
 	for _, name := range required {
 		if !set[name] {
 			return command{}, bad
@@ -158,7 +182,7 @@ func parse(args []string) (command, error) {
 	for _, name := range optionalOf[c.name] {
 		delete(set, name)
 	}
-	if len(set) > 0 || c.amount < 0 || c.days < 0 || c.slots < 0 || c.lucky < 0 || c.price < 0 {
+	if len(set) > 0 || c.amount < 0 || c.batch < 0 || c.days < 0 || c.slots < 0 || c.lucky < 0 || c.price < 0 {
 		return command{}, bad
 	}
 	if c.operator != "" {
@@ -204,8 +228,10 @@ func run(ctx context.Context, cmd command, out io.Writer) error {
 	case "draws list", "draws show", "draws sign", "draws approve", "draws void", "draws entries", "draws reconcile", "draws overdue":
 		return drawsCmd(ctx, cfg, cmd, out)
 	case "payouts list", "payouts approve", "payouts reject", "payouts settle-paid", "payouts settle-failed", "payouts retry-prize",
-		"payouts reconcile", "tax export":
+		"payouts reconcile", "tax batch", "tax file", "tax remit", "tax batches":
 		return payoutsCmd(ctx, cfg, cmd, out)
+	case "alerts list", "alerts ack", "alerts watch":
+		return alertsCmd(ctx, cfg, cmd, out)
 	}
 
 	pool, err := db.Open(ctx, cfg.DatabaseURL)
@@ -432,7 +458,8 @@ func drawsCmd(ctx context.Context, cfg config.Config, cmd command, out io.Writer
 	return enc.Encode(res)
 }
 
-// payoutsCmd lists and reconciles payouts, exports the withholding tax feed, and records operators' decisions:
+// payoutsCmd lists and reconciles payouts, batches and records remittances of withheld tax, and records operators'
+// decisions:
 // releasing or refusing a held payout, settling one whose outcome Daraja could not confirm from the M-Pesa statement,
 // paying a failed prize again. Approving and retrying queue a B2C request, so they need the api's payments
 // configuration with B2C; the other commands need only the database.
@@ -485,17 +512,56 @@ func payoutsCmd(ctx context.Context, cfg config.Config, cmd command, out io.Writ
 			return errors.New("reconciliation found mismatches")
 		}
 		res = r
-	case "tax export":
-		enc := json.NewEncoder(out) // one event per line
-		_, err = svc.ExportTax(ctx, 10_000, func(events []payouts.TaxEvent) error {
-			for _, e := range events {
-				if err := enc.Encode(e); err != nil {
-					return err
-				}
-			}
-			return nil
-		})
+	case "tax batch":
+		res, _, err = svc.PrepareBatch(ctx, cmd.operator, 10_000)
+	case "tax file":
+		var file []byte
+		if _, file, err = svc.BatchFile(ctx, cmd.batch); err != nil {
+			return err
+		}
+		_, err = out.Write(file)
 		return err
+	case "tax remit":
+		res, err = svc.RecordRemittance(ctx, cmd.batch, cmd.prn, cmd.amount, cmd.operator)
+	case "tax batches":
+		res, err = svc.Batches(ctx, 50)
+	}
+	if err != nil {
+		return err
+	}
+	enc := json.NewEncoder(out)
+	enc.SetIndent("", "  ")
+	return enc.Encode(res)
+}
+
+// alertsCmd lists and acknowledges alerts, or runs the checks now (sending to ALERT_WEBHOOK_URL when set).
+func alertsCmd(ctx context.Context, cfg config.Config, cmd command, out io.Writer) error {
+	pool, err := db.Open(ctx, cfg.DatabaseURL)
+	if err != nil {
+		return err
+	}
+	defer pool.Close()
+	clk := clock.Postgres{}
+	hc := &http.Client{Timeout: 20 * time.Second}
+	var n alerts.Notifier
+	if cfg.Alerts.WebhookURL != "" {
+		n = alerts.Webhook{URL: cfg.Alerts.WebhookURL, Client: hc}
+	}
+	ds := draws.NewService(pool, clk, nil, drand.New(drand.Quicknet, drand.DefaultRelays, hc), ledger.NewStore())
+	svc := alerts.NewService(pool, clk, n, audit.NewWriter(), alerts.Config{},
+		alerts.DrawsOverdue(ds.Overdue),
+		alerts.ReconciliationCheck(pool, clk, app.ReconciliationStaleAfter),
+		alerts.RemittanceCheck(pool, clk, cfg.Alerts.KRARemitWarnAfter, cfg.Alerts.KRARemitDueAfter))
+	var res any
+	switch cmd.name {
+	case "alerts list":
+		res, err = svc.List(ctx, cmd.all, 100)
+	case "alerts ack":
+		res, err = svc.Acknowledge(ctx, cmd.alert, cmd.operator, cmd.note)
+	case "alerts watch":
+		if err = svc.Watch(ctx); err == nil {
+			res, err = svc.List(ctx, false, 100)
+		}
 	}
 	if err != nil {
 		return err

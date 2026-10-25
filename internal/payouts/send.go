@@ -29,7 +29,8 @@ func open(status string) bool {
 
 // Send makes the B2C request for a pending payout, exactly once. The payout is marked sending (and committed) before
 // the request, so a crash during it leaves a payout that is checked, never one that is sent again. A refusal fails the
-// payout and returns the money; an unknown outcome leaves it timed_out for verification.
+// payout and returns the money; an unknown outcome leaves it timed_out for verification. Nothing is sent while payouts
+// are frozen.
 func (s *Service) Send(ctx context.Context, id string) error {
 	if s.daraja == nil {
 		return ErrUnavailable
@@ -44,6 +45,14 @@ func (s *Service) Send(ctx context.Context, id string) error {
 		}
 		if p.Status != "pending" {
 			return nil
+		}
+		// an open alert freezes payouts (a reconciliation found the books wrong) until a person acknowledges it; the
+		// payout stays pending, never sent, and the sweep queues it again
+		if frozen, err := q.PayoutsFrozen(ctx); err != nil || frozen {
+			if frozen {
+				slog.WarnContext(ctx, "payouts are frozen by an open alert; the payout waits", "payout", id)
+			}
+			return err
 		}
 		now, err := s.clk.Now(ctx, tx)
 		if err != nil {

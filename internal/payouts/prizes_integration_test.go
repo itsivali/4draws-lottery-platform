@@ -151,15 +151,16 @@ func TestPrizes_PaidWithTaxWithheldReportedAndTheDrawMarkedPaid(t *testing.T) {
 		t.Fatalf("totals %v", r.Totals)
 	}
 	// the withheld tax goes to the KRA feed once per payout, exported once
-	var exported []payouts.TaxEvent
-	if n, err := e.svc.ExportTax(ctx, 100, func(ev []payouts.TaxEvent) error { exported = ev; return nil }); err != nil || n != 2 {
-		t.Fatalf("export %d %v", n, err)
+	// the withheld tax goes to the KRA feed once per payout, batched once
+	batch, file, err := e.svc.PrepareBatch(ctx, "operator:alice", 100)
+	if err != nil || batch.Events != 2 || batch.TaxKES != 34 {
+		t.Fatalf("batch %+v %v", batch, err)
 	}
-	if n, err := e.svc.ExportTax(ctx, 100, func([]payouts.TaxEvent) error { return nil }); err != nil || n != 0 {
-		t.Fatalf("second export %d %v", n, err)
+	if _, _, err := e.svc.PrepareBatch(ctx, "operator:alice", 100); !errors.Is(err, payouts.ErrNothingToBatch) {
+		t.Fatalf("second batch: %v", err)
 	}
-	if string(exported[0].Payload) == "" || exported[0].EventType != "withholding_tax" {
-		t.Fatalf("event %+v", exported[0])
+	if ev := batchEvents(t, file); ev[0].EventType != "withholding_tax" {
+		t.Fatalf("event %+v", ev[0])
 	}
 	// the draw is paid once every prize is
 	ds := draws.NewService(e.pool, e.clk, nil, stubBeacon{}, ledger.NewStore())
@@ -369,34 +370,6 @@ func TestPrizes_RetryRefusedForAWinnerWhoCannotBePaid(t *testing.T) {
 	e.reconcileOK(t)
 }
 
-func TestExportTax_AFailedWriteExportsNothing(t *testing.T) {
-	ctx := context.Background()
-	e := setup(t)
-	a := e.player(t, 0)
-	_, results := e.approvedDraw(t, winner{a, 500})
-	if _, err := e.svc.PayPrizes(ctx); err != nil {
-		t.Fatal(err)
-	}
-	e.run(t, e.prizePayout(t, results[0]).ID)
-	if _, err := e.svc.ExportTax(ctx, 10, func([]payouts.TaxEvent) error { return errors.New("disk full") }); err == nil {
-		t.Fatal("a failed write was reported as exported")
-	}
-	if n, err := e.svc.ExportTax(ctx, 10, func(ev []payouts.TaxEvent) error { return nil }); err != nil || n != 1 {
-		t.Fatalf("the event was lost: %d %v", n, err)
-	}
-	flaky := &flakyClock{inner: e.clk}
-	aw := audit.NewWriter()
-	ls := ledger.NewStore()
-	broken := payouts.NewService(e.pool, flaky, nil, e.q, nil, wallet.NewService(ls), ls, aw, payouts.Config{}, wallet.ErrInsufficientFunds)
-	e.player(t, 0)
-	if _, err := e.svc.PayPrizes(ctx); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := broken.ExportTax(ctx, 10, func([]payouts.TaxEvent) error { return nil }); err != nil {
-		t.Fatalf("an empty export failed: %v", err)
-	}
-}
-
 // owe gives the player a debt from a reversed top-up they had already spent.
 func (e *env) owe(t *testing.T, user string, amount int64) {
 	t.Helper()
@@ -473,9 +446,13 @@ func TestPrizes_RepayTheWinnersDebtAfterTaxBeforeAnythingIsSent(t *testing.T) {
 	}
 	e.reconcileOK(t)
 	// tax withheld on every prize is reported, the wholly repaid one too
-	var events []payouts.TaxEvent
-	if n, err := e.svc.ExportTax(ctx, 100, func(ev []payouts.TaxEvent) error { events = ev; return nil }); err != nil || n != 3 {
-		t.Fatalf("export %d %v", n, err)
+	_, file, err := e.svc.PrepareBatch(ctx, "operator:alice", 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	events := batchEvents(t, file)
+	if len(events) != 3 {
+		t.Fatalf("events %+v", events)
 	}
 	repaid := 0
 	for _, ev := range events {

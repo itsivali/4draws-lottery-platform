@@ -26,6 +26,8 @@ type Config struct {
 	API API
 	// Payments configures M-Pesa top-ups (disabled unless the Daraja credentials are present).
 	Payments Payments
+	// Alerts configures where alerts are sent.
+	Alerts Alerts
 }
 
 // Load reads configuration from environment variables.
@@ -60,6 +62,9 @@ func Load() (Config, error) {
 	}
 	cfg.API = api
 	if cfg.Payments, err = loadPayments(api); err != nil {
+		return Config{}, err
+	}
+	if cfg.Alerts, err = loadAlerts(); err != nil {
 		return Config{}, err
 	}
 	return cfg, nil

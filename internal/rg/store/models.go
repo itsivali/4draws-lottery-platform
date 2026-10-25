@@ -10,6 +10,27 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type AuditAlert struct {
+	ID                   string
+	Kind                 string
+	Subject              string
+	Severity             string
+	Freezes              *string
+	Summary              string
+	Details              []byte
+	FirstSeenAt          time.Time
+	LastSeenAt           time.Time
+	Occurrences          int32
+	NotifiedAt           *time.Time
+	Notifications        int32
+	AcknowledgedBy       *string
+	AcknowledgedAt       *time.Time
+	AckNote              *string
+	ResolvedBy           *string
+	ResolvedAt           *time.Time
+	ResolutionNotifiedAt *time.Time
+}
+
 type AuditAuditLog struct {
 	ID         int64
 	At         time.Time
@@ -21,12 +42,30 @@ type AuditAuditLog struct {
 	Details    []byte
 }
 
+type AuditKraBatch struct {
+	ID           string
+	BatchNo      int64
+	Events       int32
+	FirstEventAt time.Time
+	LastEventAt  time.Time
+	GrossKes     int64
+	TaxKes       int64
+	FileSha256   string
+	PreparedBy   string
+	PreparedAt   time.Time
+	Prn          *string
+	RemittedKes  pgtype.Int8
+	RemittedBy   *string
+	RemittedAt   *time.Time
+}
+
 type AuditKraOutbox struct {
 	ID         int64
 	EventType  string
 	Payload    []byte
 	CreatedAt  time.Time
 	ExportedAt *time.Time
+	BatchID    pgtype.UUID
 }
 
 type DrawsDraw struct {

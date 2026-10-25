@@ -96,3 +96,10 @@ services:
         sync: false
       - key: DARAJA_SECURITY_CREDENTIAL
         sync: false
+      # Alerts (docs/runbooks/alerts.md): a Slack-compatible incoming webhook that receives alerts, and a dead man's
+      # switch (healthchecks.io or similar) pinged after every watch. Both secrets; unset means alerts are only logged
+      # and kept in the database, and nothing notices a stopped worker.
+      - key: ALERT_WEBHOOK_URL
+        sync: false
+      - key: ALERT_HEARTBEAT_URL
+        sync: false
