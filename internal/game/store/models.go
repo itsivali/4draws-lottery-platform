@@ -366,6 +366,7 @@ type PayoutsPayout struct {
 	ApprovedBy               *string
 	SettledBy                *string
 	SettledAt                *time.Time
+	DebtOffsetKes            int64
 }
 
 type PayoutsReconciliationRun struct {

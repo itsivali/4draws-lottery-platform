@@ -56,6 +56,7 @@ const (
 var (
 	ErrNotFound       = errors.New("draws: not found")
 	ErrState          = errors.New("draws: the draw is not in a state that allows this")
+	ErrWithheld       = errors.New("draws: the certificate names its winners and is not published")
 	ErrTooLate        = errors.New("draws: the drand round has been published; the outcome is public")
 	ErrAlreadySigned  = errors.New("draws: this official has already signed this step")
 	ErrOfficial       = errors.New("draws: an official's name is required")
@@ -424,7 +425,9 @@ func (s *Service) voidAndRerun(ctx context.Context, drawID, official, reason str
 	return s.Get(ctx, rerun)
 }
 
-// Certificate is the public record of a conducted draw: everything needed to recompute the winners.
+// Certificate is the public record of a conducted draw: everything needed to recompute the winners. It names winning
+// entries, never the players who hold them: the entry list (regulator-only) binds each entry to its player through
+// entry_list_hash, and each winner sees their own prize (EntriesOf).
 type Certificate struct {
 	DrawID        string         `json:"draw_id"`
 	DrawType      string         `json:"draw_type"`
@@ -444,13 +447,13 @@ type Certificate struct {
 	Algorithm     string         `json:"algorithm"`
 }
 
-// CertifiedWin is one awarded rank.
+// CertifiedWin is one awarded rank. UserID is the winner, known to the platform and never written to the certificate.
 type CertifiedWin struct {
 	Rank      int    `json:"rank"`
 	Share     string `json:"share"`
 	AmountKES int64  `json:"amount_kes"`
 	EntryNo   int    `json:"entry_no"`
-	UserID    string `json:"user_id"`
+	UserID    string `json:"-"`
 }
 
 // Algorithm describes, in the certificate, how the winners are drawn.

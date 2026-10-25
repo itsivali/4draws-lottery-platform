@@ -22,14 +22,15 @@ type payoutJSON struct {
 	Status    string    `json:"status"`
 	GrossKES  int64     `json:"amount_kes"`
 	TaxKES    int64     `json:"tax_kes"`
+	DebtKES   int64     `json:"debt_repaid_kes"`
 	NetKES    int64     `json:"net_kes"`
 	Receipt   *string   `json:"receipt"`
 	CreatedAt time.Time `json:"created_at"`
 }
 
 func toPayoutJSON(p payouts.Payout) payoutJSON {
-	return payoutJSON{ID: p.ID, Kind: p.Kind, Status: p.Status, GrossKES: p.GrossKES, TaxKES: p.TaxKES, NetKES: p.NetKES,
-		Receipt: optStr(p.Receipt), CreatedAt: p.CreatedAt}
+	return payoutJSON{ID: p.ID, Kind: p.Kind, Status: p.Status, GrossKES: p.GrossKES, TaxKES: p.TaxKES, DebtKES: p.DebtKES,
+		NetKES: p.NetKES, Receipt: optStr(p.Receipt), CreatedAt: p.CreatedAt}
 }
 
 func payoutsUnavailable(w http.ResponseWriter) {

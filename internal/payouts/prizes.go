@@ -67,7 +67,9 @@ func (s *Service) PayPrizes(ctx context.Context) (int, error) {
 
 var errCannotPay = errors.New("payouts: the winner cannot be paid now")
 
-// createPrize records one prize payout and its posting.
+// createPrize records one prize payout and its posting. The winnings tax is withheld on the whole prize, then what the
+// winner owes from a reversed top-up is repaid out of the rest (under the lock deposits take to recover debt), and
+// only what is left is sent. A prize the debt absorbs entirely sends nothing and is settled at once.
 func (s *Service) createPrize(ctx context.Context, tx pgx.Tx, p prize, key string, actor audit.Event) error {
 	q := store.New(tx)
 	msisdn, err := s.ids.AssertCanBePaid(ctx, tx, p.userID)
@@ -89,30 +91,48 @@ func (s *Service) createPrize(ctx context.Context, tx pgx.Tx, p prize, key strin
 	if err != nil {
 		return err
 	}
-	status := "pending"
-	if p.amount > s.cfg.ManualAboveKES {
-		status = "held"
-	}
-	id, err := q.InsertPayout(ctx, store.InsertPayoutParams{UserID: p.userID, Kind: "prize", Status: status, GrossKes: p.amount, TaxKes: tax,
-		NetKes: p.amount - tax, Msisdn: &msisdn, DrawResultID: &p.resultID, IdempotencyKey: key, TaxCode: strPtr(WinningsTax),
-		TaxRate: rateText(rule.Rate), TaxRounding: strPtr(string(rule.Rounding)), At: now})
+	debt, err := s.wallet.LockDebt(ctx, tx, p.userID)
 	if err != nil {
 		return err
 	}
-	posting, err := ledger.PrizePayout(id, p.drawType, p.amount, rule)
+	offset := min(max(debt, 0), p.amount-tax)
+	params := store.InsertPayoutParams{UserID: p.userID, Kind: "prize", Route: "b2c", Status: "pending", GrossKes: p.amount, TaxKes: tax,
+		DebtOffsetKes: offset, NetKes: p.amount - tax - offset, Msisdn: &msisdn, DrawResultID: &p.resultID, IdempotencyKey: key,
+		TaxCode: strPtr(WinningsTax), TaxRate: rateText(rule.Rate), TaxRounding: strPtr(string(rule.Rounding)), At: now}
+	switch {
+	case params.NetKes == 0:
+		params.Route, params.Status, params.SettledBy, params.SettledAt = "offset", "succeeded", settledBy(actor), &now
+	case p.amount > s.cfg.ManualAboveKES:
+		params.Status = "held"
+	}
+	id, err := q.InsertPayout(ctx, params)
+	if err != nil {
+		return err
+	}
+	posting, err := ledger.PrizePayoutWithDebt(id, p.drawType, p.userID, p.amount, rule, offset)
 	if err != nil {
 		return err
 	}
 	if _, err := s.ledger.Post(ctx, tx, posting.Journal); err != nil {
 		return err
 	}
-	if status == "pending" {
+	switch params.Status {
+	case "pending":
 		if err := s.enq.EnqueueSend(ctx, tx, id); err != nil {
+			return err
+		}
+	case "succeeded":
+		row, err := q.GetPayout(ctx, id)
+		if err != nil {
+			return err
+		}
+		if err := recordWithholding(ctx, tx, row, "", now); err != nil {
 			return err
 		}
 	}
 	actor.Action, actor.EntityType, actor.EntityID = "payout.prize.created", "payout", id
-	actor.Details = map[string]any{"draw": p.drawID, "result": p.resultID, "gross_kes": p.amount, "tax_kes": tax, "held": status == "held"}
+	actor.Details = map[string]any{"draw": p.drawID, "result": p.resultID, "gross_kes": p.amount, "tax_kes": tax, "debt_repaid_kes": offset,
+		"net_kes": params.NetKes, "route": params.Route, "held": params.Status == "held"}
 	return s.audit.Record(ctx, tx, actor)
 }
 
@@ -171,7 +191,7 @@ func recordWithholding(ctx context.Context, tx pgx.Tx, p store.PayoutsPayout, re
 		return err
 	}
 	payload, err := json.Marshal(map[string]any{"payout_id": p.ID, "kind": p.Kind, "payee": p.UserID, "gross_kes": p.GrossKes, "tax_kes": p.TaxKes,
-		"net_kes": p.NetKes, "tax_code": deref(p.TaxCode), "tax_rate": rate, "receipt": receipt, "paid_at": now.UTC().Format(time.RFC3339)})
+		"debt_repaid_kes": p.DebtOffsetKes, "net_kes": p.NetKes, "tax_code": deref(p.TaxCode), "tax_rate": rate, "receipt": receipt, "paid_at": now.UTC().Format(time.RFC3339)})
 	if err != nil {
 		return err
 	}

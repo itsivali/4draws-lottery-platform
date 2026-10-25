@@ -75,22 +75,68 @@ func tampered(t *testing.T, change func(map[string]any)) string {
 
 func prize(c map[string]any, i int) map[string]any { return c["prizes"].([]any)[i].(map[string]any) }
 
+// named adds each winning entry's holder to the prizes, as certificates issued before winners' ids were left out did.
+func named(c map[string]any) {
+	raw, err := os.ReadFile(goldenEntries)
+	if err != nil {
+		panic(err)
+	}
+	holder := map[float64]string{}
+	for _, line := range strings.Split(strings.TrimSpace(string(raw)), "\n") {
+		var e struct {
+			EntryNo float64 `json:"entry_no"`
+			UserID  string  `json:"user_id"`
+		}
+		if err := json.Unmarshal([]byte(line), &e); err != nil {
+			panic(err)
+		}
+		holder[e.EntryNo] = e.UserID
+	}
+	for i := range c["prizes"].([]any) {
+		p := prize(c, i)
+		p["user_id"] = holder[p["entry_no"].(float64)]
+	}
+}
+
+func TestDraw_CertificatesNameNoPlayersAndOlderOnesThatDoStillVerify(t *testing.T) {
+	raw, err := os.ReadFile(goldenCert)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(raw, []byte("user_id")) {
+		t.Fatal("the certificate names its winners")
+	}
+	var out bytes.Buffer
+	if err := run([]string{"draw", "-certificate", tampered(t, named), "-entries", goldenEntries}, &out); err != nil {
+		t.Fatalf("an older certificate naming its winners: %v\n%s", err, out.String())
+	}
+	out.Reset()
+	if err := run([]string{"draw", "-certificate", tampered(t, named)}, &out); err != nil || !strings.Contains(out.String(), "winners ok") {
+		t.Fatalf("without the entry list: %v\n%s", err, out.String())
+	}
+}
+
 func TestDraw_RefusesEveryKindOfTampering(t *testing.T) {
 	for name, change := range map[string]func(map[string]any){
-		"winner swapped":   func(c map[string]any) { p := prize(c, 0); p["entry_no"] = float64(int(p["entry_no"].(float64))%14 + 1) },
-		"ranks reordered":  func(c map[string]any) { ps := c["prizes"].([]any); ps[0], ps[1] = ps[1], ps[0] },
-		"prize inflated":   func(c map[string]any) { prize(c, 0)["amount_kes"] = float64(211) },
-		"pool inflated":    func(c map[string]any) { c["pool_kes"] = float64(421) },
-		"stakes changed":   func(c map[string]any) { c["stakes_kes"] = float64(1500) },
-		"other seed":       func(c map[string]any) { c["revealed_seed"] = strings.Repeat("ab", 32) },
-		"other randomness": func(c map[string]any) { c["beacon"].(map[string]any)["randomness"] = strings.Repeat("0", 64) },
-		"relabelled round": func(c map[string]any) { c["beacon"].(map[string]any)["round"] = float64(1000001) },
-		"other chain":      func(c map[string]any) { c["drand_chain_hash"] = strings.Repeat("0", 64) },
-		"other entry list": func(c map[string]any) { c["entry_list_hash"] = strings.Repeat("1", 64) },
-		"repeat winner":    func(c map[string]any) { prize(c, 1)["user_id"] = prize(c, 0)["user_id"] },
-		"rank to another player": func(c map[string]any) {
-			p := prize(c, 2)
-			p["entry_no"], p["user_id"] = float64(14), "0192f3a0-0000-7000-8000-00000000000d"
+		"winner swapped":         func(c map[string]any) { p := prize(c, 0); p["entry_no"] = float64(int(p["entry_no"].(float64))%14 + 1) },
+		"ranks reordered":        func(c map[string]any) { ps := c["prizes"].([]any); ps[0], ps[1] = ps[1], ps[0] },
+		"prize inflated":         func(c map[string]any) { prize(c, 0)["amount_kes"] = float64(211) },
+		"pool inflated":          func(c map[string]any) { c["pool_kes"] = float64(421) },
+		"stakes changed":         func(c map[string]any) { c["stakes_kes"] = float64(1500) },
+		"other seed":             func(c map[string]any) { c["revealed_seed"] = strings.Repeat("ab", 32) },
+		"other randomness":       func(c map[string]any) { c["beacon"].(map[string]any)["randomness"] = strings.Repeat("0", 64) },
+		"relabelled round":       func(c map[string]any) { c["beacon"].(map[string]any)["round"] = float64(1000001) },
+		"other chain":            func(c map[string]any) { c["drand_chain_hash"] = strings.Repeat("0", 64) },
+		"other entry list":       func(c map[string]any) { c["entry_list_hash"] = strings.Repeat("1", 64) },
+		"rank to another player": func(c map[string]any) { prize(c, 2)["entry_no"] = float64(14) },
+		// certificates issued before winners' ids were left out name them; a wrong name is caught
+		"named repeat winner": func(c map[string]any) {
+			named(c)
+			prize(c, 1)["user_id"] = prize(c, 0)["user_id"]
+		},
+		"named wrong holder": func(c map[string]any) {
+			named(c)
+			prize(c, 2)["user_id"] = "0192f3a0-0000-7000-8000-00000000000d"
 		},
 		"fewer ranks awarded": func(c map[string]any) { c["prizes"] = c["prizes"].([]any)[:1] }, // a structure with one rank: still the right pick
 	} {

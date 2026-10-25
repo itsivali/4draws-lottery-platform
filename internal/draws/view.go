@@ -109,7 +109,8 @@ func (s *Service) List(ctx context.Context, limit int) ([]Draw, error) {
 	return out, nil
 }
 
-// CertificateOf returns a conducted draw's certificate exactly as it was hashed, with its hash.
+// CertificateOf returns a conducted draw's certificate exactly as it was hashed, with its hash (ErrWithheld for one
+// that names its winners).
 func (s *Service) CertificateOf(ctx context.Context, id string) ([]byte, string, error) {
 	d, err := store.New(s.pool).GetDraw(ctx, id)
 	var pe *pgconn.PgError
@@ -122,7 +123,27 @@ func (s *Service) CertificateOf(ctx context.Context, id string) ([]byte, string,
 	if d.CertificateJson == nil {
 		return nil, "", ErrState
 	}
+	if namesWinners(d.CertificateJson) {
+		return nil, "", ErrWithheld
+	}
 	return d.CertificateJson, deref(d.CertificateHash), nil
+}
+
+// namesWinners reports a certificate written before winners' ids were left out of it. It cannot be changed (it is
+// hashed and signed off), so it is not published; the regulator reads it from the database.
+func namesWinners(raw []byte) bool {
+	var c struct {
+		Prizes []map[string]json.RawMessage `json:"prizes"`
+	}
+	if json.Unmarshal(raw, &c) != nil {
+		return true
+	}
+	for _, p := range c.Prizes {
+		if _, ok := p["user_id"]; ok {
+			return true
+		}
+	}
+	return false
 }
 
 // MyEntry is one of a player's entries in a draw.

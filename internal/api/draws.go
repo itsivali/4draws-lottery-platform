@@ -153,6 +153,9 @@ func (h *handlers) drawCertificate(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write(raw) //nolint:gosec // our own stored JSON, served as application/json, never HTML
 	case errors.Is(err, draws.ErrNotFound):
 		drawNotFound(w)
+	case errors.Is(err, draws.ErrWithheld):
+		httpx.WriteProblem(w, http.StatusForbidden, "certificate-withheld", "This certificate is not published",
+			"it was issued before winners' ids were left out of certificates; the regulator holds it")
 	case errors.Is(err, draws.ErrState):
 		httpx.WriteProblem(w, http.StatusConflict, "not-conducted", "The draw has not been conducted yet", "the certificate exists once the winners are drawn")
 	default:

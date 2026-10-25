@@ -493,7 +493,7 @@ paths:
         Everything needed to recompute the winners: the entry-list hash, the revealed seed and its commitment, the drand
         beacon (round, randomness, signature), the stakes, pool and prizes. The body's SHA-256 is the draw's
         `certificate_hash` (also sent as `X-Certificate-SHA256`); check it with `tools/verifier draw`. Winners appear
-        by entry number and user id.
+        by entry number only, never by player: the entry list that ties entries to players is held by the regulator.
       security: []
       parameters: [{ $ref: "#/components/parameters/DrawId" }]
       responses:
@@ -502,6 +502,11 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Certificate" }
+        "403":
+          description: Withheld (`certificate-withheld`) — issued before winners were left out of certificates
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
         "404": { $ref: "#/components/responses/Problem" }
         "409":
           description: Not conducted yet (`not-conducted`)
@@ -1037,13 +1042,12 @@ components:
           type: array
           items:
             type: object
-            required: [rank, share, amount_kes, entry_no, user_id]
+            required: [rank, share, amount_kes, entry_no]
             properties:
               rank: { type: integer }
               share: { type: string }
               amount_kes: { type: integer }
-              entry_no: { type: integer }
-              user_id: { type: string }
+              entry_no: { type: integer, description: The winning entry; the regulator's entry list says whose it is. }
         algorithm: { type: string }
     MyDrawEntries:
       type: object
@@ -1072,7 +1076,7 @@ components:
               user_id: { type: string }
     Payout:
       type: object
-      required: [id, kind, status, amount_kes, tax_kes, net_kes, receipt, created_at]
+      required: [id, kind, status, amount_kes, tax_kes, debt_repaid_kes, net_kes, receipt, created_at]
       properties:
         id: { type: string }
         kind: { type: string, enum: [withdrawal, prize] }
@@ -1082,8 +1086,12 @@ components:
           description: "`failed`: no money was sent; a withdrawal's amount is back in the wallet."
         amount_kes: { type: integer, description: The amount taken from the wallet (or the prize). }
         tax_kes: { type: integer, description: Tax withheld (none on withdrawals; placeholder 20% on prizes). }
-        net_kes: { type: integer, description: What M-Pesa pays the player. }
-        receipt: { type: [string, "null"], description: The M-Pesa receipt once paid. }
+        debt_repaid_kes:
+          type: integer
+          description: >-
+            Repaid from a prize, after tax, toward money owed from a reversed top-up (always 0 on withdrawals).
+        net_kes: { type: integer, description: "What M-Pesa pays the player. 0 when the whole prize repaid a debt: nothing is sent." }
+        receipt: { type: [string, "null"], description: "The M-Pesa receipt once paid (null when nothing was sent)." }
         created_at: { type: string, format: date-time }
     TopUpRequest:
       type: object

@@ -313,6 +313,88 @@ func TestPrizePayoutFailed_ReversesThePayoutExactly(t *testing.T) {
 	}
 }
 
+func TestPrizePayoutWithDebt_RepaysDebtAfterTaxAndReversesExactly(t *testing.T) {
+	r := rate(t, "0.2", ledger.HalfUp)
+	// 105 → tax 21, net 84: 30 repays the debt, 54 is sent
+	paid, err := ledger.PrizePayoutWithDebt(ref, "daily", user, 105, r, 30)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]int64{}
+	for _, e := range paid.Journal.Entries {
+		got[string(e.Dir)+":"+e.Account] += e.AmountKES
+		if e.Account == ledger.PlayerDebt && e.UserID != user {
+			t.Fatalf("debt entry for %q", e.UserID)
+		}
+	}
+	want := map[string]int64{"D:PRIZE_POOL_DAILY": 105, "C:" + ledger.PlayerDebt: 30, "C:" + ledger.B2CFloat: 54, "C:" + ledger.TaxPayable: 21}
+	if len(got) != len(want) {
+		t.Fatalf("entries %v", got)
+	}
+	for k, v := range want {
+		if got[k] != v {
+			t.Fatalf("entries %v", got)
+		}
+	}
+	// a debt that takes the whole net leaves nothing for B2C
+	all, err := ledger.PrizePayoutWithDebt(ref, "daily", user, 105, r, 84)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range all.Journal.Entries {
+		if e.Account == ledger.B2CFloat {
+			t.Fatalf("B2C entry %+v for a prize the debt absorbed", e)
+		}
+	}
+	for _, bad := range []struct {
+		user   string
+		offset int64
+	}{{user, 85}, {user, -1}, {"", 1}} {
+		if _, err := ledger.PrizePayoutWithDebt(ref, "daily", bad.user, 105, r, bad.offset); err == nil {
+			t.Errorf("offset %d for %q accepted", bad.offset, bad.user)
+		}
+		if _, err := ledger.PrizePayoutFailedWithDebt(ref, "daily", bad.user, 105, r, bad.offset); err == nil {
+			t.Errorf("failed offset %d for %q accepted", bad.offset, bad.user)
+		}
+	}
+	rapid.Check(t, func(t *rapid.T) {
+		gross := rapid.Int64Range(1, ledger.MaxAmountKES).Draw(t, "gross")
+		rl := ledger.TaxRule{Code: "x", Rate: ledger.RateFromE5(rapid.Int64Range(0, 100000).Draw(t, "e5")),
+			Rounding: rapid.SampledFrom([]ledger.Rounding{ledger.HalfUp, ledger.Down, ledger.Up}).Draw(t, "mode")}
+		tax, err := ledger.Apply(gross, rl.Rate, rl.Rounding)
+		if err != nil {
+			t.Fatal(err)
+		}
+		offset := rapid.Int64Range(0, gross-tax).Draw(t, "offset")
+		paid, err := ledger.PrizePayoutWithDebt(ref, "weekly", user, gross, rl, offset)
+		if err != nil {
+			t.Fatal(err)
+		}
+		back, err := ledger.PrizePayoutFailedWithDebt(ref, "weekly", user, gross, rl, offset)
+		if err != nil {
+			t.Fatal(err)
+		}
+		net := map[string]int64{}
+		for _, p := range []ledger.Posting{paid, back} {
+			if len(p.WalletTxs) != 0 {
+				t.Fatalf("wallet transactions %v", p.WalletTxs)
+			}
+			for _, e := range p.Journal.Entries {
+				if e.Dir == ledger.Credit {
+					net[e.Account] += e.AmountKES
+				} else {
+					net[e.Account] -= e.AmountKES
+				}
+			}
+		}
+		for acct, n := range net {
+			if n != 0 {
+				t.Fatalf("%s left with %d", acct, n)
+			}
+		}
+	})
+}
+
 func TestPrizePayout_DoesNotTouchTheWallet(t *testing.T) {
 	p, err := ledger.PrizePayout(ref, "weekly", 10_000, rate(t, "0.2", ledger.HalfUp))
 	if err != nil {

@@ -98,13 +98,10 @@ Read this first at the start of every session.
 
 - **Payouts (phase 5) placeholders:** withholding on winnings 20% (`winnings_wht`), none on withdrawals
   (`withdrawal_wht` 0%); withdrawals KES 50–150,000, 3 a day; manual approval above KES 100,000. Confirm with a tax
-  adviser and set them. Should a prize first repay a player's debt from a reversed top-up? How is the KRA feed
-  (`lotteryctl tax export`) to be submitted?
-
-- **Draw privacy (phase 4):** the public certificate (`GET /v1/draws/{id}/certificate`) names winners by entry number
-  and **user id** (a random identifier, no name or phone), because it is published byte for byte as hashed. The full
-  entry list (every player's user id) is **not** public: the regulator gets it from `lotteryctl draws entries`, and
-  players see only their own entries. Is that the right line, or should the public be able to check every skipped pick?
+  adviser and set them. How is the KRA feed (`lotteryctl tax export`) to be submitted (proposal given to the owner
+  2026-10-25: numbered remittance batches with control totals, tied to TAX_PAYABLE and the KRA payment reference)?
+- **Settled 2026-10-25:** a prize first repays the winner's debt from a reversed top-up; public certificates name
+  winning entries only, never players (the entry list stays regulator-only).
 - **Alerts:** late draws are logged as `draw overdue` and failed reconciliations as `draw reconciliation found
   mismatches`, but nothing pages anyone yet (the free plan has no log alerts). Who should be alerted, and how?
 

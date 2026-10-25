@@ -570,6 +570,21 @@ func TestPayouts_TheDatabaseGuardsPayouts(t *testing.T) {
 	if _, err := e.pool.Exec(ctx, `DELETE FROM payouts.b2c_callbacks`); err == nil {
 		t.Error("callbacks deleted")
 	}
+	// only a prize repays debt, and a payout that sends nothing is on the offset route, settled
+	insert := `INSERT INTO payouts.payouts (user_id, kind, route, status, gross_kes, tax_kes, debt_offset_kes, net_kes, msisdn,
+		originator_conversation_id, idempotency_key, settled_at) VALUES ($1, 'withdrawal', $2, $3, 100, 0, $4, $5, '254700000001',
+		platform.uuid_v7()::text, platform.uuid_v7()::text, now())`
+	for name, args := range map[string][]any{
+		"withdrawal repays debt":   {"b2c", "pending", 10, 90},
+		"nothing sent through b2c": {"b2c", "pending", 0, 0},
+		"offset route sends money": {"offset", "succeeded", 0, 100},
+		"net not gross-tax-offset": {"b2c", "pending", 0, 90},
+		"offset route still open":  {"offset", "pending", 0, 0},
+	} {
+		if _, err := e.pool.Exec(ctx, insert, append([]any{u}, args...)...); err == nil {
+			t.Errorf("%s: accepted", name)
+		}
+	}
 }
 
 func TestHandleCallback_KeepsUnknownAndRefusesMalformed(t *testing.T) {

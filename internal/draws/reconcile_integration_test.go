@@ -3,6 +3,7 @@
 package draws_test
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -287,6 +288,14 @@ func TestViews_EntryListCertificateAndOwnEntries(t *testing.T) {
 		if _, err := e.svc.EntriesOf(ctx, id, list[0].UserID); !errors.Is(err, draws.ErrNotFound) {
 			t.Errorf("own entries %s: %v", id, err)
 		}
+	}
+	// the certificate names winning entries, never players; one issued before that (naming them) is not published
+	if bytes.Contains(raw, []byte("user_id")) {
+		t.Fatalf("the certificate names its winners: %s", raw)
+	}
+	e.tamper(t, `UPDATE draws.draws SET certificate_json = replace(certificate_json::text, '"entry_no":', '"user_id":"x","entry_no":')::json WHERE id = $1`, d.ID)
+	if _, _, err := e.svc.CertificateOf(ctx, d.ID); !errors.Is(err, draws.ErrWithheld) {
+		t.Fatalf("a certificate naming its winners: %v", err)
 	}
 }
 

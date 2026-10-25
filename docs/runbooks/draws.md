@@ -62,6 +62,9 @@ go run ./tools/verifier draw -certificate cert.json -hash <certificate_hash>
 ```
 
 The verifier checks the beacon against the pinned quicknet key, the seed, the pool and prizes, and that each winner is
-the algorithm's pick. Skipped picks (a player who already won) are confirmed only with the full entry list, which is not
-public: export it for the regulator with `go run ./cmd/lotteryctl draws entries -draw <id> > entries.jsonl` and pass
-`-entries entries.jsonl`. Players see their own entries with `GET /v1/draws/{id}/entries/mine`.
+the algorithm's pick. Certificates name winning **entries**, never players (owner's decision, 2026-10-25): that no
+player won twice, and that each skipped pick landed on a player who had already won, are confirmed only with the full
+entry list, which is not public: export it for the regulator with `go run ./cmd/lotteryctl draws entries -draw <id> > entries.jsonl` and pass
+`-entries entries.jsonl`. Players see their own entries and prizes with `GET /v1/draws/{id}/entries/mine`. A
+certificate issued before winners were left out (it names them) cannot be changed, since it is hashed and signed off, so
+the public endpoint withholds it (`403 certificate-withheld`); read it from the database for the regulator.

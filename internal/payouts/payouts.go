@@ -106,6 +106,8 @@ type Identity interface {
 type Wallet interface {
 	Apply(ctx context.Context, tx pgx.Tx, p ledger.Posting) (int64, error)
 	Debt(ctx context.Context, tx pgx.Tx, user string) (int64, error)
+	// LockDebt is Debt under the wallet row lock that debt recovery takes.
+	LockDebt(ctx context.Context, tx pgx.Tx, user string) (int64, error)
 }
 
 // Ledger returns the tax rule in force and posts journals that touch no wallet (prizes).
@@ -188,6 +190,7 @@ type Payout struct {
 	GrossKES  int64     `json:"gross_kes"`
 	TaxKES    int64     `json:"tax_kes"`
 	NetKES    int64     `json:"net_kes"`
+	DebtKES   int64     `json:"debt_repaid_kes"`
 	Receipt   string    `json:"receipt,omitempty"`
 	Reason    string    `json:"reason,omitempty"`
 	CreatedAt time.Time `json:"created_at"`
@@ -196,7 +199,7 @@ type Payout struct {
 
 func view(p store.PayoutsPayout) Payout {
 	return Payout{ID: p.ID, UserID: p.UserID, Kind: p.Kind, Status: publicStatus(p.Status), State: p.Status, GrossKES: p.GrossKes,
-		TaxKES: p.TaxKes, NetKES: p.NetKes, Receipt: deref(p.MpesaReceipt), Reason: deref(p.Reason), CreatedAt: p.CreatedAt, UpdatedAt: p.UpdatedAt}
+		TaxKES: p.TaxKes, NetKES: p.NetKes, DebtKES: p.DebtOffsetKes, Receipt: deref(p.MpesaReceipt), Reason: deref(p.Reason), CreatedAt: p.CreatedAt, UpdatedAt: p.UpdatedAt}
 }
 
 func deref(p *string) string {
@@ -286,7 +289,7 @@ func (s *Service) RequestWithdrawal(ctx context.Context, userID string, amount i
 		if amount > s.cfg.ManualAboveKES {
 			status = "held"
 		}
-		if id, err = q.InsertPayout(ctx, store.InsertPayoutParams{UserID: userID, Kind: "withdrawal", Status: status, GrossKes: amount,
+		if id, err = q.InsertPayout(ctx, store.InsertPayoutParams{UserID: userID, Kind: "withdrawal", Route: "b2c", Status: status, GrossKes: amount,
 			TaxKes: tax, NetKes: amount - tax, Msisdn: &msisdn, IdempotencyKey: key, TaxCode: strPtr(WithdrawalTax),
 			TaxRate: rateText(rule.Rate), TaxRounding: strPtr(string(rule.Rounding)), At: now}); err != nil {
 			return err

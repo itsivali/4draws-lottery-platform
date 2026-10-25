@@ -385,7 +385,13 @@ func (s *Service) giveBack(ctx context.Context, tx pgx.Tx, p store.PayoutsPayout
 		if err != nil {
 			return err
 		}
-		posting, err := ledger.PrizePayoutFailed(p.ID, r.DrawType, p.GrossKes, rule)
+		if p.DebtOffsetKes > 0 {
+			// the debt this prize repaid is owed again; recovery from deposits works under the same lock
+			if _, err := s.wallet.LockDebt(ctx, tx, p.UserID); err != nil {
+				return err
+			}
+		}
+		posting, err := ledger.PrizePayoutFailedWithDebt(p.ID, r.DrawType, p.UserID, p.GrossKes, rule, p.DebtOffsetKes)
 		if err != nil {
 			return err
 		}

@@ -110,6 +110,19 @@ func (s *Service) Debt(ctx context.Context, tx pgx.Tx, user string) (int64, erro
 	return store.New(tx).PlayerDebt(ctx, user)
 }
 
+// LockDebt takes the wallet row lock that debt recovery takes and returns what the player owes, so a prize repaying
+// the debt and a deposit recovering it cannot both take the same debt.
+func (s *Service) LockDebt(ctx context.Context, tx pgx.Tx, user string) (int64, error) {
+	q := store.New(tx)
+	if err := q.EnsureWallet(ctx, user); err != nil {
+		return 0, fmt.Errorf("wallet: ensure: %w", err)
+	}
+	if _, err := q.LockWalletBalance(ctx, user); err != nil {
+		return 0, fmt.Errorf("wallet: lock: %w", err)
+	}
+	return q.PlayerDebt(ctx, user)
+}
+
 // RecoverDebt takes what the player owes out of their wallet, up to the balance, under the wallet row lock. It is
 // keyed on the deposit (paymentID) that funds it and called in the same transaction as that credit, so a deposit
 // recovers at most once. It returns the amount recovered.

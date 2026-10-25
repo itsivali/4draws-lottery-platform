@@ -127,6 +127,9 @@ func TestAPI_DrawsArePublicAndPlayersSeeOnlyTheirOwnEntries(t *testing.T) {
 	if cert.Code != http.StatusOK || hex.EncodeToString(sum[:]) != d.Body["certificate_hash"] || cert.Header.Get("X-Certificate-SHA256") != d.Body["certificate_hash"] {
 		t.Fatalf("certificate: %d %s", cert.Code, cert.Raw)
 	}
+	if strings.Contains(cert.Raw, "user_id") {
+		t.Fatalf("the certificate names its winners: %s", cert.Raw)
+	}
 
 	entries := 0
 	prizes := 0

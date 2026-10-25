@@ -9,6 +9,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -538,6 +539,32 @@ func TestWallet_DebtFromAReversalIsRecoveredFromLaterDepositsOncePerDeposit(t *t
 	if d := e.debt(t, other); d != 0 {
 		t.Fatalf("another player's debt = %d", d)
 	}
+	// LockDebt reads the same debt under the wallet lock recovery takes: a recovery waits until it is released
+	tx, err := e.pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d, err := e.svc.LockDebt(ctx, tx, u); err != nil || d != 250 {
+		t.Fatalf("locked debt %d %v", d, err)
+	}
+	waited := make(chan struct{})
+	go func() {
+		defer close(waited)
+		_ = pgx.BeginFunc(ctx, e.pool, func(tx2 pgx.Tx) error {
+			_, err := e.svc.RecoverDebt(ctx, tx2, u, newRef())
+			return err
+		})
+	}()
+	select {
+	case <-waited:
+		t.Fatal("a recovery did not wait for the debt lock")
+	case <-time.After(300 * time.Millisecond): //nolint:forbidigo // waiting for a lock
+	}
+	_ = tx.Rollback(ctx)
+	<-waited
+	if d, err := e.svc.LockDebt(ctx, mustBegin(t, e), other); err != nil || d != 0 {
+		t.Fatalf("debt of a player without a wallet %d %v", d, err)
+	}
 
 	second := newRef() // a 100 deposit covers part of the debt
 	if err := e.post(ledger.Deposit(second, u, 100, none, true)); err != nil {
@@ -574,6 +601,7 @@ func TestWallet_DatabaseFailuresInDebtOperationsAreReportedNotSwallowed(t *testi
 	for name, op := range map[string]func(pgx.Tx) error{
 		"recover debt": func(tx pgx.Tx) error { _, err := e.svc.RecoverDebt(dead, tx, u, newRef()); return err },
 		"debt":         func(tx pgx.Tx) error { _, err := e.svc.Debt(dead, tx, u); return err },
+		"lock debt":    func(tx pgx.Tx) error { _, err := e.svc.LockDebt(dead, tx, u); return err },
 		"reverse":      func(tx pgx.Tx) error { _, _, err := e.svc.ReverseDeposit(dead, tx, newRef(), u, 100, 0); return err },
 	} {
 		tx, err := e.pool.Begin(ctx)
@@ -585,4 +613,14 @@ func TestWallet_DatabaseFailuresInDebtOperationsAreReportedNotSwallowed(t *testi
 		}
 		_ = tx.Rollback(ctx)
 	}
+}
+
+func mustBegin(t *testing.T, e *env) pgx.Tx {
+	t.Helper()
+	tx, err := e.pool.Begin(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = tx.Rollback(context.Background()) })
+	return tx
 }

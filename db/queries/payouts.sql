@@ -1,9 +1,11 @@
 -- name: InsertPayout :one
-INSERT INTO payouts.payouts (user_id, kind, route, status, gross_kes, tax_kes, net_kes, msisdn, draw_result_id,
-                             originator_conversation_id, idempotency_key, tax_code, tax_rate, tax_rounding, created_at, updated_at)
-VALUES (sqlc.arg(user_id), sqlc.arg(kind), 'b2c', sqlc.arg(status), sqlc.arg(gross_kes), sqlc.arg(tax_kes), sqlc.arg(net_kes),
-        sqlc.arg(msisdn), sqlc.narg(draw_result_id), platform.uuid_v7()::text, sqlc.arg(idempotency_key), sqlc.arg(tax_code),
-        (sqlc.arg(tax_rate)::text)::numeric, sqlc.arg(tax_rounding), sqlc.arg(at), sqlc.arg(at))
+INSERT INTO payouts.payouts (user_id, kind, route, status, gross_kes, tax_kes, debt_offset_kes, net_kes, msisdn, draw_result_id,
+                             originator_conversation_id, idempotency_key, tax_code, tax_rate, tax_rounding, settled_by, settled_at,
+                             created_at, updated_at)
+VALUES (sqlc.arg(user_id), sqlc.arg(kind), sqlc.arg(route), sqlc.arg(status), sqlc.arg(gross_kes), sqlc.arg(tax_kes),
+        sqlc.arg(debt_offset_kes), sqlc.arg(net_kes), sqlc.arg(msisdn), sqlc.narg(draw_result_id), platform.uuid_v7()::text,
+        sqlc.arg(idempotency_key), sqlc.arg(tax_code), (sqlc.arg(tax_rate)::text)::numeric, sqlc.arg(tax_rounding),
+        sqlc.narg(settled_by), sqlc.narg(settled_at), sqlc.arg(at), sqlc.arg(at))
 RETURNING id;
 
 -- name: PayoutByKey :one
@@ -118,13 +120,15 @@ WHERE (p.status = 'failed') <> EXISTS (SELECT 1 FROM ledger.ledger_journals j WH
                   AND j.kind IN ('withdrawal_failed','prize_payout_failed'));
 
 -- name: JournalAmountMismatch :many
--- the payout's journal must move exactly its net to B2C_FLOAT and its tax to TAX_PAYABLE
+-- the payout's journal must move exactly its net to B2C_FLOAT, its tax to TAX_PAYABLE and its debt offset off PLAYER_DEBT
 SELECT p.id FROM payouts.payouts p
 JOIN ledger.ledger_journals j ON j.reference_type = 'payout' AND j.reference_id = p.id AND j.kind IN ('withdrawal','prize_payout')
 WHERE coalesce((SELECT sum(e.amount_kes) FROM ledger.ledger_entries e JOIN ledger.ledger_accounts a ON a.id = e.account_id
                 WHERE e.journal_id = j.id AND a.code = 'B2C_FLOAT' AND e.direction = 'C'), 0) <> p.net_kes
    OR coalesce((SELECT sum(e.amount_kes) FROM ledger.ledger_entries e JOIN ledger.ledger_accounts a ON a.id = e.account_id
-                WHERE e.journal_id = j.id AND a.code = 'TAX_PAYABLE' AND e.direction = 'C'), 0) <> p.tax_kes;
+                WHERE e.journal_id = j.id AND a.code = 'TAX_PAYABLE' AND e.direction = 'C'), 0) <> p.tax_kes
+   OR coalesce((SELECT sum(e.amount_kes) FROM ledger.ledger_entries e JOIN ledger.ledger_accounts a ON a.id = e.account_id
+                WHERE e.journal_id = j.id AND a.code = 'PLAYER_DEBT' AND e.direction = 'C' AND e.user_id = p.user_id), 0) <> p.debt_offset_kes;
 
 -- name: PrizeAmountMismatch :many
 SELECT p.id FROM payouts.payouts p JOIN draws.draw_results r ON r.id = p.draw_result_id WHERE p.gross_kes <> r.amount_kes;

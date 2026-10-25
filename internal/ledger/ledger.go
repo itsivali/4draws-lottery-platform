@@ -250,37 +250,57 @@ func PrizePoolFunding(drawID, drawType string, amount int64) (Posting, error) {
 
 // PrizePayout pays a draw prize out of the prize pool via B2C; it does not pass through the wallet.
 func PrizePayout(payoutID, drawType string, gross int64, tax TaxRule) (Posting, error) {
-	pool, ok := prizePools[drawType]
-	if !ok {
-		return Posting{}, fmt.Errorf("ledger: unknown draw type %q", drawType)
-	}
-	if err := positive(gross); err != nil {
-		return Posting{}, err
-	}
-	t, err := Apply(gross, tax.Rate, tax.Rounding)
+	return PrizePayoutWithDebt(payoutID, drawType, "", gross, tax, 0)
+}
+
+// PrizePayoutWithDebt pays a draw prize out of the prize pool: the winnings tax is withheld on the whole prize, then
+// offset (at most what is left) repays the winner's debt from a reversed top-up, and only the rest leaves through B2C.
+func PrizePayoutWithDebt(payoutID, drawType, user string, gross int64, tax TaxRule, offset int64) (Posting, error) {
+	pool, t, err := prizeParts(drawType, user, gross, tax, offset)
 	if err != nil {
 		return Posting{}, err
 	}
 	return build("prize_payout", "payout", payoutID, "", nil,
-		d(pool, gross, ""), c(B2CFloat, gross-t, ""), c(TaxPayable, t, ""))
+		d(pool, gross, ""), c(PlayerDebt, offset, user), c(B2CFloat, gross-t-offset, ""), c(TaxPayable, t, ""))
 }
 
 // PrizePayoutFailed reverses a prize payout whose B2C payment finally failed: the prize goes back to its pool, still
 // owed, and the tax withheld is released.
 func PrizePayoutFailed(payoutID, drawType string, gross int64, tax TaxRule) (Posting, error) {
-	pool, ok := prizePools[drawType]
-	if !ok {
-		return Posting{}, fmt.Errorf("ledger: unknown draw type %q", drawType)
-	}
-	if err := positive(gross); err != nil {
-		return Posting{}, err
-	}
-	t, err := Apply(gross, tax.Rate, tax.Rounding)
+	return PrizePayoutFailedWithDebt(payoutID, drawType, "", gross, tax, 0)
+}
+
+// PrizePayoutFailedWithDebt reverses PrizePayoutWithDebt exactly: the debt it repaid is owed again, since the prize it
+// was repaid from is owed again too (a retry offsets whatever is owed then).
+func PrizePayoutFailedWithDebt(payoutID, drawType, user string, gross int64, tax TaxRule, offset int64) (Posting, error) {
+	pool, t, err := prizeParts(drawType, user, gross, tax, offset)
 	if err != nil {
 		return Posting{}, err
 	}
 	return build("prize_payout_failed", "payout", payoutID, "", nil,
-		d(B2CFloat, gross-t, ""), d(TaxPayable, t, ""), c(pool, gross, ""))
+		d(B2CFloat, gross-t-offset, ""), d(TaxPayable, t, ""), d(PlayerDebt, offset, user), c(pool, gross, ""))
+}
+
+// prizeParts checks a prize posting's inputs and returns its pool and the tax withheld.
+func prizeParts(drawType, user string, gross int64, tax TaxRule, offset int64) (string, int64, error) {
+	pool, ok := prizePools[drawType]
+	if !ok {
+		return "", 0, fmt.Errorf("ledger: unknown draw type %q", drawType)
+	}
+	if err := positive(gross); err != nil {
+		return "", 0, err
+	}
+	t, err := Apply(gross, tax.Rate, tax.Rounding)
+	if err != nil {
+		return "", 0, err
+	}
+	if offset < 0 || offset > gross-t {
+		return "", 0, fmt.Errorf("ledger: debt offset %d out of range (net %d)", offset, gross-t)
+	}
+	if offset > 0 && user == "" {
+		return "", 0, errors.New("ledger: a debt offset needs the player")
+	}
+	return pool, t, nil
 }
 
 // DebtRecovery takes back, from a later deposit, money a player owes after a reversal. It is keyed on the payment

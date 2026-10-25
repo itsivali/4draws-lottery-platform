@@ -47,7 +47,7 @@ type certificate struct {
 		Share     string `json:"share"`
 		AmountKES int64  `json:"amount_kes"`
 		EntryNo   int    `json:"entry_no"`
-		UserID    string `json:"user_id"`
+		UserID    string `json:"user_id"` // only in certificates issued before winners' ids were left out
 	} `json:"prizes"`
 }
 
@@ -133,8 +133,8 @@ func runDraw(args []string, out io.Writer) error {
 		return err
 	}
 	say("winners ok: %d prizes are the algorithm's picks in rank order; skipped picks: %d confirmed, %d unconfirmed", len(c.Prizes), confirmed, unconfirmed)
-	if unconfirmed > 0 {
-		say("pass -entries to confirm each skipped pick landed on a player who had already won")
+	if entries == nil {
+		say("certificates name winning entries, not players: pass -entries to check no player won twice and each skipped pick landed on a player who had already won")
 	}
 	return nil
 }
@@ -224,6 +224,17 @@ func checkPicks(c certificate, seed []byte, entries []entry) (int, int, error) {
 	for _, p := range c.Prizes {
 		later[p.EntryNo] = p.Rank
 	}
+	// who holds an entry: the entry list says; without it, the player an older certificate names, or else the entry
+	// stands for its holder
+	who := func(no int, certified string) string {
+		switch {
+		case entries != nil:
+			return entries[no-1].UserID
+		case certified != "":
+			return certified
+		}
+		return "entry:" + strconv.Itoa(no)
+	}
 	won := map[string]bool{}
 	wonEntry := map[int]bool{}
 	confirmed, unconfirmed := 0, 0
@@ -236,10 +247,11 @@ func checkPicks(c certificate, seed []byte, entries []entry) (int, int, error) {
 		prize := c.Prizes[r]
 		switch {
 		case p == prize.EntryNo:
-			if won[prize.UserID] || (entries != nil && entries[p-1].UserID != prize.UserID) {
+			u := who(p, prize.UserID)
+			if won[u] || (entries != nil && prize.UserID != "" && prize.UserID != u) {
 				return 0, 0, mismatch("pick %d (entry %d) is certified for a player who already won or does not hold it", i, p)
 			}
-			won[prize.UserID], wonEntry[p] = true, true
+			won[u], wonEntry[p] = true, true
 			delete(later, p)
 			r++
 		case later[p] != 0:

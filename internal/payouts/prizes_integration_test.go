@@ -4,6 +4,7 @@ package payouts_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"sync/atomic"
 	"testing"
@@ -394,4 +395,145 @@ func TestExportTax_AFailedWriteExportsNothing(t *testing.T) {
 	if _, err := broken.ExportTax(ctx, 10, func([]payouts.TaxEvent) error { return nil }); err != nil {
 		t.Fatalf("an empty export failed: %v", err)
 	}
+}
+
+// owe gives the player a debt from a reversed top-up they had already spent.
+func (e *env) owe(t *testing.T, user string, amount int64) {
+	t.Helper()
+	ctx := context.Background()
+	err := pgx.BeginFunc(ctx, e.pool, func(tx pgx.Tx) error {
+		var paymentID string
+		if err := tx.QueryRow(ctx, `SELECT platform.uuid_v7()::text`).Scan(&paymentID); err != nil {
+			return err
+		}
+		p, err := ledger.DepositReversal(paymentID, user, amount, 0, 0)
+		if err != nil {
+			return err
+		}
+		_, err = wallet.NewService(ledger.NewStore()).Apply(ctx, tx, p)
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func (e *env) debt(t *testing.T, user string) int64 {
+	t.Helper()
+	var d int64
+	err := pgx.BeginFunc(context.Background(), e.pool, func(tx pgx.Tx) error {
+		var err error
+		d, err = wallet.NewService(ledger.NewStore()).Debt(context.Background(), tx, user)
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return d
+}
+
+func TestPrizes_RepayTheWinnersDebtAfterTaxBeforeAnythingIsSent(t *testing.T) {
+	ctx := context.Background()
+	e := setup(t)
+	part, whole, clear := e.player(t, 0), e.player(t, 0), e.player(t, 0)
+	e.owe(t, part, 30)
+	e.owe(t, whole, 200)
+	drawID, results := e.approvedDraw(t, winner{part, 105}, winner{whole, 63}, winner{clear, 50})
+	if n, err := e.svc.PayPrizes(ctx); err != nil || n != 3 {
+		t.Fatalf("created %d %v", n, err)
+	}
+	// 105: tax 21 on the whole prize, 30 repays the debt, 54 is sent
+	p := e.prizePayout(t, results[0])
+	if p.TaxKES != 21 || p.DebtKES != 30 || p.NetKES != 54 || p.State != "pending" || e.debt(t, part) != 0 {
+		t.Fatalf("partly repaid %+v debt %d", p, e.debt(t, part))
+	}
+	// 63: tax 13, the 50 left all repays the debt: nothing to send, settled at once
+	w := e.prizePayout(t, results[1])
+	if w.TaxKES != 13 || w.DebtKES != 50 || w.NetKES != 0 || w.State != "succeeded" || w.Receipt != "" || e.debt(t, whole) != 150 {
+		t.Fatalf("wholly repaid %+v debt %d", w, e.debt(t, whole))
+	}
+	if c := e.prizePayout(t, results[2]); c.DebtKES != 0 || c.NetKES != 40 {
+		t.Fatalf("no debt %+v", c)
+	}
+	for _, i := range []int{0, 2} {
+		if st := e.run(t, e.prizePayout(t, results[i]).ID); st != "succeeded" {
+			t.Fatalf("prize %d: %s", i, st)
+		}
+	}
+	sent := map[int64]bool{}
+	for _, m := range e.mock.Payouts() {
+		sent[m.AmountKES] = true
+	}
+	if len(e.mock.Payouts()) != 2 || !sent[54] || !sent[40] {
+		t.Fatalf("sent %+v", e.mock.Payouts())
+	}
+	// PLAYER_DEBT is debit-normal: what is still owed
+	if e.account(t, "PLAYER_DEBT") != -150 || e.account(t, "B2C_FLOAT") != 94 || e.account(t, "TAX_PAYABLE") != 44 {
+		t.Fatalf("debt %d float %d tax %d", e.account(t, "PLAYER_DEBT"), e.account(t, "B2C_FLOAT"), e.account(t, "TAX_PAYABLE"))
+	}
+	e.reconcileOK(t)
+	// tax withheld on every prize is reported, the wholly repaid one too
+	var events []payouts.TaxEvent
+	if n, err := e.svc.ExportTax(ctx, 100, func(ev []payouts.TaxEvent) error { events = ev; return nil }); err != nil || n != 3 {
+		t.Fatalf("export %d %v", n, err)
+	}
+	repaid := 0
+	for _, ev := range events {
+		var v struct {
+			Debt int64 `json:"debt_repaid_kes"`
+			Net  int64 `json:"net_kes"`
+		}
+		if err := json.Unmarshal(ev.Payload, &v); err != nil {
+			t.Fatal(err)
+		}
+		if v.Debt == 50 && v.Net == 0 {
+			repaid++
+		}
+	}
+	if repaid != 1 {
+		t.Fatalf("no event for the wholly repaid prize: %+v", events)
+	}
+	ds := draws.NewService(e.pool, e.clk, nil, stubBeacon{}, ledger.NewStore())
+	if err := ds.Schedule(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if d, err := ds.Get(ctx, drawID); err != nil || d.Status != "paid" {
+		t.Fatalf("draw %s %v", d.Status, err)
+	}
+}
+
+func TestPrizes_AFailedPrizeOwesItsDebtAgainAndTheRetryRepaysIt(t *testing.T) {
+	ctx := context.Background()
+	e := setup(t)
+	a := e.player(t, 0)
+	e.owe(t, a, 30)
+	_, results := e.approvedDraw(t, winner{a, 500})
+	e.mock.SetNextB2CFault(darajamock.B2CFault{ResultCode: 2001})
+	if n, _ := e.svc.PayPrizes(ctx); n != 1 || e.debt(t, a) != 0 {
+		t.Fatalf("not created, or debt %d", e.debt(t, a))
+	}
+	first := e.prizePayout(t, results[0])
+	if first.DebtKES != 30 || first.NetKES != 370 {
+		t.Fatalf("first %+v", first)
+	}
+	if st := e.run(t, first.ID); st != "failed" || e.debt(t, a) != 30 || e.account(t, "PRIZE_POOL_DAILY") != 500 {
+		t.Fatalf("state %s debt %d pool %d", st, e.debt(t, a), e.account(t, "PRIZE_POOL_DAILY"))
+	}
+	e.reconcileOK(t)
+	// the player paid part of it back meanwhile: the retry repays only what is owed now
+	e.credit(t, a, 20)
+	if err := pgx.BeginFunc(ctx, e.pool, func(tx pgx.Tx) error {
+		_, err := wallet.NewService(ledger.NewStore()).RecoverDebt(ctx, tx, a, "0192f000-0000-7000-8000-0000000000aa")
+		return err
+	}); err != nil || e.debt(t, a) != 11 {
+		t.Fatalf("recovery %v debt %d", err, e.debt(t, a))
+	}
+	again, err := e.svc.RetryPrize(ctx, results[0], "operator:alice")
+	if err != nil || again.DebtKES != 11 || again.NetKES != 389 {
+		t.Fatalf("retry %+v %v", again, err)
+	}
+	if st := e.run(t, again.ID); st != "succeeded" || e.debt(t, a) != 0 {
+		t.Fatalf("retry %s debt %d", st, e.debt(t, a))
+	}
+	e.reconcileOK(t)
 }

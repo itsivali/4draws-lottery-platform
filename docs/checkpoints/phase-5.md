@@ -17,7 +17,9 @@ adviser) confirms it, and nothing here reaches real money: Daraja stays in the s
 - **Prizes are paid straight to M-Pesa** (B2C, `PromotionPayment`), as the phase 1 schema (`payouts.kind = prize`,
   one payout per draw result) and the `PrizePayout` posting were designed. A failed prize payout returns the prize to
   its pool and an operator retries it; the prize stays owed. A prize is paid even to a restricted or self-excluded
-  player (it is owed); a player in debt is still paid (open question below).
+  player (it is owed). **A prize first repays the winner's debt** from a reversed top-up (owner's decision,
+  2026-10-25): tax on the whole prize, the debt from what is left, the rest sent; wholly absorbed prizes send nothing
+  (`offset` route, migration 00025).
 - **B2C fees** are Safaricom's charge to the business; they are not posted (no fee account yet).
 
 ## Plan (written before coding)
@@ -128,5 +130,5 @@ sent, sent once, and settled only on a Transaction Status confirmation; refunds 
 handle what cannot be confirmed; tax withheld on prizes is reported to the KRA feed; payouts and pools reconcile daily.
 Not yet seen live: a sandbox B2C payout (needs `DARAJA_B2C_SHORTCODE` on Render) and Daraja's sandbox answer to a
 Transaction Status request by originator conversation id. Open for the owner and a tax adviser: the withholding rates
-(placeholders), the withdrawal bounds and daily count, the manual threshold, whether a prize should first repay a
-player's debt, and how the KRA feed is to be submitted.
+(placeholders), the withdrawal bounds and daily count, the manual threshold, and how the KRA feed is to be submitted.
+Settled since: a prize first repays the winner's debt (2026-10-25).

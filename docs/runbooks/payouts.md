@@ -56,6 +56,11 @@ tax (placeholder 20%) is withheld, the prize leaves its `PRIZE_POOL_*` for B2C (
 follows the same states as a withdrawal (above KES 100,000 it is held for approval). Once every prize of a draw is
 confirmed paid, the draw becomes `paid`.
 
+- **A prize first repays the winner's debt** from a reversed top-up (owner's decision, 2026-10-25). The tax is withheld
+  on the whole prize, the debt is taken from what is left, and only the rest is sent (`debt_repaid_kes` on the payout,
+  in the audit log and in the KRA event). A prize the debt absorbs entirely sends nothing: it is recorded on the
+  `offset` route, `succeeded` at once, with no receipt. If a partly offset prize's payment fails, the debt it repaid is
+  owed again with the prize; a retry repays whatever is owed then.
 - A winner who cannot be paid now (suspended, or no longer verified) is skipped; the prize stays owed. Fix the account,
   and the next run pays it.
 - A prize whose payout **failed** (confirmed not paid) is back in its pool and is **not** retried automatically (a number

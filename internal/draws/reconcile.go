@@ -178,7 +178,7 @@ func (s *Service) reconcileDraw(ctx context.Context, q *store.Queries, d store.D
 		r.flag("winners_not_reproducible", d.ID, err.Error())
 	case err != nil:
 		return 0, err
-	case !reflect.DeepEqual(wins, cert.Prizes):
+	case !reflect.DeepEqual(certified(wins), cert.Prizes):
 		r.flag("winners_not_reproducible", d.ID, "the winners recomputed from the certificate differ from the certified ones")
 	}
 
@@ -192,7 +192,7 @@ func (s *Service) reconcileDraw(ctx context.Context, q *store.Queries, d store.D
 		paid += res.AmountKes
 		if same {
 			w := cert.Prizes[i]
-			same = int(res.PrizeRank) == w.Rank && res.AmountKes == w.AmountKES && int(res.EntryNo) == w.EntryNo && res.UserID == w.UserID
+			same = int(res.PrizeRank) == w.Rank && res.AmountKes == w.AmountKES && int(res.EntryNo) == w.EntryNo
 		}
 	}
 	if !same {
@@ -209,6 +209,16 @@ func (s *Service) reconcileDraw(ctx context.Context, q *store.Queries, d store.D
 		r.flag("funding_mismatch", d.ID, "a prize pool was funded for a draw that is not approved")
 	}
 	return cert.PoolKES, nil
+}
+
+// certified is what a certificate records of the wins: the winners' ids are left out.
+func certified(wins []CertifiedWin) []CertifiedWin {
+	out := make([]CertifiedWin, len(wins))
+	for i, w := range wins {
+		w.UserID = ""
+		out[i] = w
+	}
+	return out
 }
 
 func kes(n int64) string { return strconv.FormatInt(n, 10) }
