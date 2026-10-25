@@ -72,6 +72,11 @@ func TestParse(t *testing.T) {
 		{[]string{"draws", "overdue", "-draw", "d-1"}, command{}, true}, // takes no flags
 		{[]string{"payouts", "list", "-state", "manual"}, command{name: "payouts list", state: "manual"}, false},
 		{[]string{"payouts", "list"}, command{}, true},
+		{[]string{"payouts", "retry-prize", "-result", "r-1", "-operator", "w"}, command{name: "payouts retry-prize", result: "r-1", operator: "operator:w"}, false},
+		{[]string{"payouts", "retry-prize", "-result", "r-1"}, command{}, true}, // no operator
+		{[]string{"payouts", "reconcile"}, command{name: "payouts reconcile"}, false},
+		{[]string{"tax", "export"}, command{name: "tax export"}, false},
+		{[]string{"tax", "export", "-state", "x"}, command{}, true},
 		{[]string{"payouts", "approve", "-payout", "p-1", "-operator", "w"}, command{name: "payouts approve", payout: "p-1", operator: "operator:w"}, false},
 		{[]string{"payouts", "reject", "-payout", "p-1", "-operator", "w"}, command{}, true}, // no reason
 		{[]string{"payouts", "settle-paid", "-payout", "p-1", "-receipt", "MBC0000001", "-operator", "w"},

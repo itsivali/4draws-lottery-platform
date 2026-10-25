@@ -366,6 +366,13 @@ type PayoutsPayout struct {
 	SettledAt                pgtype.Timestamptz
 }
 
+type PayoutsReconciliationRun struct {
+	ID     string
+	RanAt  pgtype.Timestamptz
+	Ok     bool
+	Report []byte
+}
+
 type PlatformIdempotencyKey struct {
 	Principal           string
 	Key                 string

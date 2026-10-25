@@ -63,13 +63,16 @@ const usage = `usage:
   lotteryctl payouts approve -payout ID -operator NAME
   lotteryctl payouts reject -payout ID -reason TEXT -operator NAME
   lotteryctl payouts settle-paid -payout ID -receipt R -operator NAME        (a manual payout found on the statement)
-  lotteryctl payouts settle-failed -payout ID -reason TEXT -operator NAME    (a manual payout not on the statement)`
+  lotteryctl payouts settle-failed -payout ID -reason TEXT -operator NAME    (a manual payout not on the statement)
+  lotteryctl payouts retry-prize -result ID -operator NAME                   (a prize whose payout failed)
+  lotteryctl payouts reconcile
+  lotteryctl tax export                (withholding tax events not yet exported, as JSON lines; marks them exported)`
 
 type command struct {
 	name                               string
 	receipt, reason, operator, payment string
 	user, refundRef, msisdn, account   string
-	draw, payout, state                string
+	draw, payout, state, result        string
 	amount                             int64
 	days, slots, lucky                 int
 	price                              int64
@@ -102,6 +105,9 @@ var flagsOf = map[string][]string{
 	"payouts reject":           {"payout", "reason", "operator"},
 	"payouts settle-paid":      {"payout", "receipt", "operator"},
 	"payouts settle-failed":    {"payout", "reason", "operator"},
+	"payouts retry-prize":      {"result", "operator"},
+	"payouts reconcile":        nil,
+	"tax export":               nil,
 }
 
 // optionalOf lists, per command, the flags it may take; the rest of a command's flags are as in flagsOf.
@@ -132,6 +138,7 @@ func parse(args []string) (command, error) {
 	fs.StringVar(&c.draw, "draw", "", "draw id")
 	fs.StringVar(&c.payout, "payout", "", "payout id")
 	fs.StringVar(&c.state, "state", "", "payout state")
+	fs.StringVar(&c.result, "result", "", "draw result (prize) id")
 	fs.Int64Var(&c.amount, "amount", 0, "amount, whole KES")
 	fs.IntVar(&c.days, "days", 0, "simulated player-days per number of plays")
 	fs.IntVar(&c.slots, "slots", 0, "slot count")
@@ -196,7 +203,8 @@ func run(ctx context.Context, cmd command, out io.Writer) error {
 		return gameReconcile(ctx, cfg, out)
 	case "draws list", "draws show", "draws sign", "draws approve", "draws void", "draws entries", "draws reconcile", "draws overdue":
 		return drawsCmd(ctx, cfg, cmd, out)
-	case "payouts list", "payouts approve", "payouts reject", "payouts settle-paid", "payouts settle-failed":
+	case "payouts list", "payouts approve", "payouts reject", "payouts settle-paid", "payouts settle-failed", "payouts retry-prize",
+		"payouts reconcile", "tax export":
 		return payoutsCmd(ctx, cfg, cmd, out)
 	}
 
@@ -424,9 +432,10 @@ func drawsCmd(ctx context.Context, cfg config.Config, cmd command, out io.Writer
 	return enc.Encode(res)
 }
 
-// payoutsCmd lists payouts and records operators' decisions: releasing or refusing a held payout, and settling one
-// whose outcome Daraja could not confirm from the M-Pesa statement. Approving queues the B2C request, so it needs the
-// api's payments configuration with B2C; the other commands need only the database.
+// payoutsCmd lists and reconciles payouts, exports the withholding tax feed, and records operators' decisions:
+// releasing or refusing a held payout, settling one whose outcome Daraja could not confirm from the M-Pesa statement,
+// paying a failed prize again. Approving and retrying queue a B2C request, so they need the api's payments
+// configuration with B2C; the other commands need only the database.
 func payoutsCmd(ctx context.Context, cfg config.Config, cmd command, out io.Writer) error {
 	pool, err := db.Open(ctx, cfg.DatabaseURL)
 	if err != nil {
@@ -438,9 +447,9 @@ func payoutsCmd(ctx context.Context, cfg config.Config, cmd command, out io.Writ
 		return err
 	}
 	var d payouts.Daraja
-	if cmd.name == "payouts approve" {
+	if cmd.name == "payouts approve" || cmd.name == "payouts retry-prize" {
 		if !cfg.Payments.B2CEnabled() {
-			return errors.New("approving sends the payout: set the api's payments configuration with DARAJA_B2C_SHORTCODE")
+			return errors.New("this sends a payout: set the api's payments configuration with DARAJA_B2C_SHORTCODE")
 		}
 		if d, err = app.NewDaraja(cfg.Payments); err != nil {
 			return err
@@ -463,6 +472,30 @@ func payoutsCmd(ctx context.Context, cfg config.Config, cmd command, out io.Writ
 		res, err = svc.Settle(ctx, cmd.payout, cmd.operator, true, cmd.receipt, "")
 	case "payouts settle-failed":
 		res, err = svc.Settle(ctx, cmd.payout, cmd.operator, false, "", cmd.reason)
+	case "payouts retry-prize":
+		res, err = svc.RetryPrize(ctx, cmd.result, cmd.operator)
+	case "payouts reconcile":
+		var r payouts.Report
+		if r, err = svc.Reconcile(ctx); err == nil && !r.OK {
+			enc := json.NewEncoder(out)
+			enc.SetIndent("", "  ")
+			if err := enc.Encode(r); err != nil {
+				return err
+			}
+			return errors.New("reconciliation found mismatches")
+		}
+		res = r
+	case "tax export":
+		enc := json.NewEncoder(out) // one event per line
+		_, err = svc.ExportTax(ctx, 10_000, func(events []payouts.TaxEvent) error {
+			for _, e := range events {
+				if err := enc.Encode(e); err != nil {
+					return err
+				}
+			}
+			return nil
+		})
+		return err
 	}
 	if err != nil {
 		return err

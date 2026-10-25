@@ -289,3 +289,59 @@ func TestViews_EntryListCertificateAndOwnEntries(t *testing.T) {
 		}
 	}
 }
+
+// Prize payouts (phase 5) take prizes out of the pools; the draw is paid once every prize is confirmed paid.
+func TestReconcile_PrizePayoutsComeOutOfThePoolAndPayTheDraw(t *testing.T) {
+	ctx := context.Background()
+	e := setup(t, nairobi(2026, 10, 24, 12, 0))
+	d := e.approvedDraw(t)
+	e.schedule(t)
+	if got := e.draw(t, "daily", "2026-10-24", "approved"); len(got.Results) != 3 {
+		t.Fatalf("results %+v", got.Results)
+	}
+	none := ledger.TaxRule{Rate: ledger.RateFromE5(0), Rounding: ledger.HalfUp}
+	for i, res := range d.Results {
+		var resultID, payoutID string
+		if err := e.pool.QueryRow(ctx, `SELECT r.id::text FROM draws.draw_results r WHERE r.draw_id = $1 AND r.prize_rank = $2`, d.ID, res.Rank).Scan(&resultID); err != nil {
+			t.Fatal(err)
+		}
+		status := "succeeded"
+		if i == 2 {
+			status = "sent" // still being paid
+		}
+		if err := e.pool.QueryRow(ctx, `INSERT INTO payouts.payouts (user_id, kind, status, gross_kes, net_kes, msisdn, draw_result_id,
+			originator_conversation_id, idempotency_key, mpesa_receipt, settled_at)
+			VALUES ($1, 'prize', $2, $3, $3, '254700000001', $4, $5, $5, CASE WHEN $2 = 'succeeded' THEN $5 END, CASE WHEN $2 = 'succeeded' THEN now() END)
+			RETURNING id::text`, res.UserID, status, res.AmountKES, resultID, fmt.Sprint("prize-", i)).Scan(&payoutID); err != nil {
+			t.Fatal(err)
+		}
+		p, err := ledger.PrizePayout(payoutID, "daily", res.AmountKES, none)
+		if err != nil {
+			t.Fatal(err)
+		}
+		tx, err := e.pool.Begin(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := ledger.NewStore().Post(ctx, tx, p.Journal); err != nil {
+			t.Fatal(err)
+		}
+		if err := tx.Commit(ctx); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if r, err := e.svc.Reconcile(ctx); err != nil || !r.OK || r.Totals["prize_pool_daily_kes"] != 0 {
+		t.Fatalf("report %+v %v", r, err)
+	}
+	e.schedule(t)
+	e.draw(t, "daily", "2026-10-24", "approved") // one prize is still being paid
+	if _, err := e.pool.Exec(ctx, `UPDATE payouts.payouts SET status = 'succeeded', mpesa_receipt = 'MBCLAST001', settled_at = now()
+		WHERE idempotency_key = 'prize-2'`); err != nil {
+		t.Fatal(err)
+	}
+	e.schedule(t)
+	e.draw(t, "daily", "2026-10-24", "paid")
+	if r, err := e.svc.Reconcile(ctx); err != nil || !r.OK {
+		t.Fatalf("after paid %+v %v", r, err)
+	}
+}

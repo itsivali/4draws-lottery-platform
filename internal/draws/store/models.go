@@ -368,6 +368,13 @@ type PayoutsPayout struct {
 	SettledAt                *time.Time
 }
 
+type PayoutsReconciliationRun struct {
+	ID     string
+	RanAt  time.Time
+	Ok     bool
+	Report []byte
+}
+
 type PlatformIdempotencyKey struct {
 	Principal           string
 	Key                 string

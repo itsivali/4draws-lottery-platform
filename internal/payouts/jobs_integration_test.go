@@ -66,7 +66,8 @@ func TestJobs_AWithdrawalIsPaidByTheQueueAlone(t *testing.T) {
 		payouts.Config{ResultWait: 50 * time.Millisecond, StatusWait: 200 * time.Millisecond}, wallet.ErrInsufficientFunds)
 	workers := river.NewWorkers()
 	payouts.AddWorkers(workers, svc)
-	if len(payouts.PeriodicJobs()) != 1 || (payouts.SweepArgs{}).Kind() != "payouts.sweep" {
+	if len(payouts.PeriodicJobs()) != 3 || (payouts.SweepArgs{}).Kind() != "payouts.sweep" || (payouts.PrizesArgs{}).Kind() != "payouts.prizes" ||
+		(payouts.ReconcileArgs{}).Kind() != "payouts.reconcile" {
 		t.Fatal("periodic jobs")
 	}
 	wc, err := river.NewClient(riverpgxv5.New(pool), &river.Config{Schema: db.RiverSchema, Workers: workers,

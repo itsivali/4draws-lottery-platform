@@ -9,6 +9,11 @@ Read this first at the start of every session.
   (2026-10-24).** **Phase 4 — Draws: built** (`docs/checkpoints/phase-4.md`): slices 1 (drand), 2 (lifecycle) and 3
   (public results API, `tools/verifier draw`, daily draw reconciliation, late-step monitoring; branch
   `feat/draws-results`, 2026-10-25). Not yet seen live: a draw signed and approved by two officials on Render.
+  **Phase 5 — Payouts: built (2026-10-25)** (`docs/checkpoints/phase-5.md`, runbook `docs/runbooks/payouts.md`): B2C
+  client and mock, withdrawals, prize payouts, KRA withholding feed, payout reconciliation. Stacked PRs #34 → #35 →
+  #36 → slice 3, each green locally; **merging needs the owner** (the agent may not merge). To try it in the sandbox:
+  set `DARAJA_B2C_SHORTCODE=600992` on Render after the merges. **Next: phase 6 (web app and back office) — not
+  started, by the owner's instruction.**
   Phase 2 detail (`docs/checkpoints/phase-2.md`). Slices 1
   (Daraja client + mock), 2 (STK top-up, ADR 0006) and 4 (reversals, player debt, internal reconciliation, ADR 0007)
   are merged and live. **Slice 3 (C2B paybill, ADR 0008) is merged and live (2026-10-24, #18, #19)**; its sandbox
@@ -90,6 +95,11 @@ Read this first at the start of every session.
 4. Later: password reset (STK proof + ID match), passkeys/TOTP, real Play Integrity / App Attest verifiers.
 
 ## Open questions for the owner
+
+- **Payouts (phase 5) placeholders:** withholding on winnings 20% (`winnings_wht`), none on withdrawals
+  (`withdrawal_wht` 0%); withdrawals KES 50–150,000, 3 a day; manual approval above KES 100,000. Confirm with a tax
+  adviser and set them. Should a prize first repay a player's debt from a reversed top-up? How is the KRA feed
+  (`lotteryctl tax export`) to be submitted?
 
 - **Draw privacy (phase 4):** the public certificate (`GET /v1/draws/{id}/certificate`) names winners by entry number
   and **user id** (a random identifier, no name or phone), because it is published byte for byte as hashed. The full

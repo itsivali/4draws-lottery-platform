@@ -1,6 +1,6 @@
 # Phase 5 — Payouts: checkpoint
 
-Status: IN PROGRESS (started 2026-10-25, on the owner's instruction to build up to the web app).
+Status: COMPLETE in code (2026-10-25, built on the owner's instruction to go up to the web app); not yet run live in the sandbox.
 
 ## Decisions taken without the owner (placeholders, marked in code and below)
 
@@ -102,3 +102,31 @@ Prize payouts for approved draws (`PrizePayout`, a failure posting that returns 
 - Hand mutations killed: refunding on any unconfirmed status; succeeding without the amount check.
 - Open: Daraja's sandbox support for Transaction Status by `OriginalConversationID` must be seen live (the mock
   implements it); until then a payout without a confirmed status lands in manual, never refunded.
+
+### Slice 3 (prize payouts, tax feed, reconciliation)
+- `ledger.PrizePayoutFailed` (exact reversal of `PrizePayout`: the prize back to its pool, the tax released).
+- `payouts.PayPrizes` (job `payouts.prizes`, every 5 minutes): a payout per prize of an approved draw that never had one
+  (`winnings_wht` withheld, pool → B2C float and tax, queued or held), skipping winners who cannot be paid now; a
+  failed prize goes back to its pool and only an operator pays it again (`RetryPrize`, `lotteryctl payouts
+  retry-prize`). The draws schedule marks an approved draw `paid` once every prize has a confirmed payout.
+- KRA feed: one `withholding_tax` event per paid payout with tax (unique index, migration `00024`); `ExportTax` /
+  `lotteryctl tax export` writes them as JSON lines and marks them exported only when the write succeeded.
+- Reconciliation (`payouts.reconciliation_runs`, daily job, `lotteryctl payouts reconcile`): journals per payout and
+  their amounts, failure reversals, prize amounts, KRA events, `B2C_FLOAT` and `TAX_PAYABLE` against live payouts; the
+  draw reconciliation now subtracts prizes paid out from the pools.
+- Tests (coverage payouts 86.3%, draws 85.1%, overall 86.3%; `make ci` green): prizes paid with 20% withheld (105 → 21 + 84; 63 → 13 + 50), pool emptied, float and tax booked, reported to
+  the feed once and exported once, the draw marked paid; a failed prize back in its pool, not retried by itself, paid
+  again by an operator (a second retry refused while one is live); a suspended winner skipped; a large prize held;
+  nothing created without B2C; tampering caught (a missing tax event, a failure without its reversal, a rewritten
+  journal, a float that does not add up); pool reconciliation with prizes paid out and the draw paid only when the last
+  prize is. Hand mutation killed: a failed prize that is not given back to its pool.
+
+## Checkpoint (2026-10-25)
+
+Phase 5 is complete in code: withdrawals and prizes leave through M-Pesa B2C, each recorded and posted before it is
+sent, sent once, and settled only on a Transaction Status confirmation; refunds only on a confirmed failure; operators
+handle what cannot be confirmed; tax withheld on prizes is reported to the KRA feed; payouts and pools reconcile daily.
+Not yet seen live: a sandbox B2C payout (needs `DARAJA_B2C_SHORTCODE` on Render) and Daraja's sandbox answer to a
+Transaction Status request by originator conversation id. Open for the owner and a tax adviser: the withholding rates
+(placeholders), the withdrawal bounds and daily count, the manual threshold, whether a prize should first repay a
+player's debt, and how the KRA feed is to be submitted.

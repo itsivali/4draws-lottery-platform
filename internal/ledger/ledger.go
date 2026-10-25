@@ -265,6 +265,24 @@ func PrizePayout(payoutID, drawType string, gross int64, tax TaxRule) (Posting, 
 		d(pool, gross, ""), c(B2CFloat, gross-t, ""), c(TaxPayable, t, ""))
 }
 
+// PrizePayoutFailed reverses a prize payout whose B2C payment finally failed: the prize goes back to its pool, still
+// owed, and the tax withheld is released.
+func PrizePayoutFailed(payoutID, drawType string, gross int64, tax TaxRule) (Posting, error) {
+	pool, ok := prizePools[drawType]
+	if !ok {
+		return Posting{}, fmt.Errorf("ledger: unknown draw type %q", drawType)
+	}
+	if err := positive(gross); err != nil {
+		return Posting{}, err
+	}
+	t, err := Apply(gross, tax.Rate, tax.Rounding)
+	if err != nil {
+		return Posting{}, err
+	}
+	return build("prize_payout_failed", "payout", payoutID, "", nil,
+		d(B2CFloat, gross-t, ""), d(TaxPayable, t, ""), c(pool, gross, ""))
+}
+
 // DebtRecovery takes back, from a later deposit, money a player owes after a reversal. It is keyed on the payment
 // whose deposit funds it, so each deposit recovers at most once.
 func DebtRecovery(paymentID, user string, amount int64) (Posting, error) {

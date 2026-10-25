@@ -277,6 +277,42 @@ func TestPlayerDebt_IsBookedAgainstThePlayerAndRecoveredFromTheirWallet(t *testi
 	}
 }
 
+func TestPrizePayoutFailed_ReversesThePayoutExactly(t *testing.T) {
+	r := rate(t, "0.2", ledger.HalfUp)
+	paid, err := ledger.PrizePayout(ref, "daily", 105, r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	back, err := ledger.PrizePayoutFailed(ref, "daily", 105, r)
+	if err != nil || back.Journal.Kind != "prize_payout_failed" || len(back.WalletTxs) != 0 {
+		t.Fatalf("%+v %v", back, err)
+	}
+	net := map[string]int64{}
+	for _, p := range []ledger.Posting{paid, back} {
+		for _, e := range p.Journal.Entries {
+			if e.Dir == ledger.Credit {
+				net[e.Account] += e.AmountKES
+			} else {
+				net[e.Account] -= e.AmountKES
+			}
+		}
+	}
+	for acct, n := range net {
+		if n != 0 {
+			t.Errorf("%s left with %d", acct, n)
+		}
+	}
+	if _, err := ledger.PrizePayoutFailed(ref, "yearly", 1, r); err == nil {
+		t.Error("unknown draw type accepted")
+	}
+	if _, err := ledger.PrizePayoutFailed(ref, "daily", 0, r); err == nil {
+		t.Error("zero accepted")
+	}
+	if _, err := ledger.PrizePayoutFailed(ref, "daily", 10, ledger.TaxRule{Rounding: "sideways"}); err == nil {
+		t.Error("unknown rounding accepted")
+	}
+}
+
 func TestPrizePayout_DoesNotTouchTheWallet(t *testing.T) {
 	p, err := ledger.PrizePayout(ref, "weekly", 10_000, rate(t, "0.2", ledger.HalfUp))
 	if err != nil {

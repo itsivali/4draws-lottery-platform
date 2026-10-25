@@ -10,6 +10,19 @@ import (
 	"time"
 )
 
+const accountBalance = `-- name: AccountBalance :one
+SELECT coalesce(sum(CASE e.direction WHEN 'C' THEN e.amount_kes ELSE -e.amount_kes END), 0)::bigint
+FROM ledger.ledger_entries e JOIN ledger.ledger_accounts a ON a.id = e.account_id WHERE a.code = $1
+`
+
+// credit-normal balance of one account
+func (q *Queries) AccountBalance(ctx context.Context, code string) (int64, error) {
+	row := q.db.QueryRow(ctx, accountBalance, code)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const approvePayout = `-- name: ApprovePayout :exec
 UPDATE payouts.payouts SET status = 'pending', approved_by = $1, updated_at = $2
 WHERE id = $3 AND status = 'held'
@@ -55,6 +68,33 @@ func (q *Queries) Callbacks(ctx context.Context, payoutID *string) ([]CallbacksR
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const failureJournalMismatch = `-- name: FailureJournalMismatch :many
+SELECT p.id FROM payouts.payouts p
+WHERE (p.status = 'failed') <> EXISTS (SELECT 1 FROM ledger.ledger_journals j WHERE j.reference_type = 'payout' AND j.reference_id = p.id
+                  AND j.kind IN ('withdrawal_failed','prize_payout_failed'))
+`
+
+// a failed payout without its reversal, or a reversal of a payout that did not fail
+func (q *Queries) FailureJournalMismatch(ctx context.Context) ([]string, error) {
+	rows, err := q.db.Query(ctx, failureJournalMismatch)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -124,6 +164,22 @@ func (q *Queries) InsertCallback(ctx context.Context, arg InsertCallbackParams) 
 	return err
 }
 
+const insertKRAEvent = `-- name: InsertKRAEvent :exec
+INSERT INTO audit.kra_outbox (event_type, payload, created_at) VALUES ($1, $2, $3)
+ON CONFLICT DO NOTHING
+`
+
+type InsertKRAEventParams struct {
+	EventType string
+	Payload   []byte
+	At        time.Time
+}
+
+func (q *Queries) InsertKRAEvent(ctx context.Context, arg InsertKRAEventParams) error {
+	_, err := q.db.Exec(ctx, insertKRAEvent, arg.EventType, arg.Payload, arg.At)
+	return err
+}
+
 const insertPayout = `-- name: InsertPayout :one
 INSERT INTO payouts.payouts (user_id, kind, route, status, gross_kes, tax_kes, net_kes, msisdn, draw_result_id,
                              originator_conversation_id, idempotency_key, tax_code, tax_rate, tax_rounding, created_at, updated_at)
@@ -170,6 +226,69 @@ func (q *Queries) InsertPayout(ctx context.Context, arg InsertPayoutParams) (str
 	return id, err
 }
 
+const insertReconciliationRun = `-- name: InsertReconciliationRun :exec
+INSERT INTO payouts.reconciliation_runs (ran_at, ok, report) VALUES ($1, $2, $3)
+`
+
+type InsertReconciliationRunParams struct {
+	RanAt  time.Time
+	Ok     bool
+	Report []byte
+}
+
+func (q *Queries) InsertReconciliationRun(ctx context.Context, arg InsertReconciliationRunParams) error {
+	_, err := q.db.Exec(ctx, insertReconciliationRun, arg.RanAt, arg.Ok, arg.Report)
+	return err
+}
+
+const journalAmountMismatch = `-- name: JournalAmountMismatch :many
+SELECT p.id FROM payouts.payouts p
+JOIN ledger.ledger_journals j ON j.reference_type = 'payout' AND j.reference_id = p.id AND j.kind IN ('withdrawal','prize_payout')
+WHERE coalesce((SELECT sum(e.amount_kes) FROM ledger.ledger_entries e JOIN ledger.ledger_accounts a ON a.id = e.account_id
+                WHERE e.journal_id = j.id AND a.code = 'B2C_FLOAT' AND e.direction = 'C'), 0) <> p.net_kes
+   OR coalesce((SELECT sum(e.amount_kes) FROM ledger.ledger_entries e JOIN ledger.ledger_accounts a ON a.id = e.account_id
+                WHERE e.journal_id = j.id AND a.code = 'TAX_PAYABLE' AND e.direction = 'C'), 0) <> p.tax_kes
+`
+
+// the payout's journal must move exactly its net to B2C_FLOAT and its tax to TAX_PAYABLE
+func (q *Queries) JournalAmountMismatch(ctx context.Context) ([]string, error) {
+	rows, err := q.db.Query(ctx, journalAmountMismatch)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const livePayoutTotals = `-- name: LivePayoutTotals :one
+SELECT coalesce(sum(net_kes), 0)::bigint AS net_kes, coalesce(sum(tax_kes), 0)::bigint AS tax_kes, count(*)::bigint AS payouts
+FROM payouts.payouts WHERE status <> 'failed'
+`
+
+type LivePayoutTotalsRow struct {
+	NetKes  int64
+	TaxKes  int64
+	Payouts int64
+}
+
+func (q *Queries) LivePayoutTotals(ctx context.Context) (LivePayoutTotalsRow, error) {
+	row := q.db.QueryRow(ctx, livePayoutTotals)
+	var i LivePayoutTotalsRow
+	err := row.Scan(&i.NetKes, &i.TaxKes, &i.Payouts)
+	return i, err
+}
+
 const lockPayout = `-- name: LockPayout :one
 SELECT id, user_id, kind, route, status, gross_kes, tax_kes, net_kes, msisdn, draw_result_id, originator_conversation_id, conversation_id, mpesa_receipt, idempotency_key, created_at, updated_at, tax_code, tax_rate, tax_rounding, status_requests, status_requested_at, status_originator, reason, approved_by, settled_by, settled_at FROM payouts.payouts WHERE id = $1 FOR UPDATE
 `
@@ -208,6 +327,20 @@ func (q *Queries) LockPayout(ctx context.Context, id string) (PayoutsPayout, err
 	return i, err
 }
 
+const markKRAExported = `-- name: MarkKRAExported :exec
+UPDATE audit.kra_outbox SET exported_at = $1 WHERE id = ANY($2::bigint[])
+`
+
+type MarkKRAExportedParams struct {
+	At  *time.Time
+	Ids []int64
+}
+
+func (q *Queries) MarkKRAExported(ctx context.Context, arg MarkKRAExportedParams) error {
+	_, err := q.db.Exec(ctx, markKRAExported, arg.At, arg.Ids)
+	return err
+}
+
 const markSent = `-- name: MarkSent :exec
 UPDATE payouts.payouts SET status = 'sent', conversation_id = $1, updated_at = $2
 WHERE id = $3 AND status = 'sending'
@@ -240,6 +373,32 @@ type MarkStatusRequestedParams struct {
 func (q *Queries) MarkStatusRequested(ctx context.Context, arg MarkStatusRequestedParams) error {
 	_, err := q.db.Exec(ctx, markStatusRequested, arg.At, arg.Originator, arg.ID)
 	return err
+}
+
+const missingKRAEvents = `-- name: MissingKRAEvents :many
+SELECT p.id FROM payouts.payouts p
+WHERE p.status = 'succeeded' AND p.tax_kes > 0
+  AND NOT EXISTS (SELECT 1 FROM audit.kra_outbox k WHERE k.event_type = 'withholding_tax' AND k.payload->>'payout_id' = p.id::text)
+`
+
+func (q *Queries) MissingKRAEvents(ctx context.Context) ([]string, error) {
+	rows, err := q.db.Query(ctx, missingKRAEvents)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const payoutByKey = `-- name: PayoutByKey :one
@@ -336,6 +495,68 @@ func (q *Queries) PayoutsInStatus(ctx context.Context, arg PayoutsInStatusParams
 	return items, nil
 }
 
+const payoutsWithoutJournal = `-- name: PayoutsWithoutJournal :many
+SELECT p.id FROM payouts.payouts p
+WHERE NOT EXISTS (SELECT 1 FROM ledger.ledger_journals j WHERE j.reference_type = 'payout' AND j.reference_id = p.id
+                  AND j.kind = CASE p.kind WHEN 'prize' THEN 'prize_payout' ELSE 'withdrawal' END)
+`
+
+func (q *Queries) PayoutsWithoutJournal(ctx context.Context) ([]string, error) {
+	rows, err := q.db.Query(ctx, payoutsWithoutJournal)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const pendingKRAEvents = `-- name: PendingKRAEvents :many
+SELECT id, event_type, payload, created_at FROM audit.kra_outbox WHERE exported_at IS NULL ORDER BY id LIMIT $1 FOR UPDATE
+`
+
+type PendingKRAEventsRow struct {
+	ID        int64
+	EventType string
+	Payload   []byte
+	CreatedAt time.Time
+}
+
+func (q *Queries) PendingKRAEvents(ctx context.Context, maxRows int32) ([]PendingKRAEventsRow, error) {
+	rows, err := q.db.Query(ctx, pendingKRAEvents, maxRows)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []PendingKRAEventsRow
+	for rows.Next() {
+		var i PendingKRAEventsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.EventType,
+			&i.Payload,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const playerPayouts = `-- name: PlayerPayouts :many
 SELECT id, user_id, kind, route, status, gross_kes, tax_kes, net_kes, msisdn, draw_result_id, originator_conversation_id, conversation_id, mpesa_receipt, idempotency_key, created_at, updated_at, tax_code, tax_rate, tax_rounding, status_requests, status_requested_at, status_originator, reason, approved_by, settled_by, settled_at FROM payouts.payouts WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2
 `
@@ -392,6 +613,106 @@ func (q *Queries) PlayerPayouts(ctx context.Context, arg PlayerPayoutsParams) ([
 	return items, nil
 }
 
+const prizeAmountMismatch = `-- name: PrizeAmountMismatch :many
+SELECT p.id FROM payouts.payouts p JOIN draws.draw_results r ON r.id = p.draw_result_id WHERE p.gross_kes <> r.amount_kes
+`
+
+func (q *Queries) PrizeAmountMismatch(ctx context.Context) ([]string, error) {
+	rows, err := q.db.Query(ctx, prizeAmountMismatch)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const prizeResult = `-- name: PrizeResult :one
+SELECT r.id AS result_id, e.user_id, r.amount_kes, d.draw_type, d.id AS draw_id, d.status AS draw_status
+FROM draws.draw_results r
+JOIN draws.draw_entries e ON e.id = r.entry_id
+JOIN draws.draws d ON d.id = r.draw_id
+WHERE r.id = $1
+`
+
+type PrizeResultRow struct {
+	ResultID   string
+	UserID     string
+	AmountKes  int64
+	DrawType   string
+	DrawID     string
+	DrawStatus string
+}
+
+func (q *Queries) PrizeResult(ctx context.Context, id string) (PrizeResultRow, error) {
+	row := q.db.QueryRow(ctx, prizeResult, id)
+	var i PrizeResultRow
+	err := row.Scan(
+		&i.ResultID,
+		&i.UserID,
+		&i.AmountKes,
+		&i.DrawType,
+		&i.DrawID,
+		&i.DrawStatus,
+	)
+	return i, err
+}
+
+const prizesToPay = `-- name: PrizesToPay :many
+SELECT r.id AS result_id, e.user_id, r.amount_kes, d.draw_type, d.id AS draw_id
+FROM draws.draw_results r
+JOIN draws.draw_entries e ON e.id = r.entry_id
+JOIN draws.draws d ON d.id = r.draw_id
+WHERE d.status = 'approved' AND NOT EXISTS (SELECT 1 FROM payouts.payouts p WHERE p.draw_result_id = r.id)
+ORDER BY d.period_end, r.prize_rank
+LIMIT 500
+`
+
+type PrizesToPayRow struct {
+	ResultID  string
+	UserID    string
+	AmountKes int64
+	DrawType  string
+	DrawID    string
+}
+
+// results of approved draws that have never had a payout (a failed one is retried by an operator, not here)
+func (q *Queries) PrizesToPay(ctx context.Context) ([]PrizesToPayRow, error) {
+	rows, err := q.db.Query(ctx, prizesToPay)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []PrizesToPayRow
+	for rows.Next() {
+		var i PrizesToPayRow
+		if err := rows.Scan(
+			&i.ResultID,
+			&i.UserID,
+			&i.AmountKes,
+			&i.DrawType,
+			&i.DrawID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const receiptPaid = `-- name: ReceiptPaid :one
 SELECT EXISTS (SELECT 1 FROM payouts.payouts WHERE mpesa_receipt = $1)::bool
 `
@@ -401,6 +722,24 @@ func (q *Queries) ReceiptPaid(ctx context.Context, mpesaReceipt *string) (bool, 
 	var column_1 bool
 	err := row.Scan(&column_1)
 	return column_1, err
+}
+
+const resultPayouts = `-- name: ResultPayouts :one
+SELECT count(*)::int AS attempts, count(*) FILTER (WHERE status <> 'failed')::int AS live
+FROM payouts.payouts WHERE draw_result_id = $1
+`
+
+type ResultPayoutsRow struct {
+	Attempts int32
+	Live     int32
+}
+
+// how many payouts a prize has had, and whether one is live (not failed)
+func (q *Queries) ResultPayouts(ctx context.Context, drawResultID *string) (ResultPayoutsRow, error) {
+	row := q.db.QueryRow(ctx, resultPayouts, drawResultID)
+	var i ResultPayoutsRow
+	err := row.Scan(&i.Attempts, &i.Live)
+	return i, err
 }
 
 const setPayoutStatus = `-- name: SetPayoutStatus :exec

@@ -32,6 +32,18 @@ type SweepArgs struct{}
 // Kind implements river.JobArgs.
 func (SweepArgs) Kind() string { return "payouts.sweep" }
 
+// PrizesArgs creates the payouts of approved draws' prizes.
+type PrizesArgs struct{}
+
+// Kind implements river.JobArgs.
+func (PrizesArgs) Kind() string { return "payouts.prizes" }
+
+// ReconcileArgs runs the daily payout reconciliation.
+type ReconcileArgs struct{}
+
+// Kind implements river.JobArgs.
+func (ReconcileArgs) Kind() string { return "payouts.reconcile" }
+
 const verifyMaxAttempts = 20
 
 // unique collapses a job into one already waiting or running for the same arguments, but not into one that finished:
@@ -92,7 +104,30 @@ func (w *sweepWorker) Work(ctx context.Context, _ *river.Job[SweepArgs]) error {
 	return w.svc.Sweep(ctx)
 }
 
-// SweepEvery is how often the sweeper looks for payouts left behind.
+type prizesWorker struct {
+	river.WorkerDefaults[PrizesArgs]
+	svc *Service
+}
+
+func (w *prizesWorker) Work(ctx context.Context, _ *river.Job[PrizesArgs]) error {
+	_, err := w.svc.PayPrizes(ctx)
+	return err
+}
+
+type reconcileWorker struct {
+	river.WorkerDefaults[ReconcileArgs]
+	svc *Service
+}
+
+func (w *reconcileWorker) Work(ctx context.Context, _ *river.Job[ReconcileArgs]) error {
+	_, err := w.svc.Reconcile(ctx)
+	return err
+}
+
+// ReconcileEvery is how often the payout reconciliation runs.
+const ReconcileEvery = 24 * time.Hour
+
+// SweepEvery is how often the sweeper looks for payouts left behind (and prizes are paid).
 const SweepEvery = 5 * time.Minute
 
 // AddWorkers registers the payout workers.
@@ -100,6 +135,8 @@ func AddWorkers(ws *river.Workers, svc *Service) {
 	river.AddWorker(ws, &sendWorker{svc: svc})
 	river.AddWorker(ws, &verifyWorker{svc: svc})
 	river.AddWorker(ws, &sweepWorker{svc: svc})
+	river.AddWorker(ws, &prizesWorker{svc: svc})
+	river.AddWorker(ws, &reconcileWorker{svc: svc})
 }
 
 // PeriodicJobs are the scheduled payout jobs.
@@ -107,5 +144,9 @@ func PeriodicJobs() []*river.PeriodicJob {
 	return []*river.PeriodicJob{
 		river.NewPeriodicJob(river.PeriodicInterval(SweepEvery),
 			func() (river.JobArgs, *river.InsertOpts) { return SweepArgs{}, nil }, &river.PeriodicJobOpts{ID: "payouts.sweep"}),
+		river.NewPeriodicJob(river.PeriodicInterval(SweepEvery),
+			func() (river.JobArgs, *river.InsertOpts) { return PrizesArgs{}, nil }, &river.PeriodicJobOpts{ID: "payouts.prizes", RunOnStart: true}),
+		river.NewPeriodicJob(river.PeriodicInterval(ReconcileEvery),
+			func() (river.JobArgs, *river.InsertOpts) { return ReconcileArgs{}, nil }, &river.PeriodicJobOpts{ID: "payouts.reconcile", RunOnStart: true}),
 	}
 }

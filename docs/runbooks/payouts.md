@@ -48,3 +48,35 @@ Never settle a payout as failed while it might still complete: that would refund
 `unconfirmed` (no confirmation after the status requests), `success_not_confirmed` (Daraja said paid, Transaction
 Status never confirmed it: a possible forged or early result), `status_amount_mismatch`, `credited_elsewhere`,
 `receipt_reused`, `status_request_rejected` (usually the initiator or credential).
+
+## Prizes
+
+Every 5 minutes the worker creates a payout for each prize of an approved draw that has never had one: the winnings
+tax (placeholder 20%) is withheld, the prize leaves its `PRIZE_POOL_*` for B2C (`PromotionPayment`), and the payment
+follows the same states as a withdrawal (above KES 100,000 it is held for approval). Once every prize of a draw is
+confirmed paid, the draw becomes `paid`.
+
+- A winner who cannot be paid now (suspended, or no longer verified) is skipped; the prize stays owed. Fix the account,
+  and the next run pays it.
+- A prize whose payout **failed** (confirmed not paid) is back in its pool and is **not** retried automatically (a number
+  that cannot receive M-Pesa would loop). Check the winner's number, then:
+  `go run ./cmd/lotteryctl payouts retry-prize -result <draw result id> -operator <name>`.
+
+## Tax withheld (KRA)
+
+Each paid payout with tax withheld adds one `withholding_tax` event to `audit.kra_outbox` (payout, payee id, gross,
+tax, net, rate, receipt, time). Export the events not yet exported as JSON lines; they are marked exported only when
+the whole export was written:
+
+```sh
+go run ./cmd/lotteryctl tax export > withholding-$(date +%F).jsonl
+```
+
+## Reconciliation
+
+Daily (`go run ./cmd/lotteryctl payouts reconcile` runs it now; runs kept in `payouts.reconciliation_runs`): every
+payout has its journal with exactly its net to `B2C_FLOAT` and its tax to `TAX_PAYABLE`; failed payouts, and only
+they, have the reversal; prize payouts match their draw result; every paid payout with tax is in the KRA feed;
+`B2C_FLOAT` and `TAX_PAYABLE` equal the net and tax of payouts that have not failed. The draw reconciliation checks each
+pool against approved pools minus prizes paid out. A mismatch is a bug or tampering: stop approving payouts and
+investigate.

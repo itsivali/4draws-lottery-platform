@@ -84,12 +84,21 @@ func (s *Service) Reconcile(ctx context.Context) (Report, error) {
 		if err != nil {
 			return err
 		}
+		out, err := q.PrizesOutByType(ctx)
+		if err != nil {
+			return err
+		}
+		paidOut := map[string]int64{}
+		for _, o := range out {
+			paidOut[o.DrawType] = o.GrossKes
+		}
 		for _, b := range balances {
 			typ := strings.ToLower(strings.TrimPrefix(b.Code, "PRIZE_POOL_"))
 			r.Totals[strings.ToLower(b.Code)+"_kes"] = b.BalanceKes
-			// payouts take prizes out of the pools in phase 5
-			if b.BalanceKes != approvedPools[typ] {
-				r.flag("pool_balance_mismatch", b.Code, "balance "+kes(b.BalanceKes)+" != pools of approved "+typ+" draws "+kes(approvedPools[typ]))
+			// prize payouts (not failed) take prizes out of the pools
+			if want := approvedPools[typ] - paidOut[typ]; b.BalanceKes != want {
+				r.flag("pool_balance_mismatch", b.Code, "balance "+kes(b.BalanceKes)+" != pools of approved "+typ+" draws "+kes(approvedPools[typ])+
+					" - prizes paid out "+kes(paidOut[typ]))
 			}
 		}
 		r.Totals["draws_checked"] = int64(len(ids))

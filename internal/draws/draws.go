@@ -134,8 +134,8 @@ func (s *Service) roundFor(periodEnd, now time.Time) uint64 {
 
 // Schedule does whatever is due: opens the current periods' draws, freezes those whose period has ended, voids and
 // re-runs those not signed before their round, and conducts signed draws whose round is published. It runs every few
-// minutes in the worker; each draw is handled in its own transaction and one failure does not stop the others. Then
-// it reports the draws whose step is late.
+// minutes in the worker; each draw is handled in its own transaction and one failure does not stop the others. It
+// marks approved draws paid once every prize has a confirmed payout, then reports the draws whose step is late.
 func (s *Service) Schedule(ctx context.Context) error {
 	now, err := s.clk.Now(ctx, s.pool)
 	if err != nil {
@@ -192,6 +192,16 @@ func (s *Service) Schedule(ctx context.Context) error {
 		}
 		return err
 	})
+	// an approved draw is paid once every prize has a confirmed payout (phase 5)
+	if ids, err := q.ApprovedDrawsFullyPaid(ctx); err != nil {
+		errs = append(errs, err)
+	} else {
+		for _, id := range ids {
+			if err := q.SetStatus(ctx, store.SetStatusParams{Status: "paid", At: now, ID: id}); err != nil {
+				errs = append(errs, fmt.Errorf("draw %s: %w", id, err))
+			}
+		}
+	}
 	if err := s.reportOverdue(ctx); err != nil {
 		errs = append(errs, err)
 	}

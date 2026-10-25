@@ -118,3 +118,16 @@ GROUP BY a.code ORDER BY a.code;
 
 -- name: InsertReconciliationRun :exec
 INSERT INTO draws.reconciliation_runs (ran_at, ok, report) VALUES ($1, $2, $3);
+
+-- name: ApprovedDrawsFullyPaid :many
+-- approved draws every prize of which has a confirmed payout (or that awarded none)
+SELECT d.id FROM draws.draws d
+WHERE d.status = 'approved'
+  AND NOT EXISTS (SELECT 1 FROM draws.draw_results r WHERE r.draw_id = d.id
+                  AND NOT EXISTS (SELECT 1 FROM payouts.payouts p WHERE p.draw_result_id = r.id AND p.status = 'succeeded'));
+
+-- name: PrizesOutByType :many
+-- what left each pool for prize payouts that have not failed
+SELECT d.draw_type, coalesce(sum(p.gross_kes), 0)::bigint AS gross_kes
+FROM payouts.payouts p JOIN draws.draw_results r ON r.id = p.draw_result_id JOIN draws.draws d ON d.id = r.draw_id
+WHERE p.status <> 'failed' GROUP BY d.draw_type;

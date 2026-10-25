@@ -10,6 +10,34 @@ import (
 	"time"
 )
 
+const approvedDrawsFullyPaid = `-- name: ApprovedDrawsFullyPaid :many
+SELECT d.id FROM draws.draws d
+WHERE d.status = 'approved'
+  AND NOT EXISTS (SELECT 1 FROM draws.draw_results r WHERE r.draw_id = d.id
+                  AND NOT EXISTS (SELECT 1 FROM payouts.payouts p WHERE p.draw_result_id = r.id AND p.status = 'succeeded'))
+`
+
+// approved draws every prize of which has a confirmed payout (or that awarded none)
+func (q *Queries) ApprovedDrawsFullyPaid(ctx context.Context) ([]string, error) {
+	rows, err := q.db.Query(ctx, approvedDrawsFullyPaid)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const conduct = `-- name: Conduct :exec
 UPDATE draws.draws
    SET status = 'conducted', revealed_seed = $1, beacon_value = $2,
@@ -562,6 +590,38 @@ func (q *Queries) PrizeStructureFor(ctx context.Context, arg PrizeStructureForPa
 		&i.Prizes,
 	)
 	return i, err
+}
+
+const prizesOutByType = `-- name: PrizesOutByType :many
+SELECT d.draw_type, coalesce(sum(p.gross_kes), 0)::bigint AS gross_kes
+FROM payouts.payouts p JOIN draws.draw_results r ON r.id = p.draw_result_id JOIN draws.draws d ON d.id = r.draw_id
+WHERE p.status <> 'failed' GROUP BY d.draw_type
+`
+
+type PrizesOutByTypeRow struct {
+	DrawType string
+	GrossKes int64
+}
+
+// what left each pool for prize payouts that have not failed
+func (q *Queries) PrizesOutByType(ctx context.Context) ([]PrizesOutByTypeRow, error) {
+	rows, err := q.db.Query(ctx, prizesOutByType)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []PrizesOutByTypeRow
+	for rows.Next() {
+		var i PrizesOutByTypeRow
+		if err := rows.Scan(&i.DrawType, &i.GrossKes); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const results = `-- name: Results :many

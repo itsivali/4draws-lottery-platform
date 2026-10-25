@@ -335,12 +335,16 @@ func (s *Service) succeed(ctx context.Context, tx pgx.Tx, p store.PayoutsPayout,
 	if err := q.SettlePayout(ctx, store.SettlePayoutParams{Status: "succeeded", Receipt: &receipt, Reason: p.Reason, SettledBy: settledBy(actor), At: &now, ID: p.ID}); err != nil {
 		return err
 	}
+	if err := recordWithholding(ctx, tx, p, receipt, now); err != nil {
+		return err
+	}
 	actor.Action, actor.EntityType, actor.EntityID = "payout.succeeded", "payout", p.ID
 	actor.Details = map[string]any{"receipt": receipt, "net_kes": p.NetKes}
 	return s.audit.Record(ctx, tx, actor)
 }
 
-// fail records a confirmed failure and gives the money back: to the wallet for a withdrawal.
+// fail records a confirmed failure and gives the money back: to the wallet for a withdrawal, to its pool for a prize
+// (still owed).
 func (s *Service) fail(ctx context.Context, tx pgx.Tx, p store.PayoutsPayout, reason string, actor audit.Event, now time.Time) error {
 	q := store.New(tx)
 	if err := s.giveBack(ctx, tx, p); err != nil {
@@ -376,8 +380,19 @@ func (s *Service) giveBack(ctx context.Context, tx pgx.Tx, p store.PayoutsPayout
 		}
 		_, err = s.wallet.Apply(ctx, tx, posting)
 		return err
+	case "prize":
+		r, err := store.New(tx).PrizeResult(ctx, deref(p.DrawResultID))
+		if err != nil {
+			return err
+		}
+		posting, err := ledger.PrizePayoutFailed(p.ID, r.DrawType, p.GrossKes, rule)
+		if err != nil {
+			return err
+		}
+		_, err = s.ledger.Post(ctx, tx, posting.Journal)
+		return err
 	default:
-		return fmt.Errorf("payouts: payout %s: giving back a %s payout is not supported", p.ID, p.Kind)
+		return fmt.Errorf("payouts: payout %s: unknown kind %s", p.ID, p.Kind)
 	}
 }
 
