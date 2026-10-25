@@ -197,6 +197,12 @@ func (s *Server) transactionStatus(w http.ResponseWriter, _ *http.Request, body 
 		writeErr(w, http.StatusBadRequest, "400.002.02", "Bad Request - Invalid Initiator")
 		return
 	}
+	// in the sandbox one shortcode can be both the paybill and the payout account: route by what is asked about
+	if s.opts.B2CShortCode != "" && body["PartyA"] == s.opts.B2CShortCode && body["CommandID"] == "TransactionStatusQuery" &&
+		(body["PartyA"] != s.opts.C2BShortCode || s.isPayout(body)) {
+		s.b2cStatus(w, body)
+		return
+	}
 	if body["PartyA"] != s.opts.C2BShortCode || body["CommandID"] != "TransactionStatusQuery" {
 		writeErr(w, http.StatusBadRequest, "400.002.02", "Bad Request - Invalid PartyA")
 		return

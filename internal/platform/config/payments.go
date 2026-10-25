@@ -29,14 +29,28 @@ type Payments struct {
 	CallbackPath string
 	PublicURL    string // the API's public origin (PUBLIC_BASE_URL, else Render's RENDER_EXTERNAL_URL)
 
-	// Paybill (C2B) payments, verified with the Transaction Status API. All three are set, or none (C2B off).
+	// Paybill (C2B) payments, verified with the Transaction Status API, and B2C payouts. Each shortcode turns its side
+	// on and needs the initiator and its credential, which both sides share.
 	C2BShortCode       string // the paybill customers pay into (sandbox test shortcode 600992)
+	B2CShortCode       string // the account payouts leave from (in the sandbox the same test shortcode)
 	Initiator          string // the API initiator's user name
 	SecurityCredential string // the initiator's password encrypted with Safaricom's certificate, from the Daraja portal
 }
 
 // C2BEnabled reports whether paybill payments are configured.
 func (p Payments) C2BEnabled() bool { return p.C2BShortCode != "" }
+
+// B2CEnabled reports whether payouts are configured.
+func (p Payments) B2CEnabled() bool { return p.B2CShortCode != "" }
+
+// B2CRoute is where Daraja posts payout results and the Transaction Status answers about payouts:
+// B2CRoute + CallbackPath + "/" + one of result, timeout, status-result, status-timeout.
+const B2CRoute = "/hooks/b2c/"
+
+// B2CURL is the public URL of one payout hook.
+func (p Payments) B2CURL(action string) string {
+	return p.PublicURL + B2CRoute + p.CallbackPath + "/" + action
+}
 
 // C2BRoute is where Daraja posts paybill validations, confirmations and Transaction Status answers:
 // C2BRoute + CallbackPath + "/" + one of validate, confirm, status-result, status-timeout. C2B URL registration refuses
@@ -59,7 +73,8 @@ func (p Payments) CallbackURL() string { return p.PublicURL + CallbackRoute + p.
 
 var (
 	darajaCredentials = []string{"DARAJA_CONSUMER_KEY", "DARAJA_CONSUMER_SECRET", "DARAJA_SHORTCODE", "DARAJA_PASSKEY"}
-	c2bSettings       = []string{"DARAJA_C2B_SHORTCODE", "DARAJA_INITIATOR_NAME", "DARAJA_SECURITY_CREDENTIAL"}
+	c2bSettings       = []string{"DARAJA_C2B_SHORTCODE", "DARAJA_B2C_SHORTCODE", "DARAJA_INITIATOR_NAME", "DARAJA_SECURITY_CREDENTIAL"}
+	initiatorSettings = []string{"DARAJA_INITIATOR_NAME", "DARAJA_SECURITY_CREDENTIAL"}
 )
 
 // partly splits keys into those set and those missing in the environment.
@@ -76,7 +91,7 @@ func partly(keys []string) (set, missing []string) {
 
 func loadPayments(api API) (Payments, error) {
 	set, missing := partly(darajaCredentials)
-	c2bSet, c2bMissing := partly(c2bSettings)
+	c2bSet, _ := partly(c2bSettings)
 	if len(set) == 0 {
 		if len(c2bSet) > 0 {
 			return Payments{}, fmt.Errorf("config: %s set but the Daraja app credentials are not", strings.Join(c2bSet, ", "))
@@ -117,9 +132,14 @@ func loadPayments(api API) (Payments, error) {
 	if u, _ := url.Parse(p.BaseURL); u.Hostname() == "api.safaricom.co.ke" && !p.AllowProduction {
 		return Payments{}, errors.New("config: DARAJA_BASE_URL is production; set DARAJA_ALLOW_PRODUCTION=true only when that is intended")
 	}
-	if len(c2bSet) > 0 && len(c2bMissing) > 0 {
-		return Payments{}, fmt.Errorf("config: paybill payments are partly configured (%s set) but %s missing", strings.Join(c2bSet, ", "), strings.Join(c2bMissing, ", "))
+	p.C2BShortCode, p.B2CShortCode = os.Getenv("DARAJA_C2B_SHORTCODE"), os.Getenv("DARAJA_B2C_SHORTCODE")
+	initSet, initMissing := partly(initiatorSettings)
+	switch shortcodes := p.C2BShortCode != "" || p.B2CShortCode != ""; {
+	case shortcodes && len(initMissing) > 0:
+		return Payments{}, fmt.Errorf("config: paybill payments or payouts are configured (%s set) but %s missing", strings.Join(c2bSet, ", "), strings.Join(initMissing, ", "))
+	case !shortcodes && len(initSet) > 0:
+		return Payments{}, fmt.Errorf("config: %s set but neither DARAJA_C2B_SHORTCODE nor DARAJA_B2C_SHORTCODE", strings.Join(initSet, ", "))
 	}
-	p.C2BShortCode, p.Initiator, p.SecurityCredential = os.Getenv("DARAJA_C2B_SHORTCODE"), os.Getenv("DARAJA_INITIATOR_NAME"), os.Getenv("DARAJA_SECURITY_CREDENTIAL")
+	p.Initiator, p.SecurityCredential = os.Getenv("DARAJA_INITIATOR_NAME"), os.Getenv("DARAJA_SECURITY_CREDENTIAL")
 	return p, nil
 }

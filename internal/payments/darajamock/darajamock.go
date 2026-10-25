@@ -2,7 +2,8 @@
 // STK Push and STK query contract as Safaricom, posts STK callbacks, and can inject the faults the payments module must
 // survive: cancelled or failed prompts, lost and duplicated callbacks, a paid amount that differs from the request,
 // masked phone numbers, and push or query outages. It also takes paybill (C2B) payments: URL registration, simulated
-// payments with validation and confirmation calls, and asynchronous Transaction Status results (see C2BFault).
+// payments with validation and confirmation calls, and asynchronous Transaction Status results (see C2BFault), and
+// sends B2C payouts with result callbacks and their own faults (see B2CFault).
 //
 // A push stays pending until it is completed, either explicitly (Complete, or POST /__mock/complete/{checkoutID}) so
 // tests are deterministic, or automatically after a delay (AutoComplete) for the compose stack.
@@ -56,6 +57,8 @@ type Options struct {
 	ConsumerKey, ConsumerSecret, ShortCode, Passkey string
 	// Paybill (C2B) and Transaction Status: the paybill shortcode and the initiator status requests must present.
 	C2BShortCode, Initiator, SecurityCredential string
+	// B2CShortCode is the shortcode payouts leave from (B2C); it shares the initiator with Transaction Status.
+	B2CShortCode string
 	// ExternalValidation makes paybill payments ask the registered validation URL first, as Safaricom does when
 	// external validation is enabled on the shortcode.
 	ExternalValidation bool
@@ -82,6 +85,10 @@ type Server struct {
 	c2bSeq, statusSeq                            int
 	c2bTxns                                      map[string]*c2bTxn
 	c2bOrder, statusRequests                     []string
+	nextB2C                                      B2CFault
+	b2cSeq                                       int
+	b2cTxns                                      map[string]*b2cTxn
+	b2cOrder                                     []string
 	wg                                           sync.WaitGroup
 }
 
@@ -90,7 +97,7 @@ func New(o Options) *Server {
 	if o.HTTPClient == nil {
 		o.HTTPClient = http.DefaultClient
 	}
-	s := &Server{opts: o, txns: map[string]*txn{}, c2bTxns: map[string]*c2bTxn{}, mux: http.NewServeMux()}
+	s := &Server{opts: o, txns: map[string]*txn{}, c2bTxns: map[string]*c2bTxn{}, b2cTxns: map[string]*b2cTxn{}, mux: http.NewServeMux()}
 	s.mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("daraja-mock ok")) })
 	s.mux.HandleFunc("GET /oauth/v1/generate", s.token)
 	s.mux.HandleFunc("POST /mpesa/stkpush/v1/processrequest", s.authed(s.push))
@@ -98,6 +105,8 @@ func New(o Options) *Server {
 	s.mux.HandleFunc("POST /mpesa/c2b/v1/registerurl", s.bearerOnly(s.registerURLs))
 	s.mux.HandleFunc("POST /mpesa/c2b/v1/simulate", s.bearerOnly(s.simulate))
 	s.mux.HandleFunc("POST /mpesa/transactionstatus/v1/query", s.bearerOnly(s.transactionStatus))
+	s.mux.HandleFunc("POST /mpesa/b2c/v3/paymentrequest", s.bearerOnly(s.b2c))
+	s.mux.HandleFunc("POST /__mock/b2c-fault", s.setB2CFault)
 	s.mux.HandleFunc("POST /__mock/fault", s.setFault)
 	s.mux.HandleFunc("POST /__mock/c2b-fault", s.setC2BFault)
 	s.mux.HandleFunc("POST /__mock/complete/{id}", s.complete)

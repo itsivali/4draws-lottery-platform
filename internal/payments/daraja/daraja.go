@@ -1,5 +1,5 @@
 // Package daraja is the client for Safaricom's M-Pesa Daraja API: OAuth, STK Push (Lipa na M-Pesa Online), the STK
-// status query and STK callback parsing. It knows nothing about payments, wallets or the database.
+// status query and STK callback parsing, paybill (C2B) payments, B2C payouts and the Transaction Status API. It knows nothing about payments, wallets or the database.
 //
 // Errors fall into two classes so callers can decide between retrying and giving up: ErrUnavailable (network trouble,
 // 5xx, throttling, unreadable answers: retry later, the outcome is unknown) and ErrRejected (Daraja understood the
@@ -106,6 +106,7 @@ func (c Config) validate() error {
 type Client struct {
 	cfg Config
 	c2b *C2BConfig // nil: paybill calls are not configured
+	b2c *B2CConfig // nil: payout calls are not configured
 	hc  *http.Client
 	clk clock.Clock
 
@@ -245,6 +246,9 @@ func (c *Client) safeMessage(m string) string {
 	secrets := []string{c.cfg.ConsumerKey, c.cfg.ConsumerSecret, c.cfg.Passkey}
 	if c.c2b != nil {
 		secrets = append(secrets, c.c2b.Initiator, c.c2b.SecurityCredential)
+	}
+	if c.b2c != nil {
+		secrets = append(secrets, c.b2c.Initiator, c.b2c.SecurityCredential)
 	}
 	var kept []string
 	for _, w := range strings.Fields(m) {

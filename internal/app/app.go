@@ -144,18 +144,31 @@ func New(ctx context.Context, cfg config.Config, pool *pgxpool.Pool) (*App, erro
 	return a, nil
 }
 
-// NewDaraja builds the Daraja client from configuration, with the paybill calls when C2B is configured. lotteryctl
+// NewDaraja builds the Daraja client from configuration, with the paybill calls when C2B is configured and the payout
+// calls when B2C is. lotteryctl
 // uses it too, to register the paybill URLs.
 func NewDaraja(p config.Payments) (*daraja.Client, error) {
 	client, err := daraja.New(daraja.Config{
 		BaseURL: p.BaseURL, ConsumerKey: p.ConsumerKey, ConsumerSecret: p.ConsumerSecret, ShortCode: p.ShortCode,
 		Passkey: p.Passkey, TillNumber: p.TillNumber, CallbackURL: p.CallbackURL(), AllowProduction: p.AllowProduction,
 	}, &http.Client{Timeout: 35 * time.Second}, clock.Wall{})
-	if err != nil || !p.C2BEnabled() {
-		return client, err
+	if err != nil {
+		return nil, err
 	}
-	return client.WithC2B(daraja.C2BConfig{ShortCode: p.C2BShortCode, Initiator: p.Initiator, SecurityCredential: p.SecurityCredential,
-		ResultURL: p.C2BURL("status-result"), TimeoutURL: p.C2BURL("status-timeout")})
+	if p.C2BEnabled() {
+		if client, err = client.WithC2B(daraja.C2BConfig{ShortCode: p.C2BShortCode, Initiator: p.Initiator, SecurityCredential: p.SecurityCredential,
+			ResultURL: p.C2BURL("status-result"), TimeoutURL: p.C2BURL("status-timeout")}); err != nil {
+			return nil, err
+		}
+	}
+	if p.B2CEnabled() {
+		if client, err = client.WithB2C(daraja.B2CConfig{ShortCode: p.B2CShortCode, Initiator: p.Initiator, SecurityCredential: p.SecurityCredential,
+			ResultURL: p.B2CURL("result"), TimeoutURL: p.B2CURL("timeout"), StatusResultURL: p.B2CURL("status-result"),
+			StatusTimeoutURL: p.B2CURL("status-timeout")}); err != nil {
+			return nil, err
+		}
+	}
+	return client, nil
 }
 
 // StartWorkers starts the background job workers (a no-op when the API is not configured).

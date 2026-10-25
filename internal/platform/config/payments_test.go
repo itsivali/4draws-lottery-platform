@@ -21,12 +21,14 @@ func fullPaymentsEnv(t *testing.T) {
 	t.Setenv("DARAJA_ALLOW_PRODUCTION", "")
 	t.Setenv("PUBLIC_BASE_URL", "")
 	t.Setenv("RENDER_EXTERNAL_URL", "https://lottery-api.onrender.com")
-	for _, k := range c2bVars {
+	for _, k := range allInitiatorVars {
 		t.Setenv(k, "")
 	}
 }
 
 var c2bVars = []string{"DARAJA_C2B_SHORTCODE", "DARAJA_INITIATOR_NAME", "DARAJA_SECURITY_CREDENTIAL"}
+
+var allInitiatorVars = []string{"DARAJA_C2B_SHORTCODE", "DARAJA_B2C_SHORTCODE", "DARAJA_INITIATOR_NAME", "DARAJA_SECURITY_CREDENTIAL"}
 
 func fullC2BEnv(t *testing.T) {
 	t.Helper()
@@ -177,5 +179,33 @@ func TestPayments_PartialOrUnsafeConfigurationIsRefused(t *testing.T) {
 	t.Setenv("DARAJA_ALLOW_PRODUCTION", "true")
 	if cfg, err := config.Load(); err != nil || !cfg.Payments.AllowProduction {
 		t.Fatalf("explicit production: %v", err)
+	}
+}
+
+func TestPayments_B2CNeedsItsShortcodeAndTheInitiator(t *testing.T) {
+	fullPaymentsEnv(t)
+	if cfg, err := config.Load(); err != nil || cfg.Payments.B2CEnabled() {
+		t.Fatalf("b2c=%v err=%v", cfg.Payments.B2CEnabled(), err)
+	}
+	t.Setenv("DARAJA_B2C_SHORTCODE", "600992")
+	if _, err := config.Load(); err == nil || !strings.Contains(err.Error(), "DARAJA_INITIATOR_NAME") {
+		t.Fatalf("b2c without initiator: %v", err)
+	}
+	t.Setenv("DARAJA_INITIATOR_NAME", "testapi")
+	t.Setenv("DARAJA_SECURITY_CREDENTIAL", "bG9jYWwtZGV2LW9ubHk=")
+	cfg, err := config.Load()
+	if err != nil || !cfg.Payments.B2CEnabled() || cfg.Payments.C2BEnabled() {
+		t.Fatalf("b2c=%v c2b=%v err=%v", cfg.Payments.B2CEnabled(), cfg.Payments.C2BEnabled(), err)
+	}
+	p := cfg.Payments
+	for _, action := range []string{"result", "timeout", "status-result", "status-timeout"} {
+		if u := p.B2CURL(action); !strings.HasPrefix(u, "https://lottery-api.onrender.com/hooks/b2c/"+p.CallbackPath+"/") || !strings.HasSuffix(u, action) {
+			t.Errorf("%s: %s", action, u)
+		}
+	}
+	// both sides on one shortcode, as in the sandbox
+	t.Setenv("DARAJA_C2B_SHORTCODE", "600992")
+	if cfg, err := config.Load(); err != nil || !cfg.Payments.B2CEnabled() || !cfg.Payments.C2BEnabled() {
+		t.Fatalf("both: %v", err)
 	}
 }
