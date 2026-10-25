@@ -1,6 +1,6 @@
 # Phase 4 — Draws: checkpoint
 
-Status: IN PROGRESS (started 2026-10-24 on the owner's go-ahead).
+Status: COMPLETE in code (2026-10-25); the first live draw signed and approved by two officials is still to come.
 
 ## Owner decisions (2026-10-24)
 - **Draws:** daily, weekly, monthly and quarterly. **A play day's chances enter all four**: that day's daily draw and
@@ -53,6 +53,30 @@ schedule; `lotteryctl draws sign|approve|void|show`. Integration tests for every
 `GET /v1/draws` (schedule, results with drand round, beacon, entry-list hash, revealed seed), `GET /v1/draws/{id}/entries/mine`,
 a public draw verifier in `tools/verifier`, reconciliation of pools, monitoring of missed windows, checkpoint report.
 
+Detailed plan (2026-10-25, before coding):
+- **Public reads, no token:** `GET /v1/draws` (newest first, `limit` ≤ 100) and `GET /v1/draws/{id}`: type, period,
+  status, freeze time, entry count, entry-list hash, seed commitment, drand round and its time, revealed seed, beacon,
+  certificate hash, results (rank, amount, entry number), void reason and re-run link. Officials' names are staff
+  personal data and stay internal (the public sees each step's time and attestation hash). Rate-limited per address.
+- `GET /v1/draws/{id}/certificate` serves the certificate **byte for byte as hashed**, so `sha256sum` of the download
+  equals `certificate_hash` (re-encoding the JSON in a response would change the bytes).
+- `GET /v1/draws/{id}/entries/mine` (signed in): the player's own entries (entry number, play day, ticket), their
+  user id (as it appears in the certificate) and any prize. Filtered by the caller (IDOR test).
+- **Verifier** (`tools/verifier draw`): independent of the server's code (it uses kyber for BLS, nothing from
+  `internal/`). From the certificate it checks the beacon against the pinned quicknet key, the seed against its
+  commitment, the pool and prize amounts, and that every winner is the pick the algorithm gives in rank order. With the
+  full entry list (`lotteryctl draws entries`, for the regulator) it also checks the entry-list hash, the entry count and
+  every skipped pick (one prize per player). Golden certificate built from a real recorded beacon, shared by the
+  server's and the verifier's tests (like the spin vectors).
+- **Reconciliation** (daily job and `lotteryctl draws reconcile`, runs kept append-only in
+  `draws.reconciliation_runs`): certificate hash, seed vs commitment, entry-list hash and count recomputed, winners and
+  amounts recomputed from the certificate and the stored entries (beacon verified again, offline), results rows ⇔
+  certificate, prizes ≤ pool, one funding journal of exactly the pool for each approved draw and none otherwise, and each
+  `PRIZE_POOL_*` balance = what approved draws of that type funded (payouts subtract it in phase 5).
+- **Missed windows:** each schedule run reports draws that are late — open 30 minutes past their freeze time, frozen
+  with under an hour of signing left, signed 30 minutes past their round, conducted but unapproved for a day — as
+  `draw overdue` errors in the logs (Render), and `lotteryctl draws overdue` lists them.
+
 ## Results
 
 ### Slice 1 (drand client)
@@ -82,3 +106,40 @@ a public draw verifier in `tools/verifier`, reconciliation of pools, monitoring 
   funded at approval); unsigned → voided and re-run with the next 09:00 round; official void before but not after the
   round; one prize per player; empty day voided; drand down → waits; the database refuses skipped and backward
   transitions, changes to a fixed draw and deleted entries. Coverage 86%.
+
+### Slice 3 (public results, verifier, reconciliation, monitoring)
+- Public, no token, rate-limited per address: `GET /v1/draws`, `GET /v1/draws/{id}` (officials' names and entry
+  user ids left out), `GET /v1/draws/{id}/certificate` (the stored bytes, so the download hashes to
+  `certificate_hash`; also sent as `X-Certificate-SHA256`). Signed in: `GET /v1/draws/{id}/entries/mine` (own entries,
+  own user id, own prizes; another player sees none of them).
+- Winner selection moved into a pure `Award`, used by `Conduct`, the reconciliation and a golden test; the golden
+  certificate (`internal/draws/testdata`) is built from the real recorded quicknet round 1000000 and includes a skipped
+  repeat winner.
+- `tools/verifier draw`: independent of `internal/` (kyber for BLS, its own key, pick and rounding). Checks the hash,
+  the beacon against the pinned key, the seed, pool and prizes, every winner in rank order; with the entry list
+  (`lotteryctl draws entries`) also the entry-list hash, count and every skipped pick. Refuses: swapped or reordered
+  winners (also without the entry list), inflated prizes or pool, changed stakes, another seed, randomness, round or
+  chain, a repeat winner, a rank given to the wrong player, a re-encoded certificate, a doctored entry list.
+- Reconciliation (`draws.reconciliation_runs`, migration 00022, daily job `draws.reconcile`, `lotteryctl draws
+  reconcile`): entry numbering and hash, certificate hash, certificate ⇔ draw, beacon (offline, through the `Beacon`
+  interface), pool and winners recomputed against the prize structure in force, result rows ⇔ certificate, prizes ≤
+  pool, funding journals per draw, `PRIZE_POOL_*` balances. Tests: clean at every step; catches a funded open draw, an
+  entry added after freeze, a rewritten certificate (prize and beacon), an extra result row, a swapped seed, funding
+  of an unapproved draw, the wrong funding amount, a prize structure slipped in behind a draw, a pool that is not the
+  share of the stakes.
+- Monitoring: each schedule run logs `draw overdue` for open draws 30 minutes past freeze, frozen ones under an hour
+  before their round, signed ones 30 minutes past it, conducted ones unapproved a day later; `lotteryctl draws overdue`.
+- Hand mutations: the verifier's later-winner check and its entry-list skip check, and the reconciliation's funding
+  amount check, each survived at first; tests were added and all three are now killed.
+- Also fixed: the game tampering test swapped the revealed seed for a fixed one, which reproduces the stored slot one
+  time in 12 (it failed once in CI here); it now picks a seed that moves the slot.
+- Coverage: draws 85.3%, overall 86.4%; `make ci` green.
+
+## Checkpoint (2026-10-25)
+
+Phase 4 is complete in code: four draw types over each play day's chances, entries frozen and hashed, a committed
+company seed and a future drand round fixed at freeze, two officials signing before the round, verified beacons,
+one prize per player, certificates anyone can check with `tools/verifier draw`, pools funded on approval and reconciled
+daily, late steps reported. Open for the owner: the prize structure values (placeholders), the officials who will sign
+the first live draw, whether winners' user ids may stay in the public certificate, and where alerts should go.
+Payouts of prizes (`approved → paid`) are phase 5.

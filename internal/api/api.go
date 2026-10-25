@@ -11,6 +11,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/itsivali/lottery-platform/internal/draws"
 	"github.com/itsivali/lottery-platform/internal/game"
 	"github.com/itsivali/lottery-platform/internal/identity"
 	"github.com/itsivali/lottery-platform/internal/kyc"
@@ -30,6 +31,8 @@ type Deps struct {
 	Payments *payments.Service
 	// Game sells plays; nil answers 503.
 	Game *game.Service
+	// Draws publishes draws and their results; nil answers 503.
+	Draws *draws.Service
 	// Live streams payment changes to players; nil disables GET /v1/payments/events (503).
 	Live *payments.Live
 	// CallbackPath is the secret segment of the STK callback URL and of the paybill hook URLs.
@@ -71,6 +74,9 @@ func Mount(d Deps) func(chi.Router) {
 			r.Post("/auth/login", h.login)
 			r.Post("/auth/refresh", h.refresh)
 			r.Post("/auth/sso/{provider}", h.ssoSignIn)
+			r.Get("/draws", h.listDraws)
+			r.Get("/draws/{id}", h.getDraw)
+			r.Get("/draws/{id}/certificate", h.drawCertificate)
 
 			// authenticated
 			r.Group(func(r chi.Router) {
@@ -91,6 +97,7 @@ func Mount(d Deps) func(chi.Router) {
 				r.Get("/plays/today", h.playsToday)
 				r.Get("/fairness", h.fairness)
 				r.Post("/fairness/rotate", h.rotateSeed)
+				r.Get("/draws/{id}/entries/mine", h.myDrawEntries)
 			})
 		})
 	}

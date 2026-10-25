@@ -23,6 +23,7 @@ import (
 
 	"github.com/itsivali/lottery-platform/internal/api"
 	"github.com/itsivali/lottery-platform/internal/audit"
+	"github.com/itsivali/lottery-platform/internal/draws"
 	"github.com/itsivali/lottery-platform/internal/game"
 	"github.com/itsivali/lottery-platform/internal/identity"
 	"github.com/itsivali/lottery-platform/internal/kyc"
@@ -157,6 +158,7 @@ func setup(t *testing.T) *env {
 		Payments:     payments.NewService(pool, clk, dc, pay, ids, rgs, wallet.NewService(ls), ls, aw, payments.Config{}).WithC2B(dc, payments.C2BConfig{ShortCode: "600982"}),
 		Live:         live,
 		Game:         game.NewService(pool, clk, ids, rgs, wallet.NewService(ls), kr, wallet.ErrInsufficientFunds),
+		Draws:        draws.NewService(pool, clk, kr, drawBeacon{}, ls),
 		CallbackPath: callbackPath,
 		Idem:         idempotency.NewStore(pool),
 		Limiter:      ratelimit.New(vk.Client(t)),
@@ -264,6 +266,7 @@ var authedRoutes = []route{
 	{http.MethodPost, "/v1/payments/topups"}, {http.MethodGet, "/v1/payments/0192f000-0000-7000-8000-000000000000"},
 	{http.MethodPost, "/v1/plays"}, {http.MethodGet, "/v1/plays/today"},
 	{http.MethodGet, "/v1/fairness"}, {http.MethodPost, "/v1/fairness/rotate"},
+	{http.MethodGet, "/v1/draws/0192f000-0000-7000-8000-000000000000/entries/mine"},
 	{http.MethodPost, "/v1/auth/logout"}, // last: it ends the session used for the valid-token check
 }
 

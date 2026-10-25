@@ -6,7 +6,10 @@ useDefault = true
 # The local Docker Compose stack uses throwaway credentials whose plaintext starts with "local-dev-" (base64 prefix
 # below). Singular [allowlist] because CI's gitleaks action (8.24) predates [[allowlists]]. Only secrets with that exact prefix are ignored, so a real key pasted into docker-compose.yml is still caught.
 [allowlist]
-description = "throwaway local-development credentials (plaintext starts with 'local-dev-') and the mock's public token"
+description = "throwaway local-development credentials (plaintext starts with 'local-dev-'), the mock's public token and drand's public key"
 regexTarget = "secret"
 # The Daraja mock's fixed bearer token (internal/payments/darajamock) is public by design.
-regexes = ['''^bG9jYWwtZGV2LW''', '''^mock-access-token$''']
+# The drand quicknet chain's BLS public key (https://api.drand.sh/<chain hash>/info) is published by the League of
+# Entropy and pinned in tools/verifier; it verifies signatures and cannot sign anything.
+regexes = ['''^bG9jYWwtZGV2LW''', '''^mock-access-token$''',
+  '''^83cf0f2896adee7eb8b5f01fcad3912212c437e0073e911fb90022d3e760183c8c4b450b6a0a6c3ac6a5776a2d1064510d1fec758c921cc22b0e17e63aaf4bcb5ed66304de9cf809bd274ca73bab4af5a6e9c76a4bc09e76eae8991ef5ece45a$''']

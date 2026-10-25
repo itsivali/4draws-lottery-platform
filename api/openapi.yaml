@@ -15,6 +15,7 @@ tags:
   - { name: responsible-gaming, description: "Deposit limits, time-outs and self-exclusion." }
   - { name: payments, description: "M-Pesa top-ups and their live updates." }
   - { name: game, description: "Paid plays, tickets and provably fair spins." }
+  - { name: draws, description: "Daily, weekly, monthly and quarterly draws, their results and certificates." }
 paths:
   /healthz:
     get:
@@ -439,6 +440,94 @@ paths:
         "401": { $ref: "#/components/responses/Problem" }
         "429": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
+  /v1/draws:
+    get:
+      operationId: listDraws
+      tags: [draws]
+      summary: Draws, newest period first (public)
+      description: |
+        The schedule and the results. A draw is `open` during its period, `frozen` at 00:05 Nairobi after it (entries
+        numbered and hashed, the company seed committed as `seed_commit`, the drand round fixed), `signed` by two
+        officials before that round, `conducted` once the round is published (seed revealed, winners drawn), then
+        `approved` by two officials. A draw not signed in time, or voided by an official before its round, is `voided`
+        and re-run as a new draw (`rerun_of`).
+      security: []
+      parameters:
+        - { name: limit, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+      responses:
+        "200":
+          description: Draws
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [draws]
+                properties:
+                  draws: { type: array, items: { $ref: "#/components/schemas/Draw" } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+  /v1/draws/{id}:
+    get:
+      operationId: getDraw
+      tags: [draws]
+      summary: One draw (public)
+      security: []
+      parameters: [{ $ref: "#/components/parameters/DrawId" }]
+      responses:
+        "200":
+          description: The draw
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Draw" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+  /v1/draws/{id}/certificate:
+    get:
+      operationId: drawCertificate
+      tags: [draws]
+      summary: A conducted draw's certificate, byte for byte as hashed (public)
+      description: |
+        Everything needed to recompute the winners: the entry-list hash, the revealed seed and its commitment, the drand
+        beacon (round, randomness, signature), the stakes, pool and prizes. The body's SHA-256 is the draw's
+        `certificate_hash` (also sent as `X-Certificate-SHA256`); check it with `tools/verifier draw`. Winners appear
+        by entry number and user id.
+      security: []
+      parameters: [{ $ref: "#/components/parameters/DrawId" }]
+      responses:
+        "200":
+          description: The certificate
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Certificate" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409":
+          description: Not conducted yet (`not-conducted`)
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+  /v1/draws/{id}/entries/mine:
+    get:
+      operationId: myDrawEntries
+      tags: [draws]
+      summary: The signed-in player's entries in a draw and any prize
+      description: |
+        Each chance a play day earned is one entry in every draw whose period contains the day. `user_id` is how the
+        player appears in the draw's certificate.
+      parameters: [{ $ref: "#/components/parameters/DrawId" }]
+      responses:
+        "200":
+          description: The player's entries
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MyDrawEntries" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
   /hooks/mpesa/stk/{path}:
     post:
       operationId: stkCallback
@@ -601,6 +690,11 @@ components:
       required: true
       description: 1-255 URL-safe characters, unique per logical request.
       schema: { type: string, minLength: 1, maxLength: 255, pattern: "^[A-Za-z0-9._:~=+/-]+$" }
+    DrawId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
     Provider:
       name: provider
       in: path
@@ -671,6 +765,113 @@ components:
       properties:
         active: { $ref: "#/components/schemas/Chain" }
         rotated: { type: array, items: { $ref: "#/components/schemas/Chain" } }
+    Beacon:
+      type: object
+      required: [round, randomness, signature]
+      properties:
+        round: { type: integer }
+        randomness: { type: string, description: "Hex SHA-256 of the signature." }
+        signature: { type: string, description: "Hex BLS signature (quicknet, G1) on SHA-256 of the round as 8 big-endian bytes." }
+    Draw:
+      type: object
+      required: [id, draw_type, period_start, period_end, status, freeze_at, entries, entry_list_hash, seed_commit, drand_round,
+        drand_round_at, revealed_seed, beacon, certificate_hash, voided_reason, rerun_of, signoffs, results]
+      properties:
+        id: { type: string }
+        draw_type: { type: string, enum: [daily, weekly, monthly, quarterly] }
+        period_start: { type: string, format: date }
+        period_end: { type: string, format: date }
+        status: { type: string, enum: [open, frozen, signed, conducted, approved, paid, voided] }
+        freeze_at: { type: string, format: date-time }
+        entries: { type: integer }
+        entry_list_hash:
+          type: [string, "null"]
+          description: 'Hex SHA-256 over the lines "entry_no|user_id|play_date|ticket_id\n" in entry order.'
+        seed_commit: { type: [string, "null"], description: "Hex SHA-256 of the company seed, fixed at freeze." }
+        drand_round: { type: [integer, "null"], description: "The quicknet round fixed at freeze (the first at or after 09:00 Nairobi)." }
+        drand_round_at: { type: [string, "null"], format: date-time }
+        revealed_seed: { type: [string, "null"] }
+        beacon:
+          oneOf:
+            - { $ref: "#/components/schemas/Beacon" }
+            - { type: "null" }
+        certificate_hash: { type: [string, "null"] }
+        voided_reason: { type: [string, "null"] }
+        rerun_of: { type: [string, "null"] }
+        signoffs:
+          type: array
+          items:
+            type: object
+            required: [step, attestation, signed_at]
+            properties:
+              step: { type: string, enum: [sign, approve, void] }
+              attestation: { type: string, description: "Hex SHA-256 of what the official attested (the draw as fixed at that step)." }
+              signed_at: { type: string, format: date-time }
+        results:
+          type: array
+          items:
+            type: object
+            required: [rank, amount_kes, entry_no]
+            properties:
+              rank: { type: integer }
+              amount_kes: { type: integer }
+              entry_no: { type: integer }
+    Certificate:
+      type: object
+      required: [draw_id, draw_type, period_start, period_end, entries, entry_list_hash, seed_commit, revealed_seed, beacon,
+        drand_chain_hash, stakes_kes, pool_share, pool_kes, rounding, prizes, algorithm]
+      properties:
+        draw_id: { type: string }
+        draw_type: { type: string }
+        period_start: { type: string, format: date }
+        period_end: { type: string, format: date }
+        entries: { type: integer }
+        entry_list_hash: { type: string }
+        seed_commit: { type: string }
+        revealed_seed: { type: string }
+        beacon: { $ref: "#/components/schemas/Beacon" }
+        drand_chain_hash: { type: string }
+        stakes_kes: { type: integer }
+        pool_share: { type: string }
+        pool_kes: { type: integer }
+        rounding: { type: string, enum: [half_up, down, up] }
+        prizes:
+          type: array
+          items:
+            type: object
+            required: [rank, share, amount_kes, entry_no, user_id]
+            properties:
+              rank: { type: integer }
+              share: { type: string }
+              amount_kes: { type: integer }
+              entry_no: { type: integer }
+              user_id: { type: string }
+        algorithm: { type: string }
+    MyDrawEntries:
+      type: object
+      required: [draw_id, user_id, entries, prizes]
+      properties:
+        draw_id: { type: string }
+        user_id: { type: string }
+        entries:
+          type: array
+          items:
+            type: object
+            required: [entry_no, play_date, ticket_id]
+            properties:
+              entry_no: { type: integer }
+              play_date: { type: string, format: date }
+              ticket_id: { type: string }
+        prizes:
+          type: array
+          items:
+            type: object
+            required: [rank, amount_kes, entry_no, user_id]
+            properties:
+              rank: { type: integer }
+              amount_kes: { type: integer }
+              entry_no: { type: integer }
+              user_id: { type: string }
     TopUpRequest:
       type: object
       additionalProperties: false

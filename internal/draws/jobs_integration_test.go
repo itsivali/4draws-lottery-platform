@@ -21,15 +21,19 @@ func (noBeacon) Chain() drand.Chain { return drand.Quicknet }
 func (noBeacon) Fetch(context.Context, time.Time, uint64) (drand.Beacon, error) {
 	return drand.Beacon{}, drand.ErrNotYet
 }
+func (noBeacon) Verify(drand.Beacon) error { return drand.ErrInvalid }
 
 func TestJobs_TheSchedulerIsPeriodicAndRuns(t *testing.T) {
 	jobs := PeriodicJobs()
-	if len(jobs) != 1 || (ScheduleArgs{}).Kind() != "draws.schedule" {
+	if len(jobs) != 2 || (ScheduleArgs{}).Kind() != "draws.schedule" || (ReconcileArgs{}).Kind() != "draws.reconcile" {
 		t.Fatalf("periodic jobs %d", len(jobs))
 	}
 	svc := NewService(testpg.Pool(t, "app_worker"), clock.NewManual(time.Date(2026, 10, 24, 9, 0, 0, 0, time.UTC)), nil, noBeacon{}, ledger.NewStore())
 	AddWorkers(river.NewWorkers(), svc)
 	if err := (&scheduleWorker{svc: svc}).Work(context.Background(), &river.Job[ScheduleArgs]{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := (&reconcileWorker{svc: svc}).Work(context.Background(), &river.Job[ReconcileArgs]{}); err != nil {
 		t.Fatal(err)
 	}
 }

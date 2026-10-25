@@ -133,7 +133,7 @@ func New(ctx context.Context, cfg config.Config, pool *pgxpool.Pool) (*App, erro
 	go a.live.Run(liveCtx)
 
 	a.Mount = api.Mount(api.Deps{
-		Identity: idSvc, KYC: a.kyc, RG: rgSvc, Payments: a.payments, Game: a.game, Live: a.live, CallbackPath: cfg.Payments.CallbackPath,
+		Identity: idSvc, KYC: a.kyc, RG: rgSvc, Payments: a.payments, Game: a.game, Draws: a.draws, Live: a.live, CallbackPath: cfg.Payments.CallbackPath,
 		Idem:               idempotency.NewStore(pool),
 		Limiter:            ratelimit.New(vk),
 		TrustedProxyHeader: c.TrustedProxyHeader, TrustedProxyHops: c.TrustedProxyHops,

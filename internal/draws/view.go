@@ -70,11 +70,11 @@ func (s *Service) Get(ctx context.Context, id string) (Draw, error) {
 		t := s.roundTime(d)
 		out.RoundAt = &t
 	}
-	entries, err := q.Entries(ctx, d.ID)
+	n, err := q.EntryCount(ctx, d.ID)
 	if err != nil {
 		return Draw{}, err
 	}
-	out.Entries = len(entries)
+	out.Entries = int(n)
 	signs, err := q.Signoffs(ctx, d.ID)
 	if err != nil {
 		return Draw{}, err
@@ -105,6 +105,84 @@ func (s *Service) List(ctx context.Context, limit int) ([]Draw, error) {
 			return nil, err
 		}
 		out = append(out, d)
+	}
+	return out, nil
+}
+
+// CertificateOf returns a conducted draw's certificate exactly as it was hashed, with its hash.
+func (s *Service) CertificateOf(ctx context.Context, id string) ([]byte, string, error) {
+	d, err := store.New(s.pool).GetDraw(ctx, id)
+	var pe *pgconn.PgError
+	if errors.Is(err, pgx.ErrNoRows) || (errors.As(err, &pe) && pe.Code == "22P02") {
+		return nil, "", ErrNotFound
+	}
+	if err != nil {
+		return nil, "", err
+	}
+	if d.CertificateJson == nil {
+		return nil, "", ErrState
+	}
+	return d.CertificateJson, deref(d.CertificateHash), nil
+}
+
+// MyEntry is one of a player's entries in a draw.
+type MyEntry struct {
+	EntryNo  int    `json:"entry_no"`
+	PlayDate string `json:"play_date"`
+	TicketID string `json:"ticket_id"`
+}
+
+// MyEntries is what a player can see of their part in a draw.
+type MyEntries struct {
+	DrawID  string    `json:"draw_id"`
+	UserID  string    `json:"user_id"`
+	Entries []MyEntry `json:"entries"`
+	Prizes  []Result  `json:"prizes"`
+}
+
+// EntriesOf returns a player's own entries in a draw and any prize they won.
+func (s *Service) EntriesOf(ctx context.Context, drawID, userID string) (MyEntries, error) {
+	d, err := s.Get(ctx, drawID)
+	if err != nil {
+		return MyEntries{}, err
+	}
+	rows, err := store.New(s.pool).EntriesOf(ctx, store.EntriesOfParams{DrawID: d.ID, UserID: userID})
+	if err != nil {
+		return MyEntries{}, err
+	}
+	out := MyEntries{DrawID: d.ID, UserID: userID, Entries: make([]MyEntry, 0, len(rows)), Prizes: []Result{}}
+	for _, e := range rows {
+		out.Entries = append(out.Entries, MyEntry{EntryNo: int(e.EntryNo), PlayDate: e.PlayDate.Format(time.DateOnly), TicketID: e.TicketID})
+	}
+	for _, r := range d.Results {
+		if r.UserID == userID {
+			out.Prizes = append(out.Prizes, r)
+		}
+	}
+	return out, nil
+}
+
+// ListEntry is one line of a draw's full entry list, the input that hashes to entry_list_hash.
+type ListEntry struct {
+	EntryNo  int    `json:"entry_no"`
+	UserID   string `json:"user_id"`
+	PlayDate string `json:"play_date"`
+	TicketID string `json:"ticket_id"`
+}
+
+// EntryList returns a draw's full entry list in entry order (for the regulator and tools/verifier; never public).
+func (s *Service) EntryList(ctx context.Context, drawID string) ([]ListEntry, error) {
+	d, err := s.Get(ctx, drawID)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := store.New(s.pool).Entries(ctx, d.ID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]ListEntry, 0, len(rows))
+	for _, e := range rows {
+		out = append(out, ListEntry{EntryNo: int(e.EntryNo), UserID: e.UserID, PlayDate: e.PlayDate.Format(time.DateOnly), TicketID: e.TicketID})
 	}
 	return out, nil
 }

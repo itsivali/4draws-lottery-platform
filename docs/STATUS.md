@@ -6,8 +6,9 @@ Read this first at the start of every session.
   are **STK prompts into the paybill** (174379 in the sandbox). Buy Goods (`DARAJA_TILL_NUMBER`) is built but off: the
   sandbox refuses it (`Invalid TransactionType`), so it waits for a real till.
 - **Phase:** 1 — Foundations: complete. **Phase 2 — Payments: complete (2026-10-24).** **Phase 3 — Game and tickets: complete
-  (2026-10-24).** **Phase 4 — Draws: in progress** (`docs/checkpoints/phase-4.md`): slices 1 (drand) and 2 (lifecycle)
-  built; next slice 3 (public results API, draw verifier, pool reconciliation, monitoring).
+  (2026-10-24).** **Phase 4 — Draws: built** (`docs/checkpoints/phase-4.md`): slices 1 (drand), 2 (lifecycle) and 3
+  (public results API, `tools/verifier draw`, daily draw reconciliation, late-step monitoring; branch
+  `feat/draws-results`, 2026-10-25). Not yet seen live: a draw signed and approved by two officials on Render.
   Phase 2 detail (`docs/checkpoints/phase-2.md`). Slices 1
   (Daraja client + mock), 2 (STK top-up, ADR 0006) and 4 (reversals, player debt, internal reconciliation, ADR 0007)
   are merged and live. **Slice 3 (C2B paybill, ADR 0008) is merged and live (2026-10-24, #18, #19)**; its sandbox
@@ -89,6 +90,13 @@ Read this first at the start of every session.
 4. Later: password reset (STK proof + ID match), passkeys/TOTP, real Play Integrity / App Attest verifiers.
 
 ## Open questions for the owner
+
+- **Draw privacy (phase 4):** the public certificate (`GET /v1/draws/{id}/certificate`) names winners by entry number
+  and **user id** (a random identifier, no name or phone), because it is published byte for byte as hashed. The full
+  entry list (every player's user id) is **not** public: the regulator gets it from `lotteryctl draws entries`, and
+  players see only their own entries. Is that the right line, or should the public be able to check every skipped pick?
+- **Alerts:** late draws are logged as `draw overdue` and failed reconciliations as `draw reconciliation found
+  mismatches`, but nothing pages anyone yet (the free plan has no log alerts). Who should be alerted, and how?
 
 - Confirm the 5% deposit excise version with a tax adviser before production.
 - Does GRA accept phone verification by M-Pesa confirmation instead of SMS OTP (ADR 0005), and manual identity checks

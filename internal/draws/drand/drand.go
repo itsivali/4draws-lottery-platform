@@ -120,6 +120,9 @@ func New(chain Chain, relays []string, hc *http.Client) *Client {
 // Chain returns the pinned chain.
 func (c *Client) Chain() Chain { return c.chain }
 
+// Verify checks a beacon against the client's chain (no network).
+func (c *Client) Verify(b Beacon) error { return c.chain.Verify(b) }
+
 // Fetch returns the verified beacon of a round. Before the round's time it answers ErrNotYet without asking.
 // A beacon that does not verify is never returned, whichever relay served it.
 func (c *Client) Fetch(ctx context.Context, now time.Time, round uint64) (Beacon, error) {

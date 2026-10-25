@@ -65,6 +65,11 @@ func TestParse(t *testing.T) {
 		{[]string{"draws", "void", "-draw", "d-1", "-operator", "w"}, command{}, true}, // no reason
 		{[]string{"draws", "void", "-draw", "d-1", "-reason", "wrong entries", "-operator", "w"},
 			command{name: "draws void", draw: "d-1", reason: "wrong entries", operator: "operator:w"}, false},
+		{[]string{"draws", "entries", "-draw", "d-1"}, command{name: "draws entries", draw: "d-1"}, false},
+		{[]string{"draws", "entries"}, command{}, true}, // which draw
+		{[]string{"draws", "reconcile"}, command{name: "draws reconcile"}, false},
+		{[]string{"draws", "overdue"}, command{name: "draws overdue"}, false},
+		{[]string{"draws", "overdue", "-draw", "d-1"}, command{}, true}, // takes no flags
 		{[]string{"bogus"}, command{}, true},
 		{nil, command{}, true},
 	}

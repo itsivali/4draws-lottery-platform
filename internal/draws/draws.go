@@ -62,10 +62,11 @@ var (
 	ErrNoPrizeVersion = errors.New("draws: no prize structure in force")
 )
 
-// Beacon fetches verified drand rounds.
+// Beacon fetches verified drand rounds, and verifies stored ones again (offline) for the reconciliation.
 type Beacon interface {
 	Chain() drand.Chain
 	Fetch(ctx context.Context, now time.Time, round uint64) (drand.Beacon, error)
+	Verify(b drand.Beacon) error
 }
 
 // Ledger posts journals that touch no wallet.
@@ -133,7 +134,8 @@ func (s *Service) roundFor(periodEnd, now time.Time) uint64 {
 
 // Schedule does whatever is due: opens the current periods' draws, freezes those whose period has ended, voids and
 // re-runs those not signed before their round, and conducts signed draws whose round is published. It runs every few
-// minutes in the worker; each draw is handled in its own transaction and one failure does not stop the others.
+// minutes in the worker; each draw is handled in its own transaction and one failure does not stop the others. Then
+// it reports the draws whose step is late.
 func (s *Service) Schedule(ctx context.Context) error {
 	now, err := s.clk.Now(ctx, s.pool)
 	if err != nil {
@@ -190,6 +192,9 @@ func (s *Service) Schedule(ctx context.Context) error {
 		}
 		return err
 	})
+	if err := s.reportOverdue(ctx); err != nil {
+		errs = append(errs, err)
+	}
 	return errors.Join(errs...)
 }
 
@@ -438,7 +443,8 @@ type CertifiedWin struct {
 	UserID    string `json:"user_id"`
 }
 
-const algorithm = "key = SHA-256(drand randomness || company seed || entry list hash || draw id); pick i = first 64-bit " +
+// Algorithm describes, in the certificate, how the winners are drawn.
+const Algorithm = "key = SHA-256(drand randomness || company seed || entry list hash || draw id); pick i = first 64-bit " +
 	"big-endian word w of HMAC-SHA256(key, \"pick:i:round\") with w < 2^64 - (2^64 mod n), entry w mod n + 1; " +
 	"an entry of a player who already won is skipped"
 
@@ -527,9 +533,43 @@ func (s *Service) Conduct(ctx context.Context, drawID string) (Draw, error) {
 	return s.Get(ctx, drawID)
 }
 
-type rankShare struct {
+// RankShare is one rank of a prize structure: its share of the pool.
+type RankShare struct {
 	Rank  int    `json:"rank"`
 	Share string `json:"share"`
+}
+
+// Award picks the winners among entries (users[i] is the player of entry i+1) and prices each rank: pick after pick
+// from the key, skipping entries of players who already won, until every rank is awarded, every player has won, or a
+// rank's amount rounds to nothing.
+func Award(key []byte, users []string, ranks []RankShare, pool int64, mode ledger.Rounding) ([]CertifiedWin, error) {
+	players := map[string]bool{}
+	for _, u := range users {
+		players[u] = true
+	}
+	wins := []CertifiedWin{}
+	won := map[string]bool{}
+	for i, r := 0, 0; r < len(ranks) && len(won) < len(players); i++ {
+		share, err := ledger.ParseRate(ranks[r].Share)
+		if err != nil {
+			return nil, err
+		}
+		amount, err := ledger.Apply(pool, share, mode)
+		if err != nil {
+			return nil, err
+		}
+		if amount <= 0 { // nothing left to award at this rank or below
+			break
+		}
+		no := Pick(key, i, len(users))
+		if won[users[no-1]] {
+			continue
+		}
+		won[users[no-1]] = true
+		wins = append(wins, CertifiedWin{Rank: ranks[r].Rank, Share: ranks[r].Share, AmountKES: amount, EntryNo: no, UserID: users[no-1]})
+		r++
+	}
+	return wins, nil
 }
 
 // certify picks the winners, records them and returns the certificate.
@@ -557,7 +597,7 @@ func (s *Service) certify(ctx context.Context, q *store.Queries, d store.DrawsDr
 	if err != nil {
 		return Certificate{}, err
 	}
-	var ranks []rankShare
+	var ranks []RankShare
 	if err := json.Unmarshal(ps.Prizes, &ranks); err != nil {
 		return Certificate{}, err
 	}
@@ -568,36 +608,21 @@ func (s *Service) certify(ctx context.Context, q *store.Queries, d store.DrawsDr
 	cert := Certificate{DrawID: d.ID, DrawType: d.DrawType, PeriodStart: d.PeriodStart.Format(time.DateOnly), PeriodEnd: d.PeriodEnd.Format(time.DateOnly),
 		Entries: len(entries), EntryListHash: deref(d.EntryListHash), SeedCommit: deref(d.SeedCommit), RevealedSeed: hex.EncodeToString(seed),
 		Beacon: b, ChainHash: s.beacon.Chain().Hash, StakesKES: stakes, PoolShare: ps.PoolShare, PoolKES: pool, Rounding: ps.Rounding,
-		Prizes: []CertifiedWin{}, Algorithm: algorithm}
-	players := map[string]bool{}
-	for _, e := range entries {
-		players[e.UserID] = true
+		Algorithm: Algorithm}
+	users := make([]string, len(entries))
+	for i, e := range entries {
+		users[i] = e.UserID
 	}
-	key := Key(randomness, seed, cert.EntryListHash, d.ID)
-	won := map[string]bool{}
-	for i, r := 0, 0; r < len(ranks) && len(won) < len(players); i++ {
-		share, err := ledger.ParseRate(ranks[r].Share)
-		if err != nil {
-			return Certificate{}, err
-		}
-		amount, err := ledger.Apply(pool, share, mode)
-		if err != nil {
-			return Certificate{}, err
-		}
-		if amount <= 0 { // nothing left to award at this rank or below
-			break
-		}
-		e := entries[Pick(key, i, len(entries))-1]
-		if won[e.UserID] {
-			continue
-		}
-		won[e.UserID] = true
-		if err := q.InsertResult(ctx, store.InsertResultParams{DrawID: d.ID, EntryID: e.ID, PrizeRank: int32(ranks[r].Rank), AmountKes: amount, CreatedAt: now}); err != nil { //nolint:gosec // ranks are small
-			return Certificate{}, err
-		}
-		cert.Prizes = append(cert.Prizes, CertifiedWin{Rank: ranks[r].Rank, Share: ranks[r].Share, AmountKES: amount, EntryNo: int(e.EntryNo), UserID: e.UserID})
-		r++
+	wins, err := Award(Key(randomness, seed, cert.EntryListHash, d.ID), users, ranks, pool, mode)
+	if err != nil {
+		return Certificate{}, err
 	}
+	for _, w := range wins {
+		if err := q.InsertResult(ctx, store.InsertResultParams{DrawID: d.ID, EntryID: entries[w.EntryNo-1].ID, PrizeRank: int32(w.Rank), AmountKes: w.AmountKES, CreatedAt: now}); err != nil { //nolint:gosec // ranks are small
+			return Certificate{}, err
+		}
+	}
+	cert.Prizes = wins
 	return cert, nil
 }
 

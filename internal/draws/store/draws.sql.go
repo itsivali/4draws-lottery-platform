@@ -62,6 +62,31 @@ func (q *Queries) DrawsInStatus(ctx context.Context, status string) ([]string, e
 	return items, nil
 }
 
+const drawsToReconcile = `-- name: DrawsToReconcile :many
+SELECT id FROM draws.draws WHERE status IN ('frozen','signed','conducted','approved','paid') ORDER BY period_end, draw_type
+`
+
+// every draw whose entries are fixed and that is not voided
+func (q *Queries) DrawsToReconcile(ctx context.Context) ([]string, error) {
+	rows, err := q.db.Query(ctx, drawsToReconcile)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const ensureOpenDraw = `-- name: EnsureOpenDraw :exec
 INSERT INTO draws.draws (draw_type, period_start, period_end, created_at, updated_at)
 VALUES ($1, $2, $3, $4, $4)
@@ -124,6 +149,59 @@ func (q *Queries) Entries(ctx context.Context, drawID string) ([]EntriesRow, err
 	return items, nil
 }
 
+const entriesOf = `-- name: EntriesOf :many
+SELECT id, entry_no, play_date, ticket_id FROM draws.draw_entries WHERE draw_id = $1 AND user_id = $2 ORDER BY entry_no
+`
+
+type EntriesOfParams struct {
+	DrawID string
+	UserID string
+}
+
+type EntriesOfRow struct {
+	ID       string
+	EntryNo  int32
+	PlayDate time.Time
+	TicketID string
+}
+
+// one player's entries in a draw
+func (q *Queries) EntriesOf(ctx context.Context, arg EntriesOfParams) ([]EntriesOfRow, error) {
+	rows, err := q.db.Query(ctx, entriesOf, arg.DrawID, arg.UserID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []EntriesOfRow
+	for rows.Next() {
+		var i EntriesOfRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.EntryNo,
+			&i.PlayDate,
+			&i.TicketID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const entryCount = `-- name: EntryCount :one
+SELECT count(*)::int FROM draws.draw_entries WHERE draw_id = $1
+`
+
+func (q *Queries) EntryCount(ctx context.Context, drawID string) (int32, error) {
+	row := q.db.QueryRow(ctx, entryCount, drawID)
+	var column_1 int32
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const freeze = `-- name: Freeze :exec
 UPDATE draws.draws
    SET status = 'frozen', entry_list_hash = $1, seed_commit = $2,
@@ -150,6 +228,42 @@ func (q *Queries) Freeze(ctx context.Context, arg FreezeParams) error {
 		arg.ID,
 	)
 	return err
+}
+
+const fundingByDraw = `-- name: FundingByDraw :many
+SELECT j.reference_id::text AS draw_id, count(DISTINCT j.id)::int AS journals, coalesce(sum(e.amount_kes), 0)::bigint AS amount_kes
+FROM ledger.ledger_journals j
+JOIN ledger.ledger_entries e ON e.journal_id = j.id
+JOIN ledger.ledger_accounts a ON a.id = e.account_id
+WHERE j.kind = 'prize_pool_funding' AND a.code = 'STAKES_REVENUE' AND e.direction = 'D'
+GROUP BY j.reference_id
+`
+
+type FundingByDrawRow struct {
+	DrawID    string
+	Journals  int32
+	AmountKes int64
+}
+
+// prize pool funding journals per draw: how many and how much left STAKES_REVENUE
+func (q *Queries) FundingByDraw(ctx context.Context) ([]FundingByDrawRow, error) {
+	rows, err := q.db.Query(ctx, fundingByDraw)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []FundingByDrawRow
+	for rows.Next() {
+		var i FundingByDrawRow
+		if err := rows.Scan(&i.DrawID, &i.Journals, &i.AmountKes); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const getDraw = `-- name: GetDraw :one
@@ -190,6 +304,21 @@ type InsertEntriesParams struct {
 	UserID   string
 	PlayDate time.Time
 	TicketID string
+}
+
+const insertReconciliationRun = `-- name: InsertReconciliationRun :exec
+INSERT INTO draws.reconciliation_runs (ran_at, ok, report) VALUES ($1, $2, $3)
+`
+
+type InsertReconciliationRunParams struct {
+	RanAt  time.Time
+	Ok     bool
+	Report []byte
+}
+
+func (q *Queries) InsertReconciliationRun(ctx context.Context, arg InsertReconciliationRunParams) error {
+	_, err := q.db.Exec(ctx, insertReconciliationRun, arg.RanAt, arg.Ok, arg.Report)
+	return err
 }
 
 const insertRerun = `-- name: InsertRerun :one
@@ -360,6 +489,39 @@ func (q *Queries) PlayerDaysIn(ctx context.Context, arg PlayerDaysInParams) ([]P
 			&i.Lucky,
 			&i.TicketID,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const poolBalances = `-- name: PoolBalances :many
+SELECT a.code, coalesce(sum(CASE e.direction WHEN 'C' THEN e.amount_kes ELSE -e.amount_kes END), 0)::bigint AS balance_kes
+FROM ledger.ledger_accounts a LEFT JOIN ledger.ledger_entries e ON e.account_id = a.id
+WHERE a.code LIKE 'PRIZE\_POOL\_%'
+GROUP BY a.code ORDER BY a.code
+`
+
+type PoolBalancesRow struct {
+	Code       string
+	BalanceKes int64
+}
+
+// credit-normal balance of each prize pool account
+func (q *Queries) PoolBalances(ctx context.Context) ([]PoolBalancesRow, error) {
+	rows, err := q.db.Query(ctx, poolBalances)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []PoolBalancesRow
+	for rows.Next() {
+		var i PoolBalancesRow
+		if err := rows.Scan(&i.Code, &i.BalanceKes); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

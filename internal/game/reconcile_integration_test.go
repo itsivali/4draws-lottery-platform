@@ -4,9 +4,12 @@ package game_test
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"testing"
 
+	"github.com/itsivali/lottery-platform/internal/game/fair"
 	"github.com/itsivali/lottery-platform/internal/ledger"
 )
 
@@ -61,8 +64,17 @@ func TestReconcile_CatchesEveryKindOfTampering(t *testing.T) {
 	e.mustExec(t, `UPDATE tickets.player_days SET paid_plays = 2, lucky = NOT lucky WHERE user_id = $1`, u)
 	// the new chain claims a spin it never made
 	e.mustExec(t, `UPDATE game.seed_chains SET next_nonce = 3 WHERE user_id = $1 AND status = 'active'`, u)
-	// the published seed is swapped for another one
-	e.mustExec(t, `UPDATE game.seed_chains SET revealed_seed = repeat('ab', 32) WHERE user_id = $1 AND status = 'rotated'`, u)
+	// the published seed is swapped for another one that lands the spin on another slot (a random swap matches the
+	// stored slot one time in slots, and then the spin still reproduces)
+	sp := res.Play.Spin
+	var forged string
+	for i := 0; forged == ""; i++ {
+		cand := sha256.Sum256([]byte(fmt.Sprint("forged seed ", i)))
+		if slot, err := fair.Slot(cand[:], sp.ClientSeed, sp.Nonce, sp.Slots); err == nil && slot != sp.Slot {
+			forged = hex.EncodeToString(cand[:])
+		}
+	}
+	e.mustExec(t, `UPDATE game.seed_chains SET revealed_seed = $2 WHERE user_id = $1 AND status = 'rotated'`, u, forged)
 
 	r, err := e.svc.Reconcile(ctx)
 	if err != nil {

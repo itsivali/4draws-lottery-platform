@@ -1,8 +1,16 @@
-// Command verifier checks provably fair spins without trusting the server's code. It re-implements the specification
-// in internal/game/fair (on purpose it does not import it): after a seed chain is rotated, give it the revealed server
-// seed, the commitment shown before the spins, the client seed and the nonces, and it prints each spin's slot.
+// Command verifier checks provably fair spins and draws without trusting the server's code. It re-implements the
+// specifications in internal/game/fair and internal/draws (on purpose it imports neither).
+//
+// Spins: after a seed chain is rotated, give it the revealed server seed, the commitment shown before the spins, the
+// client seed and the nonces, and it prints each spin's slot.
 //
 //	go run ./tools/verifier -server-seed HEX -commitment HEX -client-seed SEED -nonce 0-3 -slots 12 -lucky 1
+//
+// Draws: give it a conducted draw's certificate (GET /v1/draws/{id}/certificate) and, optionally, its certificate_hash
+// and full entry list; it checks the drand beacon against the pinned quicknet key, the seed against its commitment,
+// the pool and prizes, and that every winner is the algorithm's pick.
+//
+//	go run ./tools/verifier draw -certificate cert.json -hash HEX [-entries entries.jsonl]
 package main
 
 import (
@@ -27,6 +35,9 @@ func main() {
 }
 
 func run(args []string, out io.Writer) error {
+	if len(args) > 0 && args[0] == "draw" {
+		return runDraw(args[1:], out)
+	}
 	fs := flag.NewFlagSet("verifier", flag.ContinueOnError)
 	seedHex := fs.String("server-seed", "", "revealed server seed (64 hex characters)")
 	commitment := fs.String("commitment", "", "commitment shown before the spins (64 hex characters)")

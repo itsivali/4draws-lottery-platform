@@ -90,6 +90,13 @@ type DrawsPrizeStructure struct {
 	PoolShare     pgtype.Numeric
 }
 
+type DrawsReconciliationRun struct {
+	ID     string
+	RanAt  time.Time
+	Ok     bool
+	Report []byte
+}
+
 type GameChanceTier struct {
 	ID            string
 	EffectiveFrom time.Time

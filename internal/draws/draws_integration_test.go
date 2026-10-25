@@ -33,6 +33,16 @@ type fakeBeacon struct {
 
 func (*fakeBeacon) Chain() drand.Chain { return drand.Quicknet }
 
+// Verify accepts exactly what Fetch serves.
+func (*fakeBeacon) Verify(b drand.Beacon) error {
+	var r [8]byte
+	binary.BigEndian.PutUint64(r[:], b.Round)
+	if sum := sha256.Sum256(r[:]); b.Signature != "00" || b.Randomness != hex.EncodeToString(sum[:]) {
+		return drand.ErrInvalid
+	}
+	return nil
+}
+
 func (f *fakeBeacon) Fetch(_ context.Context, now time.Time, round uint64) (drand.Beacon, error) {
 	f.calls.Add(1)
 	if now.Before(drand.Quicknet.TimeOf(round)) {

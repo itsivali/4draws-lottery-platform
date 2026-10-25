@@ -88,3 +88,33 @@ INSERT INTO draws.draw_results (draw_id, entry_id, prize_rank, amount_kes, creat
 SELECT r.prize_rank, r.amount_kes, e.entry_no, e.user_id, e.id AS entry_id
 FROM draws.draw_results r JOIN draws.draw_entries e ON e.id = r.entry_id
 WHERE r.draw_id = $1 ORDER BY r.prize_rank;
+
+-- name: EntryCount :one
+SELECT count(*)::int FROM draws.draw_entries WHERE draw_id = $1;
+
+-- name: EntriesOf :many
+-- one player's entries in a draw
+SELECT id, entry_no, play_date, ticket_id FROM draws.draw_entries WHERE draw_id = sqlc.arg(draw_id) AND user_id = sqlc.arg(user_id) ORDER BY entry_no;
+
+-- name: DrawsToReconcile :many
+-- every draw whose entries are fixed and that is not voided
+SELECT id FROM draws.draws WHERE status IN ('frozen','signed','conducted','approved','paid') ORDER BY period_end, draw_type;
+
+-- name: FundingByDraw :many
+-- prize pool funding journals per draw: how many and how much left STAKES_REVENUE
+SELECT j.reference_id::text AS draw_id, count(DISTINCT j.id)::int AS journals, coalesce(sum(e.amount_kes), 0)::bigint AS amount_kes
+FROM ledger.ledger_journals j
+JOIN ledger.ledger_entries e ON e.journal_id = j.id
+JOIN ledger.ledger_accounts a ON a.id = e.account_id
+WHERE j.kind = 'prize_pool_funding' AND a.code = 'STAKES_REVENUE' AND e.direction = 'D'
+GROUP BY j.reference_id;
+
+-- name: PoolBalances :many
+-- credit-normal balance of each prize pool account
+SELECT a.code, coalesce(sum(CASE e.direction WHEN 'C' THEN e.amount_kes ELSE -e.amount_kes END), 0)::bigint AS balance_kes
+FROM ledger.ledger_accounts a LEFT JOIN ledger.ledger_entries e ON e.account_id = a.id
+WHERE a.code LIKE 'PRIZE\_POOL\_%'
+GROUP BY a.code ORDER BY a.code;
+
+-- name: InsertReconciliationRun :exec
+INSERT INTO draws.reconciliation_runs (ran_at, ok, report) VALUES ($1, $2, $3);

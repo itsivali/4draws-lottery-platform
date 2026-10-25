@@ -51,7 +51,10 @@ const usage = `usage:
   lotteryctl draws list
   lotteryctl draws show -draw ID
   lotteryctl draws sign|approve -draw ID -operator NAME
-  lotteryctl draws void -draw ID -reason TEXT -operator NAME`
+  lotteryctl draws void -draw ID -reason TEXT -operator NAME
+  lotteryctl draws entries -draw ID     (the full entry list as JSON lines, for tools/verifier draw -entries)
+  lotteryctl draws reconcile
+  lotteryctl draws overdue`
 
 type command struct {
 	name                               string
@@ -82,6 +85,9 @@ var flagsOf = map[string][]string{
 	"draws sign":               {"draw", "operator"},
 	"draws approve":            {"draw", "operator"},
 	"draws void":               {"draw", "reason", "operator"},
+	"draws entries":            {"draw"},
+	"draws reconcile":          nil,
+	"draws overdue":            nil,
 }
 
 // optionalOf lists, per command, the flags it may take; the rest of a command's flags are as in flagsOf.
@@ -172,7 +178,7 @@ func run(ctx context.Context, cmd command, out io.Writer) error {
 		return kycReview(ctx, cfg, cmd, out)
 	case "game reconcile":
 		return gameReconcile(ctx, cfg, out)
-	case "draws list", "draws show", "draws sign", "draws approve", "draws void":
+	case "draws list", "draws show", "draws sign", "draws approve", "draws void", "draws entries", "draws reconcile", "draws overdue":
 		return drawsCmd(ctx, cfg, cmd, out)
 	}
 
@@ -344,7 +350,7 @@ func simulate(cmd command, out io.Writer) error {
 	return enc.Encode(rep)
 }
 
-// drawsCmd shows draws and records officials' sign-offs (two different officials sign the frozen entry list before the
+// drawsCmd shows, exports, reconciles and monitors draws, and records officials' sign-offs (two different officials sign the frozen entry list before the
 // drand round and approve the result). Voiding re-runs the draw with a new company seed, which is encrypted with the
 // api's DATA_KEY, so it needs the api's configuration; the other commands need only the database.
 func drawsCmd(ctx context.Context, cfg config.Config, cmd command, out io.Writer) error {
@@ -375,6 +381,22 @@ func drawsCmd(ctx context.Context, cfg config.Config, cmd command, out io.Writer
 		res, err = svc.Approve(ctx, cmd.draw, cmd.operator)
 	case "draws void":
 		res, err = svc.Void(ctx, cmd.draw, cmd.operator, cmd.reason)
+	case "draws reconcile":
+		res, err = svc.Reconcile(ctx)
+	case "draws overdue":
+		res, err = svc.Overdue(ctx)
+	case "draws entries":
+		entries, err := svc.EntryList(ctx, cmd.draw)
+		if err != nil {
+			return err
+		}
+		enc := json.NewEncoder(out) // one entry per line
+		for _, e := range entries {
+			if err := enc.Encode(e); err != nil {
+				return err
+			}
+		}
+		return nil
 	}
 	if err != nil {
 		return err
