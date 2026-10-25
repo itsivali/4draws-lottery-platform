@@ -16,6 +16,7 @@ tags:
   - { name: payments, description: "M-Pesa top-ups and their live updates." }
   - { name: game, description: "Paid plays, tickets and provably fair spins." }
   - { name: draws, description: "Daily, weekly, monthly and quarterly draws, their results and certificates." }
+  - { name: payouts, description: "Withdrawals and prizes paid through M-Pesa (B2C)." }
 paths:
   /healthz:
     get:
@@ -528,6 +529,87 @@ paths:
         "404": { $ref: "#/components/responses/Problem" }
         "429": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
+  /v1/payouts/withdrawals:
+    post:
+      operationId: withdraw
+      tags: [payouts]
+      summary: Withdraw from the wallet to the player's proved M-Pesa number
+      description: |
+        Debits the wallet at once and sends the money to the account's proved phone number (never a number the client
+        supplies). KES 50 to 150,000 a time, at most 3 a Nairobi day; amounts above KES 100,000 wait for an operator
+        (placeholders until the owner sets them). Needs a verified ID and a proved phone, and no debt from a reversed
+        top-up; self-excluded and timed-out players may withdraw. The payout is `processing` until M-Pesa's answer is
+        confirmed with Daraja's Transaction Status API: then `paid` (with the receipt) or `failed` (the money is back in
+        the wallet). Replaying the same Idempotency-Key returns the same payout (200) and debits nothing.
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [amount_kes]
+              properties:
+                amount_kes: { type: integer, minimum: 50, maximum: 150000, description: Whole shillings. }
+      responses:
+        "201":
+          description: Requested
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Payout" }
+        "200":
+          description: The withdrawal already requested with this Idempotency-Key
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Payout" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403":
+          description: KYC (`kyc-required`), phone (`phone-not-verified`), suspended account or debt (`in-debt`)
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+        "409":
+          description: Balance below the amount (`insufficient-funds`) or no withdrawals left today (`daily-withdrawal-limit`)
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+  /v1/payouts:
+    get:
+      operationId: listPayouts
+      tags: [payouts]
+      summary: The signed-in player's withdrawals and prizes, newest first
+      responses:
+        "200":
+          description: Payouts
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [payouts]
+                properties:
+                  payouts: { type: array, items: { $ref: "#/components/schemas/Payout" } }
+        "401": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+  /v1/payouts/{id}:
+    get:
+      operationId: getPayout
+      tags: [payouts]
+      summary: One of the signed-in player's payouts
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: The payout
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Payout" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
   /hooks/mpesa/stk/{path}:
     post:
       operationId: stkCallback
@@ -676,6 +758,122 @@ paths:
                 properties:
                   ResultCode: { oneOf: [{ type: integer }, { type: string }] }
                   ResultDesc: { type: string }
+        "404": { $ref: "#/components/responses/Problem" }
+  /hooks/b2c/{path}/result:
+    post:
+      operationId: b2cResult
+      tags: [payouts]
+      summary: Daraja B2C payment result
+      description: |
+        Called by Safaricom, not by clients. Authenticated by the secret path segment (the same one as the other
+        hooks); needs no token and no Idempotency-Key. 404 when payouts are not configured. The result of a payout request: a claim. It is stored as
+        received and the payout is settled in the background, only after Daraja's Transaction Status API confirms it.
+      security: []
+      parameters:
+        - { name: path, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        "200":
+          description: Stored
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ResultCode: { oneOf: [{ type: integer }, { type: string }] }
+                  ResultDesc: { type: string }
+        "400": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /hooks/b2c/{path}/timeout:
+    post:
+      operationId: b2cTimeout
+      tags: [payouts]
+      summary: Daraja B2C queue timeout
+      description: |
+        Called by Safaricom, not by clients. Authenticated by the secret path segment (the same one as the other
+        hooks); needs no token and no Idempotency-Key. 404 when payouts are not configured. Daraja gave up on a payout request before processing it. It is stored as
+        received and the payout is settled in the background, only after Daraja's Transaction Status API confirms it.
+      security: []
+      parameters:
+        - { name: path, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        "200":
+          description: Stored
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ResultCode: { oneOf: [{ type: integer }, { type: string }] }
+                  ResultDesc: { type: string }
+        "400": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /hooks/b2c/{path}/status-result:
+    post:
+      operationId: b2cStatusResult
+      tags: [payouts]
+      summary: Daraja Transaction Status result about a payout
+      description: |
+        Called by Safaricom, not by clients. Authenticated by the secret path segment (the same one as the other
+        hooks); needs no token and no Idempotency-Key. 404 when payouts are not configured. The answer to a status request about a payout. It is stored as
+        received and the payout is settled in the background, only after Daraja's Transaction Status API confirms it.
+      security: []
+      parameters:
+        - { name: path, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        "200":
+          description: Stored
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ResultCode: { oneOf: [{ type: integer }, { type: string }] }
+                  ResultDesc: { type: string }
+        "400": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /hooks/b2c/{path}/status-timeout:
+    post:
+      operationId: b2cStatusTimeout
+      tags: [payouts]
+      summary: Daraja Transaction Status timeout about a payout
+      description: |
+        Called by Safaricom, not by clients. Authenticated by the secret path segment (the same one as the other
+        hooks); needs no token and no Idempotency-Key. 404 when payouts are not configured. Daraja gave up on a status request; it is asked again. It is stored as
+        received and the payout is settled in the background, only after Daraja's Transaction Status API confirms it.
+      security: []
+      parameters:
+        - { name: path, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        "200":
+          description: Stored
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ResultCode: { oneOf: [{ type: integer }, { type: string }] }
+                  ResultDesc: { type: string }
+        "400": { $ref: "#/components/responses/Problem" }
         "404": { $ref: "#/components/responses/Problem" }
 components:
   securitySchemes:
@@ -872,6 +1070,21 @@ components:
               amount_kes: { type: integer }
               entry_no: { type: integer }
               user_id: { type: string }
+    Payout:
+      type: object
+      required: [id, kind, status, amount_kes, tax_kes, net_kes, receipt, created_at]
+      properties:
+        id: { type: string }
+        kind: { type: string, enum: [withdrawal, prize] }
+        status:
+          type: string
+          enum: [processing, paid, failed]
+          description: "`failed`: no money was sent; a withdrawal's amount is back in the wallet."
+        amount_kes: { type: integer, description: The amount taken from the wallet (or the prize). }
+        tax_kes: { type: integer, description: Tax withheld (none on withdrawals; placeholder 20% on prizes). }
+        net_kes: { type: integer, description: What M-Pesa pays the player. }
+        receipt: { type: [string, "null"], description: The M-Pesa receipt once paid. }
+        created_at: { type: string, format: date-time }
     TopUpRequest:
       type: object
       additionalProperties: false

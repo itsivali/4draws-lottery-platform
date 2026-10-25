@@ -31,6 +31,7 @@ import (
 	"github.com/itsivali/lottery-platform/internal/payments"
 	"github.com/itsivali/lottery-platform/internal/payments/daraja"
 	"github.com/itsivali/lottery-platform/internal/payments/darajamock"
+	"github.com/itsivali/lottery-platform/internal/payouts"
 	"github.com/itsivali/lottery-platform/internal/platform/clock"
 	"github.com/itsivali/lottery-platform/internal/platform/crypto"
 	"github.com/itsivali/lottery-platform/internal/platform/httpx"
@@ -142,6 +143,11 @@ func setup(t *testing.T) *env {
 		ResultURL: "http://api/hooks/c2b/" + callbackPath + "/status-result", TimeoutURL: "http://api/hooks/c2b/" + callbackPath + "/status-timeout"}); err != nil {
 		t.Fatal(err)
 	}
+	if dc, err = dc.WithB2C(daraja.B2CConfig{ShortCode: "600992", Initiator: "i", SecurityCredential: "c",
+		ResultURL: "http://api/hooks/b2c/" + callbackPath + "/result", TimeoutURL: "http://api/hooks/b2c/" + callbackPath + "/timeout",
+		StatusResultURL: "http://api/hooks/b2c/" + callbackPath + "/status-result", StatusTimeoutURL: "http://api/hooks/b2c/" + callbackPath + "/status-timeout"}); err != nil {
+		t.Fatal(err)
+	}
 	ids := identity.NewService(pool, clk, fakeOIDC{}, aw, identity.Config{
 		AuthKey: []byte("0123456789abcdef0123456789abcdef"), TokenKey: priv, Issuer: "lottery", Audience: "lottery-api",
 		AccessTTL: 10 * time.Minute, RefreshTTL: 30 * 24 * time.Hour, DeviceCap: 2,
@@ -152,13 +158,15 @@ func setup(t *testing.T) *env {
 	live := payments.NewLive(func(ctx context.Context) (*pgx.Conn, error) { return pgx.ConnectConfig(ctx, listenCfg) }, payments.LiveConfig{})
 	go live.Run(t.Context())
 	deps := api.Deps{
-		Identity:     ids,
-		KYC:          kyc.NewService(pool, clk, mock, kr, []byte("0123456789abcdef0123456789abcdef"), aw, enq),
-		RG:           rgs,
-		Payments:     payments.NewService(pool, clk, dc, pay, ids, rgs, wallet.NewService(ls), ls, aw, payments.Config{}).WithC2B(dc, payments.C2BConfig{ShortCode: "600982"}),
-		Live:         live,
-		Game:         game.NewService(pool, clk, ids, rgs, wallet.NewService(ls), kr, wallet.ErrInsufficientFunds),
-		Draws:        draws.NewService(pool, clk, kr, drawBeacon{}, ls),
+		Identity: ids,
+		KYC:      kyc.NewService(pool, clk, mock, kr, []byte("0123456789abcdef0123456789abcdef"), aw, enq),
+		RG:       rgs,
+		Payments: payments.NewService(pool, clk, dc, pay, ids, rgs, wallet.NewService(ls), ls, aw, payments.Config{}).WithC2B(dc, payments.C2BConfig{ShortCode: "600982"}),
+		Live:     live,
+		Game:     game.NewService(pool, clk, ids, rgs, wallet.NewService(ls), kr, wallet.ErrInsufficientFunds),
+		Draws:    draws.NewService(pool, clk, kr, drawBeacon{}, ls),
+		Payouts: payouts.NewService(pool, clk, dc, payoutQueue{pay}, ids, wallet.NewService(ls), ls, aw, payouts.Config{},
+			wallet.ErrInsufficientFunds),
 		CallbackPath: callbackPath,
 		Idem:         idempotency.NewStore(pool),
 		Limiter:      ratelimit.New(vk.Client(t)),
@@ -267,6 +275,8 @@ var authedRoutes = []route{
 	{http.MethodPost, "/v1/plays"}, {http.MethodGet, "/v1/plays/today"},
 	{http.MethodGet, "/v1/fairness"}, {http.MethodPost, "/v1/fairness/rotate"},
 	{http.MethodGet, "/v1/draws/0192f000-0000-7000-8000-000000000000/entries/mine"},
+	{http.MethodPost, "/v1/payouts/withdrawals"}, {http.MethodGet, "/v1/payouts"},
+	{http.MethodGet, "/v1/payouts/0192f000-0000-7000-8000-000000000000"},
 	{http.MethodPost, "/v1/auth/logout"}, // last: it ends the session used for the valid-token check
 }
 

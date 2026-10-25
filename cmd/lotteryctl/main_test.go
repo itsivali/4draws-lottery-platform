@@ -70,6 +70,15 @@ func TestParse(t *testing.T) {
 		{[]string{"draws", "reconcile"}, command{name: "draws reconcile"}, false},
 		{[]string{"draws", "overdue"}, command{name: "draws overdue"}, false},
 		{[]string{"draws", "overdue", "-draw", "d-1"}, command{}, true}, // takes no flags
+		{[]string{"payouts", "list", "-state", "manual"}, command{name: "payouts list", state: "manual"}, false},
+		{[]string{"payouts", "list"}, command{}, true},
+		{[]string{"payouts", "approve", "-payout", "p-1", "-operator", "w"}, command{name: "payouts approve", payout: "p-1", operator: "operator:w"}, false},
+		{[]string{"payouts", "reject", "-payout", "p-1", "-operator", "w"}, command{}, true}, // no reason
+		{[]string{"payouts", "settle-paid", "-payout", "p-1", "-receipt", "MBC0000001", "-operator", "w"},
+			command{name: "payouts settle-paid", payout: "p-1", receipt: "MBC0000001", operator: "operator:w"}, false},
+		{[]string{"payouts", "settle-paid", "-payout", "p-1", "-operator", "w"}, command{}, true}, // no receipt
+		{[]string{"payouts", "settle-failed", "-payout", "p-1", "-reason", "not on the statement", "-operator", "w"},
+			command{name: "payouts settle-failed", payout: "p-1", reason: "not on the statement", operator: "operator:w"}, false},
 		{[]string{"bogus"}, command{}, true},
 		{nil, command{}, true},
 	}

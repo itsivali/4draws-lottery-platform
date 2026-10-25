@@ -16,6 +16,7 @@ import (
 	"github.com/itsivali/lottery-platform/internal/identity"
 	"github.com/itsivali/lottery-platform/internal/kyc"
 	"github.com/itsivali/lottery-platform/internal/payments"
+	"github.com/itsivali/lottery-platform/internal/payouts"
 	"github.com/itsivali/lottery-platform/internal/platform/httpx"
 	"github.com/itsivali/lottery-platform/internal/platform/idempotency"
 	"github.com/itsivali/lottery-platform/internal/platform/ratelimit"
@@ -33,6 +34,8 @@ type Deps struct {
 	Game *game.Service
 	// Draws publishes draws and their results; nil answers 503.
 	Draws *draws.Service
+	// Payouts sends withdrawals through M-Pesa B2C; nil answers 503.
+	Payouts *payouts.Service
 	// Live streams payment changes to players; nil disables GET /v1/payments/events (503).
 	Live *payments.Live
 	// CallbackPath is the secret segment of the STK callback URL and of the paybill hook URLs.
@@ -64,6 +67,11 @@ func Mount(d Deps) func(chi.Router) {
 		r.Post("/hooks/c2b/{path}/confirm", h.c2bConfirm)
 		r.Post("/hooks/c2b/{path}/status-result", h.c2bStatusResult)
 		r.Post("/hooks/c2b/{path}/status-timeout", h.c2bStatusTimeout)
+		// Payout (B2C) hooks: payment results and the Transaction Status answers about payouts.
+		r.Post("/hooks/b2c/{path}/result", h.b2cHook(payouts.CallbackResult))
+		r.Post("/hooks/b2c/{path}/timeout", h.b2cHook(payouts.CallbackTimeout))
+		r.Post("/hooks/b2c/{path}/status-result", h.b2cHook(payouts.CallbackStatusResult))
+		r.Post("/hooks/b2c/{path}/status-timeout", h.b2cHook(payouts.CallbackStatusTimeout))
 
 		r.Route("/v1", func(r chi.Router) {
 			r.Use(h.optionalAuth)
@@ -98,6 +106,9 @@ func Mount(d Deps) func(chi.Router) {
 				r.Get("/fairness", h.fairness)
 				r.Post("/fairness/rotate", h.rotateSeed)
 				r.Get("/draws/{id}/entries/mine", h.myDrawEntries)
+				r.Post("/payouts/withdrawals", h.withdraw)
+				r.Get("/payouts", h.listPayouts)
+				r.Get("/payouts/{id}", h.getPayout)
 			})
 		})
 	}

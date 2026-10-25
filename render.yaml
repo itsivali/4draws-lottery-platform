@@ -88,6 +88,10 @@ services:
       # hooks once with `lotteryctl payments c2b-register`.
       - key: DARAJA_C2B_SHORTCODE
         sync: false
+      # Payouts (B2C): the shortcode payouts leave from (in the sandbox the same test shortcode, 600992); it shares the
+      # initiator and credential below. Unset means withdrawals are refused.
+      - key: DARAJA_B2C_SHORTCODE
+        sync: false
       - key: DARAJA_INITIATOR_NAME
         sync: false
       - key: DARAJA_SECURITY_CREDENTIAL

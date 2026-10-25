@@ -16,6 +16,9 @@ import (
 	"os"
 	"time"
 
+	"github.com/riverqueue/river"
+	"github.com/riverqueue/river/riverdriver/riverpgxv5"
+
 	"github.com/itsivali/lottery-platform/internal/app"
 	"github.com/itsivali/lottery-platform/internal/audit"
 	"github.com/itsivali/lottery-platform/internal/draws"
@@ -26,6 +29,7 @@ import (
 	"github.com/itsivali/lottery-platform/internal/ledger"
 	"github.com/itsivali/lottery-platform/internal/payments"
 	"github.com/itsivali/lottery-platform/internal/payments/daraja"
+	"github.com/itsivali/lottery-platform/internal/payouts"
 	"github.com/itsivali/lottery-platform/internal/platform/clock"
 	"github.com/itsivali/lottery-platform/internal/platform/config"
 	"github.com/itsivali/lottery-platform/internal/platform/crypto"
@@ -54,13 +58,18 @@ const usage = `usage:
   lotteryctl draws void -draw ID -reason TEXT -operator NAME
   lotteryctl draws entries -draw ID     (the full entry list as JSON lines, for tools/verifier draw -entries)
   lotteryctl draws reconcile
-  lotteryctl draws overdue`
+  lotteryctl draws overdue
+  lotteryctl payouts list -state held|manual|sent|timed_out|result_received|pending|succeeded|failed
+  lotteryctl payouts approve -payout ID -operator NAME
+  lotteryctl payouts reject -payout ID -reason TEXT -operator NAME
+  lotteryctl payouts settle-paid -payout ID -receipt R -operator NAME        (a manual payout found on the statement)
+  lotteryctl payouts settle-failed -payout ID -reason TEXT -operator NAME    (a manual payout not on the statement)`
 
 type command struct {
 	name                               string
 	receipt, reason, operator, payment string
 	user, refundRef, msisdn, account   string
-	draw                               string
+	draw, payout, state                string
 	amount                             int64
 	days, slots, lucky                 int
 	price                              int64
@@ -88,6 +97,11 @@ var flagsOf = map[string][]string{
 	"draws entries":            {"draw"},
 	"draws reconcile":          nil,
 	"draws overdue":            nil,
+	"payouts list":             {"state"},
+	"payouts approve":          {"payout", "operator"},
+	"payouts reject":           {"payout", "reason", "operator"},
+	"payouts settle-paid":      {"payout", "receipt", "operator"},
+	"payouts settle-failed":    {"payout", "reason", "operator"},
 }
 
 // optionalOf lists, per command, the flags it may take; the rest of a command's flags are as in flagsOf.
@@ -116,6 +130,8 @@ func parse(args []string) (command, error) {
 	fs.StringVar(&c.msisdn, "msisdn", "", "payer number (sandbox)")
 	fs.StringVar(&c.account, "account", "", "account number typed by the payer")
 	fs.StringVar(&c.draw, "draw", "", "draw id")
+	fs.StringVar(&c.payout, "payout", "", "payout id")
+	fs.StringVar(&c.state, "state", "", "payout state")
 	fs.Int64Var(&c.amount, "amount", 0, "amount, whole KES")
 	fs.IntVar(&c.days, "days", 0, "simulated player-days per number of plays")
 	fs.IntVar(&c.slots, "slots", 0, "slot count")
@@ -180,6 +196,8 @@ func run(ctx context.Context, cmd command, out io.Writer) error {
 		return gameReconcile(ctx, cfg, out)
 	case "draws list", "draws show", "draws sign", "draws approve", "draws void", "draws entries", "draws reconcile", "draws overdue":
 		return drawsCmd(ctx, cfg, cmd, out)
+	case "payouts list", "payouts approve", "payouts reject", "payouts settle-paid", "payouts settle-failed":
+		return payoutsCmd(ctx, cfg, cmd, out)
 	}
 
 	pool, err := db.Open(ctx, cfg.DatabaseURL)
@@ -397,6 +415,54 @@ func drawsCmd(ctx context.Context, cfg config.Config, cmd command, out io.Writer
 			}
 		}
 		return nil
+	}
+	if err != nil {
+		return err
+	}
+	enc := json.NewEncoder(out)
+	enc.SetIndent("", "  ")
+	return enc.Encode(res)
+}
+
+// payoutsCmd lists payouts and records operators' decisions: releasing or refusing a held payout, and settling one
+// whose outcome Daraja could not confirm from the M-Pesa statement. Approving queues the B2C request, so it needs the
+// api's payments configuration with B2C; the other commands need only the database.
+func payoutsCmd(ctx context.Context, cfg config.Config, cmd command, out io.Writer) error {
+	pool, err := db.Open(ctx, cfg.DatabaseURL)
+	if err != nil {
+		return err
+	}
+	defer pool.Close()
+	insertOnly, err := river.NewClient(riverpgxv5.New(pool), &river.Config{Schema: db.RiverSchema})
+	if err != nil {
+		return err
+	}
+	var d payouts.Daraja
+	if cmd.name == "payouts approve" {
+		if !cfg.Payments.B2CEnabled() {
+			return errors.New("approving sends the payout: set the api's payments configuration with DARAJA_B2C_SHORTCODE")
+		}
+		if d, err = app.NewDaraja(cfg.Payments); err != nil {
+			return err
+		}
+	}
+	aw := audit.NewWriter()
+	clk := clock.Postgres{}
+	ls := ledger.NewStore()
+	svc := payouts.NewService(pool, clk, d, payouts.NewRiverEnqueuer(insertOnly), identity.NewService(pool, clk, nil, aw, identity.Config{}),
+		wallet.NewService(ls), ls, aw, payouts.Config{}, wallet.ErrInsufficientFunds)
+	var res any
+	switch cmd.name {
+	case "payouts list":
+		res, err = svc.InState(ctx, cmd.state, 100)
+	case "payouts approve":
+		res, err = svc.Approve(ctx, cmd.payout, cmd.operator)
+	case "payouts reject":
+		res, err = svc.Reject(ctx, cmd.payout, cmd.operator, cmd.reason)
+	case "payouts settle-paid":
+		res, err = svc.Settle(ctx, cmd.payout, cmd.operator, true, cmd.receipt, "")
+	case "payouts settle-failed":
+		res, err = svc.Settle(ctx, cmd.payout, cmd.operator, false, "", cmd.reason)
 	}
 	if err != nil {
 		return err

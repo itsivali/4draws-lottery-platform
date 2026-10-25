@@ -81,3 +81,20 @@ func (s *Service) AssertDeviceTrusted(ctx context.Context, tx pgx.Tx, sessionID 
 	}
 	return nil
 }
+
+// AssertCanBePaid refuses accounts that may not receive a payout: suspended or closed accounts, an unverified national
+// ID, or a phone not yet proved. It returns the proved number, the only one money is sent to (ADR 0005). Called inside
+// the same transaction that records the payout.
+func (s *Service) AssertCanBePaid(ctx context.Context, tx pgx.Tx, userID string) (string, error) {
+	u, err := s.loadActive(ctx, tx, userID)
+	if err != nil {
+		return "", err
+	}
+	if u.KycStatus != "verified" {
+		return "", ErrKYCRequired
+	}
+	if !u.PhoneVerified {
+		return "", ErrPhoneNotVerified
+	}
+	return u.Msisdn, nil
+}

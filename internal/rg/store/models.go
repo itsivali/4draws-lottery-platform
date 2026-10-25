@@ -330,6 +330,15 @@ type PaymentsStkOrphanCallback struct {
 	ReceivedAt        time.Time
 }
 
+type PayoutsB2cCallback struct {
+	ID         string
+	Kind       string
+	PayoutID   pgtype.UUID
+	Originator *string
+	Raw        []byte
+	ReceivedAt time.Time
+}
+
 type PayoutsPayout struct {
 	ID                       string
 	UserID                   string
@@ -347,6 +356,16 @@ type PayoutsPayout struct {
 	IdempotencyKey           string
 	CreatedAt                time.Time
 	UpdatedAt                time.Time
+	TaxCode                  *string
+	TaxRate                  pgtype.Numeric
+	TaxRounding              *string
+	StatusRequests           int32
+	StatusRequestedAt        *time.Time
+	StatusOriginator         *string
+	Reason                   *string
+	ApprovedBy               *string
+	SettledBy                *string
+	SettledAt                *time.Time
 }
 
 type PlatformIdempotencyKey struct {

@@ -68,3 +68,37 @@ Prize payouts for approved draws (`PrizePayout`, a failure posting that returns 
   answer lost, failure result, a result that lies, dropped, duplicated, queue timeout, status outage or silence, a
   status amount that differs; Transaction Status answers for payouts, also when the paybill and payout share the
   sandbox shortcode.
+
+### Slice 2 (withdrawals)
+- Migration `00023`: payout states `held → pending → sending → sent | timed_out → result_received → succeeded |
+  failed | manual`, forward-only (trigger), amounts, payee and keys immutable, final states final, no deletes; a
+  receipt for every success; `payouts.b2c_callbacks` (append-only; the api may append but never change a payout);
+  placeholder tax rules `winnings_wht` 20% and `withdrawal_wht` 0%; a failed prize payout no longer blocks a retry.
+- `internal/payouts`: `RequestWithdrawal` (proved phone and verified KYC via `identity.AssertCanBePaid`, no debt,
+  KES 50–150,000, 3 a Nairobi day, balance, posting and job in one transaction under a per-player lock; above KES
+  100,000 held), `Send` (claims `sending` first, never repeats the request; refused → failed and refunded, unknown →
+  timed_out), `HandleCallback` (stores and enqueues; found by originator, or by occasion/status originator), `Verify`
+  (waits for the result, asks Transaction Status by our originator id, never by a receipt a result claims; completed
+  with the right amount to the right number → succeeded; a failure Daraja reported and Transaction Status does not
+  contradict → failed and refunded with the payout's own tax rule; otherwise asks again, then manual), `Sweep`
+  (re-queues a pending payout, turns a stuck `sending` into timed_out), operator `Approve | Reject | Settle`.
+- River uniqueness for payout jobs ignores finished jobs (River's default counts completed jobs, which would have
+  swallowed a send after an approval or a sweep).
+- API: `POST /v1/payouts/withdrawals`, `GET /v1/payouts`, `GET /v1/payouts/{id}` (player sees processing/paid/failed),
+  hooks `/hooks/b2c/{secret}/…`; `lotteryctl payouts list | approve | reject | settle-paid | settle-failed`; runbook
+  `docs/runbooks/payouts.md`; `DARAJA_B2C_SHORTCODE` in the Blueprint and compose.
+- Tests through the mock: paid and confirmed once (replay debits nothing); refused; paid with the answer lost; failure
+  result; queue timeout; a lying success (→ manual); result dropped or duplicated; another amount (→ manual); outage
+  with nothing sent (→ manual, not refunded); status outage retried; an interrupted send checked and never re-sent; a
+  lost send job re-queued; eligibility and limits (bounds, balance, phone, KYC, debt, daily count); refused without
+  B2C; held, approved, rejected; manual settled from the statement; six concurrent requests never overdraw; the
+  database refuses changed amounts or payee, skipped states, changes to a final payout, deletes, and the api role
+  changing a payout; a receipt that already paid another payout, money credited to another number and an answer to an
+  older status request are not trusted; a rejected status request goes to an operator; a failing clock in the middle
+  of any step leaves no debit, payout or state change behind; the queue alone pays a withdrawal. Found and fixed: a
+  status answer with a malformed occasion aborted the hook's transaction (500); a reused receipt hit the unique
+  constraint and aborted the settlement instead of handing the payout to an operator (now checked first).
+- Coverage: payouts 86.6%, overall 86.3%; `make ci` green.
+- Hand mutations killed: refunding on any unconfirmed status; succeeding without the amount check.
+- Open: Daraja's sandbox support for Transaction Status by `OriginalConversationID` must be seen live (the mock
+  implements it); until then a payout without a confirmed status lands in manual, never refunded.

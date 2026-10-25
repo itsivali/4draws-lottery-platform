@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -29,6 +30,7 @@ import (
 	"github.com/itsivali/lottery-platform/internal/ledger"
 	"github.com/itsivali/lottery-platform/internal/payments"
 	"github.com/itsivali/lottery-platform/internal/payments/daraja"
+	"github.com/itsivali/lottery-platform/internal/payouts"
 	"github.com/itsivali/lottery-platform/internal/platform/clock"
 	"github.com/itsivali/lottery-platform/internal/platform/config"
 	"github.com/itsivali/lottery-platform/internal/platform/crypto"
@@ -56,6 +58,7 @@ type App struct {
 	payments *payments.Service
 	game     *game.Service
 	draws    *draws.Service
+	payouts  *payouts.Service
 	live     *payments.Live
 	stopLive context.CancelFunc
 	workers  *river.Client[pgx.Tx]
@@ -122,6 +125,14 @@ func New(ctx context.Context, cfg config.Config, pool *pgxpool.Pool) (*App, erro
 
 	a.game = game.NewService(pool, clk, idSvc, rgSvc, wallet.NewService(ls), keyring, wallet.ErrInsufficientFunds)
 
+	// Payouts need B2C; without it withdrawals are refused (fail closed).
+	var pd payouts.Daraja
+	if cfg.Payments.B2CEnabled() {
+		pd = client
+	}
+	a.payouts = payouts.NewService(pool, clk, pd, payouts.NewRiverEnqueuer(insertOnly), idSvc, wallet.NewService(ls), ls, aw, payouts.Config{},
+		wallet.ErrInsufficientFunds)
+
 	// Draws use the League of Entropy's quicknet, verified against the pinned key, through its public relays.
 	a.draws = draws.NewService(pool, clk, keyring, drand.New(drand.Quicknet, drand.DefaultRelays, hc), ls)
 
@@ -133,14 +144,14 @@ func New(ctx context.Context, cfg config.Config, pool *pgxpool.Pool) (*App, erro
 	go a.live.Run(liveCtx)
 
 	a.Mount = api.Mount(api.Deps{
-		Identity: idSvc, KYC: a.kyc, RG: rgSvc, Payments: a.payments, Game: a.game, Draws: a.draws, Live: a.live, CallbackPath: cfg.Payments.CallbackPath,
+		Identity: idSvc, KYC: a.kyc, RG: rgSvc, Payments: a.payments, Game: a.game, Draws: a.draws, Payouts: a.payouts, Live: a.live, CallbackPath: cfg.Payments.CallbackPath,
 		Idem:               idempotency.NewStore(pool),
 		Limiter:            ratelimit.New(vk),
 		TrustedProxyHeader: c.TrustedProxyHeader, TrustedProxyHops: c.TrustedProxyHops,
 	})
 	slog.InfoContext(ctx, "v1 API enabled", "trusted_proxy_header", c.TrustedProxyHeader, "trusted_proxy_hops", c.TrustedProxyHops,
 		"kyc_registry", c.KYCURL != "", "google", c.GoogleClientID != "", "apple", c.AppleClientID != "",
-		"payments", cfg.Payments.Enabled, "buy_goods", cfg.Payments.TillNumber != "", "paybill", cfg.Payments.C2BEnabled(), "daraja", cfg.Payments.BaseURL)
+		"payments", cfg.Payments.Enabled, "buy_goods", cfg.Payments.TillNumber != "", "paybill", cfg.Payments.C2BEnabled(), "payouts", cfg.Payments.B2CEnabled(), "daraja", cfg.Payments.BaseURL)
 	return a, nil
 }
 
@@ -182,8 +193,9 @@ func (a *App) StartWorkers(ctx context.Context) error {
 	payments.AddWorkers(workers, a.payments)
 	game.AddWorkers(workers, a.game)
 	draws.AddWorkers(workers, a.draws)
+	payouts.AddWorkers(workers, a.payouts)
 	wc, err := river.NewClient(riverpgxv5.New(a.pool), &river.Config{
-		Schema: db.RiverSchema, Workers: workers, PeriodicJobs: append(append(payments.PeriodicJobs(), game.PeriodicJobs()...), draws.PeriodicJobs()...),
+		Schema: db.RiverSchema, Workers: workers, PeriodicJobs: slices.Concat(payments.PeriodicJobs(), game.PeriodicJobs(), draws.PeriodicJobs(), payouts.PeriodicJobs()),
 		Queues: map[string]river.QueueConfig{river.QueueDefault: {MaxWorkers: 10}},
 	})
 	if err != nil {
