@@ -25,7 +25,7 @@ later clean run does not close it. Only a person closes it:
 ```sh
 go run ./cmd/lotteryctl alerts list              # open alerts (-all for history)
 go run ./cmd/lotteryctl draws reconcile          # or payments / game / payouts reconcile: what is wrong
-go run ./cmd/lotteryctl alerts ack -alert <id> -note "what was found and done" -operator alice
+go run ./cmd/lotteryctl alerts ack -alert <id> -note "what was found and done" -operator <alice's staff id>
 ```
 
 Acknowledging is audited with the note. For other pages it only stops the reminders; they stay open until their

@@ -2,7 +2,9 @@
 # E2E: bring up the stack, check the probes, then sign up, log in, verify identity and top up through the real API,
 # workers and the Daraja mock (which approves every prompt after two seconds and calls the api back); then pay into the
 # paybill through the mock and wait for the verified credit.
-# Playwright journeys for the clients arrive with the clients.
+# Then (phases 6-7): a play, the wallet and account reads, a withdrawal followed until paid, an attestation challenge,
+# and the back office with real staff tokens from the local staff realm. The clients' own journeys run in their test
+# suites (Flutter widget/integration tests, back office component tests).
 set -euo pipefail
 docker compose up -d --build --wait
 trap 'docker compose down -v' EXIT
@@ -52,4 +54,40 @@ for _ in $(seq 1 60); do
   sleep 0.5
 done
 [ "$status" = credited ] || { echo "paybill payment never credited (status: $status)"; docker compose logs api daraja-mock | tail -30; exit 1; }
+
+# A play: the server spins and charges; the day and the wallet agree.
+[ "$(post /v1/plays e2e-5 '' "$token")" = 201 ] || { echo "play failed"; cat /tmp/e2e.body; exit 1; }
+slot=$(jq -r .play.spin.slot /tmp/e2e.body); balance=$(jq -r .balance_kes /tmp/e2e.body)
+[ "$(curl -fsS localhost:8080/v1/plays/today -H "Authorization: Bearer $token" | jq -r .plays)" = 1 ] || { echo "today does not show the play"; exit 1; }
+[ "$(curl -fsS localhost:8080/v1/wallet -H "Authorization: Bearer $token" | jq -r .balance_kes)" = "$balance" ] || { echo "wallet disagrees with the play"; exit 1; }
+[ "$(curl -fsS localhost:8080/v1/account -H "Authorization: Bearer $token" | jq -r .phone_verified)" = true ] || { echo "phone not proved by the top-up"; exit 1; }
+echo "played: slot $slot, balance $balance"
+
+# A withdrawal: debited at once, paid only when M-Pesa's answer is confirmed with Transaction Status (the payout looks
+# again a minute after asking, so this takes one to two minutes).
+[ "$(post /v1/payouts/withdrawals e2e-6 '{"amount_kes":50}' "$token")" = 201 ] || { echo "withdrawal failed"; cat /tmp/e2e.body; exit 1; }
+payout=$(jq -r .id /tmp/e2e.body)
+for _ in $(seq 1 360); do
+  status=$(curl -fsS "localhost:8080/v1/payouts/$payout" -H "Authorization: Bearer $token" | jq -r .status)
+  [ "$status" = paid ] && break
+  sleep 0.5
+done
+[ "$status" = paid ] || { echo "withdrawal never paid (status: $status)"; docker compose logs api daraja-mock | tail -30; exit 1; }
+
+# Device attestation: a single-use challenge is issued.
+[ "$(post /v1/auth/attestation/challenge e2e-7 '')" = 201 ] || { echo "attestation challenge failed"; cat /tmp/e2e.body; exit 1; }
+
+# The back office: staff tokens from the local staff realm (password grant on its local-only e2e client).
+staff_token() {
+  curl -fsS -d client_id=lottery-e2e -d grant_type=password -d "username=$1" -d password=local-dev-staff \
+    localhost:8081/realms/lottery-staff/protocol/openid-connect/token | jq -r .access_token
+}
+paula=$(staff_token paula)
+[ "$(curl -fsS localhost:8080/v1/staff/me -H "Authorization: Bearer $paula" | jq -r '.roles | index("payments_operator") != null')" = true ] \
+  || { echo "staff roles not seen"; exit 1; }
+[ "$(post /v1/staff/payments/reconcile e2e-8 '' "$paula")" = 200 ] || { echo "staff reconciliation failed"; cat /tmp/e2e.body; exit 1; }
+[ "$(curl -sS -o /dev/null -w '%{http_code}' localhost:8080/v1/staff/payouts -H "Authorization: Bearer $paula")" = 403 ] \
+  || { echo "a payments operator could list payouts"; exit 1; }
+[ "$(curl -sS -o /dev/null -w '%{http_code}' localhost:8080/v1/staff/me -H "Authorization: Bearer $token")" = 401 ] \
+  || { echo "a player token reached the back office"; exit 1; }
 echo "e2e smoke ok"

@@ -38,6 +38,9 @@ func payoutsUnavailable(w http.ResponseWriter) {
 }
 
 func (h *handlers) withdraw(w http.ResponseWriter, r *http.Request) {
+	if !h.deviceTrusted(w, r) {
+		return
+	}
 	var in struct {
 		AmountKES int64 `json:"amount_kes"`
 	}

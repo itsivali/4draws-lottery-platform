@@ -10,10 +10,10 @@ Listing decrypts personal data, so it needs the api's configuration (copy the ap
 dashboard into your shell; never commit it or save it in a file in the repository):
 
 ```sh
-go run ./cmd/lotteryctl kyc pending -operator <your name>
+go run ./cmd/lotteryctl kyc pending -operator <your staff id>
 ```
 
-Every submission shown is audited as `kyc.unmask` under `operator:<your name>`. Show it only when you are about to
+Every submission shown is audited as `kyc.unmask` under `staff:<your staff id>`. Show it only when you are about to
 review it.
 
 ## Decide
@@ -22,8 +22,8 @@ Confirm the identity by the operator's procedure (owner to define: for example a
 player, checked against the submitted number, name and date of birth). Then:
 
 ```sh
-go run ./cmd/lotteryctl kyc approve -user <user id> -reason "<how it was checked>" -operator <your name>
-go run ./cmd/lotteryctl kyc reject  -user <user id> -reason "<why>" -operator <your name>
+go run ./cmd/lotteryctl kyc approve -user <user id> -reason "<how it was checked>" -operator <your staff id>
+go run ./cmd/lotteryctl kyc reject  -user <user id> -reason "<why>" -operator <your staff id>
 ```
 
 Approve and reject need no keys. A reason is required and is stored with the decision. A rejected player may submit

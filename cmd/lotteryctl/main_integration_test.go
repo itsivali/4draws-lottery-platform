@@ -27,7 +27,7 @@ func TestRun_PaymentsReconcilePrintsACleanReportOnAFreshDatabase(t *testing.T) {
 	if err := json.Unmarshal(out.Bytes(), &r); err != nil || !r.OK || len(r.Mismatches) != 0 {
 		t.Fatalf("report = %s (%v)", out.String(), err)
 	}
-	if err := run(context.Background(), command{name: "payments reverse", receipt: "NOPE", reason: "x", operator: "operator:t"}, &out); err == nil {
+	if err := run(context.Background(), command{name: "payments reverse", receipt: "NOPE", reason: "x", operator: "staff:" + opID}, &out); err == nil {
 		t.Fatal("reversing an unknown receipt succeeded")
 	}
 }

@@ -27,11 +27,13 @@ import (
 	"github.com/itsivali/lottery-platform/internal/draws/drand"
 	"github.com/itsivali/lottery-platform/internal/game"
 	"github.com/itsivali/lottery-platform/internal/identity"
+	"github.com/itsivali/lottery-platform/internal/identity/attest"
 	"github.com/itsivali/lottery-platform/internal/kyc"
 	"github.com/itsivali/lottery-platform/internal/ledger"
 	"github.com/itsivali/lottery-platform/internal/payments"
 	"github.com/itsivali/lottery-platform/internal/payments/daraja"
 	"github.com/itsivali/lottery-platform/internal/payouts"
+	"github.com/itsivali/lottery-platform/internal/platform/challenge"
 	"github.com/itsivali/lottery-platform/internal/platform/clock"
 	"github.com/itsivali/lottery-platform/internal/platform/config"
 	"github.com/itsivali/lottery-platform/internal/platform/crypto"
@@ -100,7 +102,11 @@ func New(ctx context.Context, cfg config.Config, pool *pgxpool.Pool) (*App, erro
 	if err != nil {
 		return nil, err
 	}
-	sh := shared{cfg: cfg, clk: clk, hc: hc, keyring: keyring, aw: aw, provider: provider, insertOnly: insertOnly}
+	attestor, err := newAttestor(c.Attestation, hc)
+	if err != nil {
+		return nil, err
+	}
+	sh := shared{cfg: cfg, clk: clk, hc: hc, keyring: keyring, aw: aw, provider: provider, insertOnly: insertOnly, attestor: attestor}
 	if p := cfg.Payments; p.Enabled {
 		if sh.daraja, err = NewDaraja(p); err != nil {
 			return nil, err
@@ -127,14 +133,18 @@ func New(ctx context.Context, cfg config.Config, pool *pgxpool.Pool) (*App, erro
 		Idem:               idempotency.NewStore(pool),
 		Limiter:            ratelimit.New(vk),
 		TrustedProxyHeader: c.TrustedProxyHeader, TrustedProxyHops: c.TrustedProxyHops,
-		Wallet:        wallet.NewReader(pool),
-		CORSOrigins:   c.CORSOrigins,
-		Staff:         staffAuth,
-		StaffServices: staffSvc,
+		Wallet:          wallet.NewReader(pool),
+		CORSOrigins:     c.CORSOrigins,
+		Staff:           staffAuth,
+		StaffServices:   staffSvc,
+		Challenges:      challenge.NewStore(vk, 5*time.Minute),
+		AttestationMode: c.Attestation.Mode,
+		AttestationWeb:  c.Attestation.Web,
 	})
 	slog.InfoContext(ctx, "v1 API enabled", "trusted_proxy_header", c.TrustedProxyHeader, "trusted_proxy_hops", c.TrustedProxyHops,
 		"kyc_registry", c.KYCURL != "", "google", c.GoogleClientID != "", "apple", c.AppleClientID != "",
-		"payments", cfg.Payments.Enabled, "buy_goods", cfg.Payments.TillNumber != "", "paybill", cfg.Payments.C2BEnabled(), "payouts", cfg.Payments.B2CEnabled(), "daraja", cfg.Payments.BaseURL, "cors_origins", len(c.CORSOrigins), "staff", c.Staff.Enabled, "staff_pool", c.Staff.DatabaseURL != "")
+		"payments", cfg.Payments.Enabled, "buy_goods", cfg.Payments.TillNumber != "", "paybill", cfg.Payments.C2BEnabled(), "payouts", cfg.Payments.B2CEnabled(), "daraja", cfg.Payments.BaseURL, "cors_origins", len(c.CORSOrigins), "staff", c.Staff.Enabled, "staff_pool", c.Staff.DatabaseURL != "",
+		"attestation", c.Attestation.Mode, "app_attest", c.Attestation.AppID != "", "play_integrity", c.Attestation.PlayPackage != "")
 	return a, nil
 }
 
@@ -148,6 +158,7 @@ type shared struct {
 	provider   kyc.Provider
 	insertOnly *river.Client[pgx.Tx]
 	daraja     *daraja.Client // nil without Daraja configuration
+	attestor   identity.Attestor
 }
 
 type services struct {
@@ -168,7 +179,10 @@ func buildServices(pool *pgxpool.Pool, sh shared) services {
 	s.identity = identity.NewService(pool, sh.clk, oidcVerifier(clock.Wall{}, sh.hc, c), sh.aw, identity.Config{
 		AuthKey: c.AuthKey, TokenKey: ed25519.NewKeyFromSeed(c.TokenSeed), Issuer: issuer, Audience: audience,
 		AccessTTL: 10 * time.Minute, RefreshTTL: 30 * 24 * time.Hour, DeviceCap: 2,
-	})
+	}).WithAttestor(sh.attestor)
+	if c.Attestation.Mode == "off" {
+		s.identity.WithAttestationOff()
+	}
 	s.rg = rg.NewService(pool, sh.clk, sh.aw, rg.Config{CoolingOff: 24 * time.Hour})
 
 	// Without Daraja configuration the payments service still answers reads but refuses top-ups (fail closed).
@@ -222,6 +236,27 @@ func (a *App) staff(ctx context.Context, sh shared, base services) (staff.Authen
 }
 
 const staffProvider = "staff"
+
+// newAttestor builds the device attestation verifiers that are configured (App Attest trusts Apple's root; Play
+// Integrity decodes through Google). A platform without one never passes.
+func newAttestor(c config.Attestation, hc *http.Client) (identity.Attestor, error) {
+	now := func() time.Time { t, _ := clock.Wall{}.Now(context.Background(), nil); return t } // certificate and verdict ages
+	var r attest.Router
+	if c.AppID != "" {
+		r.IOS = attest.NewAppAttest(c.AppID, attest.AppleAppAttestationRoot(), c.AllowDevelopment, now)
+	}
+	if c.PlayPackage != "" {
+		d, err := attest.NewGoogleDecoder(c.PlayServiceAccount, c.PlayPackage, "https://playintegrity.googleapis.com", hc, now)
+		if err != nil {
+			return nil, err
+		}
+		r.Android = attest.NewPlayIntegrity(c.PlayPackage, c.PlayCertDigests, d, now)
+	}
+	if r.IOS == nil && r.Android == nil {
+		return identity.UnavailableAttestor{}, nil
+	}
+	return r, nil
+}
 
 // NewDaraja builds the Daraja client from configuration, with the paybill calls when C2B is configured and the payout
 // calls when B2C is. lotteryctl

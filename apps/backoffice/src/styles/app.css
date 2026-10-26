@@ -41,7 +41,8 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
 table { width: 100%; border-collapse: collapse; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); overflow: hidden; margin-top: var(--s-4); }
 th, td { text-align: left; padding: var(--s-3) var(--s-4); border-bottom: 1px solid var(--border); vertical-align: top; }
 th { font-size: 14px; font-weight: 500; color: var(--ink-muted); background: var(--muted-surface); }
-td.actions { display: flex; gap: var(--s-2); flex-wrap: wrap; justify-content: flex-end; }
+td.actions { text-align: right; }
+td.actions > * { margin: 0 0 var(--s-1) var(--s-2); }
 .pill { display: inline-flex; gap: var(--s-1); align-items: center; padding: 2px var(--s-3); border-radius: 999px; font-size: 13px; font-weight: 500; border: 1px solid currentColor; }
 .pill-success { color: var(--success); } .pill-warning { color: var(--warning); } .pill-error { color: var(--error); } .pill-pending { color: var(--pending); } .pill-neutral { color: var(--ink-muted); }
 .notice { border-radius: var(--r-md); padding: var(--s-3) var(--s-4); margin: var(--s-4) 0; border: 1px solid; background: var(--surface); }
@@ -64,5 +65,5 @@ dialog::backdrop { background: rgb(0 0 0 / 0.4); }
 .check { display: flex; gap: var(--s-2); align-items: center; margin: var(--s-3) 0; }
 .dialog-actions { display: flex; justify-content: flex-end; gap: var(--s-2); margin-top: var(--s-6); }
 .center { display: grid; place-items: center; min-height: 100vh; gap: var(--s-4); text-align: center; padding: var(--s-6); }
-@media (max-width: 800px) { .layout { grid-template-columns: 1fr; } nav { border-right: none; border-bottom: 1px solid var(--border); } main { padding: var(--s-4); } td.actions { justify-content: flex-start; } }
+@media (max-width: 800px) { .layout { grid-template-columns: 1fr; } nav { border-right: none; border-bottom: 1px solid var(--border); } main { padding: var(--s-4); } td.actions { text-align: left; } td.actions > * { margin: 0 var(--s-2) var(--s-1) 0; } }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }

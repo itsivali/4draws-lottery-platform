@@ -32,6 +32,7 @@ import (
 	"github.com/itsivali/lottery-platform/internal/payments/daraja"
 	"github.com/itsivali/lottery-platform/internal/payments/darajamock"
 	"github.com/itsivali/lottery-platform/internal/payouts"
+	"github.com/itsivali/lottery-platform/internal/platform/challenge"
 	"github.com/itsivali/lottery-platform/internal/platform/clock"
 	"github.com/itsivali/lottery-platform/internal/platform/crypto"
 	"github.com/itsivali/lottery-platform/internal/platform/httpx"
@@ -206,6 +207,7 @@ func setupWith(t *testing.T, mutate func(*apiDeps)) *env {
 			wallet.ErrInsufficientFunds),
 		Wallet:       wallet.NewReader(pool),
 		CallbackPath: callbackPath,
+		Challenges:   challenge.NewStore(vk.Client(t), 5*time.Minute),
 		Idem:         idempotency.NewStore(pool),
 		Limiter:      ratelimit.New(vk.Client(t)),
 	}
@@ -359,6 +361,7 @@ func TestAPI_EveryWriteRequiresAnIdempotencyKey(t *testing.T) {
 	writes := append([]route{
 		{http.MethodPost, "/v1/auth/signup"}, {http.MethodPost, "/v1/auth/login"},
 		{http.MethodPost, "/v1/auth/refresh"}, {http.MethodPost, "/v1/auth/sso/google"},
+		{http.MethodPost, "/v1/auth/attestation/challenge"},
 	}, authedRoutes...)
 	for _, rt := range writes {
 		if rt.method == http.MethodGet {

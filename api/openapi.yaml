@@ -139,6 +139,30 @@ paths:
               schema: { $ref: "#/components/schemas/Tokens" }
         "401": { $ref: "#/components/responses/Problem" }
         "429": { $ref: "#/components/responses/Problem" }
+  /v1/auth/attestation/challenge:
+    post:
+      operationId: attestationChallenge
+      tags: [auth]
+      summary: A single-use challenge for a device attestation (App Attest / Play Integrity)
+      description: |
+        The app asks for a challenge, has the platform attest to it (App Attest: as the client data; Play Integrity: as
+        the nonce, or its base64url SHA-256 as the request hash), and sends the token with the challenge in the
+        `device` of sign-up or sign-in. A challenge works once and for 5 minutes; a token without one is not checked.
+      security: []
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      responses:
+        "201":
+          description: The challenge
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [challenge, expires_at]
+                properties:
+                  challenge: { type: string }
+                  expires_at: { type: string, format: date-time }
+        "429": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
   /v1/auth/logout:
     post:
       operationId: logout
@@ -309,7 +333,7 @@ paths:
         "400": { $ref: "#/components/responses/Problem" }
         "401": { $ref: "#/components/responses/Problem" }
         "403":
-          description: KYC not verified (`kyc-required`), over a deposit limit (`deposit-limit`) or restricted (`restricted`)
+          description: KYC not verified (`kyc-required`), over a deposit limit (`deposit-limit`), restricted (`restricted`) or an unverified device (`attestation-required`)
           content:
             application/problem+json:
               schema: { $ref: "#/components/schemas/Problem" }
@@ -397,7 +421,7 @@ paths:
               schema: { $ref: "#/components/schemas/PlayResult" }
         "401": { $ref: "#/components/responses/Problem" }
         "403":
-          description: KYC (`kyc-required`), phone (`phone-not-verified`), restriction (`restricted`) or debt (`in-debt`)
+          description: KYC (`kyc-required`), phone (`phone-not-verified`), restriction (`restricted`), debt (`in-debt`) or an unverified device (`attestation-required`, by ATTESTATION_MODE)
           content:
             application/problem+json:
               schema: { $ref: "#/components/schemas/Problem" }
@@ -594,7 +618,7 @@ paths:
         "400": { $ref: "#/components/responses/Problem" }
         "401": { $ref: "#/components/responses/Problem" }
         "403":
-          description: KYC (`kyc-required`), phone (`phone-not-verified`), suspended account or debt (`in-debt`)
+          description: KYC (`kyc-required`), phone (`phone-not-verified`), suspended account, debt (`in-debt`) or an unverified device (`attestation-required`)
           content:
             application/problem+json:
               schema: { $ref: "#/components/schemas/Problem" }
@@ -2047,6 +2071,9 @@ components:
         attestation_token:
           type: string
           description: Play Integrity or App Attest token. It is evidence for the server-side verifier, never a verdict.
+        attestation_challenge:
+          type: string
+          description: The challenge from `POST /v1/auth/attestation/challenge` the token was made for (used once).
     Credentials:
       type: object
       additionalProperties: false

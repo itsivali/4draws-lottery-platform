@@ -66,17 +66,23 @@ type ClosureRequest struct {
 	RequestedAt time.Time
 }
 
-// OpenClosures lists open closure requests, oldest first.
-func (s *Service) OpenClosures(ctx context.Context, limit int) ([]ClosureRequest, error) {
-	rows, err := store.New(s.pool).OpenClosureRequests(ctx, int32(limit)) //nolint:gosec // callers pass small limits
-	if err != nil {
-		return nil, err
-	}
-	out := make([]ClosureRequest, 0, len(rows))
-	for _, r := range rows {
-		out = append(out, ClosureRequest{UserID: r.UserID, MSISDN: r.Msisdn, Status: r.Status, RequestedAt: r.RequestedAt})
-	}
-	return out, nil
+// OpenClosures lists open closure requests, oldest first, with the players' numbers; the viewing is audited as
+// viewer (like a KYC unmask), since it shows personal data.
+func (s *Service) OpenClosures(ctx context.Context, limit int, viewer string) ([]ClosureRequest, error) {
+	var out []ClosureRequest
+	err := s.withTx(ctx, func(tx pgx.Tx, q *store.Queries, _ time.Time) error {
+		rows, err := q.OpenClosureRequests(ctx, int32(limit)) //nolint:gosec // callers pass small limits
+		if err != nil {
+			return err
+		}
+		out = make([]ClosureRequest, 0, len(rows))
+		for _, r := range rows {
+			out = append(out, ClosureRequest{UserID: r.UserID, MSISDN: r.Msisdn, Status: r.Status, RequestedAt: r.RequestedAt})
+		}
+		return s.audit.Record(ctx, tx, audit.Event{ActorType: audit.Staff, ActorID: viewer, Action: "identity.closures_viewed",
+			EntityType: "closure_requests", EntityID: "open", Details: map[string]any{"shown": len(out)}})
+	})
+	return out, err
 }
 
 // ClosureGuard refuses to close an account (returning an error wrapping ErrClosureBlocked) while money is in it or
@@ -89,6 +95,10 @@ type ClosureGuard func(ctx context.Context, tx pgx.Tx, userID string) error
 func (s *Service) CloseAccount(ctx context.Context, userID, staffID, staff string, guard ClosureGuard) (time.Time, error) {
 	var at time.Time
 	err := s.withTx(ctx, func(tx pgx.Tx, q *store.Queries, now time.Time) error {
+		// the account row first: a top-up, play or withdrawal in flight holds it (FOR SHARE) until it commits
+		if err := q.LockUser(ctx, userID); err != nil {
+			return err
+		}
 		if _, err := q.LockOpenClosure(ctx, userID); err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
 				return ErrNoClosureRequest

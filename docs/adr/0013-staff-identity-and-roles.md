@@ -23,7 +23,10 @@ compromise in the player API must not be able to change a draw or release money.
   `alerts_operator`, `support`, `auditor` (`internal/staff`). Every `/v1/staff` route requires one (the auditor reads
   and runs reconciliations, changes nothing). Roles unknown to the platform are ignored; a token with none is refused.
 - **Staff appear as `staff:<Keycloak subject>`** in audit records and in the services' operator fields, so the
-  two-person rules compare real, distinct people. `lotteryctl` keeps working (`operator:<name>`) for emergencies.
+  two-person rules compare real, distinct people. `lotteryctl` keeps working for emergencies, but `-operator` now
+  takes the staff member's id (their Keycloak subject) and records it as `staff:<id>` too, so one person cannot meet
+  a two-person rule by acting once in the back office and once with `lotteryctl` (found in the phase 8 security
+  review).
 - **The back office acts through services on `STAFF_DATABASE_URL`**, connected with the worker's role. Without it
   (single-role mode, as on Render's free plan today) they share the API's pool.
 - Configuration is all-or-nothing (`STAFF_OIDC_ISSUER`, `STAFF_OIDC_AUDIENCE`, `STAFF_OIDC_JWKS_URL`); without it the

@@ -1,0 +1,9 @@
+# Load tests only: lets go run ./loadtest -spoof-ip give each simulated player its own client address, so per-address
+# limits (10 sign-ups an hour) apply per player as they would in production. Never use this anywhere real: it trusts
+# X-Forwarded-For from anyone.
+#   docker compose -f docker-compose.yml -f loadtest/compose.loadtest.yml up -d --wait
+services:
+  api:
+    environment:
+      TRUSTED_PROXY_HEADER: X-Forwarded-For
+      TRUSTED_PROXY_HOPS: "1"

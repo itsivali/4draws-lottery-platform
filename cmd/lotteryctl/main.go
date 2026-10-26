@@ -14,6 +14,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"regexp"
 	"time"
 
 	"github.com/riverqueue/river"
@@ -145,7 +146,7 @@ func parse(args []string) (command, error) {
 	fs := flag.NewFlagSet(c.name, flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	fs.StringVar(&c.receipt, "receipt", "", "M-Pesa receipt")
-	fs.StringVar(&c.operator, "operator", "", "who is acting (audited)")
+	fs.StringVar(&c.operator, "operator", "", "your staff id: the uuid of your staff account (audited as staff:<id>)")
 	fs.StringVar(&c.reason, "reason", "", "why the top-up was reversed")
 	fs.StringVar(&c.payment, "payment", "", "payment id")
 	fs.StringVar(&c.user, "user", "", "player (user id) to credit")
@@ -186,10 +187,17 @@ func parse(args []string) (command, error) {
 		return command{}, bad
 	}
 	if c.operator != "" {
-		c.operator = "operator:" + c.operator
+		// the staff member's id (their Keycloak subject), recorded as the back office records it, so a two-person rule
+		// (draw sign-off, KRA remittance) cannot be met by one person acting once here and once in the back office
+		if !staffID.MatchString(c.operator) {
+			return command{}, errors.New("-operator must be your staff id (the uuid of your staff account), not a name")
+		}
+		c.operator = "staff:" + c.operator
 	}
 	return c, nil
 }
+
+var staffID = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 
 func main() {
 	cmd, err := parse(os.Args[1:])

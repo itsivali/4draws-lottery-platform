@@ -641,7 +641,7 @@ func (h *handlers) staffClosures(w http.ResponseWriter, r *http.Request) {
 		unavailable(w, "Account closure")
 		return
 	}
-	list, err := h.StaffServices.Identity.OpenClosures(r.Context(), 100)
+	list, err := h.StaffServices.Identity.OpenClosures(r.Context(), 100, member(r).Operator())
 	if err != nil {
 		staffError(w, err)
 		return
@@ -667,15 +667,24 @@ func (h *handlers) staffClose(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusOK, map[string]any{"closed_at": at})
 }
 
-// closureGuard keeps an account open while money is in it or still moving: a balance (it must be withdrawn or
-// paid out first), a top-up still being settled, or a payout not yet final.
+// closureGuard keeps an account open while money is in it, still moving, owed by the player, or still to be won or
+// paid from a draw: a balance (pay it out first), debt from a reversed top-up, a top-up or payout not final, tickets in
+// a draw still taking entries, entries in a draw not yet paid, or a prize not yet paid.
 func (h *handlers) closureGuard(ctx context.Context, tx pgx.Tx, userID string) error {
-	bal, err := wallet.NewService(nil).Balance(ctx, tx, userID)
+	w := wallet.NewService(nil)
+	bal, err := w.Balance(ctx, tx, userID)
 	if err != nil {
 		return err
 	}
 	if bal > 0 {
 		return fmt.Errorf("%w: the wallet still holds KES %d; pay it out first", identity.ErrClosureBlocked, bal)
+	}
+	debt, err := w.Debt(ctx, tx, userID)
+	if err != nil {
+		return err
+	}
+	if debt > 0 {
+		return fmt.Errorf("%w: the player owes KES %d from a reversed top-up; settle it first", identity.ErrClosureBlocked, debt)
 	}
 	if n, err := h.StaffServices.Payments.Unsettled(ctx, tx, userID); err != nil {
 		return err
@@ -686,6 +695,14 @@ func (h *handlers) closureGuard(ctx context.Context, tx pgx.Tx, userID string) e
 		return err
 	} else if n > 0 {
 		return fmt.Errorf("%w: %d payout(s) are not final yet", identity.ErrClosureBlocked, n)
+	}
+	pi, err := h.StaffServices.Payouts.PrizeInterestOf(ctx, tx, userID)
+	if err != nil {
+		return err
+	}
+	if pi.Any() {
+		return fmt.Errorf("%w: the player still has chances or prizes in draws (%d tickets in open draws, %d entries in draws not yet paid, %d prizes not yet paid); close it once they are settled",
+			identity.ErrClosureBlocked, pi.OpenDrawTickets, pi.UndecidedEntries, pi.UnpaidPrizes)
 	}
 	return nil
 }

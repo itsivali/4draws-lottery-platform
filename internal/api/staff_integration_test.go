@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/itsivali/lottery-platform/internal/draws"
@@ -19,6 +20,7 @@ import (
 	"github.com/itsivali/lottery-platform/internal/platform/clock"
 	"github.com/itsivali/lottery-platform/internal/platform/crypto"
 	"github.com/itsivali/lottery-platform/internal/staff"
+	"github.com/itsivali/lottery-platform/internal/wallet"
 )
 
 // fakeStaff stands in for the Keycloak token check: a token is a staff member's name.
@@ -252,6 +254,10 @@ func TestStaffAPI_AnAccountClosesOnlyOnceItsMoneyIsOut(t *testing.T) {
 	if c, _ := list.Body["closures"].([]any); len(c) != 1 || c[0].(map[string]any)["user_id"] != user {
 		t.Fatalf("closures: %s", list.Raw)
 	}
+	var viewed int
+	if err := e.pool.QueryRow(context.Background(), `SELECT count(*) FROM audit.audit_log WHERE action = 'identity.closures_viewed' AND actor_type = 'staff'`).Scan(&viewed); err != nil || viewed != 1 {
+		t.Fatalf("viewing players' numbers audited %d times (%v), want once", viewed, err)
+	}
 	r := e.do(t, http.MethodPost, "/v1/staff/closures/"+user+"/close", support, map[string]any{})
 	if r.Code != http.StatusConflict || !hasType(r, "closure-blocked") || !strings.Contains(r.Raw, "950") {
 		t.Fatalf("close with money in the wallet: %d %s", r.Code, r.Raw)
@@ -289,5 +295,66 @@ func TestStaffAPI_UnconfiguredStaffSignInAnswers503(t *testing.T) {
 	e := setupWith(t, func(d *apiDeps) { d.Staff = nil })
 	if r := e.do(t, http.MethodGet, "/v1/staff/me", "anything", nil); r.Code != http.StatusServiceUnavailable || !hasType(r, "staff-unavailable") {
 		t.Fatalf("%d %s", r.Code, r.Raw)
+	}
+}
+
+func TestStaffAPI_AnAccountWithAStakeInADrawIsNotClosedUntilTheDrawIsSettled(t *testing.T) {
+	e := setup(t)
+	s := e.signIn(t)
+	user := e.userID(t, s)
+	e.canPlay(t, s, 1000)
+	if r := e.do(t, http.MethodPost, "/v1/plays", s.access, nil); r.Code != http.StatusCreated {
+		t.Fatalf("play: %d %s", r.Code, r.Raw)
+	}
+	e.freezeDaily(t) // today's draws (daily frozen; weekly, monthly, quarterly still open) hold this player's chances
+	// pay out the rest of the wallet so only the draw stake remains
+	w := e.do(t, http.MethodPost, "/v1/payouts/withdrawals", s.access, map[string]any{"amount_kes": 850})
+	if w.Code != http.StatusCreated {
+		t.Fatalf("withdraw: %d %s", w.Code, w.Raw)
+	}
+	for _, st := range []string{"sending", "sent", "manual"} {
+		e.ownerExec(t, `UPDATE payouts.payouts SET status = $2 WHERE id = $1`, w.Body["id"], st)
+	}
+	if r := e.do(t, http.MethodPost, "/v1/staff/payouts/"+w.Body["id"].(string)+"/settle", e.member(staff.PayoutOperator), map[string]any{"paid": true, "receipt": "SGH0000002"}); r.Code != http.StatusOK {
+		t.Fatalf("settle: %d %s", r.Code, r.Raw)
+	}
+	e.do(t, http.MethodPost, "/v1/account/closure", s.access, nil)
+	r := e.do(t, http.MethodPost, "/v1/staff/closures/"+user+"/close", e.member(staff.Support), map[string]any{})
+	if r.Code != http.StatusConflict || !hasType(r, "closure-blocked") || !strings.Contains(r.Raw, "draw") {
+		t.Fatalf("closed with chances still in draws: %d %s", r.Code, r.Raw)
+	}
+}
+
+func TestStaffAPI_AnAccountThatOwesMoneyIsNotClosedSilently(t *testing.T) {
+	e := setup(t)
+	s := e.signIn(t)
+	user := e.userID(t, s)
+	e.do(t, http.MethodPost, "/v1/account/closure", s.access, nil)
+	e.debtFor(t, user, 300)
+	r := e.do(t, http.MethodPost, "/v1/staff/closures/"+user+"/close", e.member(staff.Support), map[string]any{})
+	if r.Code != http.StatusConflict || !strings.Contains(r.Raw, "owes") {
+		t.Fatalf("closed an account in debt: %d %s", r.Code, r.Raw)
+	}
+}
+
+// debtFor books a reversed top-up of gross against an empty wallet, so the player owes it (less the excise).
+func (e *env) debtFor(t *testing.T, user string, gross int64) {
+	t.Helper()
+	ctx := context.Background()
+	err := pgx.BeginFunc(ctx, e.pool, func(tx pgx.Tx) error {
+		var payment string
+		if err := tx.QueryRow(ctx, `SELECT platform.uuid_v7()::text`).Scan(&payment); err != nil {
+			return err
+		}
+		ls := ledger.NewStore()
+		p, err := ledger.DepositReversal(payment, user, gross, gross*5/100, 0)
+		if err != nil {
+			return err
+		}
+		_, err = wallet.NewService(ls).Apply(ctx, tx, p)
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
 	}
 }

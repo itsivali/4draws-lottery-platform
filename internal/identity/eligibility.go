@@ -9,8 +9,19 @@ import (
 	"github.com/itsivali/lottery-platform/internal/identity/store"
 )
 
+// loadActive reads the account and holds its row (FOR SHARE) for the caller's transaction, so a top-up, play or
+// withdrawal and the closing of the account cannot interleave.
 func (s *Service) loadActive(ctx context.Context, tx pgx.Tx, userID string) (store.GetUserRow, error) {
-	u, err := store.New(tx).GetUser(ctx, userID)
+	r, err := store.New(tx).GetUserForShare(ctx, userID)
+	return activeUser(store.GetUserRow(r), err)
+}
+
+// peekActive is loadActive without the lock, for decisions taken in read-only transactions (it moves nothing).
+func (s *Service) peekActive(ctx context.Context, tx pgx.Tx, userID string) (store.GetUserRow, error) {
+	return activeUser(store.New(tx).GetUser(ctx, userID))
+}
+
+func activeUser(u store.GetUserRow, err error) (store.GetUserRow, error) {
 	if err != nil {
 		return u, err
 	}
@@ -25,7 +36,16 @@ func (s *Service) loadActive(ctx context.Context, tx pgx.Tx, userID string) (sto
 // yet: the first top-up is what proves it. It returns the number the account claims, which is where the payment
 // prompt must go (never a number the client supplies). Called inside the same transaction as the top-up (invariant 12).
 func (s *Service) AssertCanTopUp(ctx context.Context, tx pgx.Tx, userID string) (string, error) {
-	u, err := s.loadActive(ctx, tx, userID)
+	return canTopUp(s.loadActive(ctx, tx, userID))
+}
+
+// CanTopUp answers what AssertCanTopUp would without holding the account row (for read-only transactions, such as
+// deciding whether to accept a paybill payment before it happens).
+func (s *Service) CanTopUp(ctx context.Context, tx pgx.Tx, userID string) (string, error) {
+	return canTopUp(s.peekActive(ctx, tx, userID))
+}
+
+func canTopUp(u store.GetUserRow, err error) (string, error) {
 	if err != nil {
 		return "", err
 	}
@@ -63,18 +83,20 @@ func (s *Service) AssertCanPlay(ctx context.Context, tx pgx.Tx, userID string) e
 }
 
 // AssertDeviceTrusted refuses transactions from a session whose device failed attestation. With strict set (the
-// production policy once the verifier is live) a mobile device must also have passed; web sessions are not attestable
-// and are limited by IP, CAPTCHA and lower rate limits instead.
-func (s *Service) AssertDeviceTrusted(ctx context.Context, tx pgx.Tx, sessionID string, strict bool) error {
+// production policy once the verifier is live) a mobile device must also have passed. Web sessions cannot be attested
+// and the platform is the client's own claim, so a script can call itself "web": they pass only when webAllowed
+// (ATTESTATION_WEB=allow), and are otherwise refused like an unattested phone.
+func (s *Service) AssertDeviceTrusted(ctx context.Context, tx pgx.Tx, sessionID string, strict, webAllowed bool) error {
 	d, err := store.New(tx).GetSessionDevice(ctx, sessionID)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return nil // a session without a device record is a web session
-	}
-	if err != nil {
+	web := errors.Is(err, pgx.ErrNoRows) // a session without a device record is a web session
+	if err != nil && !web {
 		return err
 	}
-	if d.Platform == "web" {
-		return nil
+	if web || d.Platform == "web" {
+		if webAllowed {
+			return nil
+		}
+		return ErrAttestationFailed
 	}
 	if d.AttestationVerdict == "failed" || (strict && d.AttestationVerdict != "passed") {
 		return ErrAttestationFailed
@@ -97,4 +119,11 @@ func (s *Service) AssertCanBePaid(ctx context.Context, tx pgx.Tx, userID string)
 		return "", ErrPhoneNotVerified
 	}
 	return u.Msisdn, nil
+}
+
+// DeviceTrusted is AssertDeviceTrusted in its own read-only transaction, for checks made before a service call.
+func (s *Service) DeviceTrusted(ctx context.Context, sessionID string, strict, webAllowed bool) error {
+	return pgx.BeginTxFunc(ctx, s.pool, pgx.TxOptions{AccessMode: pgx.ReadOnly}, func(tx pgx.Tx) error {
+		return s.AssertDeviceTrusted(ctx, tx, sessionID, strict, webAllowed)
+	})
 }

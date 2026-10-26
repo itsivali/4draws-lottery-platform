@@ -219,3 +219,16 @@ INSERT INTO payouts.reconciliation_runs (ran_at, ok, report) VALUES ($1, $2, $3)
 -- Payouts of the player not yet paid or failed (an account cannot be closed while money may still move).
 SELECT count(*)::int FROM payouts.payouts
 WHERE user_id = sqlc.arg(user_id) AND status NOT IN ('succeeded','failed');
+
+-- name: PrizeInterest :one
+-- What a player may still win or be owed from draws: paid tickets on a day of a draw still taking entries, entries in
+-- a draw not yet paid or voided, and won prizes without a successful payout. An account is not closed while any remain.
+SELECT
+  (SELECT count(*) FROM tickets.tickets t JOIN draws.draws d
+     ON d.status = 'open' AND t.play_date BETWEEN d.period_start AND d.period_end
+   WHERE t.user_id = sqlc.arg(user_id) AND t.status = 'paid')::int AS open_draw_tickets,
+  (SELECT count(*) FROM draws.draw_entries e JOIN draws.draws d ON d.id = e.draw_id
+   WHERE e.user_id = sqlc.arg(user_id) AND d.status NOT IN ('paid','voided'))::int AS undecided_entries,
+  (SELECT count(*) FROM draws.draw_results r JOIN draws.draw_entries e ON e.id = r.entry_id
+   WHERE e.user_id = sqlc.arg(user_id)
+     AND NOT EXISTS (SELECT 1 FROM payouts.payouts p WHERE p.draw_result_id = r.id AND p.status = 'succeeded'))::int AS unpaid_prizes;

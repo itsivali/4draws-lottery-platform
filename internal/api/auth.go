@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"strings"
@@ -14,15 +15,23 @@ import (
 )
 
 type deviceJSON struct {
-	Fingerprint      string `json:"fingerprint"`
-	Platform         string `json:"platform"`
-	AttestationToken string `json:"attestation_token"`
+	Fingerprint          string `json:"fingerprint"`
+	Platform             string `json:"platform"`
+	AttestationToken     string `json:"attestation_token"`
+	AttestationChallenge string `json:"attestation_challenge"`
 }
 
-// toDevice converts the client's device description. The attestation token is only evidence for the server-side
-// verifier; there is no way for a client to state a verdict.
-func (d deviceJSON) toDevice() identity.Device {
-	return identity.Device{Fingerprint: d.Fingerprint, Platform: d.Platform, AttestationToken: d.AttestationToken}
+// device converts the client's device description. The attestation token is only evidence for the server-side
+// verifier, and only together with a challenge this server issued, used here once; there is no way for a client to
+// state a verdict.
+func (h *handlers) device(ctx context.Context, d deviceJSON) identity.Device {
+	dev := identity.Device{Fingerprint: d.Fingerprint, Platform: d.Platform, AttestationToken: d.AttestationToken}
+	if d.AttestationToken != "" && d.AttestationChallenge != "" && h.Challenges != nil {
+		if ok, err := h.Challenges.Consume(ctx, d.AttestationChallenge); err == nil && ok {
+			dev.AttestationChallenge = d.AttestationChallenge
+		}
+	}
+	return dev
 }
 
 type tokensJSON struct {
@@ -50,6 +59,9 @@ func authError(w http.ResponseWriter, err error) {
 		httpx.WriteProblem(w, http.StatusUnauthorized, "invalid-token", "Invalid token", "")
 	case errors.Is(err, identity.ErrDeviceRequired):
 		httpx.WriteProblem(w, http.StatusBadRequest, "device-required", "Device information required", "")
+	case errors.Is(err, identity.ErrAttestationFailed):
+		httpx.WriteProblem(w, http.StatusForbidden, "attestation-required", "This device could not be verified",
+			"install the app from the official store and sign in again; plays, top-ups and withdrawals need a verified device")
 	case errors.Is(err, identity.ErrDeviceCap):
 		httpx.WriteProblem(w, http.StatusForbidden, "device-limit", "Too many accounts on this device", "")
 	case errors.Is(err, identity.ErrAccountSuspended):
@@ -87,7 +99,7 @@ func (h *handlers) signup(w http.ResponseWriter, r *http.Request) {
 	if !h.limit(w, r, "signup:ip:"+h.clientIP(r), 10, time.Hour) || !h.limit(w, r, "signup:msisdn:"+key, 5, 24*time.Hour) {
 		return
 	}
-	t, err := h.Identity.Signup(r.Context(), in.MSISDN, in.Password, in.Device.toDevice())
+	t, err := h.Identity.Signup(r.Context(), in.MSISDN, in.Password, h.device(r.Context(), in.Device))
 	if err != nil {
 		authError(w, err)
 		return
@@ -108,7 +120,7 @@ func (h *handlers) login(w http.ResponseWriter, r *http.Request) {
 	if !h.limit(w, r, "login:msisdn:"+key, 10, time.Hour) || !h.limit(w, r, "login:ip:"+h.clientIP(r), 60, time.Hour) {
 		return
 	}
-	t, err := h.Identity.Login(r.Context(), in.MSISDN, in.Password, in.Device.toDevice())
+	t, err := h.Identity.Login(r.Context(), in.MSISDN, in.Password, h.device(r.Context(), in.Device))
 	if err != nil {
 		authError(w, err)
 		return
@@ -172,7 +184,7 @@ func (h *handlers) ssoSignIn(w http.ResponseWriter, r *http.Request) {
 	if !httpx.DecodeJSON(w, r, &in) || !h.limit(w, r, "sso:ip:"+h.clientIP(r), 30, time.Hour) {
 		return
 	}
-	t, err := h.Identity.SignInSSO(r.Context(), provider, in.IDToken, in.Nonce, in.Device.toDevice())
+	t, err := h.Identity.SignInSSO(r.Context(), provider, in.IDToken, in.Nonce, h.device(r.Context(), in.Device))
 	if err != nil {
 		authError(w, err)
 		return
@@ -208,4 +220,36 @@ func (h *handlers) logout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *handlers) attestationChallenge(w http.ResponseWriter, r *http.Request) {
+	if !h.limit(w, r, "challenge:ip:"+h.clientIP(r), 30, time.Minute) {
+		return
+	}
+	if h.Challenges == nil {
+		httpx.WriteProblemRetry(w, http.StatusServiceUnavailable, "attestation-unavailable", "Device attestation is not configured", "", 60)
+		return
+	}
+	c, exp, err := h.Challenges.Issue(r.Context())
+	if err != nil {
+		internalError(w, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusCreated, map[string]any{"challenge": c, "expires_at": exp})
+}
+
+// deviceTrusted applies ATTESTATION_MODE before plays, top-ups and withdrawals: refuse_failed stops devices that
+// failed attestation; require also stops phones that were never attested. Web sessions cannot be attested (and anyone
+// can claim to be one): ATTESTATION_WEB decides whether they may transact under those modes.
+func (h *handlers) deviceTrusted(w http.ResponseWriter, r *http.Request) bool {
+	if h.AttestationMode != "refuse_failed" && h.AttestationMode != "require" {
+		return true
+	}
+	p, _ := principalFrom(r.Context())
+	err := h.Identity.DeviceTrusted(r.Context(), p.SessionID, h.AttestationMode == "require", h.AttestationWeb != "refuse")
+	if err == nil {
+		return true
+	}
+	authError(w, err)
+	return false
 }

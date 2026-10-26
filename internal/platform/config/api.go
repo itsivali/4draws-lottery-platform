@@ -39,6 +39,61 @@ type API struct {
 
 	// Staff configures the back office's staff sign-in (off when unset).
 	Staff Staff
+
+	// Attestation configures server-side device attestation.
+	Attestation Attestation
+}
+
+// Attestation is ATTESTATION_MODE and its verifiers. Modes: off (never verify), record (verify and store verdicts;
+// the default), refuse_failed (devices that failed may not play, top up or withdraw), require (phones must have
+// passed). refuse_failed and require need both verifiers.
+type Attestation struct {
+	Mode               string
+	Web                string // allow (default) or refuse: web sessions cannot be attested, and anyone can claim to be one
+	AppID              string // App Attest: "<team id>.<bundle id>"
+	AllowDevelopment   bool   // App Attest: also accept development builds (never in production)
+	PlayPackage        string
+	PlayServiceAccount []byte // Play Integrity: the service account key (JSON)
+	PlayCertDigests    []string
+}
+
+func loadAttestation() (Attestation, error) {
+	a := Attestation{Mode: os.Getenv("ATTESTATION_MODE"), AppID: os.Getenv("APP_ATTEST_APP_ID"),
+		AllowDevelopment: os.Getenv("APP_ATTEST_ALLOW_DEVELOPMENT") == "true", PlayPackage: os.Getenv("PLAY_INTEGRITY_PACKAGE")}
+	if a.Mode == "" {
+		a.Mode = "record"
+	}
+	switch a.Web = os.Getenv("ATTESTATION_WEB"); a.Web {
+	case "":
+		a.Web = "allow"
+	case "allow", "refuse":
+	default:
+		return Attestation{}, errors.New("config: ATTESTATION_WEB must be allow or refuse")
+	}
+	if !slices.Contains([]string{"off", "record", "refuse_failed", "require"}, a.Mode) {
+		return Attestation{}, errors.New("config: ATTESTATION_MODE must be off, record, refuse_failed or require")
+	}
+	if v := os.Getenv("PLAY_INTEGRITY_SERVICE_ACCOUNT"); v != "" {
+		b, err := base64.StdEncoding.DecodeString(v)
+		if err != nil {
+			return Attestation{}, errors.New("config: PLAY_INTEGRITY_SERVICE_ACCOUNT must be the service account JSON, base64-encoded")
+		}
+		a.PlayServiceAccount = b
+	}
+	for d := range strings.SplitSeq(os.Getenv("PLAY_INTEGRITY_CERT_DIGESTS"), ",") {
+		if d = strings.TrimSpace(d); d != "" {
+			a.PlayCertDigests = append(a.PlayCertDigests, d)
+		}
+	}
+	if (a.PlayPackage == "") != (len(a.PlayServiceAccount) == 0) {
+		return Attestation{}, errors.New("config: PLAY_INTEGRITY_PACKAGE and PLAY_INTEGRITY_SERVICE_ACCOUNT go together")
+	}
+	if a.Mode == "refuse_failed" || a.Mode == "require" {
+		if a.AppID == "" || a.PlayPackage == "" {
+			return Attestation{}, fmt.Errorf("config: ATTESTATION_MODE=%s needs both verifiers: APP_ATTEST_APP_ID and PLAY_INTEGRITY_PACKAGE (with PLAY_INTEGRITY_SERVICE_ACCOUNT)", a.Mode)
+		}
+	}
+	return a, nil
 }
 
 // Staff is the back office's sign-in: access tokens from the staff realm (Keycloak), and the database URL the
@@ -145,6 +200,9 @@ func loadAPI() (API, error) {
 		return API{}, err
 	}
 	if a.Staff, err = loadStaff(); err != nil {
+		return API{}, err
+	}
+	if a.Attestation, err = loadAttestation(); err != nil {
 		return API{}, err
 	}
 	for _, g := range []struct{ name, val string }{{"KYC_API_URL", a.KYCURL}} {

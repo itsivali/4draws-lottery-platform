@@ -146,7 +146,7 @@ func (s *Service) matchC2B(ctx context.Context, tx pgx.Tx, billRef string, amoun
 		return c2bMatch{}, err
 	}
 	m := c2bMatch{user: user, msisdn: msisdn}
-	switch _, err := s.ids.AssertCanTopUp(ctx, tx, user); {
+	switch _, err := s.ids.CanTopUp(ctx, tx, user); {
 	case errors.Is(err, identity.ErrKYCRequired):
 		m.reason = "kyc_required"
 		return m, nil

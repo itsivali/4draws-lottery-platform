@@ -349,3 +349,17 @@ func (s *Service) Unsettled(ctx context.Context, tx pgx.Tx, userID string) (int,
 	n, err := store.New(tx).UnsettledPayouts(ctx, userID)
 	return int(n), err
 }
+
+// PrizeInterest is what a player may still win or be owed from draws (see the PrizeInterest query).
+type PrizeInterest struct {
+	OpenDrawTickets, UndecidedEntries, UnpaidPrizes int
+}
+
+// Any reports whether anything remains.
+func (p PrizeInterest) Any() bool { return p.OpenDrawTickets+p.UndecidedEntries+p.UnpaidPrizes > 0 }
+
+// PrizeInterestOf reads it in the caller's transaction.
+func (s *Service) PrizeInterestOf(ctx context.Context, tx pgx.Tx, userID string) (PrizeInterest, error) {
+	r, err := store.New(tx).PrizeInterest(ctx, userID)
+	return PrizeInterest{OpenDrawTickets: int(r.OpenDrawTickets), UndecidedEntries: int(r.UndecidedEntries), UnpaidPrizes: int(r.UnpaidPrizes)}, err
+}

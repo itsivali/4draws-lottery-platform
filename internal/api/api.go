@@ -17,6 +17,7 @@ import (
 	"github.com/itsivali/lottery-platform/internal/kyc"
 	"github.com/itsivali/lottery-platform/internal/payments"
 	"github.com/itsivali/lottery-platform/internal/payouts"
+	"github.com/itsivali/lottery-platform/internal/platform/challenge"
 	"github.com/itsivali/lottery-platform/internal/platform/httpx"
 	"github.com/itsivali/lottery-platform/internal/platform/idempotency"
 	"github.com/itsivali/lottery-platform/internal/platform/ratelimit"
@@ -56,6 +57,12 @@ type Deps struct {
 	TrustedProxyHops int
 	// CORSOrigins are the browser origins allowed to call /v1 (the player web app); empty turns CORS off.
 	CORSOrigins []string
+	// Challenges issues the single-use challenges device attestations are made for; nil answers 503.
+	Challenges *challenge.Store
+	// AttestationMode is ATTESTATION_MODE: off, record, refuse_failed or require ("" behaves as record).
+	AttestationMode string
+	// AttestationWeb is ATTESTATION_WEB: allow (default) or refuse web sessions on money routes under the strict modes.
+	AttestationWeb string
 }
 
 type ctxKey struct{}
@@ -93,6 +100,7 @@ func Mount(d Deps) func(chi.Router) {
 			r.Post("/auth/signup", h.signup)
 			r.Post("/auth/login", h.login)
 			r.Post("/auth/refresh", h.refresh)
+			r.Post("/auth/attestation/challenge", h.attestationChallenge)
 			r.Post("/auth/sso/{provider}", h.ssoSignIn)
 			r.Get("/draws", h.listDraws)
 			r.Get("/draws/{id}", h.getDraw)

@@ -20,7 +20,7 @@ func fullAPIEnv(t *testing.T) {
 	t.Setenv("IDENTITY_KEY", b64(32))
 	t.Setenv("VALKEY_ADDR", "valkey:6379")
 	t.Setenv("TRUSTED_PROXY_HEADER", "X-Forwarded-For")
-	for _, k := range []string{"TRUSTED_PROXY_HOPS", "DATA_KEY_ACTIVE", "KYC_API_URL", "KYC_API_KEY", "GOOGLE_CLIENT_ID", "APPLE_CLIENT_ID", "CORS_ALLOWED_ORIGINS", "STAFF_OIDC_ISSUER", "STAFF_OIDC_AUDIENCE", "STAFF_OIDC_JWKS_URL", "STAFF_DATABASE_URL"} {
+	for _, k := range []string{"TRUSTED_PROXY_HOPS", "DATA_KEY_ACTIVE", "KYC_API_URL", "KYC_API_KEY", "GOOGLE_CLIENT_ID", "APPLE_CLIENT_ID", "CORS_ALLOWED_ORIGINS", "STAFF_OIDC_ISSUER", "STAFF_OIDC_AUDIENCE", "STAFF_OIDC_JWKS_URL", "STAFF_DATABASE_URL", "ATTESTATION_MODE", "APP_ATTEST_APP_ID", "APP_ATTEST_ALLOW_DEVELOPMENT", "PLAY_INTEGRITY_PACKAGE", "PLAY_INTEGRITY_SERVICE_ACCOUNT", "PLAY_INTEGRITY_CERT_DIGESTS", "ATTESTATION_WEB"} {
 		t.Setenv(k, "")
 	}
 }
@@ -225,5 +225,42 @@ func TestAPI_StaffSignInIsAllOrNothingAndUsesSecureURLs(t *testing.T) {
 	t.Setenv("STAFF_OIDC_JWKS_URL", "http://keycloak:8080/realms/lottery-staff/protocol/openid-connect/certs")
 	if _, err := config.Load(); err != nil {
 		t.Fatalf("local compose host refused: %v", err)
+	}
+}
+
+func TestAPI_AttestationModeNeedsItsVerifiers(t *testing.T) {
+	fullAPIEnv(t)
+	cfg, err := config.Load()
+	if err != nil || cfg.API.Attestation.Mode != "record" || cfg.API.Attestation.Web != "allow" {
+		t.Fatalf("default: %+v %v", cfg.API.Attestation, err)
+	}
+	t.Setenv("ATTESTATION_WEB", "sometimes")
+	if _, err := config.Load(); err == nil || !strings.Contains(err.Error(), "ATTESTATION_WEB") {
+		t.Fatalf("bad ATTESTATION_WEB accepted: %v", err)
+	}
+	t.Setenv("ATTESTATION_WEB", "refuse")
+	t.Setenv("ATTESTATION_MODE", "lenient")
+	if _, err := config.Load(); err == nil || !strings.Contains(err.Error(), "ATTESTATION_MODE") {
+		t.Fatalf("unknown mode accepted: %v", err)
+	}
+	t.Setenv("ATTESTATION_MODE", "require")
+	if _, err := config.Load(); err == nil || !strings.Contains(err.Error(), "APP_ATTEST_APP_ID") {
+		t.Fatalf("require without verifiers accepted: %v", err)
+	}
+	t.Setenv("APP_ATTEST_APP_ID", "ABCDE12345.ke.bahati.lottery_mobile")
+	t.Setenv("PLAY_INTEGRITY_PACKAGE", "ke.bahati.lottery_mobile")
+	t.Setenv("PLAY_INTEGRITY_SERVICE_ACCOUNT", base64.StdEncoding.EncodeToString([]byte(`{"client_email":"v@x.iam.gserviceaccount.com"}`)))
+	t.Setenv("PLAY_INTEGRITY_CERT_DIGESTS", "abc,def")
+	cfg, err = config.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := cfg.API.Attestation
+	if a.Mode != "require" || a.AppID == "" || a.PlayPackage == "" || len(a.PlayServiceAccount) == 0 || len(a.PlayCertDigests) != 2 || a.AllowDevelopment {
+		t.Fatalf("attestation: %+v", a)
+	}
+	t.Setenv("PLAY_INTEGRITY_SERVICE_ACCOUNT", "not base64!")
+	if _, err := config.Load(); err == nil {
+		t.Fatal("bad service account encoding accepted")
 	}
 }

@@ -32,6 +32,9 @@ func toTopUpJSON(t payments.TopUp) topUpJSON {
 }
 
 func (h *handlers) startTopUp(w http.ResponseWriter, r *http.Request) {
+	if !h.deviceTrusted(w, r) {
+		return
+	}
 	var in struct {
 		AmountKES int64 `json:"amount_kes"`
 	}

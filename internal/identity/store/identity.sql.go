@@ -164,6 +164,37 @@ func (q *Queries) GetUser(ctx context.Context, id string) (GetUserRow, error) {
 	return i, err
 }
 
+const getUserForShare = `-- name: GetUserForShare :one
+SELECT id, msisdn, kyc_status, status, language, password_hash, (msisdn_verified_at IS NOT NULL)::boolean AS phone_verified
+FROM identity.users WHERE id = $1 FOR SHARE
+`
+
+type GetUserForShareRow struct {
+	ID            string
+	Msisdn        string
+	KycStatus     string
+	Status        string
+	Language      string
+	PasswordHash  *string
+	PhoneVerified bool
+}
+
+// As GetUser, holding the row so the account cannot be closed (or suspended) until the caller's transaction ends.
+func (q *Queries) GetUserForShare(ctx context.Context, id string) (GetUserForShareRow, error) {
+	row := q.db.QueryRow(ctx, getUserForShare, id)
+	var i GetUserForShareRow
+	err := row.Scan(
+		&i.ID,
+		&i.Msisdn,
+		&i.KycStatus,
+		&i.Status,
+		&i.Language,
+		&i.PasswordHash,
+		&i.PhoneVerified,
+	)
+	return i, err
+}
+
 const insertAccount = `-- name: InsertAccount :one
 INSERT INTO identity.users (msisdn, password_hash, password_changed_at, created_at, updated_at)
 VALUES ($1, $2, $3, $3, $3)
@@ -271,6 +302,15 @@ func (q *Queries) LockRefreshToken(ctx context.Context, tokenHash []byte) (LockR
 		&i.UsedAt,
 	)
 	return i, err
+}
+
+const lockUser = `-- name: LockUser :exec
+SELECT 1 FROM identity.users WHERE id = $1 FOR UPDATE
+`
+
+func (q *Queries) LockUser(ctx context.Context, id string) error {
+	_, err := q.db.Exec(ctx, lockUser, id)
+	return err
 }
 
 const lockUserPhone = `-- name: LockUserPhone :one

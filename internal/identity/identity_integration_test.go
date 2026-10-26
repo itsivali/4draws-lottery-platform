@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -322,10 +323,14 @@ func TestEligibility_TopUpNeedsAVerifiedIDAndPlayAlsoNeedsAProvedPhone(t *testin
 	}
 }
 
-// fakeAttestor passes tokens starting with "good", refuses "bad" and is down for "outage".
+// fakeAttestor passes tokens starting with "good", refuses "bad" and is down for "outage". It only ever accepts the
+// challenge "c-1" as the binding nonce.
 type fakeAttestor struct{}
 
 func (fakeAttestor) Verify(_ context.Context, platform, token, nonce string) (bool, error) {
+	if nonce != "c-1" {
+		return false, nil
+	}
 	switch {
 	case strings.HasPrefix(token, "good"):
 		return platform == "android" || platform == "ios", nil
@@ -343,7 +348,7 @@ func TestAttestation_VerdictComesFromTheServerSideVerifierNeverFromTheClient(t *
 		t.Helper()
 		seq++
 		m := e.newMSISDN()
-		dev := identity.Device{Fingerprint: fmt.Sprintf("att-%d", seq), Platform: "android", AttestationToken: token}
+		dev := identity.Device{Fingerprint: fmt.Sprintf("att-%d", seq), Platform: "android", AttestationToken: token, AttestationChallenge: "c-1"}
 		tok := e.login(t, m, dev)
 		var v string
 		if err := e.pool.QueryRow(ctx, `SELECT d.attestation_verdict FROM identity.devices d JOIN identity.sessions s ON s.device_id = d.id
@@ -385,13 +390,13 @@ func TestAttestation_FailedDevicesCannotTransactAndStrictModeRequiresAPass(t *te
 	} {
 		e := setup(t)
 		e.svc.WithAttestor(fakeAttestor{})
-		dev := identity.Device{Fingerprint: "fp-att", Platform: c.platform, AttestationToken: c.token}
+		dev := identity.Device{Fingerprint: "fp-att", Platform: c.platform, AttestationToken: c.token, AttestationChallenge: "c-1"}
 		if c.platform == "web" {
 			dev.Fingerprint = ""
 		}
 		tok := e.login(t, e.newMSISDN(), dev)
 		p, _ := e.svc.Authenticate(ctx, tok.Access)
-		err := pgx.BeginFunc(ctx, e.pool, func(tx pgx.Tx) error { return e.svc.AssertDeviceTrusted(ctx, tx, p.SessionID, c.strict) })
+		err := pgx.BeginFunc(ctx, e.pool, func(tx pgx.Tx) error { return e.svc.AssertDeviceTrusted(ctx, tx, p.SessionID, c.strict, true) })
 		if !errors.Is(err, c.wantErr) {
 			t.Errorf("%s: err = %v, want %v", c.name, err, c.wantErr)
 		}
@@ -601,4 +606,44 @@ func TestDevices_MobileSignupWithoutAFingerprintIsRefused(t *testing.T) {
 	if _, err := e.svc.Signup(context.Background(), e.newMSISDN(), goodPassword, identity.Device{Platform: "android"}); !errors.Is(err, identity.ErrDeviceRequired) {
 		t.Fatalf("err = %v, want ErrDeviceRequired", err)
 	}
+}
+
+func TestAttestation_ATokenIsOnlyCheckedAgainstAServerIssuedChallenge(t *testing.T) {
+	e := setup(t)
+	e.svc.WithAttestor(fakeAttestor{})
+	ctx := context.Background()
+	for name, dev := range map[string]identity.Device{
+		"no challenge":      {Fingerprint: "fp-nc", Platform: "android", AttestationToken: "good"},
+		"another challenge": {Fingerprint: "fp-oc", Platform: "android", AttestationToken: "good", AttestationChallenge: "c-2"},
+	} {
+		m := e.newMSISDN()
+		e.login(t, m, dev)
+		var v string
+		if err := e.pool.QueryRow(ctx, `SELECT d.attestation_verdict FROM identity.devices d JOIN identity.sessions s ON s.device_id = d.id
+			JOIN identity.users u ON u.id = s.user_id WHERE u.msisdn = $1`, m).Scan(&v); err != nil {
+			t.Fatal(err)
+		}
+		if v == "passed" {
+			t.Errorf("%s: passed without the issued challenge", name)
+		}
+	}
+}
+
+func TestAttestation_OffModeNeverAsksTheVerifier(t *testing.T) {
+	e := setup(t)
+	e.svc.WithAttestor(countingAttestor{}).WithAttestationOff()
+	m := e.newMSISDN()
+	e.login(t, m, identity.Device{Fingerprint: "fp-off", Platform: "android", AttestationToken: "good", AttestationChallenge: "c-1"})
+	if calls.Load() != 0 {
+		t.Fatalf("verifier called %d times in off mode", calls.Load())
+	}
+}
+
+var calls atomic.Int64
+
+type countingAttestor struct{}
+
+func (countingAttestor) Verify(context.Context, string, string, string) (bool, error) {
+	calls.Add(1)
+	return true, nil
 }

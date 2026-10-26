@@ -83,6 +83,33 @@
         "email",
         "basic"
       ]
+    },
+    {
+      "clientId": "lottery-e2e",
+      "name": "End-to-end tests (LOCAL ONLY: password grant)",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": true,
+      "implicitFlowEnabled": false,
+      "protocolMappers": [
+        {
+          "name": "api audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.custom.audience": "lottery-backoffice-api",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        }
+      ],
+      "defaultClientScopes": [
+        "roles",
+        "profile",
+        "email",
+        "basic"
+      ]
     }
   ],
   "users": [

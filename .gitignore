@@ -26,6 +26,8 @@ build/
 .env.*
 !.env.example
 *.pem
+# public certificates the code embeds (not keys)
+!internal/identity/attest/apple_app_attestation_root_ca.pem
 *.key
 *.p12
 *.jks

@@ -63,6 +63,9 @@ type Device struct {
 	Fingerprint      string
 	Platform         string // android | ios | web
 	AttestationToken string
+	// AttestationChallenge is the server-issued, single-use challenge the token was made for, already consumed by the
+	// caller (empty when the client sent none). Without it a token is not checked: it could be replayed.
+	AttestationChallenge string
 }
 
 // Attestor verifies a device attestation token server-side (Play Integrity on Android, App Attest on iOS). nonce binds
@@ -96,6 +99,7 @@ type Service struct {
 	oidc      IDTokenVerifier
 	audit     *audit.Writer
 	att       Attestor
+	attOff    bool // ATTESTATION_MODE=off: never ask the attestor
 	cfg       Config
 	pepper    []byte // password pepper, derived from cfg.AuthKey
 	dummyHash string // verified against when no account exists, so unknown numbers cost the same time as wrong passwords
@@ -115,13 +119,20 @@ func (s *Service) WithAttestor(a Attestor) *Service {
 	return s
 }
 
-// verdict asks the attestor about a mobile device before any transaction is opened. Without a token, on web, or when
-// the verifier cannot decide, the verdict is "none" (unknown), never "passed".
+// WithAttestationOff stops asking the attestor (ATTESTATION_MODE=off): every device is recorded as "none".
+func (s *Service) WithAttestationOff() *Service {
+	s.attOff = true
+	return s
+}
+
+// verdict asks the attestor about a mobile device before any transaction is opened, with the server-issued challenge
+// the token was made for. Without a token or a challenge, on web, in off mode, or when the verifier cannot decide,
+// the verdict is "none" (unknown), never "passed".
 func (s *Service) verdict(ctx context.Context, dev Device) string {
-	if (dev.Platform != "android" && dev.Platform != "ios") || dev.AttestationToken == "" {
+	if s.attOff || (dev.Platform != "android" && dev.Platform != "ios") || dev.AttestationToken == "" || dev.AttestationChallenge == "" {
 		return "none"
 	}
-	passed, err := s.att.Verify(ctx, dev.Platform, dev.AttestationToken, dev.Fingerprint)
+	passed, err := s.att.Verify(ctx, dev.Platform, dev.AttestationToken, dev.AttestationChallenge)
 	switch {
 	case err != nil:
 		return "none"

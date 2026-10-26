@@ -29,16 +29,16 @@ registering. Without the shortcode `POST /v1/payouts/withdrawals` answers 503.
 
 ```sh
 go run ./cmd/lotteryctl payouts list -state held
-go run ./cmd/lotteryctl payouts approve -payout <id> -operator <name>      # needs the api's B2C configuration
-go run ./cmd/lotteryctl payouts reject -payout <id> -reason "<why>" -operator <name>
+go run ./cmd/lotteryctl payouts approve -payout <id> -operator <your staff id>      # needs the api's B2C configuration
+go run ./cmd/lotteryctl payouts reject -payout <id> -reason "<why>" -operator <your staff id>
 go run ./cmd/lotteryctl payouts list -state manual
 ```
 
 For a payout in `manual`, find it on the B2C account statement (the originator conversation id is the payout's
 `originator_conversation_id`; the amount is `net_kes`, to the payout's number):
 
-- found → `payouts settle-paid -payout <id> -receipt <receipt> -operator <name>`
-- not there (and the payout is more than a day old) → `payouts settle-failed -payout <id> -reason "<why>" -operator <name>`;
+- found → `payouts settle-paid -payout <id> -receipt <receipt> -operator <your staff id>`
+- not there (and the payout is more than a day old) → `payouts settle-failed -payout <id> -reason "<why>" -operator <your staff id>`;
   the amount returns to the wallet.
 
 Never settle a payout as failed while it might still complete: that would refund money that left.
@@ -65,7 +65,7 @@ confirmed paid, the draw becomes `paid`.
   and the next run pays it.
 - A prize whose payout **failed** (confirmed not paid) is back in its pool and is **not** retried automatically (a number
   that cannot receive M-Pesa would loop). Check the winner's number, then:
-  `go run ./cmd/lotteryctl payouts retry-prize -result <draw result id> -operator <name>`.
+  `go run ./cmd/lotteryctl payouts retry-prize -result <draw result id> -operator <your staff id>`.
 
 ## Tax withheld (KRA)
 

@@ -110,6 +110,8 @@ const (
 // Identity is what payments needs from the identity module.
 type Identity interface {
 	AssertCanTopUp(ctx context.Context, tx pgx.Tx, userID string) (string, error)
+	// CanTopUp is AssertCanTopUp without holding the account row, for decisions in read-only transactions.
+	CanTopUp(ctx context.Context, tx pgx.Tx, userID string) (string, error)
 	ProvedPhoneOwner(ctx context.Context, tx pgx.Tx, msisdn string) (string, error)
 	MarkPhoneVerified(ctx context.Context, tx pgx.Tx, userID, confirmedMSISDN string) error
 }

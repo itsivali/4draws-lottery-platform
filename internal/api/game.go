@@ -61,6 +61,9 @@ func toTodayJSON(t game.Today) todayJSON {
 }
 
 func (h *handlers) play(w http.ResponseWriter, r *http.Request) {
+	if !h.deviceTrusted(w, r) {
+		return
+	}
 	p, _ := principalFrom(r.Context())
 	if !h.limit(w, r, "play:user:"+p.UserID, 30, time.Hour) {
 		return

@@ -2,7 +2,7 @@
 
 The back office (`apps/backoffice`) is how staff run the operations that `lotteryctl` performs (ADR 0013). Every
 action is checked against the staff member's role by the API and audited as `staff:<id>`. `lotteryctl` still works for
-emergencies (audited as `operator:<name>`).
+emergencies (`-operator <your staff id>`, audited as `staff:<id>` like the back office).
 
 ## Sign-in and roles
 
@@ -37,7 +37,8 @@ The realm needs: realm roles named as above; a public client for the back office
 (S256), its redirect URI and web origin; an audience mapper adding `lottery-backoffice-api` to access tokens;
 **MFA required for every staff account**; short access tokens (10 min). `deploy/keycloak/lottery-staff-realm.json`
 is the local version (test staff `alice`, `bob`, `kim`, `paula`, `otis`, `tara`, `tom`, `sam`, password
-`local-dev-staff`; never import it anywhere real).
+`local-dev-staff`; never import it anywhere real: it also has `lottery-e2e`, a password-grant client for `make e2e`
+that skips the browser and MFA).
 
 ## Local
 

@@ -112,3 +112,11 @@ UPDATE identity.users SET status = 'closed', updated_at = sqlc.arg(at) WHERE id 
 -- name: RevokeAllSessions :exec
 UPDATE identity.sessions SET revoked_at = sqlc.arg(at), revoked_reason = 'admin'
 WHERE user_id = sqlc.arg(user_id) AND revoked_at IS NULL;
+
+-- name: GetUserForShare :one
+-- As GetUser, holding the row so the account cannot be closed (or suspended) until the caller's transaction ends.
+SELECT id, msisdn, kyc_status, status, language, password_hash, (msisdn_verified_at IS NOT NULL)::boolean AS phone_verified
+FROM identity.users WHERE id = $1 FOR SHARE;
+
+-- name: LockUser :exec
+SELECT 1 FROM identity.users WHERE id = $1 FOR UPDATE;

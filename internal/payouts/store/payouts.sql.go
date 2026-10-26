@@ -874,6 +874,33 @@ func (q *Queries) PrizeAmountMismatch(ctx context.Context) ([]string, error) {
 	return items, nil
 }
 
+const prizeInterest = `-- name: PrizeInterest :one
+SELECT
+  (SELECT count(*) FROM tickets.tickets t JOIN draws.draws d
+     ON d.status = 'open' AND t.play_date BETWEEN d.period_start AND d.period_end
+   WHERE t.user_id = $1 AND t.status = 'paid')::int AS open_draw_tickets,
+  (SELECT count(*) FROM draws.draw_entries e JOIN draws.draws d ON d.id = e.draw_id
+   WHERE e.user_id = $1 AND d.status NOT IN ('paid','voided'))::int AS undecided_entries,
+  (SELECT count(*) FROM draws.draw_results r JOIN draws.draw_entries e ON e.id = r.entry_id
+   WHERE e.user_id = $1
+     AND NOT EXISTS (SELECT 1 FROM payouts.payouts p WHERE p.draw_result_id = r.id AND p.status = 'succeeded'))::int AS unpaid_prizes
+`
+
+type PrizeInterestRow struct {
+	OpenDrawTickets  int32
+	UndecidedEntries int32
+	UnpaidPrizes     int32
+}
+
+// What a player may still win or be owed from draws: paid tickets on a day of a draw still taking entries, entries in
+// a draw not yet paid or voided, and won prizes without a successful payout. An account is not closed while any remain.
+func (q *Queries) PrizeInterest(ctx context.Context, userID string) (PrizeInterestRow, error) {
+	row := q.db.QueryRow(ctx, prizeInterest, userID)
+	var i PrizeInterestRow
+	err := row.Scan(&i.OpenDrawTickets, &i.UndecidedEntries, &i.UnpaidPrizes)
+	return i, err
+}
+
 const prizeResult = `-- name: PrizeResult :one
 SELECT r.id AS result_id, e.user_id, r.amount_kes, d.draw_type, d.id AS draw_id, d.status AS draw_status
 FROM draws.draw_results r
