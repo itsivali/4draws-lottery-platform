@@ -167,6 +167,7 @@ func setup(t *testing.T) *env {
 		Draws:    draws.NewService(pool, clk, kr, drawBeacon{}, ls),
 		Payouts: payouts.NewService(pool, clk, dc, payoutQueue{pay}, ids, wallet.NewService(ls), ls, aw, payouts.Config{},
 			wallet.ErrInsufficientFunds),
+		Wallet:       wallet.NewReader(pool),
 		CallbackPath: callbackPath,
 		Idem:         idempotency.NewStore(pool),
 		Limiter:      ratelimit.New(vk.Client(t)),
@@ -277,6 +278,8 @@ var authedRoutes = []route{
 	{http.MethodGet, "/v1/draws/0192f000-0000-7000-8000-000000000000/entries/mine"},
 	{http.MethodPost, "/v1/payouts/withdrawals"}, {http.MethodGet, "/v1/payouts"},
 	{http.MethodGet, "/v1/payouts/0192f000-0000-7000-8000-000000000000"},
+	{http.MethodGet, "/v1/wallet"}, {http.MethodGet, "/v1/account"}, {http.MethodPost, "/v1/account/closure"},
+	{http.MethodGet, "/v1/payments"},
 	{http.MethodPost, "/v1/auth/logout"}, // last: it ends the session used for the valid-token check
 }
 

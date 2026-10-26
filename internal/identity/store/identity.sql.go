@@ -42,6 +42,38 @@ func (q *Queries) FindAuthIdentity(ctx context.Context, arg FindAuthIdentityPara
 	return user_id, err
 }
 
+const getAccount = `-- name: GetAccount :one
+SELECT u.id, u.msisdn, u.kyc_status, u.status, (u.msisdn_verified_at IS NOT NULL)::boolean AS phone_verified, u.created_at,
+  c.requested_at AS closure_requested_at
+FROM identity.users u LEFT JOIN identity.closure_requests c ON c.user_id = u.id
+WHERE u.id = $1
+`
+
+type GetAccountRow struct {
+	ID                 string
+	Msisdn             string
+	KycStatus          string
+	Status             string
+	PhoneVerified      bool
+	CreatedAt          time.Time
+	ClosureRequestedAt *time.Time
+}
+
+func (q *Queries) GetAccount(ctx context.Context, id string) (GetAccountRow, error) {
+	row := q.db.QueryRow(ctx, getAccount, id)
+	var i GetAccountRow
+	err := row.Scan(
+		&i.ID,
+		&i.Msisdn,
+		&i.KycStatus,
+		&i.Status,
+		&i.PhoneVerified,
+		&i.CreatedAt,
+		&i.ClosureRequestedAt,
+	)
+	return i, err
+}
+
 const getSession = `-- name: GetSession :one
 SELECT s.id, s.user_id, s.device_id, s.revoked_at, d.fingerprint_hash
 FROM identity.sessions s LEFT JOIN identity.devices d ON d.id = s.device_id
@@ -314,6 +346,35 @@ func (q *Queries) ProvedPhoneOwner(ctx context.Context, msisdn string) (ProvedPh
 	row := q.db.QueryRow(ctx, provedPhoneOwner, msisdn)
 	var i ProvedPhoneOwnerRow
 	err := row.Scan(&i.ID, &i.Status, &i.KycStatus)
+	return i, err
+}
+
+const requestClosure = `-- name: RequestClosure :one
+WITH ins AS (
+  INSERT INTO identity.closure_requests (user_id, requested_at) VALUES ($1, $2)
+  ON CONFLICT (user_id) DO NOTHING
+  RETURNING requested_at, true AS created
+)
+SELECT requested_at, created FROM ins
+UNION ALL
+SELECT requested_at, false FROM identity.closure_requests WHERE user_id = $1 AND NOT EXISTS (SELECT 1 FROM ins)
+`
+
+type RequestClosureParams struct {
+	UserID string
+	At     time.Time
+}
+
+type RequestClosureRow struct {
+	RequestedAt time.Time
+	Created     bool
+}
+
+// Keeps the first request: asking again returns its time and changes nothing.
+func (q *Queries) RequestClosure(ctx context.Context, arg RequestClosureParams) (RequestClosureRow, error) {
+	row := q.db.QueryRow(ctx, requestClosure, arg.UserID, arg.At)
+	var i RequestClosureRow
+	err := row.Scan(&i.RequestedAt, &i.Created)
 	return i, err
 }
 

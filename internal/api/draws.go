@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -103,14 +102,9 @@ func (h *handlers) listDraws(w http.ResponseWriter, r *http.Request) {
 	if !h.publicDraws(w, r) {
 		return
 	}
-	limit := 20
-	if s := r.URL.Query().Get("limit"); s != "" {
-		n, err := strconv.Atoi(s)
-		if err != nil || n < 1 || n > 100 {
-			httpx.WriteProblem(w, http.StatusBadRequest, "invalid-limit", "Invalid limit", "use 1 to 100")
-			return
-		}
-		limit = n
+	limit, ok := pageLimit(w, r)
+	if !ok {
+		return
 	}
 	list, err := h.Draws.List(r.Context(), limit)
 	if err != nil {

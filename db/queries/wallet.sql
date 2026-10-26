@@ -28,3 +28,11 @@ SELECT coalesce(sum(CASE e.direction WHEN 'D' THEN e.amount_kes ELSE -e.amount_k
 FROM ledger.ledger_entries e
 JOIN ledger.ledger_accounts a ON a.id = e.account_id
 WHERE a.code = 'PLAYER_DEBT' AND e.user_id = sqlc.arg(user_id)::uuid;
+
+-- name: WalletTransactions :many
+-- Newest first; before (a transaction id, uuid v7 so ordered by time) continues a page.
+SELECT id, kind, amount_kes, reference_type, reference_id, created_at
+FROM wallet.wallet_transactions
+WHERE user_id = sqlc.arg(user_id) AND (sqlc.narg(before)::uuid IS NULL OR id < sqlc.narg(before)::uuid)
+ORDER BY id DESC
+LIMIT sqlc.arg(lim);

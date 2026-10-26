@@ -33,6 +33,9 @@ type API struct {
 
 	GoogleClientID string
 	AppleClientID  string
+
+	// CORSOrigins are the browser origins (the player web app) allowed to call the API; empty turns CORS off.
+	CORSOrigins []string
 }
 
 var apiSecrets = []string{"AUTH_KEY", "TOKEN_SEED", "DATA_KEYS", "IDENTITY_KEY", "VALKEY_ADDR"}
@@ -100,12 +103,37 @@ func loadAPI() (API, error) {
 		}
 		a.TrustedProxyHops = n
 	}
+	if a.CORSOrigins, err = corsOrigins(os.Getenv("CORS_ALLOWED_ORIGINS")); err != nil {
+		return API{}, err
+	}
 	for _, g := range []struct{ name, val string }{{"KYC_API_URL", a.KYCURL}} {
 		if err := checkGatewayURL(g.name, g.val); err != nil {
 			return API{}, err
 		}
 	}
 	return a, nil
+}
+
+// corsOrigins parses CORS_ALLOWED_ORIGINS: a comma-separated list of exact origins. Each must be https, or http on
+// localhost or 127.0.0.1 for development; wildcards, paths, queries and credentials are refused, so a typo can never
+// open the API to every site.
+func corsOrigins(v string) ([]string, error) {
+	if strings.TrimSpace(v) == "" {
+		return nil, nil
+	}
+	var out []string
+	for part := range strings.SplitSeq(v, ",") {
+		o := strings.TrimSpace(part)
+		u, err := url.Parse(o)
+		local := u != nil && (u.Hostname() == "localhost" || u.Hostname() == "127.0.0.1")
+		schemeOK := u != nil && (u.Scheme == "https" || (u.Scheme == "http" && local))
+		if err != nil || !schemeOK || u.Host == "" || strings.Contains(o, "*") || u.User != nil || u.Path != "" || u.RawQuery != "" ||
+			u.Fragment != "" || strings.HasSuffix(o, "?") {
+			return nil, fmt.Errorf("config: CORS_ALLOWED_ORIGINS entry %q must be an exact origin such as https://play.example.com (http only on localhost)", o)
+		}
+		out = append(out, o)
+	}
+	return out, nil
 }
 
 // secret decodes a base64 variable. exact requires exactly n bytes, otherwise at least n.

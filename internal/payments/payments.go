@@ -239,6 +239,19 @@ func (s *Service) Get(ctx context.Context, userID, id string) (TopUp, error) {
 	return TopUp{ID: p.ID, Status: publicStatus(p.Status), AmountRequestedKES: p.AmountRequestedKes, AmountConfirmedKES: p.AmountConfirmedKes, CreatedAt: p.CreatedAt}, nil
 }
 
+// List returns the player's latest top-ups, newest first.
+func (s *Service) List(ctx context.Context, userID string, limit int) ([]TopUp, error) {
+	rows, err := store.New(s.pool).ListPayments(ctx, store.ListPaymentsParams{UserID: userID, Lim: int32(limit)}) //nolint:gosec // callers pass small limits
+	if err != nil {
+		return nil, err
+	}
+	out := make([]TopUp, 0, len(rows))
+	for _, p := range rows {
+		out = append(out, TopUp{ID: p.ID, Status: publicStatus(p.Status), AmountRequestedKES: p.AmountRequestedKes, AmountConfirmedKES: p.AmountConfirmedKes, CreatedAt: p.CreatedAt})
+	}
+	return out, nil
+}
+
 // RecentWindow is how far back Recent looks for payments that already settled.
 const RecentWindow = 15 * time.Minute
 

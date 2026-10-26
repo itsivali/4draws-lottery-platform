@@ -17,6 +17,7 @@ tags:
   - { name: game, description: "Paid plays, tickets and provably fair spins." }
   - { name: draws, description: "Daily, weekly, monthly and quarterly draws, their results and certificates." }
   - { name: payouts, description: "Withdrawals and prizes paid through M-Pesa (B2C)." }
+  - { name: wallet, description: "The player's balance and its movements." }
 paths:
   /healthz:
     get:
@@ -312,6 +313,27 @@ paths:
             application/problem+json:
               schema: { $ref: "#/components/schemas/Problem" }
         "429": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+  /v1/payments:
+    get:
+      operationId: listPayments
+      tags: [payments]
+      summary: The signed-in player's top-ups, newest first
+      description: Every top-up and its state, including ones still `pending`; credits appear in `GET /v1/wallet` once confirmed.
+      parameters:
+        - { name: limit, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+      responses:
+        "200":
+          description: Top-ups
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [payments]
+                properties:
+                  payments: { type: array, items: { $ref: "#/components/schemas/TopUp" } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
   /v1/payments/events:
     get:
@@ -615,6 +637,60 @@ paths:
         "401": { $ref: "#/components/responses/Problem" }
         "404": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
+  /v1/wallet:
+    get:
+      operationId: getWallet
+      tags: [wallet]
+      summary: The signed-in player's balance, debt and transactions, newest first
+      description: |
+        Read in one snapshot, so the transactions of the first page add up with the older ones to the balance.
+        `debt_kes` is what is owed after a reversed top-up (play and withdrawals are paused while it is above 0).
+        Pass `next_before` as `before` for the next page; it is null on the last.
+      parameters:
+        - { name: limit, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+        - { name: before, in: query, required: false, schema: { type: string }, description: "`next_before` of the previous page." }
+      responses:
+        "200":
+          description: The wallet
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Wallet" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+  /v1/account:
+    get:
+      operationId: getAccount
+      tags: [auth]
+      summary: The signed-in player's account, verification, restriction and closure request
+      responses:
+        "200":
+          description: The account
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Account" }
+        "401": { $ref: "#/components/responses/Problem" }
+  /v1/account/closure:
+    post:
+      operationId: requestClosure
+      tags: [auth]
+      summary: Ask for the account to be closed
+      description: |
+        Records the request (asking again returns the first one's time). Staff close the account after any balance is
+        paid out; until then it works as before. Records the law requires (transactions, tax, draws) are kept after
+        closing.
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      responses:
+        "202":
+          description: Requested
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [closure_requested_at]
+                properties:
+                  closure_requested_at: { type: string, format: date-time }
+        "401": { $ref: "#/components/responses/Problem" }
   /hooks/mpesa/stk/{path}:
     post:
       operationId: stkCallback
@@ -1113,6 +1189,47 @@ components:
           type: [integer, "null"]
           description: What the player actually paid (credited gross, before excise); null until credited.
         created_at: { type: string, format: date-time }
+    Wallet:
+      type: object
+      required: [balance_kes, debt_kes, transactions, next_before]
+      properties:
+        balance_kes: { type: integer }
+        debt_kes: { type: integer }
+        transactions:
+          type: array
+          items:
+            type: object
+            required: [id, kind, amount_kes, reference_type, reference_id, created_at]
+            properties:
+              id: { type: string }
+              kind:
+                type: string
+                enum: [deposit, deposit_excise, stake, withdrawal, prize, refund, adjustment, reversal, debt_recovery]
+              amount_kes: { type: integer, description: "Signed: credits positive, debits negative." }
+              reference_type: { type: [string, "null"], description: "What caused it, e.g. payment, ticket, payout." }
+              reference_id: { type: [string, "null"] }
+              created_at: { type: string, format: date-time }
+        next_before: { type: [string, "null"] }
+    Account:
+      type: object
+      required: [user_id, msisdn, phone_verified, kyc_status, status, created_at, restriction, closure_requested_at]
+      properties:
+        user_id: { type: string }
+        msisdn: { type: string, description: "254XXXXXXXXX" }
+        phone_verified: { type: boolean, description: Proved by the M-Pesa confirmation of the first top-up. }
+        kyc_status: { type: string, enum: [none, pending, verified, manual_review, rejected] }
+        status: { type: string, enum: [active, suspended, closed] }
+        created_at: { type: string, format: date-time }
+        restriction:
+          description: The time-out or self-exclusion in force (a permanent one first, else the longest), or null.
+          oneOf:
+            - type: object
+              required: [kind, until]
+              properties:
+                kind: { type: string, enum: [timeout, self_exclusion] }
+                until: { type: [string, "null"], format: date-time, description: Null for a permanent self-exclusion. }
+            - { type: "null" }
+        closure_requested_at: { type: [string, "null"], format: date-time }
     Problem:
       type: object
       required: [type, title, status]

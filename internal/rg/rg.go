@@ -291,3 +291,16 @@ func CheckDeposit(limits, spent map[Period]int64, amount int64) error {
 	}
 	return nil
 }
+
+// Restriction returns the player's time-out or self-exclusion in force (the longest, a permanent one first), or nil.
+func (s *Service) Restriction(ctx context.Context, userID string) (*RestrictedError, error) {
+	var out *RestrictedError
+	err := pgx.BeginTxFunc(ctx, s.pool, pgx.TxOptions{AccessMode: pgx.ReadOnly}, func(tx pgx.Tx) error {
+		err := s.AssertNotRestricted(ctx, tx, userID)
+		if errors.As(err, &out) {
+			return nil
+		}
+		return err
+	})
+	return out, err
+}

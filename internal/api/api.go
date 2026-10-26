@@ -21,6 +21,7 @@ import (
 	"github.com/itsivali/lottery-platform/internal/platform/idempotency"
 	"github.com/itsivali/lottery-platform/internal/platform/ratelimit"
 	"github.com/itsivali/lottery-platform/internal/rg"
+	"github.com/itsivali/lottery-platform/internal/wallet"
 )
 
 // Deps are the collaborators the API needs.
@@ -36,6 +37,8 @@ type Deps struct {
 	Draws *draws.Service
 	// Payouts sends withdrawals through M-Pesa B2C; nil answers 503.
 	Payouts *payouts.Service
+	// Wallet reads players' balances and transactions; nil answers 503.
+	Wallet *wallet.Reader
 	// Live streams payment changes to players; nil disables GET /v1/payments/events (503).
 	Live *payments.Live
 	// CallbackPath is the secret segment of the STK callback URL and of the paybill hook URLs.
@@ -46,6 +49,8 @@ type Deps struct {
 	TrustedProxyHeader string
 	// TrustedProxyHops is how many trusted proxies appended to X-Forwarded-For (ignored for other headers).
 	TrustedProxyHops int
+	// CORSOrigins are the browser origins allowed to call /v1 (the player web app); empty turns CORS off.
+	CORSOrigins []string
 }
 
 type ctxKey struct{}
@@ -74,6 +79,7 @@ func Mount(d Deps) func(chi.Router) {
 		r.Post("/hooks/b2c/{path}/status-timeout", h.b2cHook(payouts.CallbackStatusTimeout))
 
 		r.Route("/v1", func(r chi.Router) {
+			r.Use(httpx.CORS(d.CORSOrigins))
 			r.Use(h.optionalAuth)
 			r.Use(idempotency.Middleware(d.Idem, h.idempotencyPrincipal, idempotency.Options{}))
 
@@ -99,6 +105,7 @@ func Mount(d Deps) func(chi.Router) {
 				r.Post("/rg/timeout", h.rgTimeout)
 				r.Post("/rg/self-exclusion", h.rgSelfExclude)
 				r.Post("/payments/topups", h.startTopUp)
+				r.Get("/payments", h.listPayments)
 				r.Get("/payments/events", h.paymentEvents)
 				r.Get("/payments/{id}", h.getPayment)
 				r.Post("/plays", h.play)
@@ -109,6 +116,9 @@ func Mount(d Deps) func(chi.Router) {
 				r.Post("/payouts/withdrawals", h.withdraw)
 				r.Get("/payouts", h.listPayouts)
 				r.Get("/payouts/{id}", h.getPayout)
+				r.Get("/wallet", h.getWallet)
+				r.Get("/account", h.getAccount)
+				r.Post("/account/closure", h.requestClosure)
 			})
 		})
 	}

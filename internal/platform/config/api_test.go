@@ -20,7 +20,7 @@ func fullAPIEnv(t *testing.T) {
 	t.Setenv("IDENTITY_KEY", b64(32))
 	t.Setenv("VALKEY_ADDR", "valkey:6379")
 	t.Setenv("TRUSTED_PROXY_HEADER", "X-Forwarded-For")
-	for _, k := range []string{"TRUSTED_PROXY_HOPS", "DATA_KEY_ACTIVE", "KYC_API_URL", "KYC_API_KEY", "GOOGLE_CLIENT_ID", "APPLE_CLIENT_ID"} {
+	for _, k := range []string{"TRUSTED_PROXY_HOPS", "DATA_KEY_ACTIVE", "KYC_API_URL", "KYC_API_KEY", "GOOGLE_CLIENT_ID", "APPLE_CLIENT_ID", "CORS_ALLOWED_ORIGINS"} {
 		t.Setenv(k, "")
 	}
 }
@@ -168,5 +168,28 @@ func TestMigrateOnStart_IsOffUnlessExplicitlyEnabled(t *testing.T) {
 	t.Setenv("MIGRATE_ON_START", "true")
 	if cfg, _ := config.Load(); !cfg.MigrateOnStart {
 		t.Error("MIGRATE_ON_START=true ignored")
+	}
+}
+
+func TestAPI_CORSOriginsAreExactHTTPSOriginsOrLocalhost(t *testing.T) {
+	fullAPIEnv(t)
+	t.Setenv("CORS_ALLOWED_ORIGINS", "https://play.example.co.ke, http://localhost:5173,http://127.0.0.1:8088")
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(cfg.API.CORSOrigins, " "); got != "https://play.example.co.ke http://localhost:5173 http://127.0.0.1:8088" {
+		t.Fatalf("origins = %q", got)
+	}
+	for _, bad := range []string{"*", "https://*.example.co.ke", "http://play.example.co.ke", "https://play.example.co.ke/",
+		"https://play.example.co.ke/app", "play.example.co.ke", "https://user@play.example.co.ke", "https://play.example.co.ke?x=1"} {
+		t.Setenv("CORS_ALLOWED_ORIGINS", bad)
+		if _, err := config.Load(); err == nil || !strings.Contains(err.Error(), "CORS_ALLOWED_ORIGINS") {
+			t.Errorf("%q accepted (err %v)", bad, err)
+		}
+	}
+	t.Setenv("CORS_ALLOWED_ORIGINS", "")
+	if cfg, err := config.Load(); err != nil || len(cfg.API.CORSOrigins) != 0 {
+		t.Fatalf("unset: %v %v", cfg.API.CORSOrigins, err)
 	}
 }

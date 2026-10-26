@@ -261,3 +261,9 @@ FROM payments.payments
 WHERE user_id = sqlc.arg(user_id)
   AND (updated_at >= sqlc.arg(since) OR status IN ('initiated','stk_sent','callback_received','verified'))
 ORDER BY created_at DESC LIMIT 20;
+
+-- name: ListPayments :many
+SELECT id, status, amount_requested_kes, amount_confirmed_kes, created_at
+FROM payments.payments
+WHERE user_id = sqlc.arg(user_id)
+ORDER BY created_at DESC, id DESC LIMIT sqlc.arg(lim);

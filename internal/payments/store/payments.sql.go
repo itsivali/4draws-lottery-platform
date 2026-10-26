@@ -420,6 +420,52 @@ func (q *Queries) InsertUnmatched(ctx context.Context, arg InsertUnmatchedParams
 	return id, err
 }
 
+const listPayments = `-- name: ListPayments :many
+SELECT id, status, amount_requested_kes, amount_confirmed_kes, created_at
+FROM payments.payments
+WHERE user_id = $1
+ORDER BY created_at DESC, id DESC LIMIT $2
+`
+
+type ListPaymentsParams struct {
+	UserID string
+	Lim    int32
+}
+
+type ListPaymentsRow struct {
+	ID                 string
+	Status             string
+	AmountRequestedKes int64
+	AmountConfirmedKes *int64
+	CreatedAt          time.Time
+}
+
+func (q *Queries) ListPayments(ctx context.Context, arg ListPaymentsParams) ([]ListPaymentsRow, error) {
+	rows, err := q.db.Query(ctx, listPayments, arg.UserID, arg.Lim)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPaymentsRow
+	for rows.Next() {
+		var i ListPaymentsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Status,
+			&i.AmountRequestedKes,
+			&i.AmountConfirmedKes,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const lockC2B = `-- name: LockC2B :one
 SELECT id, trans_id, shortcode, bill_ref, payer_msisdn, amount_kes, raw_confirmation, conflicting, status, status_requests,
        status_requested_at, originator_conversation_id, status_result, outcome_reason, payment_id, unmatched_id, created_at, updated_at

@@ -193,6 +193,13 @@ type IdentityAuthIdentity struct {
 	CreatedAt pgtype.Timestamptz
 }
 
+type IdentityClosureRequest struct {
+	UserID      string
+	RequestedAt pgtype.Timestamptz
+	ClosedAt    pgtype.Timestamptz
+	ClosedBy    *string
+}
+
 type IdentityDevice struct {
 	ID                 string
 	UserID             string

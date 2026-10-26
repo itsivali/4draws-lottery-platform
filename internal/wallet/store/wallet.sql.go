@@ -7,6 +7,8 @@ package store
 
 import (
 	"context"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const creditWallet = `-- name: CreditWallet :one
@@ -116,4 +118,55 @@ func (q *Queries) PlayerDebt(ctx context.Context, userID string) (int64, error) 
 	var column_1 int64
 	err := row.Scan(&column_1)
 	return column_1, err
+}
+
+const walletTransactions = `-- name: WalletTransactions :many
+SELECT id, kind, amount_kes, reference_type, reference_id, created_at
+FROM wallet.wallet_transactions
+WHERE user_id = $1 AND ($2::uuid IS NULL OR id < $2::uuid)
+ORDER BY id DESC
+LIMIT $3
+`
+
+type WalletTransactionsParams struct {
+	UserID string
+	Before *string
+	Lim    int32
+}
+
+type WalletTransactionsRow struct {
+	ID            string
+	Kind          string
+	AmountKes     int64
+	ReferenceType *string
+	ReferenceID   *string
+	CreatedAt     pgtype.Timestamptz
+}
+
+// Newest first; before (a transaction id, uuid v7 so ordered by time) continues a page.
+func (q *Queries) WalletTransactions(ctx context.Context, arg WalletTransactionsParams) ([]WalletTransactionsRow, error) {
+	rows, err := q.db.Query(ctx, walletTransactions, arg.UserID, arg.Before, arg.Lim)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []WalletTransactionsRow
+	for rows.Next() {
+		var i WalletTransactionsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Kind,
+			&i.AmountKes,
+			&i.ReferenceType,
+			&i.ReferenceID,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }

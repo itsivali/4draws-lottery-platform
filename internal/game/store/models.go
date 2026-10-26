@@ -195,6 +195,13 @@ type IdentityAuthIdentity struct {
 	CreatedAt time.Time
 }
 
+type IdentityClosureRequest struct {
+	UserID      string
+	RequestedAt time.Time
+	ClosedAt    *time.Time
+	ClosedBy    *string
+}
+
 type IdentityDevice struct {
 	ID                 string
 	UserID             string

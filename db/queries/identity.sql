@@ -77,3 +77,20 @@ UPDATE identity.users SET msisdn_verified_at = $2, updated_at = $2 WHERE id = $1
 
 -- name: ProvedPhoneOwner :one
 SELECT id, status, kyc_status FROM identity.users WHERE msisdn = $1 AND msisdn_verified_at IS NOT NULL;
+
+-- name: GetAccount :one
+SELECT u.id, u.msisdn, u.kyc_status, u.status, (u.msisdn_verified_at IS NOT NULL)::boolean AS phone_verified, u.created_at,
+  c.requested_at AS closure_requested_at
+FROM identity.users u LEFT JOIN identity.closure_requests c ON c.user_id = u.id
+WHERE u.id = $1;
+
+-- name: RequestClosure :one
+-- Keeps the first request: asking again returns its time and changes nothing.
+WITH ins AS (
+  INSERT INTO identity.closure_requests (user_id, requested_at) VALUES (sqlc.arg(user_id), sqlc.arg(at))
+  ON CONFLICT (user_id) DO NOTHING
+  RETURNING requested_at, true AS created
+)
+SELECT requested_at, created FROM ins
+UNION ALL
+SELECT requested_at, false FROM identity.closure_requests WHERE user_id = sqlc.arg(user_id) AND NOT EXISTS (SELECT 1 FROM ins);
