@@ -94,3 +94,21 @@ WITH ins AS (
 SELECT requested_at, created FROM ins
 UNION ALL
 SELECT requested_at, false FROM identity.closure_requests WHERE user_id = sqlc.arg(user_id) AND NOT EXISTS (SELECT 1 FROM ins);
+
+-- name: OpenClosureRequests :many
+SELECT c.user_id, c.requested_at, u.msisdn, u.status FROM identity.closure_requests c
+JOIN identity.users u ON u.id = c.user_id
+WHERE c.closed_at IS NULL ORDER BY c.requested_at LIMIT sqlc.arg(lim);
+
+-- name: LockOpenClosure :one
+SELECT requested_at FROM identity.closure_requests WHERE user_id = $1 AND closed_at IS NULL FOR UPDATE;
+
+-- name: CloseClosureRequest :exec
+UPDATE identity.closure_requests SET closed_at = sqlc.arg(at), closed_by = sqlc.arg(staff)::uuid WHERE user_id = sqlc.arg(user_id);
+
+-- name: SetUserClosed :exec
+UPDATE identity.users SET status = 'closed', updated_at = sqlc.arg(at) WHERE id = sqlc.arg(id);
+
+-- name: RevokeAllSessions :exec
+UPDATE identity.sessions SET revoked_at = sqlc.arg(at), revoked_reason = 'admin'
+WHERE user_id = sqlc.arg(user_id) AND revoked_at IS NULL;

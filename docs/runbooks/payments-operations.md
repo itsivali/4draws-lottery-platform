@@ -1,7 +1,8 @@
 # Runbook: payments operator actions
 
-Until the back office exists, operators use `lotteryctl` with the database URL (the external URL from the Render
-dashboard; never commit it). Every action is audited as staff `operator:<name>`.
+Operators use the back office (`docs/runbooks/back-office.md`, *Payments*), audited as `staff:<id>`. The `lotteryctl`
+commands below remain for emergencies, with the database URL (the external URL from the Render dashboard; never commit
+it); they are audited as `operator:<name>`.
 
 ```sh
 export DATABASE_URL='postgres://...'          # external connection string of lottery-db

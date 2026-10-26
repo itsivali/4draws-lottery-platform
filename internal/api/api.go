@@ -21,6 +21,7 @@ import (
 	"github.com/itsivali/lottery-platform/internal/platform/idempotency"
 	"github.com/itsivali/lottery-platform/internal/platform/ratelimit"
 	"github.com/itsivali/lottery-platform/internal/rg"
+	"github.com/itsivali/lottery-platform/internal/staff"
 	"github.com/itsivali/lottery-platform/internal/wallet"
 )
 
@@ -37,6 +38,10 @@ type Deps struct {
 	Draws *draws.Service
 	// Payouts sends withdrawals through M-Pesa B2C; nil answers 503.
 	Payouts *payouts.Service
+	// Staff authenticates back-office staff (Keycloak access tokens); nil closes the /v1/staff routes (503).
+	Staff staff.Authenticator
+	// StaffServices are what the back office acts through (on the staff database pool).
+	StaffServices StaffServices
 	// Wallet reads players' balances and transactions; nil answers 503.
 	Wallet *wallet.Reader
 	// Live streams payment changes to players; nil disables GET /v1/payments/events (503).
@@ -80,6 +85,7 @@ func Mount(d Deps) func(chi.Router) {
 
 		r.Route("/v1", func(r chi.Router) {
 			r.Use(httpx.CORS(d.CORSOrigins))
+			r.Use(h.staffAuth)
 			r.Use(h.optionalAuth)
 			r.Use(idempotency.Middleware(d.Idem, h.idempotencyPrincipal, idempotency.Options{}))
 
@@ -91,6 +97,9 @@ func Mount(d Deps) func(chi.Router) {
 			r.Get("/draws", h.listDraws)
 			r.Get("/draws/{id}", h.getDraw)
 			r.Get("/draws/{id}/certificate", h.drawCertificate)
+
+			// back office: staff tokens only (authenticated by staffAuth), each route behind a role
+			r.Route("/staff", h.mountStaff)
 
 			// authenticated
 			r.Group(func(r chi.Router) {
@@ -153,8 +162,12 @@ func requireAuth(next http.Handler) http.Handler {
 	})
 }
 
-// idempotencyPrincipal scopes idempotency keys to the authenticated user, or to the client address before sign-in.
+// idempotencyPrincipal scopes idempotency keys to the authenticated staff member or user, or to the client address
+// before sign-in.
 func (h *handlers) idempotencyPrincipal(r *http.Request) string {
+	if m, ok := staffFrom(r.Context()); ok {
+		return "staff:" + m.ID
+	}
 	if p, ok := principalFrom(r.Context()); ok {
 		return "user:" + p.UserID
 	}

@@ -39,6 +39,7 @@ import (
 	"github.com/itsivali/lottery-platform/internal/platform/idempotency"
 	"github.com/itsivali/lottery-platform/internal/platform/ratelimit"
 	"github.com/itsivali/lottery-platform/internal/rg"
+	"github.com/itsivali/lottery-platform/internal/staff"
 	"github.com/itsivali/lottery-platform/internal/wallet"
 )
 
@@ -52,17 +53,18 @@ type App struct {
 	// Mount registers the /v1 routes; it is nil when the API is not configured (health probes only).
 	Mount func(chi.Router)
 
-	cfg      config.Config
-	pool     *pgxpool.Pool
-	valkey   valkey.Client
-	kyc      *kyc.Service
-	payments *payments.Service
-	game     *game.Service
-	draws    *draws.Service
-	payouts  *payouts.Service
-	live     *payments.Live
-	stopLive context.CancelFunc
-	workers  *river.Client[pgx.Tx]
+	cfg       config.Config
+	pool      *pgxpool.Pool
+	staffPool *pgxpool.Pool
+	valkey    valkey.Client
+	kyc       *kyc.Service
+	payments  *payments.Service
+	game      *game.Service
+	draws     *draws.Service
+	payouts   *payouts.Service
+	live      *payments.Live
+	stopLive  context.CancelFunc
+	workers   *river.Client[pgx.Tx]
 }
 
 // New builds the application. With the API unconfigured it returns an App that serves nothing beyond the probes.
@@ -98,44 +100,20 @@ func New(ctx context.Context, cfg config.Config, pool *pgxpool.Pool) (*App, erro
 	if err != nil {
 		return nil, err
 	}
-	idKey := c.IdentityKey
-	a.kyc = kyc.NewService(pool, clk, provider, keyring, idKey, aw, kyc.NewRiverEnqueuer(insertOnly, 0))
-
-	idSvc := identity.NewService(pool, clk, oidcVerifier(clock.Wall{}, hc, c), aw, identity.Config{
-		AuthKey: c.AuthKey, TokenKey: ed25519.NewKeyFromSeed(c.TokenSeed), Issuer: issuer, Audience: audience,
-		AccessTTL: 10 * time.Minute, RefreshTTL: 30 * 24 * time.Hour, DeviceCap: 2,
-	})
-
-	rgSvc := rg.NewService(pool, clk, aw, rg.Config{CoolingOff: 24 * time.Hour})
-
-	// Without Daraja configuration the payments service still answers reads but refuses top-ups (fail closed).
-	var dc payments.Daraja
-	var client *daraja.Client
+	sh := shared{cfg: cfg, clk: clk, hc: hc, keyring: keyring, aw: aw, provider: provider, insertOnly: insertOnly}
 	if p := cfg.Payments; p.Enabled {
-		client, err = NewDaraja(p)
-		if err != nil {
+		if sh.daraja, err = NewDaraja(p); err != nil {
 			return nil, err
 		}
-		dc = client
 	}
-	ls := ledger.NewStore()
-	a.payments = payments.NewService(pool, clk, dc, payments.NewRiverEnqueuer(insertOnly), idSvc, rgSvc, wallet.NewService(ls), ls, aw, payments.Config{})
-	if p := cfg.Payments; p.C2BEnabled() {
-		a.payments.WithC2B(client, payments.C2BConfig{ShortCode: p.C2BShortCode})
+	svc := buildServices(pool, sh)
+	idSvc, rgSvc := svc.identity, svc.rg
+	a.kyc, a.payments, a.game, a.payouts, a.draws = svc.kyc, svc.payments, svc.game, svc.payouts, svc.draws
+
+	staffAuth, staffSvc, err := a.staff(ctx, sh, svc)
+	if err != nil {
+		return nil, err
 	}
-
-	a.game = game.NewService(pool, clk, idSvc, rgSvc, wallet.NewService(ls), keyring, wallet.ErrInsufficientFunds)
-
-	// Payouts need B2C; without it withdrawals are refused (fail closed).
-	var pd payouts.Daraja
-	if cfg.Payments.B2CEnabled() {
-		pd = client
-	}
-	a.payouts = payouts.NewService(pool, clk, pd, payouts.NewRiverEnqueuer(insertOnly), idSvc, wallet.NewService(ls), ls, aw, payouts.Config{},
-		wallet.ErrInsufficientFunds)
-
-	// Draws use the League of Entropy's quicknet, verified against the pinned key, through its public relays.
-	a.draws = draws.NewService(pool, clk, keyring, drand.New(drand.Quicknet, drand.DefaultRelays, hc), ls)
 
 	// One connection per instance listens for payment changes and fans them out to the players' streams.
 	listenCfg := pool.Config().ConnConfig.Copy()
@@ -149,14 +127,101 @@ func New(ctx context.Context, cfg config.Config, pool *pgxpool.Pool) (*App, erro
 		Idem:               idempotency.NewStore(pool),
 		Limiter:            ratelimit.New(vk),
 		TrustedProxyHeader: c.TrustedProxyHeader, TrustedProxyHops: c.TrustedProxyHops,
-		Wallet:      wallet.NewReader(pool),
-		CORSOrigins: c.CORSOrigins,
+		Wallet:        wallet.NewReader(pool),
+		CORSOrigins:   c.CORSOrigins,
+		Staff:         staffAuth,
+		StaffServices: staffSvc,
 	})
 	slog.InfoContext(ctx, "v1 API enabled", "trusted_proxy_header", c.TrustedProxyHeader, "trusted_proxy_hops", c.TrustedProxyHops,
 		"kyc_registry", c.KYCURL != "", "google", c.GoogleClientID != "", "apple", c.AppleClientID != "",
-		"payments", cfg.Payments.Enabled, "buy_goods", cfg.Payments.TillNumber != "", "paybill", cfg.Payments.C2BEnabled(), "payouts", cfg.Payments.B2CEnabled(), "daraja", cfg.Payments.BaseURL, "cors_origins", len(c.CORSOrigins))
+		"payments", cfg.Payments.Enabled, "buy_goods", cfg.Payments.TillNumber != "", "paybill", cfg.Payments.C2BEnabled(), "payouts", cfg.Payments.B2CEnabled(), "daraja", cfg.Payments.BaseURL, "cors_origins", len(c.CORSOrigins), "staff", c.Staff.Enabled, "staff_pool", c.Staff.DatabaseURL != "")
 	return a, nil
 }
+
+// shared is what every set of services is built from.
+type shared struct {
+	cfg        config.Config
+	clk        clock.Clock
+	hc         *http.Client
+	keyring    *crypto.Keyring
+	aw         *audit.Writer
+	provider   kyc.Provider
+	insertOnly *river.Client[pgx.Tx]
+	daraja     *daraja.Client // nil without Daraja configuration
+}
+
+type services struct {
+	identity *identity.Service
+	kyc      *kyc.Service
+	rg       *rg.Service
+	payments *payments.Service
+	game     *game.Service
+	payouts  *payouts.Service
+	draws    *draws.Service
+}
+
+// buildServices builds the domain services on pool. Anything not configured fails closed instead of pretending to work.
+func buildServices(pool *pgxpool.Pool, sh shared) services {
+	c, cfg := sh.cfg.API, sh.cfg
+	var s services
+	s.kyc = kyc.NewService(pool, sh.clk, sh.provider, sh.keyring, c.IdentityKey, sh.aw, kyc.NewRiverEnqueuer(sh.insertOnly, 0))
+	s.identity = identity.NewService(pool, sh.clk, oidcVerifier(clock.Wall{}, sh.hc, c), sh.aw, identity.Config{
+		AuthKey: c.AuthKey, TokenKey: ed25519.NewKeyFromSeed(c.TokenSeed), Issuer: issuer, Audience: audience,
+		AccessTTL: 10 * time.Minute, RefreshTTL: 30 * 24 * time.Hour, DeviceCap: 2,
+	})
+	s.rg = rg.NewService(pool, sh.clk, sh.aw, rg.Config{CoolingOff: 24 * time.Hour})
+
+	// Without Daraja configuration the payments service still answers reads but refuses top-ups (fail closed).
+	var dc payments.Daraja
+	if sh.daraja != nil {
+		dc = sh.daraja
+	}
+	ls := ledger.NewStore()
+	s.payments = payments.NewService(pool, sh.clk, dc, payments.NewRiverEnqueuer(sh.insertOnly), s.identity, s.rg, wallet.NewService(ls), ls, sh.aw, payments.Config{})
+	if p := cfg.Payments; p.C2BEnabled() {
+		s.payments.WithC2B(sh.daraja, payments.C2BConfig{ShortCode: p.C2BShortCode})
+	}
+	s.game = game.NewService(pool, sh.clk, s.identity, s.rg, wallet.NewService(ls), sh.keyring, wallet.ErrInsufficientFunds)
+
+	// Payouts need B2C; without it withdrawals are refused (fail closed).
+	var pd payouts.Daraja
+	if cfg.Payments.B2CEnabled() {
+		pd = sh.daraja
+	}
+	s.payouts = payouts.NewService(pool, sh.clk, pd, payouts.NewRiverEnqueuer(sh.insertOnly), s.identity, wallet.NewService(ls), ls, sh.aw, payouts.Config{},
+		wallet.ErrInsufficientFunds)
+
+	// Draws use the League of Entropy's quicknet, verified against the pinned key, through its public relays.
+	s.draws = draws.NewService(pool, sh.clk, sh.keyring, drand.New(drand.Quicknet, drand.DefaultRelays, sh.hc), ls)
+	return s
+}
+
+// staff builds the back office's sign-in and the services it acts through. Those run on STAFF_DATABASE_URL (the
+// worker's role: the API's role may not change draws or payouts); without it, in single-role mode, they share the
+// API's pool. Without staff sign-in configured the /v1/staff routes answer 503.
+func (a *App) staff(ctx context.Context, sh shared, base services) (staff.Authenticator, api.StaffServices, error) {
+	c := sh.cfg.API.Staff
+	if !c.Enabled {
+		return nil, api.StaffServices{}, nil
+	}
+	pool, svc := a.pool, base
+	if c.DatabaseURL != "" {
+		p, err := db.Open(ctx, c.DatabaseURL)
+		if err != nil {
+			return nil, api.StaffServices{}, fmt.Errorf("app: staff database: %w", err)
+		}
+		a.staffPool, pool, svc = p, p, buildServices(p, sh)
+	}
+	verifier := identity.NewOIDCVerifier(clock.Wall{}, sh.hc, map[string]identity.OIDCProvider{
+		staffProvider: {Issuers: []string{c.Issuer}, Audiences: []string{c.Audience}, JWKSURL: c.JWKSURL},
+	})
+	return staff.NewAuthenticator(verifier, staffProvider), api.StaffServices{
+		Identity: svc.identity, KYC: svc.kyc, Payments: svc.payments, Draws: svc.draws, Payouts: svc.payouts, Game: svc.game,
+		Alerts: a.alertsOn(pool, svc.draws),
+	}, nil
+}
+
+const staffProvider = "staff"
 
 // NewDaraja builds the Daraja client from configuration, with the paybill calls when C2B is configured and the payout
 // calls when B2C is. lotteryctl
@@ -218,7 +283,9 @@ const ReconciliationStaleAfter = 26 * time.Hour
 
 // alerts builds the alert watch: late draws, failed or missing reconciliations (a failed one freezes payouts), and
 // withheld tax nearing its remittance deadline, sent to ALERT_WEBHOOK_URL (else logged) with ALERT_HEARTBEAT_URL pinged.
-func (a *App) alerts() *alerts.Service {
+func (a *App) alerts() *alerts.Service { return a.alertsOn(a.pool, a.draws) }
+
+func (a *App) alertsOn(pool *pgxpool.Pool, ds *draws.Service) *alerts.Service {
 	hc := &http.Client{Timeout: 10 * time.Second}
 	clk := clock.Postgres{}
 	var n alerts.Notifier
@@ -229,10 +296,10 @@ func (a *App) alerts() *alerts.Service {
 	if u := a.cfg.Alerts.HeartbeatURL; u != "" {
 		cfg.Heartbeat = alerts.Heartbeat(u, hc)
 	}
-	return alerts.NewService(a.pool, clk, n, audit.NewWriter(), cfg,
-		alerts.DrawsOverdue(a.draws.Overdue),
-		alerts.ReconciliationCheck(a.pool, clk, ReconciliationStaleAfter),
-		alerts.RemittanceCheck(a.pool, clk, a.cfg.Alerts.KRARemitWarnAfter, a.cfg.Alerts.KRARemitDueAfter))
+	return alerts.NewService(pool, clk, n, audit.NewWriter(), cfg,
+		alerts.DrawsOverdue(ds.Overdue),
+		alerts.ReconciliationCheck(pool, clk, ReconciliationStaleAfter),
+		alerts.RemittanceCheck(pool, clk, a.cfg.Alerts.KRARemitWarnAfter, a.cfg.Alerts.KRARemitDueAfter))
 }
 
 // StopStreams ends every open payment stream and refuses new ones. The server calls it when shutdown begins, since
@@ -254,6 +321,9 @@ func (a *App) Close(ctx context.Context) {
 	}
 	if a.valkey != nil {
 		a.valkey.Close()
+	}
+	if a.staffPool != nil {
+		a.staffPool.Close()
 	}
 }
 

@@ -40,6 +40,7 @@ import (
 	"github.com/itsivali/lottery-platform/internal/platform/testpg"
 	"github.com/itsivali/lottery-platform/internal/platform/testvalkey"
 	"github.com/itsivali/lottery-platform/internal/rg"
+	"github.com/itsivali/lottery-platform/internal/staff"
 	"github.com/itsivali/lottery-platform/internal/wallet"
 )
 
@@ -108,18 +109,27 @@ func (e *env) drainKYC(t *testing.T) {
 }
 
 type env struct {
-	pool *pgxpool.Pool
-	clk  *clock.Manual
-	kyc  *kyc.Mock
-	vk   *testvalkey.Server
-	srv  *httptest.Server
-	live *payments.Live
-	enq  *kycQueue
-	pay  *payQueue
-	keys int
+	pool  *pgxpool.Pool
+	clk   *clock.Manual
+	kyc   *kyc.Mock
+	vk    *testvalkey.Server
+	srv   *httptest.Server
+	live  *payments.Live
+	enq   *kycQueue
+	pay   *payQueue
+	staff *fakeStaff
+	keys  int
 }
 
+type apiDeps = api.Deps
+
 func setup(t *testing.T) *env {
+	t.Helper()
+	return setupWith(t, nil)
+}
+
+// setupWith is setup with a chance to change the dependencies before the server starts.
+func setupWith(t *testing.T, mutate func(*apiDeps)) *env {
 	t.Helper()
 	pool := testpg.Pool(t, "app_api")
 	vk := testvalkey.Start(t)
@@ -157,14 +167,41 @@ func setup(t *testing.T) *env {
 	listenCfg := pool.Config().ConnConfig.Copy()
 	live := payments.NewLive(func(ctx context.Context) (*pgx.Conn, error) { return pgx.ConnectConfig(ctx, listenCfg) }, payments.LiveConfig{})
 	go live.Run(t.Context())
+	// the back office acts through services on a pool with the worker's role, as in production
+	staffCfg := pool.Config().Copy()
+	staffCfg.AfterConnect = func(ctx context.Context, c *pgx.Conn) error {
+		_, err := c.Exec(ctx, "SET ROLE app_worker")
+		return err
+	}
+	staffPool, err := pgxpool.NewWithConfig(context.Background(), staffCfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(staffPool.Close)
+	sIDs := identity.NewService(staffPool, clk, fakeOIDC{}, aw, identity.Config{
+		AuthKey: []byte("0123456789abcdef0123456789abcdef"), TokenKey: priv, Issuer: "lottery", Audience: "lottery-api",
+		AccessTTL: 10 * time.Minute, RefreshTTL: 30 * 24 * time.Hour, DeviceCap: 2,
+	})
+	sRG := rg.NewService(staffPool, clk, aw, rg.Config{CoolingOff: 24 * time.Hour})
+	staffServices := api.StaffServices{
+		Identity: sIDs,
+		KYC:      kyc.NewService(staffPool, clk, mock, kr, []byte("0123456789abcdef0123456789abcdef"), aw, enq),
+		Payments: payments.NewService(staffPool, clk, dc, pay, sIDs, sRG, wallet.NewService(ls), ls, aw, payments.Config{}),
+		Draws:    draws.NewService(staffPool, clk, kr, drawBeacon{}, ls),
+		Payouts:  payouts.NewService(staffPool, clk, dc, payoutQueue{pay}, sIDs, wallet.NewService(ls), ls, aw, payouts.Config{}, wallet.ErrInsufficientFunds),
+		Game:     game.NewService(staffPool, clk, sIDs, sRG, wallet.NewService(ls), kr, wallet.ErrInsufficientFunds),
+	}
+	staffAuth := &fakeStaff{members: map[string]staff.Member{}}
 	deps := api.Deps{
-		Identity: ids,
-		KYC:      kyc.NewService(pool, clk, mock, kr, []byte("0123456789abcdef0123456789abcdef"), aw, enq),
-		RG:       rgs,
-		Payments: payments.NewService(pool, clk, dc, pay, ids, rgs, wallet.NewService(ls), ls, aw, payments.Config{}).WithC2B(dc, payments.C2BConfig{ShortCode: "600982"}),
-		Live:     live,
-		Game:     game.NewService(pool, clk, ids, rgs, wallet.NewService(ls), kr, wallet.ErrInsufficientFunds),
-		Draws:    draws.NewService(pool, clk, kr, drawBeacon{}, ls),
+		Staff:         staffAuth,
+		StaffServices: staffServices,
+		Identity:      ids,
+		KYC:           kyc.NewService(pool, clk, mock, kr, []byte("0123456789abcdef0123456789abcdef"), aw, enq),
+		RG:            rgs,
+		Payments:      payments.NewService(pool, clk, dc, pay, ids, rgs, wallet.NewService(ls), ls, aw, payments.Config{}).WithC2B(dc, payments.C2BConfig{ShortCode: "600982"}),
+		Live:          live,
+		Game:          game.NewService(pool, clk, ids, rgs, wallet.NewService(ls), kr, wallet.ErrInsufficientFunds),
+		Draws:         draws.NewService(pool, clk, kr, drawBeacon{}, ls),
 		Payouts: payouts.NewService(pool, clk, dc, payoutQueue{pay}, ids, wallet.NewService(ls), ls, aw, payouts.Config{},
 			wallet.ErrInsufficientFunds),
 		Wallet:       wallet.NewReader(pool),
@@ -172,11 +209,14 @@ func setup(t *testing.T) *env {
 		Idem:         idempotency.NewStore(pool),
 		Limiter:      ratelimit.New(vk.Client(t)),
 	}
+	if mutate != nil {
+		mutate(&deps)
+	}
 	srv := httptest.NewServer(httpx.NewRouterWith(pool, api.Mount(deps)))
 	enq.process = func(ctx context.Context, id string) error { return deps.KYC.Process(ctx, id) }
 	t.Cleanup(srv.Close)
 	t.Cleanup(live.Close) // before srv.Close (cleanups run last-in first-out), so open streams end
-	return &env{pool: pool, clk: clk, kyc: mock, vk: vk, srv: srv, live: live, enq: enq, pay: pay}
+	return &env{pool: pool, clk: clk, kyc: mock, vk: vk, srv: srv, live: live, enq: enq, pay: pay, staff: staffAuth}
 }
 
 type resp struct {

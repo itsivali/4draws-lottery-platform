@@ -18,6 +18,7 @@ tags:
   - { name: draws, description: "Daily, weekly, monthly and quarterly draws, their results and certificates." }
   - { name: payouts, description: "Withdrawals and prizes paid through M-Pesa (B2C)." }
   - { name: wallet, description: "The player's balance and its movements." }
+  - { name: back-office, description: "Staff operations (tokens from the staff realm; every route needs a role; audited as the staff member)." }
 paths:
   /healthz:
     get:
@@ -691,6 +692,799 @@ paths:
                 properties:
                   closure_requested_at: { type: string, format: date-time }
         "401": { $ref: "#/components/responses/Problem" }
+  /v1/staff/me:
+    get:
+      operationId: staffMe
+      tags: [back-office]
+      summary: The signed-in staff member and their roles
+      description: "Role: `any back-office role`."
+      security: [{ staffBearer: [] }]
+      responses:
+        "200":
+          description: Done
+          content:
+            application/json:
+              schema: { type: object }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+  /v1/staff/kyc/pending:
+    get:
+      operationId: staffKycPending
+      tags: [back-office]
+      summary: Identity submissions awaiting review (decrypted; each one shown is audited as unmasked)
+      description: "Role: `kyc_reviewer`."
+      security: [{ staffBearer: [] }]
+      responses:
+        "200":
+          description: Done
+          content:
+            application/json:
+              schema: { type: object }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+  /v1/staff/kyc/{user}/approve:
+    post:
+      operationId: staffKycApprove
+      tags: [back-office]
+      summary: Approve a submission
+      description: "Role: `kyc_reviewer`."
+      security: [{ staffBearer: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+        - { name: user, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [reason]
+              properties:
+                reason: { type: string, minLength: 1 }
+      responses:
+        "200":
+          description: Done
+          content:
+            application/json:
+              schema: { type: object }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+  /v1/staff/kyc/{user}/reject:
+    post:
+      operationId: staffKycReject
+      tags: [back-office]
+      summary: Reject a submission
+      description: "Role: `kyc_reviewer`."
+      security: [{ staffBearer: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+        - { name: user, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [reason]
+              properties:
+                reason: { type: string, minLength: 1 }
+      responses:
+        "200":
+          description: Done
+          content:
+            application/json:
+              schema: { type: object }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+  /v1/staff/payments/reconcile:
+    post:
+      operationId: staffPaymentsReconcile
+      tags: [back-office]
+      summary: Run the payments reconciliation now (stored as a run)
+      description: "Role: `payments_operator or auditor`."
+      security: [{ staffBearer: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      responses:
+        "200":
+          description: Done
+          content:
+            application/json:
+              schema: { type: object }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+  /v1/staff/payments/reversals:
+    post:
+      operationId: staffReverse
+      tags: [back-office]
+      summary: Record that M-Pesa reversed a credited top-up
+      description: "Role: `payments_operator`."
+      security: [{ staffBearer: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [receipt, reason]
+              properties:
+                receipt: { type: string }
+                reason: { type: string }
+      responses:
+        "200":
+          description: Done
+          content:
+            application/json:
+              schema: { type: object }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+  /v1/staff/payments/{id}/resolve:
+    post:
+      operationId: staffResolve
+      tags: [back-office]
+      summary: Resolve an unconfirmed top-up from the statement receipt
+      description: "Role: `payments_operator`."
+      security: [{ staffBearer: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [receipt, amount_kes]
+              properties:
+                receipt: { type: string }
+                amount_kes: { type: integer }
+      responses:
+        "204":
+          description: Done
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+  /v1/staff/suspense/{receipt}/credit:
+    post:
+      operationId: staffSuspenseCredit
+      tags: [back-office]
+      summary: Credit a paybill payment held in suspense to a player
+      description: "Role: `payments_operator`."
+      security: [{ staffBearer: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+        - { name: receipt, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [user_id]
+              properties:
+                user_id: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Done
+          content:
+            application/json:
+              schema: { type: object }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+  /v1/staff/suspense/{receipt}/refund:
+    post:
+      operationId: staffSuspenseRefund
+      tags: [back-office]
+      summary: Record the refund of a paybill payment held in suspense
+      description: "Role: `payments_operator`."
+      security: [{ staffBearer: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+        - { name: receipt, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [refund_ref]
+              properties:
+                refund_ref: { type: string }
+      responses:
+        "204":
+          description: Done
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+  /v1/staff/paybill/{receipt}/recheck:
+    post:
+      operationId: staffRecheck
+      tags: [back-office]
+      summary: Ask Daraja again about an unverified paybill payment
+      description: "Role: `payments_operator`."
+      security: [{ staffBearer: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+        - { name: receipt, in: path, required: true, schema: { type: string } }
+      responses:
+        "204":
+          description: Done
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+  /v1/staff/draws:
+    get:
+      operationId: staffDraws
+      tags: [back-office]
+      summary: Draws, newest period first
+      description: "Role: `draw_official or auditor`."
+      security: [{ staffBearer: [] }]
+      parameters:
+        - { name: limit, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+      responses:
+        "200":
+          description: Done
+          content:
+            application/json:
+              schema: { type: object }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+  /v1/staff/draws/overdue:
+    get:
+      operationId: staffDrawsOverdue
+      tags: [back-office]
+      summary: Draws late for a lifecycle step
+      description: "Role: `draw_official or auditor`."
+      security: [{ staffBearer: [] }]
+      responses:
+        "200":
+          description: Done
+          content:
+            application/json:
+              schema: { type: object }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+  /v1/staff/draws/reconcile:
+    post:
+      operationId: staffDrawsReconcile
+      tags: [back-office]
+      summary: Run the draws reconciliation now
+      description: "Role: `draw_official or auditor`."
+      security: [{ staffBearer: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      responses:
+        "200":
+          description: Done
+          content:
+            application/json:
+              schema: { type: object }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+  /v1/staff/draws/{id}/sign:
+    post:
+      operationId: staffDrawSign
+      tags: [back-office]
+      summary: Sign a frozen draw (two different officials make it signed)
+      description: "Role: `draw_official`."
+      security: [{ staffBearer: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Done
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Draw" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+  /v1/staff/draws/{id}/approve:
+    post:
+      operationId: staffDrawApprove
+      tags: [back-office]
+      summary: Approve a conducted draw (two different officials make it approved)
+      description: "Role: `draw_official`."
+      security: [{ staffBearer: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Done
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Draw" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+  /v1/staff/draws/{id}/void:
+    post:
+      operationId: staffDrawVoid
+      tags: [back-office]
+      summary: Void a frozen or signed draw before its round; returns the re-run
+      description: "Role: `draw_official`."
+      security: [{ staffBearer: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [reason]
+              properties:
+                reason: { type: string, minLength: 1 }
+      responses:
+        "200":
+          description: Done
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Draw" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+  /v1/staff/game/reconcile:
+    post:
+      operationId: staffGameReconcile
+      tags: [back-office]
+      summary: Run the game reconciliation now
+      description: "Role: `auditor or payments_operator`."
+      security: [{ staffBearer: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      responses:
+        "200":
+          description: Done
+          content:
+            application/json:
+              schema: { type: object }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+  /v1/staff/payouts:
+    get:
+      operationId: staffPayouts
+      tags: [back-office]
+      summary: Payouts in a state (default held)
+      description: "Role: `payout_operator or auditor`."
+      security: [{ staffBearer: [] }]
+      parameters:
+        - { name: state, in: query, required: false, schema: { type: string, enum: [held, manual, pending, sending, sent, timed_out, result_received, succeeded, failed] } }
+      responses:
+        "200":
+          description: Done
+          content:
+            application/json:
+              schema: { type: object }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+  /v1/staff/payouts/reconcile:
+    post:
+      operationId: staffPayoutsReconcile
+      tags: [back-office]
+      summary: Run the payouts reconciliation now
+      description: "Role: `payout_operator or auditor`."
+      security: [{ staffBearer: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      responses:
+        "200":
+          description: Done
+          content:
+            application/json:
+              schema: { type: object }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+  /v1/staff/payouts/{id}/approve:
+    post:
+      operationId: staffPayoutApprove
+      tags: [back-office]
+      summary: Approve a held payout (it is then sent)
+      description: "Role: `payout_operator`."
+      security: [{ staffBearer: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Done
+          content:
+            application/json:
+              schema: { type: object }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+  /v1/staff/payouts/{id}/reject:
+    post:
+      operationId: staffPayoutReject
+      tags: [back-office]
+      summary: Reject a held payout (a withdrawal returns to the wallet)
+      description: "Role: `payout_operator`."
+      security: [{ staffBearer: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [reason]
+              properties:
+                reason: { type: string, minLength: 1 }
+      responses:
+        "200":
+          description: Done
+          content:
+            application/json:
+              schema: { type: object }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+  /v1/staff/payouts/{id}/settle:
+    post:
+      operationId: staffPayoutSettle
+      tags: [back-office]
+      summary: Settle a payout in manual from the M-Pesa statement
+      description: "Role: `payout_operator`."
+      security: [{ staffBearer: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [paid]
+              properties:
+                paid: { type: boolean }
+                receipt: { type: string, description: Required when paid. }
+                reason: { type: string, description: Required when not paid. }
+      responses:
+        "200":
+          description: Done
+          content:
+            application/json:
+              schema: { type: object }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+  /v1/staff/prizes/{result}/retry:
+    post:
+      operationId: staffRetryPrize
+      tags: [back-office]
+      summary: Pay again a prize whose payout failed
+      description: "Role: `payout_operator`."
+      security: [{ staffBearer: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+        - { name: result, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Done
+          content:
+            application/json:
+              schema: { type: object }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+  /v1/staff/tax/batches:
+    get:
+      operationId: staffTaxBatches
+      tags: [back-office]
+      summary: KRA withholding batches, newest first
+      description: "Role: `tax_officer or auditor`."
+      security: [{ staffBearer: [] }]
+      responses:
+        "200":
+          description: Done
+          content:
+            application/json:
+              schema: { type: object }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    post:
+      operationId: staffTaxPrepare
+      tags: [back-office]
+      summary: Prepare the next batch of withheld tax
+      description: "Role: `tax_officer`."
+      security: [{ staffBearer: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      responses:
+        "201":
+          description: Prepared
+          content:
+            application/json:
+              schema: { type: object }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+  /v1/staff/tax/batches/{no}/file:
+    get:
+      operationId: staffTaxFile
+      tags: [back-office]
+      summary: The batch file, byte for byte as hashed (X-File-SHA256)
+      description: "Role: `tax_officer or auditor`."
+      security: [{ staffBearer: [] }]
+      parameters:
+        - { name: no, in: path, required: true, schema: { type: integer, minimum: 1 } }
+      responses:
+        "200":
+          description: The file
+          content:
+            text/csv:
+              schema: { type: string }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+  /v1/staff/tax/batches/{no}/remit:
+    post:
+      operationId: staffTaxRemit
+      tags: [back-office]
+      summary: Record a batch as remitted (by someone other than who prepared it)
+      description: "Role: `tax_officer`."
+      security: [{ staffBearer: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+        - { name: no, in: path, required: true, schema: { type: integer, minimum: 1 } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [prn, amount_kes]
+              properties:
+                prn: { type: string }
+                amount_kes: { type: integer }
+      responses:
+        "200":
+          description: Done
+          content:
+            application/json:
+              schema: { type: object }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+  /v1/staff/alerts:
+    get:
+      operationId: staffAlerts
+      tags: [back-office]
+      summary: Open alerts (all with all=true)
+      description: "Role: `alerts_operator or auditor`."
+      security: [{ staffBearer: [] }]
+      parameters:
+        - { name: all, in: query, required: false, schema: { type: boolean } }
+      responses:
+        "200":
+          description: Done
+          content:
+            application/json:
+              schema: { type: object }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+  /v1/staff/alerts/{id}/acknowledge:
+    post:
+      operationId: staffAlertAcknowledge
+      tags: [back-office]
+      summary: Acknowledge an alert (stops reminders; lifts a payout freeze)
+      description: "Role: `alerts_operator`."
+      security: [{ staffBearer: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [note]
+              properties:
+                note: { type: string, minLength: 1 }
+      responses:
+        "200":
+          description: Done
+          content:
+            application/json:
+              schema: { type: object }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+  /v1/staff/closures:
+    get:
+      operationId: staffClosures
+      tags: [back-office]
+      summary: Open account-closure requests, oldest first
+      description: "Role: `support or auditor`."
+      security: [{ staffBearer: [] }]
+      responses:
+        "200":
+          description: Done
+          content:
+            application/json:
+              schema: { type: object }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+  /v1/staff/closures/{user}/close:
+    post:
+      operationId: staffClose
+      tags: [back-office]
+      summary: Close the account of an open request (refused while money is in it or moving)
+      description: "Role: `support`."
+      security: [{ staffBearer: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+        - { name: user, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Done
+          content:
+            application/json:
+              schema: { type: object }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
   /hooks/mpesa/stk/{path}:
     post:
       operationId: stkCallback
@@ -962,6 +1756,11 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT
+    staffBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: An access token from the staff realm (Keycloak), with the API as audience and back-office realm roles.
   parameters:
     IdempotencyKey:
       name: Idempotency-Key

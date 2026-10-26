@@ -1,0 +1,236 @@
+{
+  "realm": "lottery-staff",
+  "enabled": true,
+  "displayName": "Lottery staff (LOCAL DEVELOPMENT ONLY)",
+  "sslRequired": "external",
+  "registrationAllowed": false,
+  "resetPasswordAllowed": false,
+  "bruteForceProtected": true,
+  "accessTokenLifespan": 600,
+  "ssoSessionIdleTimeout": 1800,
+  "ssoSessionMaxLifespan": 36000,
+  "roles": {
+    "realm": [
+      {
+        "name": "kyc_reviewer",
+        "description": "Reads submitted identity details; approves or rejects them"
+      },
+      {
+        "name": "payments_operator",
+        "description": "Reconciliation, reversals, unconfirmed top-ups, suspense"
+      },
+      {
+        "name": "draw_official",
+        "description": "Signs, approves and voids draws"
+      },
+      {
+        "name": "payout_operator",
+        "description": "Approves, rejects and settles payouts; retries prizes"
+      },
+      {
+        "name": "tax_officer",
+        "description": "Prepares and records KRA remittance batches"
+      },
+      {
+        "name": "alerts_operator",
+        "description": "Acknowledges alerts (lifts a payout freeze)"
+      },
+      {
+        "name": "support",
+        "description": "Closes accounts on request"
+      },
+      {
+        "name": "auditor",
+        "description": "Runs reconciliations and reads; changes nothing"
+      }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "lottery-backoffice",
+      "name": "Back office",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "implicitFlowEnabled": false,
+      "redirectUris": [
+        "http://localhost:5173/*"
+      ],
+      "webOrigins": [
+        "http://localhost:5173"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "http://localhost:5173/*"
+      },
+      "protocolMappers": [
+        {
+          "name": "api audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.custom.audience": "lottery-backoffice-api",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        }
+      ],
+      "defaultClientScopes": [
+        "web-origins",
+        "roles",
+        "profile",
+        "email",
+        "basic"
+      ]
+    }
+  ],
+  "users": [
+    {
+      "username": "alice",
+      "enabled": true,
+      "email": "alice@staff.local",
+      "emailVerified": true,
+      "firstName": "Alice",
+      "lastName": "Official",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "local-dev-staff",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "draw_official",
+        "auditor"
+      ]
+    },
+    {
+      "username": "bob",
+      "enabled": true,
+      "email": "bob@staff.local",
+      "emailVerified": true,
+      "firstName": "Bob",
+      "lastName": "Official",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "local-dev-staff",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "draw_official"
+      ]
+    },
+    {
+      "username": "kim",
+      "enabled": true,
+      "email": "kim@staff.local",
+      "emailVerified": true,
+      "firstName": "Kim",
+      "lastName": "Reviewer",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "local-dev-staff",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "kyc_reviewer"
+      ]
+    },
+    {
+      "username": "paula",
+      "enabled": true,
+      "email": "paula@staff.local",
+      "emailVerified": true,
+      "firstName": "Paula",
+      "lastName": "Payments",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "local-dev-staff",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "payments_operator",
+        "alerts_operator"
+      ]
+    },
+    {
+      "username": "otis",
+      "enabled": true,
+      "email": "otis@staff.local",
+      "emailVerified": true,
+      "firstName": "Otis",
+      "lastName": "Payouts",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "local-dev-staff",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "payout_operator"
+      ]
+    },
+    {
+      "username": "tara",
+      "enabled": true,
+      "email": "tara@staff.local",
+      "emailVerified": true,
+      "firstName": "Tara",
+      "lastName": "Tax",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "local-dev-staff",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "tax_officer"
+      ]
+    },
+    {
+      "username": "tom",
+      "enabled": true,
+      "email": "tom@staff.local",
+      "emailVerified": true,
+      "firstName": "Tom",
+      "lastName": "Tax",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "local-dev-staff",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "tax_officer"
+      ]
+    },
+    {
+      "username": "sam",
+      "enabled": true,
+      "email": "sam@staff.local",
+      "emailVerified": true,
+      "firstName": "Sam",
+      "lastName": "Support",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "local-dev-staff",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "support"
+      ]
+    }
+  ]
+}

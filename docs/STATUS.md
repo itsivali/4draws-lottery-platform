@@ -14,7 +14,7 @@ Read this first at the start of every session.
   2026-10-25). Follow-ups on the owner's decisions of 2026-10-25: prizes repay winners' debt and certificates name no
   winners (PR #38); KRA remittance batches (`docs/runbooks/tax.md`) and alerts with a payout freeze
   (`docs/runbooks/alerts.md`) (PR stacked on #38). To try payouts in the sandbox: set `DARAJA_B2C_SHORTCODE=600992`
-  on Render. **Next: phase 6 (web app and back office) — not started, by the owner's instruction.**
+  on Render. **Phase 6 — player web app and back office: in progress (started 2026-10-26 on the owner's instruction, with phases 7 and 8 to follow)** (`docs/checkpoints/phase-6.md`, ADR 0012): slice 1 (player API: wallet, account, top-up list, closure request, CORS) on `feat/player-account-api`; slice 2 (the Flutter player app for iOS, Android and web, design system in `design-system/lottery-platform/`) on `feat/mobile-app`; next the back-office API and app.
   Phase 2 detail (`docs/checkpoints/phase-2.md`). Slices 1
   (Daraja client + mock), 2 (STK top-up, ADR 0006) and 4 (reversals, player debt, internal reconciliation, ADR 0007)
   are merged and live. **Slice 3 (C2B paybill, ADR 0008) is merged and live (2026-10-24, #18, #19)**; its sandbox

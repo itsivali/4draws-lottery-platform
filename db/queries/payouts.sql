@@ -214,3 +214,8 @@ FROM ledger.ledger_entries e JOIN ledger.ledger_accounts a ON a.id = e.account_i
 
 -- name: InsertReconciliationRun :exec
 INSERT INTO payouts.reconciliation_runs (ran_at, ok, report) VALUES ($1, $2, $3);
+
+-- name: UnsettledPayouts :one
+-- Payouts of the player not yet paid or failed (an account cannot be closed while money may still move).
+SELECT count(*)::int FROM payouts.payouts
+WHERE user_id = sqlc.arg(user_id) AND status NOT IN ('succeeded','failed');

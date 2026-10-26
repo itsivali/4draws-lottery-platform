@@ -607,3 +607,9 @@ func (s *Service) Sweep(ctx context.Context) error {
 		return nil
 	})
 }
+
+// Unsettled counts the player's top-ups still being settled, in the caller's transaction.
+func (s *Service) Unsettled(ctx context.Context, tx pgx.Tx, userID string) (int, error) {
+	n, err := store.New(tx).UnsettledPayments(ctx, userID)
+	return int(n), err
+}

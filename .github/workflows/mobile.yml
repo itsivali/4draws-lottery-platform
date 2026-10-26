@@ -6,6 +6,9 @@ on:
     tags: ["v*.*.*"]
 permissions:
   contents: read
+env:
+  # Unset (the default) builds an app that refuses to start without a server: no URL is ever guessed.
+  API_BASE_URL: ${{ vars.MOBILE_API_BASE_URL }}
 concurrency:
   group: mobile-${{ github.ref }}
   cancel-in-progress: true
@@ -28,8 +31,8 @@ jobs:
       - uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00 # v4.7.1
         with: { distribution: temurin, java-version: "17" }
       - uses: subosito/flutter-action@e938fdf56512cc96ef2f93601a5a40bde3801046 # v2.19.0
-        with: { channel: stable, cache: true }
-      - run: flutter pub get && flutter build apk --release && flutter build appbundle --release
+        with: { flutter-version: 3.47.7, channel: stable, cache: true }
+      - run: flutter pub get && flutter build apk --release --dart-define=API_BASE_URL="$API_BASE_URL" && flutter build appbundle --release --dart-define=API_BASE_URL="$API_BASE_URL"
         working-directory: apps/mobile
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with: { name: android, path: "apps/mobile/build/app/outputs/**/*.a*" }
@@ -40,8 +43,8 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: subosito/flutter-action@e938fdf56512cc96ef2f93601a5a40bde3801046 # v2.19.0
-        with: { channel: stable, cache: true }
-      - run: flutter pub get && flutter build ios --release --no-codesign
+        with: { flutter-version: 3.47.7, channel: stable, cache: true }
+      - run: flutter pub get && flutter build ios --release --no-codesign --dart-define=API_BASE_URL="$API_BASE_URL"
         working-directory: apps/mobile
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with: { name: ios, path: apps/mobile/build/ios/iphoneos/Runner.app }

@@ -343,3 +343,9 @@ func (s *Service) List(ctx context.Context, userID string, limit int) ([]Payout,
 	}
 	return out, nil
 }
+
+// Unsettled counts the player's payouts not yet paid or failed, in the caller's transaction.
+func (s *Service) Unsettled(ctx context.Context, tx pgx.Tx, userID string) (int, error) {
+	n, err := store.New(tx).UnsettledPayouts(ctx, userID)
+	return int(n), err
+}

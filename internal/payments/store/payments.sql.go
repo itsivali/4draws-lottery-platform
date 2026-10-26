@@ -1281,6 +1281,19 @@ func (q *Queries) UnconfirmedPayments(ctx context.Context) ([]string, error) {
 	return items, nil
 }
 
+const unsettledPayments = `-- name: UnsettledPayments :one
+SELECT count(*)::int FROM payments.payments
+WHERE user_id = $1 AND status IN ('initiated','stk_sent','callback_received','verified','unconfirmed')
+`
+
+// Top-ups of the player still being settled (an account cannot be closed while one may still credit it).
+func (q *Queries) UnsettledPayments(ctx context.Context, userID string) (int32, error) {
+	row := q.db.QueryRow(ctx, unsettledPayments, userID)
+	var column_1 int32
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const unverifiedC2B = `-- name: UnverifiedC2B :many
 SELECT trans_id FROM payments.c2b_confirmations WHERE status = 'unverified' ORDER BY created_at
 `

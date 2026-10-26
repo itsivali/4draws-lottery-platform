@@ -10,6 +10,21 @@ import (
 	"time"
 )
 
+const closeClosureRequest = `-- name: CloseClosureRequest :exec
+UPDATE identity.closure_requests SET closed_at = $1, closed_by = $2::uuid WHERE user_id = $3
+`
+
+type CloseClosureRequestParams struct {
+	At     *time.Time
+	Staff  string
+	UserID string
+}
+
+func (q *Queries) CloseClosureRequest(ctx context.Context, arg CloseClosureRequestParams) error {
+	_, err := q.db.Exec(ctx, closeClosureRequest, arg.At, arg.Staff, arg.UserID)
+	return err
+}
+
 const countOtherAccountsOnDevice = `-- name: CountOtherAccountsOnDevice :one
 SELECT count(DISTINCT user_id) FROM identity.devices WHERE fingerprint_hash = $1 AND user_id <> $2
 `
@@ -224,6 +239,17 @@ func (q *Queries) InsertSession(ctx context.Context, arg InsertSessionParams) (s
 	return id, err
 }
 
+const lockOpenClosure = `-- name: LockOpenClosure :one
+SELECT requested_at FROM identity.closure_requests WHERE user_id = $1 AND closed_at IS NULL FOR UPDATE
+`
+
+func (q *Queries) LockOpenClosure(ctx context.Context, userID string) (time.Time, error) {
+	row := q.db.QueryRow(ctx, lockOpenClosure, userID)
+	var requested_at time.Time
+	err := row.Scan(&requested_at)
+	return requested_at, err
+}
+
 const lockRefreshToken = `-- name: LockRefreshToken :one
 SELECT id, session_id, expires_at, used_at FROM identity.refresh_tokens WHERE token_hash = $1 FOR UPDATE
 `
@@ -332,6 +358,44 @@ func (q *Queries) MarkRefreshUsed(ctx context.Context, arg MarkRefreshUsedParams
 	return err
 }
 
+const openClosureRequests = `-- name: OpenClosureRequests :many
+SELECT c.user_id, c.requested_at, u.msisdn, u.status FROM identity.closure_requests c
+JOIN identity.users u ON u.id = c.user_id
+WHERE c.closed_at IS NULL ORDER BY c.requested_at LIMIT $1
+`
+
+type OpenClosureRequestsRow struct {
+	UserID      string
+	RequestedAt time.Time
+	Msisdn      string
+	Status      string
+}
+
+func (q *Queries) OpenClosureRequests(ctx context.Context, lim int32) ([]OpenClosureRequestsRow, error) {
+	rows, err := q.db.Query(ctx, openClosureRequests, lim)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []OpenClosureRequestsRow
+	for rows.Next() {
+		var i OpenClosureRequestsRow
+		if err := rows.Scan(
+			&i.UserID,
+			&i.RequestedAt,
+			&i.Msisdn,
+			&i.Status,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const provedPhoneOwner = `-- name: ProvedPhoneOwner :one
 SELECT id, status, kyc_status FROM identity.users WHERE msisdn = $1 AND msisdn_verified_at IS NOT NULL
 `
@@ -378,6 +442,21 @@ func (q *Queries) RequestClosure(ctx context.Context, arg RequestClosureParams) 
 	return i, err
 }
 
+const revokeAllSessions = `-- name: RevokeAllSessions :exec
+UPDATE identity.sessions SET revoked_at = $1, revoked_reason = 'admin'
+WHERE user_id = $2 AND revoked_at IS NULL
+`
+
+type RevokeAllSessionsParams struct {
+	At     *time.Time
+	UserID string
+}
+
+func (q *Queries) RevokeAllSessions(ctx context.Context, arg RevokeAllSessionsParams) error {
+	_, err := q.db.Exec(ctx, revokeAllSessions, arg.At, arg.UserID)
+	return err
+}
+
 const revokeOtherSessions = `-- name: RevokeOtherSessions :exec
 UPDATE identity.sessions SET revoked_at = $1, revoked_reason = 'password_change'
 WHERE user_id = $2 AND id <> $3 AND revoked_at IS NULL
@@ -422,6 +501,20 @@ type SetPasswordParams struct {
 
 func (q *Queries) SetPassword(ctx context.Context, arg SetPasswordParams) error {
 	_, err := q.db.Exec(ctx, setPassword, arg.ID, arg.PasswordHash, arg.PasswordChangedAt)
+	return err
+}
+
+const setUserClosed = `-- name: SetUserClosed :exec
+UPDATE identity.users SET status = 'closed', updated_at = $1 WHERE id = $2
+`
+
+type SetUserClosedParams struct {
+	At time.Time
+	ID string
+}
+
+func (q *Queries) SetUserClosed(ctx context.Context, arg SetUserClosedParams) error {
+	_, err := q.db.Exec(ctx, setUserClosed, arg.At, arg.ID)
 	return err
 }
 

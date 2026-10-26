@@ -36,6 +36,44 @@ type API struct {
 
 	// CORSOrigins are the browser origins (the player web app) allowed to call the API; empty turns CORS off.
 	CORSOrigins []string
+
+	// Staff configures the back office's staff sign-in (off when unset).
+	Staff Staff
+}
+
+// Staff is the back office's sign-in: access tokens from the staff realm (Keycloak), and the database URL the
+// back office acts through (the worker's role; empty uses DATABASE_URL, for single-role mode).
+type Staff struct {
+	Enabled     bool
+	Issuer      string
+	Audience    string
+	JWKSURL     string
+	DatabaseURL string
+}
+
+var staffVars = []string{"STAFF_OIDC_ISSUER", "STAFF_OIDC_AUDIENCE", "STAFF_OIDC_JWKS_URL"}
+
+func loadStaff() (Staff, error) {
+	var set, missing []string
+	for _, k := range staffVars {
+		if os.Getenv(k) != "" {
+			set = append(set, k)
+		} else {
+			missing = append(missing, k)
+		}
+	}
+	if len(set) == 0 {
+		return Staff{}, nil
+	}
+	if len(missing) > 0 {
+		return Staff{}, fmt.Errorf("config: staff sign-in is partly configured (%s set) but %s missing", strings.Join(set, ", "), strings.Join(missing, ", "))
+	}
+	s := Staff{Enabled: true, Issuer: os.Getenv("STAFF_OIDC_ISSUER"), Audience: os.Getenv("STAFF_OIDC_AUDIENCE"),
+		JWKSURL: os.Getenv("STAFF_OIDC_JWKS_URL"), DatabaseURL: os.Getenv("STAFF_DATABASE_URL")}
+	if err := checkGatewayURL("STAFF_OIDC_JWKS_URL", s.JWKSURL); err != nil {
+		return Staff{}, err
+	}
+	return s, nil
 }
 
 var apiSecrets = []string{"AUTH_KEY", "TOKEN_SEED", "DATA_KEYS", "IDENTITY_KEY", "VALKEY_ADDR"}
@@ -104,6 +142,9 @@ func loadAPI() (API, error) {
 		a.TrustedProxyHops = n
 	}
 	if a.CORSOrigins, err = corsOrigins(os.Getenv("CORS_ALLOWED_ORIGINS")); err != nil {
+		return API{}, err
+	}
+	if a.Staff, err = loadStaff(); err != nil {
 		return API{}, err
 	}
 	for _, g := range []struct{ name, val string }{{"KYC_API_URL", a.KYCURL}} {

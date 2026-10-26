@@ -1,0 +1,145 @@
+import { screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { describe, expect, it } from 'vitest'
+import { App } from './App'
+import { loadConfig } from './config'
+import { visibleSections } from './roles'
+import { problem, renderSignedIn } from './test/render'
+import type { Draw } from './types'
+
+const submission = { user_id: 'u1', msisdn: '254712345678', national_id: '12345678', full_name: 'Amina Otieno', date_of_birth: '1992-03-04', submitted_at: '2026-10-26T09:00:00Z' }
+
+describe('roles', () => {
+  it('a member sees only the sections their roles open', () => {
+    expect(visibleSections(['kyc_reviewer']).map((s) => s.path)).toEqual(['/kyc'])
+    expect(visibleSections(['auditor']).map((s) => s.path)).toEqual(['/draws', '/payouts', '/payments', '/tax', '/alerts', '/closures'])
+  })
+
+  it('the navigation and the routes follow the roles', async () => {
+    renderSignedIn(<App />, { roles: ['kyc_reviewer'], route: () => ({ status: 200, body: { submissions: [] } }), path: '/payouts' })
+    const nav = screen.getByRole('navigation', { name: 'Back office' })
+    expect(within(nav).getByRole('link', { name: 'Identity review' })).toBeInTheDocument()
+    expect(within(nav).queryByRole('link', { name: 'Payouts' })).not.toBeInTheDocument()
+    // a forbidden address goes back to the overview
+    expect(await screen.findByRole('heading', { name: /Signed in as Alice/ })).toBeInTheDocument()
+  })
+})
+
+describe('identity review', () => {
+  it('approving needs a reason, sends it, and reloads the queue', async () => {
+    let pending = [submission]
+    const { fetch } = renderSignedIn(<App />, {
+      roles: ['kyc_reviewer'],
+      path: '/kyc',
+      route: (method, url) => {
+        if (method === 'GET' && url.pathname === '/v1/staff/kyc/pending') return { status: 200, body: { submissions: pending } }
+        if (method === 'POST' && url.pathname === '/v1/staff/kyc/u1/approve') {
+          pending = []
+          return { status: 200, body: { status: 'verified' } }
+        }
+        return { status: 404 }
+      },
+    })
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: 'Approve' }))
+    const dialog = screen.getByRole('dialog', { name: 'Approve Amina Otieno?' })
+    const confirm = within(dialog).getByRole('button', { name: 'Approve' })
+    expect(confirm).toBeDisabled()
+    await user.type(within(dialog).getByLabelText(/What you checked/), 'ID card seen; details match')
+    await user.click(confirm)
+    expect(await screen.findByRole('status')).toHaveTextContent('Amina Otieno is verified.')
+    await waitFor(() => { expect(screen.getByText('No submission is waiting for review.')).toBeInTheDocument() })
+    const post = fetch.mock.calls.find(([, init]) => init?.method === 'POST')
+    expect(post?.[1]?.body).toBe(JSON.stringify({ reason: 'ID card seen; details match' }))
+  })
+})
+
+const frozen: Draw = {
+  id: 'd1', draw_type: 'daily', period_start: '2026-10-25', period_end: '2026-10-25', status: 'frozen', freeze_at: '2026-10-26T00:05:00+03:00',
+  entries: 42, drand_round_at: '2026-10-26T09:00:00+03:00', voided_reason: null, results: [],
+  signoffs: [{ step: 'sign', attestation: 'a', signed_at: '2026-10-26T00:10:00Z' }],
+}
+
+describe('draws', () => {
+  it('shows how many officials have signed, and the two-person refusal in the server’s words', async () => {
+    renderSignedIn(<App />, {
+      roles: ['draw_official'],
+      path: '/draws',
+      route: (method, url) => {
+        if (url.pathname === '/v1/staff/draws') return { status: 200, body: { draws: [frozen] } }
+        if (url.pathname === '/v1/staff/draws/overdue') return { status: 200, body: { overdue: [] } }
+        if (method === 'POST') return problem(409, 'already-signed', 'You have already signed this step; a second official must')
+        return { status: 404 }
+      },
+    })
+    expect(await screen.findByText('1 of 2 signatures')).toBeInTheDocument()
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'Sign' }))
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Sign' }))
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('You have already signed this step; a second official must')
+    expect(alert).toHaveTextContent('Nothing was changed.')
+  })
+
+  it('an auditor sees draws but no buttons that change them', async () => {
+    renderSignedIn(<App />, {
+      roles: ['auditor'],
+      path: '/draws',
+      route: (_m, url) => (url.pathname === '/v1/staff/draws' ? { status: 200, body: { draws: [frozen] } } : { status: 200, body: { overdue: [] } }),
+    })
+    expect(await screen.findByText('1 of 2 signatures')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Sign' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Void' })).not.toBeInTheDocument()
+  })
+})
+
+describe('payouts', () => {
+  it('a lost answer is shown as unknown and checked again with the same key', async () => {
+    let calls = 0
+    const held = { id: 'p1', user_id: 'u', kind: 'withdrawal', status: 'processing', state: 'held', gross_kes: 120000, tax_kes: 0, net_kes: 120000, debt_repaid_kes: 0, created_at: '2026-10-26T09:00:00Z' }
+    const { fetch } = renderSignedIn(<App />, {
+      roles: ['payout_operator'],
+      path: '/payouts',
+      route: (method) => {
+        if (method === 'GET') return { status: 200, body: { payouts: [held] } }
+        calls++
+        if (calls <= 2) return Promise.reject(new TypeError('network'))
+        return { status: 200, body: { ...held, state: 'pending' } }
+      },
+    })
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: 'Approve' }))
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Approve and send' }))
+    expect(await screen.findByText(/No answer from the server/)).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Check again' }))
+    expect(await screen.findByRole('status')).toHaveTextContent('Confirmed by the server.')
+    const keys = fetch.mock.calls.filter(([, i]) => i?.method === 'POST').map(([, i]) => new Headers(i?.headers).get('Idempotency-Key'))
+    expect(keys).toHaveLength(3)
+    expect(new Set(keys).size).toBe(1)
+  })
+})
+
+describe('closures', () => {
+  it('a refused closure explains why (money still in the account)', async () => {
+    renderSignedIn(<App />, {
+      roles: ['support'],
+      path: '/closures',
+      route: (method) =>
+        method === 'GET'
+          ? { status: 200, body: { closures: [{ user_id: 'u1', msisdn: '254712345678', status: 'active', requested_at: '2026-10-26T09:00:00Z' }] } }
+          : { status: 409, body: { type: 'https://lottery.example/problems/closure-blocked', title: 'The account cannot be closed yet', detail: 'the wallet still holds KES 950; pay it out first', status: 409 } },
+    })
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: 'Close account' }))
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Close account' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('the wallet still holds KES 950')
+  })
+})
+
+describe('config', () => {
+  it('refuses to start without a server or with plain http outside localhost', () => {
+    expect(loadConfig({})).toBeNull()
+    expect(loadConfig({ VITE_API_BASE_URL: 'http://api.example.com', VITE_OIDC_AUTHORITY: 'https://sso.example.com/realms/x', VITE_OIDC_CLIENT_ID: 'c' })).toBeNull()
+    expect(loadConfig({ VITE_API_BASE_URL: 'http://localhost:8080', VITE_OIDC_AUTHORITY: 'http://localhost:8081/realms/lottery-staff', VITE_OIDC_CLIENT_ID: 'lottery-backoffice' })).not.toBeNull()
+  })
+})

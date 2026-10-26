@@ -6,6 +6,9 @@ import (
 	"context"
 	"testing"
 	"time"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func TestClosureRequest_KeepsTheFirstRequestAndClosesAtMostOnce(t *testing.T) {
@@ -30,19 +33,33 @@ func TestClosureRequest_KeepsTheFirstRequestAndClosesAtMostOnce(t *testing.T) {
 	}
 
 	staff := "0192f000-0000-7000-8000-0000000000aa"
+	// players' API may record a request but never close one; the back office (the worker's role) closes it
+	if _, err := e.pool.Exec(ctx, `UPDATE identity.closure_requests SET closed_at = requested_at + interval '1 hour', closed_by = $2 WHERE user_id = $1`, p.UserID, staff); err == nil {
+		t.Fatal("the API's role closed a request")
+	}
+	cfg := e.pool.Config().Copy()
+	cfg.AfterConnect = func(ctx context.Context, c *pgx.Conn) error {
+		_, err := c.Exec(ctx, "SET ROLE app_worker")
+		return err
+	}
+	worker, err := pgxpool.NewWithConfig(ctx, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer worker.Close()
 	for name, sql := range map[string]string{
 		"change the request time": `UPDATE identity.closure_requests SET requested_at = requested_at - interval '1 day' WHERE user_id = $1`,
 		"delete the request":      `DELETE FROM identity.closure_requests WHERE user_id = $1`,
 		"close without staff":     `UPDATE identity.closure_requests SET closed_at = now() WHERE user_id = $1`,
 	} {
-		if _, err := e.pool.Exec(ctx, sql, p.UserID); err == nil {
+		if _, err := worker.Exec(ctx, sql, p.UserID); err == nil {
 			t.Errorf("%s: allowed", name)
 		}
 	}
-	if _, err := e.pool.Exec(ctx, `UPDATE identity.closure_requests SET closed_at = requested_at + interval '1 hour', closed_by = $2 WHERE user_id = $1`, p.UserID, staff); err != nil {
+	if _, err := worker.Exec(ctx, `UPDATE identity.closure_requests SET closed_at = requested_at + interval '1 hour', closed_by = $2 WHERE user_id = $1`, p.UserID, staff); err != nil {
 		t.Fatalf("closing an open request: %v", err)
 	}
-	if _, err := e.pool.Exec(ctx, `UPDATE identity.closure_requests SET closed_at = requested_at + interval '2 hours', closed_by = $2 WHERE user_id = $1`, p.UserID, staff); err == nil {
+	if _, err := worker.Exec(ctx, `UPDATE identity.closure_requests SET closed_at = requested_at + interval '2 hours', closed_by = $2 WHERE user_id = $1`, p.UserID, staff); err == nil {
 		t.Fatal("a closed request was closed again")
 	}
 }

@@ -37,8 +37,10 @@ BEGIN
     RAISE WARNING 'application roles unavailable: skipping grants (SINGLE-ROLE MODE)';
     RETURN;
   END IF;
-  GRANT SELECT, INSERT, UPDATE ON identity.closure_requests TO app_api;
-  GRANT SELECT ON identity.closure_requests TO app_worker, app_readonly;
+  -- players ask (the API); staff close (the back office runs with the worker's role)
+  GRANT SELECT, INSERT ON identity.closure_requests TO app_api;
+  GRANT SELECT, UPDATE ON identity.closure_requests TO app_worker;
+  GRANT SELECT ON identity.closure_requests TO app_readonly;
   ALTER TABLE identity.closure_requests OWNER TO app_migrator;
   ALTER FUNCTION identity.check_closure_transition() OWNER TO app_migrator;
 END $$;

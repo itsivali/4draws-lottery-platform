@@ -57,32 +57,12 @@ func NewOIDCVerifier(clk clock.Clock, hc *http.Client, providers map[string]OIDC
 
 // VerifyIDToken implements IDTokenVerifier.
 func (v *OIDCVerifier) VerifyIDToken(ctx context.Context, provider, idToken, nonce string) (string, error) {
-	p, ok := v.providers[provider]
-	if !ok {
-		return "", fmt.Errorf("oidc: unknown provider %q", provider)
-	}
 	if nonce == "" {
 		return "", errors.New("oidc: nonce required")
 	}
-	now, err := v.clk.Now(ctx, nil)
+	p, claims, err := v.verify(ctx, provider, idToken)
 	if err != nil {
 		return "", err
-	}
-	claims := jwt.MapClaims{}
-	_, err = jwt.ParseWithClaims(idToken, claims, func(t *jwt.Token) (any, error) {
-		kid, _ := t.Header["kid"].(string)
-		return v.key(ctx, provider, p, kid, now)
-	}, jwt.WithValidMethods([]string{"RS256"}), jwt.WithExpirationRequired(), jwt.WithTimeFunc(func() time.Time { return now }))
-	if err != nil {
-		return "", fmt.Errorf("oidc: %w", err)
-	}
-	iss, _ := claims.GetIssuer()
-	if !slices.Contains(p.Issuers, iss) {
-		return "", errors.New("oidc: unexpected issuer")
-	}
-	aud, _ := claims.GetAudience()
-	if !slices.ContainsFunc(aud, func(a string) bool { return slices.Contains(p.Audiences, a) }) {
-		return "", errors.New("oidc: unexpected audience")
 	}
 	want := nonce
 	if p.NonceSHA256 {
@@ -93,10 +73,46 @@ func (v *OIDCVerifier) VerifyIDToken(ctx context.Context, provider, idToken, non
 		return "", errors.New("oidc: nonce mismatch")
 	}
 	sub, _ := claims.GetSubject()
-	if sub == "" {
-		return "", errors.New("oidc: missing subject")
-	}
 	return sub, nil
+}
+
+// VerifyAccessToken validates an OAuth access token issued by the provider (staff tokens from Keycloak): signature
+// (RS256 only), issuer, audience, expiry and subject. Access tokens carry no nonce. It returns the claims so the caller
+// can read roles.
+func (v *OIDCVerifier) VerifyAccessToken(ctx context.Context, provider, token string) (jwt.MapClaims, error) {
+	_, claims, err := v.verify(ctx, provider, token)
+	return claims, err
+}
+
+func (v *OIDCVerifier) verify(ctx context.Context, provider, token string) (OIDCProvider, jwt.MapClaims, error) {
+	p, ok := v.providers[provider]
+	if !ok {
+		return p, nil, fmt.Errorf("oidc: unknown provider %q", provider)
+	}
+	now, err := v.clk.Now(ctx, nil)
+	if err != nil {
+		return p, nil, err
+	}
+	claims := jwt.MapClaims{}
+	_, err = jwt.ParseWithClaims(token, claims, func(t *jwt.Token) (any, error) {
+		kid, _ := t.Header["kid"].(string)
+		return v.key(ctx, provider, p, kid, now)
+	}, jwt.WithValidMethods([]string{"RS256"}), jwt.WithExpirationRequired(), jwt.WithTimeFunc(func() time.Time { return now }))
+	if err != nil {
+		return p, nil, fmt.Errorf("oidc: %w", err)
+	}
+	iss, _ := claims.GetIssuer()
+	if !slices.Contains(p.Issuers, iss) {
+		return p, nil, errors.New("oidc: unexpected issuer")
+	}
+	aud, _ := claims.GetAudience()
+	if !slices.ContainsFunc(aud, func(a string) bool { return slices.Contains(p.Audiences, a) }) {
+		return p, nil, errors.New("oidc: unexpected audience")
+	}
+	if sub, _ := claims.GetSubject(); sub == "" {
+		return p, nil, errors.New("oidc: missing subject")
+	}
+	return p, claims, nil
 }
 
 func (v *OIDCVerifier) key(ctx context.Context, name string, p OIDCProvider, kid string, now time.Time) (*rsa.PublicKey, error) {

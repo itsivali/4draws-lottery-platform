@@ -1,0 +1,272 @@
+import 'dart:math';
+
+import 'package:flutter/material.dart';
+
+import '../../../../app/theme/tokens.dart';
+import '../../domain/wheel_geometry.dart';
+
+// The wheel is drawn in unit proportions of its radius, so it looks the same at any size and resizing never moves a
+// slot. Angle convention (see WheelGeometry): wheel angle a, clockwise from 12 o'clock, is canvas angle a − π/2.
+
+const _rimInner = 0.90;
+const _studRadius = 0.86;
+const _labelRadius = 0.70;
+const _hubRadius = 0.24;
+
+Offset _polar(Offset c, double r, double wheelAngle) =>
+    c + Offset(cos(wheelAngle - pi / 2), sin(wheelAngle - pi / 2)) * r;
+
+/// The rotating disc: segments, slot numbers, the lucky star and the boundary studs. It paints once per geometry;
+/// rotation is applied by a transform above it, so spinning does not repaint it.
+class WheelDiscPainter extends CustomPainter {
+  WheelDiscPainter({required this.geometry, required this.colors, required this.labelled, required this.textScaler});
+
+  final WheelGeometry geometry;
+  final AppColors colors;
+
+  /// False before the server has said how many slots the wheel has: the segments are then plain decoration.
+  final bool labelled;
+  final TextScaler textScaler;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final r = size.shortestSide / 2;
+    final c = size.center(Offset.zero);
+    final g = geometry;
+    final face = Rect.fromCircle(center: c, radius: r * _rimInner);
+
+    for (var i = 0; i < g.slots; i++) {
+      final lucky = labelled && g.isLucky(i);
+      final base = lucky ? colors.wheelLucky : (i.isEven ? colors.wheelSegmentA : colors.wheelSegmentB);
+      final paint = Paint()
+        ..shader = RadialGradient(
+          colors: [Color.lerp(base, Colors.white, 0.10)!, base, Color.lerp(base, Colors.black, 0.18)!],
+          stops: const [0.0, 0.62, 1.0],
+        ).createShader(face);
+      canvas.drawArc(face, g.segmentStart(i) - pi / 2, g.sweep, true, paint);
+    }
+
+    // hairline separators
+    final sep = Paint()
+      ..color = colors.wheelRimLight.withValues(alpha: 0.28)
+      ..strokeWidth = max(1.0, r * 0.006);
+    for (var i = 0; i < g.slots; i++) {
+      canvas.drawLine(
+        _polar(c, r * (_hubRadius + 0.02), g.segmentStart(i)),
+        _polar(c, r * _rimInner, g.segmentStart(i)),
+        sep,
+      );
+    }
+
+    // studs on the boundaries: what the pointer "clicks" past
+    final stud = Paint()..color = colors.wheelRimLight;
+    final studShadow = Paint()..color = colors.shadow.withValues(alpha: 0.35);
+    for (var i = 0; i < g.slots; i++) {
+      final p = _polar(c, r * _studRadius, g.segmentStart(i));
+      canvas.drawCircle(p + Offset(0, r * 0.006), r * 0.018, studShadow);
+      canvas.drawCircle(p, r * 0.016, stud);
+    }
+
+    if (labelled) _paintLabels(canvas, c, r);
+  }
+
+  void _paintLabels(Canvas canvas, Offset c, double r) {
+    final g = geometry;
+    // label size follows the segment's width so many slots still fit; the system text scale applies, within reason
+    final arc = 2 * pi * r * _labelRadius / g.slots;
+    final fontSize = textScaler.clamp(maxScaleFactor: 1.3).scale(min(r * 0.11, arc * 0.42));
+    for (var i = 0; i < g.slots; i++) {
+      final lucky = g.isLucky(i);
+      final label = '$i';
+      final tp = TextPainter(
+        text: TextSpan(
+          text: label,
+          style: TextStyle(
+            fontFamily: 'IBMPlexSans',
+            fontSize: fontSize,
+            fontWeight: FontWeight.w600,
+            color: colors.wheelLabel,
+            height: 1.05,
+            fontFeatures: const [FontFeature.tabularFigures()],
+            // labels turn with the wheel, so 6 and 9 are underlined to tell them apart upside down
+            decoration: label.contains(RegExp('[69]')) ? TextDecoration.underline : null,
+            decorationColor: colors.wheelLabel,
+            decorationThickness: 1.6,
+          ),
+        ),
+        textAlign: TextAlign.center,
+        textDirection: TextDirection.ltr,
+      )..layout();
+      final angle = g.segmentCenter(i);
+      canvas.save();
+      canvas.translate(c.dx, c.dy);
+      canvas.rotate(angle); // upright along the radius, reading from the centre outwards
+      canvas.translate(0, -r * _labelRadius);
+      tp.paint(canvas, Offset(-tp.width / 2, -tp.height / 2));
+      if (lucky) _star(canvas, Offset(0, tp.height / 2 + fontSize * 0.5), fontSize * 0.42, colors.wheelRimLight);
+      canvas.restore();
+    }
+  }
+
+  /// A five-pointed star (drawn, not a font glyph, so it never depends on a font having it).
+  static void _star(Canvas canvas, Offset centre, double radius, Color color) {
+    final path = Path();
+    for (var k = 0; k < 10; k++) {
+      final rr = k.isEven ? radius : radius * 0.45;
+      final a = -pi / 2 + k * pi / 5;
+      final p = centre + Offset(cos(a), sin(a)) * rr;
+      k == 0 ? path.moveTo(p.dx, p.dy) : path.lineTo(p.dx, p.dy);
+    }
+    canvas.drawPath(path..close(), Paint()..color = color);
+  }
+
+  @override
+  bool shouldRepaint(WheelDiscPainter old) =>
+      old.geometry != geometry || old.colors != colors || old.labelled != labelled || old.textScaler != textScaler;
+}
+
+/// What does not turn: the soft shadow under the wheel.
+class WheelBackplatePainter extends CustomPainter {
+  WheelBackplatePainter(this.colors);
+
+  final AppColors colors;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final r = size.shortestSide / 2;
+    final c = size.center(Offset.zero);
+    canvas.drawCircle(
+      c + Offset(0, r * 0.04),
+      r * 0.99,
+      Paint()
+        ..color = colors.shadow.withValues(alpha: 0.22)
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, r * 0.05),
+    );
+  }
+
+  @override
+  bool shouldRepaint(WheelBackplatePainter old) => old.colors != colors;
+}
+
+/// The fixed metal rim, the light falling on the face, the hub and the pointer. Lighting does not rotate with the
+/// wheel, which is what makes the disc read as turning under it.
+class WheelFramePainter extends CustomPainter {
+  WheelFramePainter(this.colors);
+
+  final AppColors colors;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final r = size.shortestSide / 2;
+    final c = size.center(Offset.zero);
+    final outer = Rect.fromCircle(center: c, radius: r);
+
+    // rim: brushed metal, lit from the top left
+    final rimWidth = r * (1 - _rimInner);
+    canvas.drawCircle(
+      c,
+      r - rimWidth / 2,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = rimWidth
+        ..shader = SweepGradient(
+          colors: [
+            colors.wheelRimLight,
+            colors.wheelRimDark,
+            colors.wheelRimLight,
+            colors.wheelRimDark,
+            colors.wheelRimLight,
+          ],
+          stops: const [0.0, 0.3, 0.5, 0.8, 1.0],
+          transform: const GradientRotation(-pi / 3),
+        ).createShader(outer),
+    );
+    // bevels
+    canvas.drawCircle(
+      c,
+      r - 0.5,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = max(1.0, r * 0.008)
+        ..color = colors.wheelRimDark,
+    );
+    canvas.drawCircle(
+      c,
+      r * _rimInner,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = max(1.0, r * 0.01)
+        ..color = colors.shadow.withValues(alpha: 0.45),
+    );
+
+    // sheen across the face
+    canvas.drawCircle(
+      c,
+      r * _rimInner,
+      Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Colors.white.withValues(alpha: 0.16),
+            Colors.white.withValues(alpha: 0.0),
+            colors.shadow.withValues(alpha: 0.12),
+          ],
+          stops: const [0.0, 0.45, 1.0],
+        ).createShader(outer),
+    );
+
+    // hub
+    final hub = Rect.fromCircle(center: c, radius: r * _hubRadius);
+    canvas.drawCircle(
+      c + Offset(0, r * 0.012),
+      r * _hubRadius,
+      Paint()
+        ..color = colors.shadow.withValues(alpha: 0.35)
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, r * 0.02),
+    );
+    canvas.drawCircle(
+      c,
+      r * _hubRadius,
+      Paint()
+        ..shader = RadialGradient(
+          center: const Alignment(-0.35, -0.4),
+          colors: [colors.wheelRimLight, colors.wheelRimDark],
+        ).createShader(hub),
+    );
+    canvas.drawCircle(
+      c,
+      r * (_hubRadius - 0.035),
+      Paint()
+        ..shader = RadialGradient(
+          center: const Alignment(-0.3, -0.35),
+          colors: [Color.lerp(colors.wheelSegmentA, Colors.white, 0.12)!, colors.wheelSegmentB],
+        ).createShader(hub),
+    );
+
+    // pointer: fixed at 12 o'clock, its tip just inside the rim
+    final tip = Offset(c.dx, c.dy - r * (_rimInner - 0.07));
+    final w = r * 0.085;
+    final top = c.dy - r - r * 0.05;
+    final pointer = Path()
+      ..moveTo(tip.dx, tip.dy)
+      ..quadraticBezierTo(c.dx - w * 0.55, top + r * 0.12, c.dx - w, top + r * 0.035)
+      ..arcToPoint(Offset(c.dx + w, top + r * 0.035), radius: Radius.circular(w * 1.05))
+      ..quadraticBezierTo(c.dx + w * 0.55, top + r * 0.12, tip.dx, tip.dy)
+      ..close();
+    canvas.drawShadow(pointer, colors.shadow, r * 0.025, false);
+    canvas.drawPath(
+      pointer,
+      Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+          colors: [colors.wheelRimLight, colors.gold, colors.wheelRimDark],
+        ).createShader(Rect.fromLTRB(c.dx - w, top, c.dx + w, tip.dy)),
+    );
+    canvas.drawCircle(Offset(c.dx, top + r * 0.045), w * 0.32, Paint()..color = colors.wheelRimDark);
+  }
+
+  @override
+  bool shouldRepaint(WheelFramePainter old) => old.colors != colors;
+}

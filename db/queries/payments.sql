@@ -267,3 +267,8 @@ SELECT id, status, amount_requested_kes, amount_confirmed_kes, created_at
 FROM payments.payments
 WHERE user_id = sqlc.arg(user_id)
 ORDER BY created_at DESC, id DESC LIMIT sqlc.arg(lim);
+
+-- name: UnsettledPayments :one
+-- Top-ups of the player still being settled (an account cannot be closed while one may still credit it).
+SELECT count(*)::int FROM payments.payments
+WHERE user_id = sqlc.arg(user_id) AND status IN ('initiated','stk_sent','callback_received','verified','unconfirmed');

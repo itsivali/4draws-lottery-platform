@@ -20,8 +20,16 @@ services:
       retries: 20
   keycloak:
     image: quay.io/keycloak/keycloak:26.0
-    command: start-dev
-    environment: { KC_BOOTSTRAP_ADMIN_USERNAME: admin, KC_BOOTSTRAP_ADMIN_PASSWORD: admin, KC_HEALTH_ENABLED: "true" }
+    # The staff realm (deploy/keycloak): local test staff, password local-dev-staff. Tokens are issued for
+    # http://localhost:8081 (the browser's address); the api fetches the keys over the compose network.
+    command: start-dev --import-realm
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+      KC_HEALTH_ENABLED: "true"
+      KC_HOSTNAME: http://localhost:8081
+      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
+    volumes: ["./deploy/keycloak:/opt/keycloak/data/import:ro"]
     ports: ["8081:8080"]
   daraja-mock:
     build: { context: ., target: mock, args: { TARGET: mocks/daraja } }
@@ -71,6 +79,10 @@ services:
       DARAJA_INITIATOR_NAME: local
       DARAJA_SECURITY_CREDENTIAL: bG9jYWwtZGV2LW9ubHk=
       PUBLIC_BASE_URL: http://api:8080
+      CORS_ALLOWED_ORIGINS: http://localhost:5173,http://localhost:8088
+      STAFF_OIDC_ISSUER: http://localhost:8081/realms/lottery-staff
+      STAFF_OIDC_AUDIENCE: lottery-backoffice-api
+      STAFF_OIDC_JWKS_URL: http://keycloak:8080/realms/lottery-staff/protocol/openid-connect/certs
     ports: ["8080:8080"]
     depends_on:
       migrate: { condition: service_completed_successfully }

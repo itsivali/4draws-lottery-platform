@@ -1176,6 +1176,19 @@ func (q *Queries) UnbatchedKRAEvents(ctx context.Context, maxRows int32) ([]Unba
 	return items, nil
 }
 
+const unsettledPayouts = `-- name: UnsettledPayouts :one
+SELECT count(*)::int FROM payouts.payouts
+WHERE user_id = $1 AND status NOT IN ('succeeded','failed')
+`
+
+// Payouts of the player not yet paid or failed (an account cannot be closed while money may still move).
+func (q *Queries) UnsettledPayouts(ctx context.Context, userID string) (int32, error) {
+	row := q.db.QueryRow(ctx, unsettledPayouts, userID)
+	var column_1 int32
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const withdrawalsSince = `-- name: WithdrawalsSince :one
 SELECT count(*)::int FROM payouts.payouts
 WHERE user_id = $1 AND kind = 'withdrawal' AND created_at >= $2 AND status <> 'failed'

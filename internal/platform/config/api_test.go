@@ -20,7 +20,7 @@ func fullAPIEnv(t *testing.T) {
 	t.Setenv("IDENTITY_KEY", b64(32))
 	t.Setenv("VALKEY_ADDR", "valkey:6379")
 	t.Setenv("TRUSTED_PROXY_HEADER", "X-Forwarded-For")
-	for _, k := range []string{"TRUSTED_PROXY_HOPS", "DATA_KEY_ACTIVE", "KYC_API_URL", "KYC_API_KEY", "GOOGLE_CLIENT_ID", "APPLE_CLIENT_ID", "CORS_ALLOWED_ORIGINS"} {
+	for _, k := range []string{"TRUSTED_PROXY_HOPS", "DATA_KEY_ACTIVE", "KYC_API_URL", "KYC_API_KEY", "GOOGLE_CLIENT_ID", "APPLE_CLIENT_ID", "CORS_ALLOWED_ORIGINS", "STAFF_OIDC_ISSUER", "STAFF_OIDC_AUDIENCE", "STAFF_OIDC_JWKS_URL", "STAFF_DATABASE_URL"} {
 		t.Setenv(k, "")
 	}
 }
@@ -191,5 +191,39 @@ func TestAPI_CORSOriginsAreExactHTTPSOriginsOrLocalhost(t *testing.T) {
 	t.Setenv("CORS_ALLOWED_ORIGINS", "")
 	if cfg, err := config.Load(); err != nil || len(cfg.API.CORSOrigins) != 0 {
 		t.Fatalf("unset: %v %v", cfg.API.CORSOrigins, err)
+	}
+}
+
+func TestAPI_StaffSignInIsAllOrNothingAndUsesSecureURLs(t *testing.T) {
+	fullAPIEnv(t)
+	cfg, err := config.Load()
+	if err != nil || cfg.API.Staff.Enabled {
+		t.Fatalf("unset: %+v %v", cfg.API.Staff, err)
+	}
+	t.Setenv("STAFF_OIDC_ISSUER", "https://sso.example.co.ke/realms/lottery-staff")
+	t.Setenv("STAFF_OIDC_AUDIENCE", "lottery-backoffice-api")
+	t.Setenv("STAFF_OIDC_JWKS_URL", "https://sso.example.co.ke/realms/lottery-staff/protocol/openid-connect/certs")
+	t.Setenv("STAFF_DATABASE_URL", "postgres://worker@db/lottery")
+	cfg, err = config.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := cfg.API.Staff
+	if !s.Enabled || s.Issuer != "https://sso.example.co.ke/realms/lottery-staff" || s.Audience != "lottery-backoffice-api" ||
+		s.JWKSURL == "" || s.DatabaseURL != "postgres://worker@db/lottery" {
+		t.Fatalf("staff: %+v", s)
+	}
+	t.Setenv("STAFF_OIDC_AUDIENCE", "")
+	if _, err := config.Load(); err == nil || !strings.Contains(err.Error(), "STAFF_OIDC_AUDIENCE") {
+		t.Fatalf("partial staff config accepted: %v", err)
+	}
+	t.Setenv("STAFF_OIDC_AUDIENCE", "lottery-backoffice-api")
+	t.Setenv("STAFF_OIDC_JWKS_URL", "http://sso.example.co.ke/certs")
+	if _, err := config.Load(); err == nil {
+		t.Fatal("plain http JWKS accepted")
+	}
+	t.Setenv("STAFF_OIDC_JWKS_URL", "http://keycloak:8080/realms/lottery-staff/protocol/openid-connect/certs")
+	if _, err := config.Load(); err != nil {
+		t.Fatalf("local compose host refused: %v", err)
 	}
 }
