@@ -12,13 +12,22 @@ class MoneyFlow<T> {
   MoneyFlow(this._build);
 
   final SettlementFlow<T> Function(int Function() amount) _build;
-  int amount = 0;
-  late final SettlementFlow<T> flow = _build(() => amount);
+  int _amount = 0;
+  late final SettlementFlow<T> flow = _build(() => _amount);
+
+  /// Sends one request for [amountKes]. The amount is fixed for that request: a retry after a lost answer sends the
+  /// same one, whatever the form shows by then.
+  void submit(int amountKes) {
+    if (flow.state.value.busy) return;
+    _amount = amountKes;
+    flow.submit();
+  }
 }
 
-/// One top-up from request to the server's final answer. Disposed (polling stops) when its screen closes; an
-/// unsettled top-up is found again in the server's list.
-final topUpFlowProvider = Provider.autoDispose<MoneyFlow<TopUp>>((ref) {
+/// One top-up from request to the server's final answer. The flow lives for the session, not the screen: leaving the
+/// screen mid-request keeps the idempotency key, so coming back never starts a second prompt for the same top-up.
+/// It is rebuilt on every session change (app.dart).
+final topUpFlowProvider = Provider<MoneyFlow<TopUp>>((ref) {
   final repo = ref.watch(walletRepositoryProvider);
   final m = MoneyFlow<TopUp>(
     (amount) =>
@@ -40,7 +49,7 @@ final topUpFlowProvider = Provider.autoDispose<MoneyFlow<TopUp>>((ref) {
   return m;
 });
 
-final withdrawFlowProvider = Provider.autoDispose<MoneyFlow<Payout>>((ref) {
+final withdrawFlowProvider = Provider<MoneyFlow<Payout>>((ref) {
   final repo = ref.watch(walletRepositoryProvider);
   final m = MoneyFlow<Payout>(
     (amount) =>

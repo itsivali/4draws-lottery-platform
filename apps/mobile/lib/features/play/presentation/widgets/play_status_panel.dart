@@ -17,12 +17,14 @@ class PlayStatusPanel extends StatelessWidget {
     required this.onDone,
     required this.onCheckAgain,
     required this.onForget,
+    required this.onSetAside,
   });
 
   final PlayFlow flow;
   final VoidCallback onDone;
   final VoidCallback onCheckAgain;
   final VoidCallback onForget;
+  final VoidCallback onSetAside;
 
   @override
   Widget build(BuildContext context) {
@@ -38,12 +40,18 @@ class PlayStatusPanel extends StatelessWidget {
         busy: true,
       ),
       PlayStage.revealed => _Result(key: ValueKey('result-${flow.result!.play.ticketId}'), flow: flow, onDone: onDone),
-      PlayStage.refused => _Refused(key: const ValueKey('refused'), failure: flow.failure!, onDone: onDone),
+      PlayStage.refused => _Refused(
+        key: const ValueKey('refused'),
+        failure: flow.failure!,
+        recovered: flow.recovered,
+        onDone: onDone,
+      ),
       PlayStage.uncertain => _Uncertain(
         key: const ValueKey('uncertain'),
         flow: flow,
         onCheckAgain: onCheckAgain,
         onForget: onForget,
+        onSetAside: onSetAside,
       ),
     };
     return AnimatedSwitcher(
@@ -194,9 +202,12 @@ class _Result extends StatelessWidget {
 }
 
 class _Refused extends StatelessWidget {
-  const _Refused({super.key, required this.failure, required this.onDone});
+  const _Refused({super.key, required this.failure, required this.recovered, required this.onDone});
 
   final ApiFailure failure;
+
+  /// The refusal answered a replay after a lost answer, so the first attempt is not claimed either way.
+  final bool recovered;
   final VoidCallback onDone;
 
   @override
@@ -214,7 +225,12 @@ class _Refused extends StatelessWidget {
       title: d.title,
       children: [
         if (d.detail != null) Text(d.detail!, style: t.bodyMedium),
-        Text('Nothing was charged.', style: t.bodySmall),
+        Text(
+          recovered
+              ? "This answers a check of an earlier play. If that play did go through, it shows in today's plays."
+              : 'Nothing was charged.',
+          style: t.bodySmall,
+        ),
         const SizedBox(height: Space.md),
         Wrap(
           spacing: Space.sm,
@@ -229,11 +245,18 @@ class _Refused extends StatelessWidget {
 }
 
 class _Uncertain extends StatelessWidget {
-  const _Uncertain({super.key, required this.flow, required this.onCheckAgain, required this.onForget});
+  const _Uncertain({
+    super.key,
+    required this.flow,
+    required this.onCheckAgain,
+    required this.onForget,
+    required this.onSetAside,
+  });
 
   final PlayFlow flow;
   final VoidCallback onCheckAgain;
   final VoidCallback onForget;
+  final VoidCallback onSetAside;
 
   @override
   Widget build(BuildContext context) {
@@ -285,9 +308,13 @@ class _Uncertain extends StatelessWidget {
         else ...[
           Text("We couldn't confirm it yet. It is safe to leave and come back.", style: t.bodySmall),
           const SizedBox(height: Space.sm),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: OutlinedButton(onPressed: onCheckAgain, child: const Text('Check again')),
+          Wrap(
+            spacing: Space.sm,
+            runSpacing: Space.sm,
+            children: [
+              OutlinedButton(onPressed: onCheckAgain, child: const Text('Check again')),
+              TextButton(onPressed: onSetAside, child: const Text('Set aside for now')),
+            ],
           ),
         ],
       ],

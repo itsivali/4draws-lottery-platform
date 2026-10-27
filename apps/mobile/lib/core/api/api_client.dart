@@ -78,7 +78,9 @@ class ApiClient {
     String? idempotencyKey,
     String? token,
   ) async {
-    final req = http.Request(method, baseUrl.replace(path: path, queryParameters: query));
+    // the base URL may carry a path (a reverse proxy's prefix): the route is appended to it, never swapped for it
+    final prefix = baseUrl.path.endsWith('/') ? baseUrl.path.substring(0, baseUrl.path.length - 1) : baseUrl.path;
+    final req = http.Request(method, baseUrl.replace(path: '$prefix$path', queryParameters: query));
     req.headers['Accept'] = 'application/json, application/problem+json';
     if (token != null) req.headers['Authorization'] = 'Bearer $token';
     if (idempotencyKey != null) req.headers['Idempotency-Key'] = idempotencyKey;

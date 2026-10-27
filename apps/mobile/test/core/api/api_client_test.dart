@@ -210,4 +210,18 @@ void main() {
     final pattern = RegExp(r'^[A-Za-z0-9._:~=+/-]{1,255}$');
     expect(keys.every(pattern.hasMatch), isTrue);
   });
+
+  test('a base URL with a path prefix keeps it in front of every route', () async {
+    late http.Request seen;
+    final client = ApiClient(
+      baseUrl: Uri.parse('https://example.test/lottery/'),
+      http: MockClient((r) async {
+        seen = r;
+        return json(200, {'ok': true});
+      }),
+      tokens: FakeTokens('tok'),
+    );
+    await client.get('/v1/draws', authenticated: false);
+    expect(seen.url.toString(), 'https://example.test/lottery/v1/draws');
+  });
 }

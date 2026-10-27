@@ -223,7 +223,9 @@ class _PlayPanel extends ConsumerWidget {
     // the result's fresh day is shown once the wheel has stopped, never while it still turns
     final revealed = flow.stage == PlayStage.revealed;
     final day = revealed ? flow.result!.today : t;
-    final balance = flow.result?.balanceKes ?? w.balanceKes;
+    // the wallet is re-read the moment a play is charged, so it is the one balance to show (a top-up made while
+    // the wheel turned is in it; the result's own figure is shown in the result panel)
+    final balance = w.balanceKes;
     final cap = day.plays + day.playsLeft;
     final block = playBlock(
       account: a,
@@ -237,7 +239,13 @@ class _PlayPanel extends ConsumerWidget {
       children: [
         _DayStrip(today: day),
         const SizedBox(height: Space.lg),
-        PlayStatusPanel(flow: flow, onDone: ctl.dismiss, onCheckAgain: ctl.checkAgain, onForget: ctl.forget),
+        PlayStatusPanel(
+          flow: flow,
+          onDone: ctl.dismiss,
+          onCheckAgain: ctl.checkAgain,
+          onForget: ctl.forget,
+          onSetAside: ctl.setAside,
+        ),
         if (flow.stage != PlayStage.idle) const SizedBox(height: Space.lg),
         if (block != null && !flow.busy) ...[
           _BlockNotice(block: block, priceKes: day.priceKes, dailyCap: cap),

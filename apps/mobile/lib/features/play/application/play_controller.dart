@@ -86,7 +86,8 @@ final playConfirmedProvider = Provider<void Function()>(
       ..invalidate(todayProvider)
       ..invalidate(walletStatementProvider)
       ..invalidate(accountProvider)
-      ..invalidate(drawsProvider);
+      ..invalidate(drawsProvider)
+      ..invalidate(myPeriodsProvider); // the first play opens the player's own periods
   },
 );
 
@@ -96,6 +97,7 @@ final playChargedProvider = Provider<void Function()>(
       () => ref.invalidate(walletStatementProvider),
 );
 
+/// Rebuilt on every session change (app.dart), so one player's unfinished play never meets another's token.
 final playControllerProvider = NotifierProvider<PlayController, PlayFlow>(PlayController.new);
 
 class PlayController extends Notifier<PlayFlow> {
@@ -111,8 +113,13 @@ class PlayController extends Notifier<PlayFlow> {
   /// An unfinished play found at launch is checked by itself only if it is this recent.
   static const autoRecoverWindow = Duration(minutes: 15);
 
+  /// A landing that never reports the wheel at rest (the tab was left mid-spin) is revealed after this.
+  static const landingTimeout = Duration(seconds: 12);
+
   Timer? _timer;
+  Timer? _landing;
   int _checks = 0;
+  bool _recovering = false;
 
   PlayRepository get _repo => ref.read(playRepositoryProvider);
   PendingPlayStore get _store => ref.read(pendingPlayStoreProvider);
@@ -120,31 +127,46 @@ class PlayController extends Notifier<PlayFlow> {
 
   @override
   PlayFlow build() {
-    ref.onDispose(() => _timer?.cancel());
+    ref.onDispose(() {
+      _timer?.cancel();
+      _landing?.cancel();
+    });
+    // recovery needs the player's id: run it now, and again whenever the id becomes known (it was offline at launch)
+    ref.listen(currentUserIdProvider, (prev, next) {
+      if (next.hasValue && prev?.value != next.value) scheduleMicrotask(_recover);
+    });
     scheduleMicrotask(_recover);
     return const PlayFlow();
   }
 
   Future<void> _recover() async {
-    final p = await _store.read();
-    if (!ref.mounted || p == null || state.stage != PlayStage.idle) return;
-    final String me;
+    if (_recovering || state.stage != PlayStage.idle) return;
+    _recovering = true;
     try {
-      me = await ref.read(currentUserIdProvider.future);
+      final p = await _store.read();
+      if (!ref.mounted || p == null || state.stage != PlayStage.idle) return;
+      final String me;
+      try {
+        me = await ref.read(currentUserIdProvider.future);
+      } on Object {
+        return; // not known yet (offline, signed out): the listener above tries again when it is
+      }
+      if (!ref.mounted || state.stage != PlayStage.idle) return;
+      if (p.owner != me) {
+        await _clearStore(); // someone else's: they will see it in their own plays when they sign in
+        return;
+      }
+      final age = _now().difference(p.startedAt);
+      if (!age.isNegative && age <= autoRecoverWindow) {
+        state = PlayFlow(stage: PlayStage.uncertain, key: p.key, checking: true, recovered: true);
+        await _send(p.key);
+      } else {
+        state = PlayFlow(stage: PlayStage.uncertain, key: p.key, needsConsent: true, recovered: true);
+      }
     } on Object {
-      return; // not known yet (offline, signed out): try again on the next launch
-    }
-    if (!ref.mounted || state.stage != PlayStage.idle) return;
-    if (p.owner != me) {
-      await _store.clear(); // someone else's: they will see it in their own plays when they sign in
-      return;
-    }
-    final age = _now().difference(p.startedAt);
-    if (!age.isNegative && age <= autoRecoverWindow) {
-      state = PlayFlow(stage: PlayStage.uncertain, key: p.key, checking: true, recovered: true);
-      await _send(p.key);
-    } else {
-      state = PlayFlow(stage: PlayStage.uncertain, key: p.key, needsConsent: true, recovered: true);
+      // the store could not be read: nothing to recover from here; the next launch asks again
+    } finally {
+      _recovering = false;
     }
   }
 
@@ -160,16 +182,38 @@ class PlayController extends Notifier<PlayFlow> {
     } on ApiFailure catch (f) {
       if (ref.mounted && state.key == key) state = PlayFlow(stage: PlayStage.refused, key: key, failure: f);
       return;
+    } on Object catch (e) {
+      if (ref.mounted && state.key == key) {
+        state = PlayFlow(
+          stage: PlayStage.refused,
+          key: key,
+          failure: NetworkFailure(cause: e),
+        );
+      }
+      return;
     }
     if (!ref.mounted || state.key != key) return;
-    // kept before sending, so a crash between the two can never lose track of a play that may have been made
-    await _store.write(PendingPlay(key: key, owner: owner, startedAt: _now()));
+    // kept before sending, so a crash between the two can never lose track of a play that may have been made.
+    // If it cannot be kept, nothing is sent: an untracked play is worse than no play.
+    try {
+      await _store.write(PendingPlay(key: key, owner: owner, startedAt: _now()));
+    } on Object catch (e) {
+      if (ref.mounted && state.key == key) {
+        state = PlayFlow(
+          stage: PlayStage.refused,
+          key: key,
+          failure: NetworkFailure(cause: e),
+        );
+      }
+      return;
+    }
     await _send(key);
   }
 
   /// The wheel has come to rest on the result.
   void landed() {
     if (state.stage == PlayStage.landing) {
+      _landing?.cancel();
       state = PlayFlow(stage: PlayStage.revealed, key: state.key, result: state.result, recovered: state.recovered);
       ref.read(playConfirmedProvider)();
     }
@@ -185,12 +229,24 @@ class PlayController extends Notifier<PlayFlow> {
     await _send(key);
   }
 
+  /// Sets an unresolved play aside once automatic checks are exhausted: it stays tracked and is asked about
+  /// (check or forget) instead of blocking the screen until the app restarts.
+  void setAside() {
+    if (state.stage != PlayStage.uncertain || state.checking || !state.autoChecksExhausted) return;
+    _timer?.cancel();
+    state = PlayFlow(stage: PlayStage.uncertain, key: state.key, needsConsent: true, recovered: true);
+  }
+
   /// Stops tracking an old unfinished play without sending it. If it did happen it shows in today's plays.
   Future<void> forget() async {
     if (state.stage != PlayStage.uncertain || !state.needsConsent) return;
     state = const PlayFlow();
     ref.read(playConfirmedProvider)();
-    await _store.clear(); // last: if this is interrupted, the next launch simply asks again
+    try {
+      await _store.clear(); // last: if this is interrupted, the next launch simply asks again
+    } on Object {
+      // the next launch asks again
+    }
   }
 
   void dismiss() {
@@ -201,6 +257,7 @@ class PlayController extends Notifier<PlayFlow> {
   Future<void> debugDeliver(PlayResult r) => _accept(r);
 
   Future<void> _send(String key) async {
+    final reconciling = state.stage == PlayStage.uncertain;
     try {
       final r = await _repo.play(idempotencyKey: key);
       if (!ref.mounted || state.key != key) return;
@@ -209,10 +266,21 @@ class PlayController extends Notifier<PlayFlow> {
       if (!ref.mounted || state.key != key) return;
       if (f.outcomeUncertain) {
         _uncertain(key, f);
+      } else if (f is SessionEndedFailure) {
+        // the play stays tracked: its owner can still check it after signing in again
+        state = PlayFlow(stage: PlayStage.refused, key: key, failure: f, recovered: reconciling);
+      } else if (reconciling) {
+        // a refusal of a replay says nothing about the first attempt: the play is not claimed either way
+        state = PlayFlow(stage: PlayStage.refused, key: key, failure: f, recovered: true);
+        await _clearStore();
       } else {
-        await _store.clear();
+        await _clearStore();
         state = PlayFlow(stage: PlayStage.refused, key: key, failure: f);
       }
+    } on Object catch (e) {
+      // anything the client did not expect (a parser, a platform channel): never a stuck spinner
+      if (!ref.mounted || state.key != key) return;
+      _uncertain(key, NetworkFailure(cause: e));
     }
   }
 
@@ -220,9 +288,22 @@ class PlayController extends Notifier<PlayFlow> {
     final shown = state.result;
     if (shown != null && shown.play.ticketId == r.play.ticketId) return; // the same answer again
     final recovered = state.recovered || state.stage == PlayStage.uncertain;
-    state = PlayFlow(stage: PlayStage.landing, key: state.key, result: r, recovered: recovered);
-    await _store.clear();
+    final key = state.key;
+    state = PlayFlow(stage: PlayStage.landing, key: key, result: r, recovered: recovered);
+    _landing?.cancel();
+    _landing = Timer(landingTimeout, () {
+      if (ref.mounted && state.stage == PlayStage.landing && state.key == key) landed();
+    });
+    await _clearStore();
     ref.read(playChargedProvider)();
+  }
+
+  Future<void> _clearStore() async {
+    try {
+      await _store.clear();
+    } on Object {
+      // a stale record is harmless: recovery finds the play already answered and shows it
+    }
   }
 
   void _uncertain(String key, ApiFailure f) {

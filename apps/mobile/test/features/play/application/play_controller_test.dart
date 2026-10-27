@@ -47,6 +47,18 @@ PlayResult result({
 const timeout = NetworkFailure(timedOut: true);
 const dailyLimit = ProblemFailure(status: 409, slug: 'daily-limit', title: 'No plays left today');
 
+/// A pending-play store whose disk is gone.
+class _BrokenStore implements PendingPlayStore {
+  @override
+  Future<PendingPlay?> read() async => null;
+
+  @override
+  Future<void> write(PendingPlay p) async => throw StateError('disk');
+
+  @override
+  Future<void> clear() async {}
+}
+
 void main() {
   late ScriptedPlays server;
   late MemoryPendingPlayStore pending;
@@ -341,6 +353,84 @@ void main() {
       c.read(playControllerProvider.notifier).start();
       async.flushMicrotasks();
       expect(pending.value!.owner, 'user-1');
+    });
+  });
+
+  test('a store that cannot keep the pending play refuses the play instead of leaving it submitting', () {
+    fakeAsync((async) {
+      final c = ProviderContainer.test(
+        overrides: [
+          playRepositoryProvider.overrideWithValue(server),
+          pendingPlayStoreProvider.overrideWithValue(_BrokenStore()),
+          playClockProvider.overrideWithValue(() => now),
+          playConfirmedProvider.overrideWithValue(() => confirmations++),
+          playChargedProvider.overrideWithValue(() => charges++),
+          currentUserIdProvider.overrideWith((ref) async => currentUser),
+        ],
+        retry: (_, _) => null,
+      );
+      c.listen(playControllerProvider, (_, _) {});
+      final ctl = c.read(playControllerProvider.notifier);
+      server.answer(result());
+      ctl.start();
+      async.flushMicrotasks();
+      final s = c.read(playControllerProvider);
+      expect(s.stage, PlayStage.refused);
+      expect(s.failure, isA<NetworkFailure>());
+      expect(server.keys, isEmpty, reason: 'nothing is sent that could not be tracked');
+      expect(s.busy, isFalse);
+    });
+  });
+
+  test('an unexpected client error while sending is a lost answer, never a stuck spinner', () {
+    fakeAsync((async) {
+      final c = container();
+      final ctl = c.read(playControllerProvider.notifier);
+      server.answers.add(() => throw StateError('parser'));
+      server.answer(result());
+      ctl.start();
+      async.flushMicrotasks();
+      expect(c.read(playControllerProvider).stage, PlayStage.uncertain);
+      async.elapse(const Duration(seconds: 2));
+      expect(c.read(playControllerProvider).stage, PlayStage.landing);
+      expect(server.keys.toSet().length, 1, reason: 'the check used the same key');
+    });
+  });
+
+  test('an unresolved play can be set aside once automatic checks are exhausted, and asked about later', () {
+    fakeAsync((async) {
+      final c = container();
+      final ctl = c.read(playControllerProvider.notifier);
+      for (var i = 0; i <= PlayController.reconcileDelays.length; i++) {
+        server.fail(timeout);
+      }
+      ctl.start();
+      async.flushMicrotasks();
+      async.elapse(const Duration(minutes: 1));
+      expect(c.read(playControllerProvider).autoChecksExhausted, isTrue);
+      ctl.setAside();
+      final s = c.read(playControllerProvider);
+      expect(s.stage, PlayStage.uncertain);
+      expect(s.needsConsent, isTrue);
+      expect(pending.value, isNotNull, reason: 'the play stays tracked');
+      server.answer(result());
+      ctl.checkAgain();
+      async.flushMicrotasks();
+      expect(c.read(playControllerProvider).stage, PlayStage.landing);
+    });
+  });
+
+  test('a landing that is never reported settled is revealed after a timeout', () {
+    fakeAsync((async) {
+      final c = container();
+      final ctl = c.read(playControllerProvider.notifier);
+      server.answer(result());
+      ctl.start();
+      async.flushMicrotasks();
+      expect(c.read(playControllerProvider).stage, PlayStage.landing);
+      async.elapse(PlayController.landingTimeout + const Duration(seconds: 1));
+      expect(c.read(playControllerProvider).stage, PlayStage.revealed);
+      expect(confirmations, 1);
     });
   });
 }

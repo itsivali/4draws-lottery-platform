@@ -15,7 +15,7 @@ enum SettlementStage {
   /// The request's answer was lost; it is retried with the same key (the API replays, never repeats).
   sendUncertain,
 
-  /// The API refused the request: nothing was started.
+  /// The API refused the request: nothing was started (unless [SettlementState.retried], see there).
   refused,
 
   /// Accepted and waiting for the server to confirm the money moved.
@@ -30,12 +30,16 @@ enum SettlementStage {
 
 @immutable
 class SettlementState<T> {
-  const SettlementState(this.stage, {this.item, this.failure, this.checking = false});
+  const SettlementState(this.stage, {this.item, this.failure, this.checking = false, this.retried = false});
 
   final SettlementStage stage;
   final T? item;
   final ApiFailure? failure;
   final bool checking;
+
+  /// The refusal came to a replay after a lost answer: the first attempt may still have started the request, so
+  /// "nothing was started" cannot be claimed.
+  final bool retried;
 
   bool get busy =>
       stage == SettlementStage.sending || stage == SettlementStage.waiting || stage == SettlementStage.sendUncertain;
@@ -69,8 +73,11 @@ class SettlementFlow<T> {
   final bool Function(T) settled;
   final Duration maxWait;
 
-  /// Called once when the item reaches a final state.
+  /// Called once per item when it reaches a final state.
   void Function(T item)? onSettled;
+
+  /// Called when the session ended mid-flow: polling stops; the app signs the player out.
+  void Function()? onSessionEnded;
 
   final state = ValueNotifier(SettlementState<T>(SettlementStage.ready));
 
@@ -80,7 +87,7 @@ class SettlementFlow<T> {
   int _polls = 0;
   Duration _waited = Duration.zero;
   bool _disposed = false;
-  bool _reportedSettled = false;
+  String? _reportedSettled;
 
   /// Sends the request once. Ignored while a request is unresolved or already followed.
   void submit() {
@@ -89,6 +96,17 @@ class SettlementFlow<T> {
     _sendTries = 0;
     _set(SettlementState(SettlementStage.sending));
     unawaited(_send());
+  }
+
+  /// Back to [SettlementStage.ready] for a new request, once the last one is settled or set aside. Ignored while a
+  /// request is unresolved: its key must survive until the server has answered.
+  void reset() {
+    final s = state.value.stage;
+    if (s != SettlementStage.settled && s != SettlementStage.stillWaiting && s != SettlementStage.refused) return;
+    _timer?.cancel();
+    _key = null;
+    _reportedSettled = null;
+    _set(SettlementState(SettlementStage.ready));
   }
 
   /// Follows an item already sent (found pending in the server's list).
@@ -113,6 +131,13 @@ class SettlementFlow<T> {
     unawaited(_poll(idOf(item), manual: true));
   }
 
+  /// The app is back in the foreground: a paused timer is not waited for.
+  void resume() {
+    final s = state.value.stage;
+    if (s == SettlementStage.waiting || s == SettlementStage.stillWaiting) refresh();
+    if (s == SettlementStage.sendUncertain && !state.value.checking) checkSend();
+  }
+
   Future<void> _send() async {
     final key = _key!;
     try {
@@ -121,8 +146,13 @@ class SettlementFlow<T> {
       _accepted(item);
     } on ApiFailure catch (f) {
       if (_disposed || key != _key) return;
+      if (f is SessionEndedFailure) {
+        _set(SettlementState(SettlementStage.refused, failure: f, retried: _sendTries > 0));
+        onSessionEnded?.call();
+        return;
+      }
       if (!f.outcomeUncertain) {
-        _set(SettlementState(SettlementStage.refused, failure: f));
+        _set(SettlementState(SettlementStage.refused, failure: f, retried: _sendTries > 0));
         return;
       }
       if (_sendTries >= sendRetries.length) {
@@ -131,6 +161,9 @@ class SettlementFlow<T> {
       }
       _set(SettlementState(SettlementStage.sendUncertain, failure: f, checking: true));
       _timer = Timer(sendRetries[_sendTries++], () => unawaited(_send()));
+    } on Object catch (e) {
+      if (_disposed || key != _key) return;
+      _set(SettlementState(SettlementStage.sendUncertain, failure: NetworkFailure(cause: e)));
     }
   }
 
@@ -170,8 +203,13 @@ class SettlementFlow<T> {
         _waited = Duration.zero;
       }
       _set(SettlementState(SettlementStage.waiting, item: item));
-    } on ApiFailure {
+    } on ApiFailure catch (f) {
       if (_disposed) return;
+      if (f is SessionEndedFailure) {
+        _set(SettlementState(SettlementStage.stillWaiting, item: state.value.item));
+        onSessionEnded?.call();
+        return; // no more polling: the next session finds the item in the server's list
+      }
       _set(
         SettlementState(
           state.value.stage == SettlementStage.stillWaiting && !manual
@@ -180,6 +218,9 @@ class SettlementFlow<T> {
           item: state.value.item,
         ),
       );
+    } on Object {
+      if (_disposed) return;
+      _set(SettlementState(SettlementStage.waiting, item: state.value.item));
     }
     _schedule(id);
   }
@@ -187,8 +228,9 @@ class SettlementFlow<T> {
   void _settle(T item) {
     _timer?.cancel();
     _set(SettlementState(SettlementStage.settled, item: item));
-    if (_reportedSettled) return;
-    _reportedSettled = true;
+    final id = idOf(item);
+    if (_reportedSettled == id) return;
+    _reportedSettled = id;
     onSettled?.call(item);
   }
 

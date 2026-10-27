@@ -11,6 +11,7 @@ import '../../../core/widgets/busy_button.dart';
 import '../../../core/widgets/confirm_sheet.dart';
 import '../../../core/widgets/content_frame.dart';
 import '../../../core/widgets/inline_banner.dart';
+import '../../../core/widgets/skeleton.dart';
 import '../../../core/widgets/status_pill.dart';
 import '../../account/application/account_providers.dart';
 import '../../account/domain/account_models.dart';
@@ -55,14 +56,14 @@ class _WithdrawScreenState extends ConsumerState<WithdrawScreen> {
       confirmLabel: 'Withdraw ${formatKes(amount)}',
     );
     if (!ok || !mounted) return;
-    m.amount = amount;
-    m.flow.submit();
+    m.submit(amount);
   }
 
   @override
   Widget build(BuildContext context) {
     final account = ref.watch(accountProvider);
     final wallet = ref.watch(walletStatementProvider);
+    final payouts = ref.watch(payoutsProvider);
     final m = ref.watch(withdrawFlowProvider);
     final t = Theme.of(context).textTheme;
     final c = context.colors;
@@ -105,6 +106,21 @@ class _WithdrawScreenState extends ConsumerState<WithdrawScreen> {
               return ValueListenableBuilder<SettlementState<Payout>>(
                 valueListenable: m.flow.state,
                 builder: (context, s, _) {
+                  // one withdrawal at a time: a processing one is followed, not joined by a second
+                  if (s.stage == SettlementStage.ready && payouts.isLoading && !payouts.hasValue) {
+                    return const SkeletonLines();
+                  }
+                  final processing = payouts.value?.where((p) => p.status == PayoutStatus.processing).firstOrNull;
+                  if (s.stage == SettlementStage.ready && processing != null) {
+                    return InlineBanner(
+                      tone: StatusTone.pending,
+                      title: 'A withdrawal is still processing',
+                      message:
+                          'Your withdrawal of ${formatKes(processing.netKes)} has not been confirmed yet. A new one can start once it is settled.',
+                      actionLabel: 'Follow its status',
+                      onAction: () => m.flow.track(processing),
+                    );
+                  }
                   final started = s.stage != SettlementStage.ready && s.stage != SettlementStage.refused;
                   return Form(
                     key: _form,
@@ -172,7 +188,10 @@ class _WithdrawScreenState extends ConsumerState<WithdrawScreen> {
                                 ),
                                 PayoutStatus.processing => (StatusTone.pending, 'Processing', ''),
                               },
-                              onDone: () => context.go('/wallet'),
+                              onDone: () {
+                                m.flow.reset();
+                                context.go('/wallet');
+                              },
                             ),
                           ),
                         ],

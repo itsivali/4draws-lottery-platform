@@ -32,6 +32,7 @@ class _KycScreenState extends ConsumerState<KycScreen> {
   var _busy = false;
   String? _error;
   String? _key;
+  String? _sentBody; // the key is reused only for the same details; edited details are a new submission
 
   @override
   void dispose() {
@@ -61,6 +62,9 @@ class _KycScreenState extends ConsumerState<KycScreen> {
       return;
     }
     setState(() => _busy = true);
+    final body = '${_id.text.trim()}|${_name.text.trim()}|${_dob!.toIso8601String()}';
+    if (_sentBody != body) _key = null;
+    _sentBody = body;
     _key ??= newIdempotencyKey(); // the same key on a retry after a lost answer
     try {
       await ref

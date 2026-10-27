@@ -189,4 +189,58 @@ void main() {
       expect(fetches, n);
     });
   });
+
+  test('after a settled request the flow resets for a new one, whose settlement is reported too', () {
+    fakeAsync((async) {
+      final settledIds = <String>[];
+      final f = flow()..onSettled = (t) => settledIds.add(t.id);
+      sendAnswers.add(topUp('credited', confirmed: 500));
+      f.submit();
+      async.flushMicrotasks();
+      expect(f.state.value.stage, SettlementStage.settled);
+      f.reset();
+      expect(f.state.value.stage, SettlementStage.ready);
+      sendAnswers.add(topUp('credited', confirmed: 200));
+      f.submit();
+      async.flushMicrotasks();
+      expect(f.state.value.stage, SettlementStage.settled);
+      expect(settledIds, hasLength(2));
+      f.dispose();
+    });
+  });
+
+  test('reset is refused while a request is unresolved: its key must outlive the screen', () {
+    fakeAsync((async) {
+      final f = flow();
+      sendAnswers.addAll(List.filled(4, const NetworkFailure(timedOut: true)));
+      f.submit();
+      async.flushMicrotasks();
+      async.elapse(const Duration(seconds: 15));
+      expect(f.state.value.stage, SettlementStage.sendUncertain);
+      f.reset();
+      expect(f.state.value.stage, SettlementStage.sendUncertain);
+      expect(sendKeys.toSet(), hasLength(1));
+      f.dispose();
+    });
+  });
+
+  test('a refusal that answers a replay does not claim nothing was started', () {
+    fakeAsync((async) {
+      final f = flow();
+      sendAnswers.addAll([
+        const NetworkFailure(timedOut: true),
+        const ProblemFailure(status: 409, slug: 'pending-top-up', title: 'A top-up is pending'),
+      ]);
+      f.submit();
+      async.flushMicrotasks();
+      async.elapse(const Duration(seconds: 2));
+      expect(f.state.value.stage, SettlementStage.refused);
+      expect(f.state.value.retried, isTrue);
+      sendAnswers.add(const ProblemFailure(status: 400, slug: 'invalid-amount', title: 'Invalid amount'));
+      f.submit();
+      async.flushMicrotasks();
+      expect(f.state.value.retried, isFalse);
+      f.dispose();
+    });
+  });
 }

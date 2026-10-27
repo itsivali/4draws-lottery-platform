@@ -51,7 +51,18 @@ class _FairnessScreenState extends ConsumerState<FairnessScreen> {
       }
       ref.invalidate(fairnessProvider);
     } on ApiFailure catch (f) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(describeFailure(f).title)));
+      if (mounted) {
+        final d = describeFailure(f);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              f.outcomeUncertain
+                  ? 'Not confirmed: ${d.title}. Pull down to see whether the seed was revealed.'
+                  : d.title,
+            ),
+          ),
+        );
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }

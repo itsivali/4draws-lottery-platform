@@ -19,8 +19,10 @@ WalletStatement wallet({int balance = 850, int debt = 0}) =>
     WalletStatement.fromJson(JsonObject(walletJson(balance: balance, debt: debt)));
 
 void main() {
+  // the fixtures' restriction ends on 2026-10-27; the test's 'now' is the day before
+  final now = DateTime.utc(2026, 10, 26);
   PlayBlock? block({Account? a, Today? t, WalletStatement? w}) =>
-      playBlock(account: a ?? account(), today: t ?? today(), wallet: w ?? wallet());
+      playBlock(account: a ?? account(), today: t ?? today(), wallet: w ?? wallet(), now: now);
 
   test('an eligible player with plays left and enough balance may play', () {
     expect(block(), isNull);
@@ -66,5 +68,11 @@ void main() {
     final t = Today.fromJson(JsonObject({...todayJson(), 'price_kes': 150}));
     expect(playBlock(account: account(), today: t, wallet: wallet(balance: 120))!.reason, PlayBlockReason.lowBalance);
     expect(playBlock(account: account(), today: t, wallet: wallet(balance: 150)), isNull);
+  });
+
+  test('a break whose end has passed no longer blocks, even before the account is re-read', () {
+    final paused = account(restriction: {'kind': 'timeout', 'until': '2026-10-27T09:00:00Z'});
+    expect(playBlock(account: paused, today: today(), wallet: wallet(), now: DateTime.utc(2026, 10, 28)), isNull);
+    expect(playBlock(account: paused, today: today(), wallet: wallet(), now: now)!.reason, PlayBlockReason.timedOut);
   });
 }

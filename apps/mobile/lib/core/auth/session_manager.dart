@@ -66,7 +66,15 @@ class SessionManager implements AccessTokenSource {
   Future<String?>? _refreshing;
 
   Future<void> restore() async {
-    final stored = await _store.read();
+    final String? stored;
+    try {
+      stored = await _store.read();
+    } on Object {
+      // the secure store could not be read (a platform fault): the app must not hang on "starting"; signing in
+      // again writes a fresh token
+      status.value = SessionStatus.signedOut;
+      return;
+    }
     if (stored == null) {
       status.value = SessionStatus.signedOut;
       return;

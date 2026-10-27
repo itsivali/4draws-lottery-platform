@@ -11,6 +11,7 @@ import '../../../core/widgets/busy_button.dart';
 import '../../../core/widgets/confirm_sheet.dart';
 import '../../../core/widgets/content_frame.dart';
 import '../../../core/widgets/inline_banner.dart';
+import '../../../core/widgets/skeleton.dart';
 import '../../../core/widgets/status_pill.dart';
 import '../../account/application/account_providers.dart';
 import '../../account/domain/account_models.dart';
@@ -51,8 +52,7 @@ class _TopUpScreenState extends ConsumerState<TopUpScreen> {
       confirmLabel: 'Send M-Pesa prompt',
     );
     if (!ok || !mounted) return;
-    m.amount = amount;
-    m.flow.submit();
+    m.submit(amount);
   }
 
   @override
@@ -95,6 +95,10 @@ class _TopUpScreenState extends ConsumerState<TopUpScreen> {
             return ValueListenableBuilder<SettlementState<TopUp>>(
               valueListenable: m.flow.state,
               builder: (context, s, _) {
+                // the server's list decides whether a top-up may start: not known yet, not started yet
+                if (s.stage == SettlementStage.ready && topUps.isLoading && !topUps.hasValue) {
+                  return const SkeletonLines();
+                }
                 final pendingOnServer = topUps.value?.where((x) => x.status == TopUpStatus.pending).firstOrNull;
                 if (s.stage == SettlementStage.ready && pendingOnServer != null) {
                   return _PendingElsewhere(topUp: pendingOnServer, onTrack: () => m.flow.track(pendingOnServer));
@@ -171,7 +175,10 @@ class _TopUpScreenState extends ConsumerState<TopUpScreen> {
                               ),
                               TopUpStatus.pending => (StatusTone.pending, 'Pending', ''),
                             },
-                            onDone: () => context.go('/wallet'),
+                            onDone: () {
+                              m.flow.reset();
+                              context.go('/wallet');
+                            },
                           ),
                         ),
                       ],

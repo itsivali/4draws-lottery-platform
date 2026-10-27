@@ -7,6 +7,7 @@ import '../features/draws/application/draws_providers.dart';
 import '../features/fairness/application/fairness_providers.dart';
 import '../features/play/application/play_controller.dart';
 import '../features/play/application/play_providers.dart';
+import '../features/wallet/application/money_flows.dart';
 import '../features/wallet/application/wallet_providers.dart';
 import 'providers.dart';
 import 'router.dart';
@@ -19,7 +20,7 @@ class LotteryApp extends ConsumerStatefulWidget {
   ConsumerState<LotteryApp> createState() => _LotteryAppState();
 }
 
-class _LotteryAppState extends ConsumerState<LotteryApp> {
+class _LotteryAppState extends ConsumerState<LotteryApp> with WidgetsBindingObserver {
   late final SessionManager _session = ref.read(sessionManagerProvider);
   SessionStatus? _last;
 
@@ -27,9 +28,10 @@ class _LotteryAppState extends ConsumerState<LotteryApp> {
   void initState() {
     super.initState();
     _session.status.addListener(_onSession);
+    WidgetsBinding.instance.addObserver(this);
   }
 
-  /// A new session never sees the previous one's data.
+  /// A new session never sees the previous one's data, nor its unfinished play or money request.
   void _onSession() {
     final s = _session.status.value;
     if (s == _last) return;
@@ -44,12 +46,34 @@ class _LotteryAppState extends ConsumerState<LotteryApp> {
         ..invalidate(payoutsProvider)
         ..invalidate(limitsProvider)
         ..invalidate(fairnessProvider)
-        ..invalidate(myEntriesProvider);
+        ..invalidate(myEntriesProvider)
+        ..invalidate(myPeriodsProvider)
+        ..invalidate(drawsProvider)
+        ..invalidate(drawProvider)
+        ..invalidate(playControllerProvider)
+        ..invalidate(topUpFlowProvider)
+        ..invalidate(withdrawFlowProvider);
     }
+  }
+
+  /// Back from the background (an M-Pesa prompt, a phone call): what the server may have settled meanwhile is
+  /// re-read, and a money request still being followed asks again now rather than when its paused timer fires.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed || _session.status.value != SessionStatus.signedIn) return;
+    ref
+      ..invalidate(walletStatementProvider)
+      ..invalidate(topUpsProvider)
+      ..invalidate(payoutsProvider)
+      ..invalidate(accountProvider)
+      ..invalidate(todayProvider);
+    if (ref.exists(topUpFlowProvider)) ref.read(topUpFlowProvider).flow.resume();
+    if (ref.exists(withdrawFlowProvider)) ref.read(withdrawFlowProvider).flow.resume();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _session.status.removeListener(_onSession);
     super.dispose();
   }

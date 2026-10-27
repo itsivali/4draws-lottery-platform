@@ -47,7 +47,15 @@ class _ResponsibleGamingScreenState extends ConsumerState<ResponsibleGamingScree
     } on ApiFailure catch (f) {
       if (mounted) {
         final d = describeFailure(f);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Not saved: ${d.title}')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              f.outcomeUncertain
+                  ? 'Not confirmed: ${d.title}. Pull down to see whether it was saved.'
+                  : 'Not saved: ${d.title}',
+            ),
+          ),
+        );
       }
     } finally {
       if (mounted) setState(() => _busy = null);

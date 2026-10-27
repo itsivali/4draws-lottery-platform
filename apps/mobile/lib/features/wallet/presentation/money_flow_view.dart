@@ -80,7 +80,12 @@ class _SettlementStatusViewState<T> extends State<SettlementStatusView<T>> {
             label: describeFailure(s.failure!).title,
             children: [
               if (describeFailure(s.failure!).detail case final d?) Text(d, style: t.bodyMedium),
-              Text('Nothing was started.', style: t.bodySmall),
+              Text(
+                s.retried
+                    ? 'The first attempt may still have started it: check your wallet before trying again.'
+                    : 'Nothing was started.',
+                style: t.bodySmall,
+              ),
             ],
           ),
           SettlementStage.waiting || SettlementStage.stillWaiting => _Stage(
