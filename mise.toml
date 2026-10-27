@@ -2,6 +2,7 @@
 go = "1.27.3"
 node = "22.23.3"
 flutter = "3.47.7"
+java = "temurin-17.0.21+9"   # Android builds (Gradle); matches CI
 sqlc = "1.31.1"
 golangci-lint = "2.15.0"
 oapi-codegen = "2.8.0"
