@@ -7,7 +7,9 @@ import { loadConfig, type Config } from './config'
 import { SessionContext, type Session } from './context'
 import { completeDevPopup } from './providers'
 import { SignIn, type StaffSession } from './SignIn'
-import './styles/app.css'
+import { applyTheme, readTheme } from './theme'
+import { TooltipProvider } from '@/components/ui/tooltip'
+import './index.css'
 
 // The session lives in this tab's session storage only: closing the tab signs out. The token is the API's own
 // back-office session (ADR 0018); the Google or Apple ID token is used once, to open it.
@@ -61,6 +63,7 @@ function Root({ config }: { config: Config }) {
   )
 }
 
+applyTheme(readTheme())
 const config = loadConfig()
 const root = document.getElementById('root')
 if (config?.dev && location.pathname === '/callback') {
@@ -68,11 +71,15 @@ if (config?.dev && location.pathname === '/callback') {
 } else if (root) {
   createRoot(root).render(
     <StrictMode>
-      {config ? (
-        <BrowserRouter><Root config={config} /></BrowserRouter>
-      ) : (
-        <div className="center"><p role="alert">This build has no server or sign-in configured (VITE_API_BASE_URL, and VITE_GOOGLE_CLIENT_ID or VITE_APPLE_CLIENT_ID).</p></div>
-      )}
+      <TooltipProvider>
+        {config ? (
+          <BrowserRouter><Root config={config} /></BrowserRouter>
+        ) : (
+          <div className="grid min-h-svh place-items-center p-6 text-center">
+            <p role="alert" className="max-w-md text-muted-foreground">This build has no server or sign-in configured (VITE_API_BASE_URL, and VITE_GOOGLE_CLIENT_ID or VITE_APPLE_CLIENT_ID).</p>
+          </div>
+        )}
+      </TooltipProvider>
     </StrictMode>,
   )
 }

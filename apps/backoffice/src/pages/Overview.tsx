@@ -1,32 +1,80 @@
+import { ArrowRight, Banknote, Bell, IdCard, Landmark, Receipt, Ticket, UserX, Users, Wallet, type LucideIcon } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useSession } from '../context'
 import { ReconcileCard } from '../components/Reconcile'
-import { PageHeader } from '../components/ui'
+import { PageHeader, SectionTitle } from '../components/ui'
 import { eat } from '../format'
 import { submissions, useReviewQueue } from '../reviewQueue'
 import { can, roleLabels, visibleSections } from '../roles'
+import { Badge } from '@/components/ui/badge'
+import { Card, CardContent } from '@/components/ui/card'
+
+const icons: Record<string, LucideIcon> = {
+  '/finance': Landmark, '/kyc': IdCard, '/draws': Ticket, '/payouts': Banknote, '/payments': Wallet, '/tax': Receipt, '/alerts': Bell, '/closures': UserX, '/staff': Users,
+}
+
+const blurbs: Record<string, string> = {
+  '/finance': 'Money in and out, what the platform earned and owes.',
+  '/kyc': 'Compare submissions with the national ID and decide.',
+  '/draws': 'Sign frozen draws and approve conducted ones.',
+  '/payouts': 'Approve large withdrawals; settle unclear ones.',
+  '/payments': 'Reconciliations, reversals and suspense.',
+  '/tax': 'Prepare KRA batches and record remittances.',
+  '/alerts': 'Acknowledge what went wrong and lift freezes.',
+  '/closures': 'Close accounts whose holders asked.',
+  '/staff': 'Invite members and set their roles.',
+}
 
 export function OverviewPage() {
   const { me } = useSession()
   const { queue } = useReviewQueue()
+  const sections = visibleSections(me.roles)
   return (
     <section>
       <PageHeader title={`Signed in as ${me.name || me.email}`}>
-        Your roles: {me.roles.map((r) => roleLabels[r]).join(', ')}. Every action you take is recorded in the audit log under your name.
+        Every action you take is recorded in the audit log under your name.
       </PageHeader>
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="mr-1 text-sm text-muted-foreground">Your roles:</span>
+        {me.roles.map((r) => <Badge key={r} variant="secondary" className="rounded-full px-2.5">{roleLabels[r]}</Badge>)}
+      </div>
       {queue && queue.waiting > 0 ? (
-        <p className="card">
-          <Link to="/kyc">{submissions(queue.waiting)}</Link>
-          {queue.oldest_submitted_at ? <span className="muted"> · oldest since {eat(queue.oldest_submitted_at)}</span> : null}
-        </p>
+        <Card className="mt-6 border-pending/40 bg-pending/5 shadow-card">
+          <CardContent className="flex flex-wrap items-center gap-3">
+            <IdCard aria-hidden="true" className="size-5 text-pending" />
+            <Link to="/kyc" className="font-medium underline-offset-4 hover:underline">{submissions(queue.waiting)}</Link>
+            {queue.oldest_submitted_at ? <span className="text-sm text-muted-foreground">· oldest since {eat(queue.oldest_submitted_at)}</span> : null}
+          </CardContent>
+        </Card>
       ) : null}
-      <ul className="cards">
-        {visibleSections(me.roles).map((s) => (
-          <li key={s.path} className="card"><Link to={s.path}>{s.label}</Link></li>
-        ))}
+      <SectionTitle>Sections</SectionTitle>
+      <ul className="grid list-none gap-3 p-0 sm:grid-cols-2 xl:grid-cols-3">
+        {sections.map((s) => {
+          const Icon = icons[s.path] ?? Landmark
+          return (
+            <li key={s.path}>
+              <Link to={s.path} className="group block h-full rounded-xl border bg-card p-4 shadow-card outline-none transition-[transform,box-shadow] hover:-translate-y-0.5 hover:shadow-float focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none">
+                <div className="flex items-start gap-3">
+                  <span aria-hidden="true" className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary-container text-primary-container-foreground"><Icon className="size-5" /></span>
+                  <div className="min-w-0 flex-1">
+                    <span className="flex items-center gap-1 font-semibold">{s.label}<ArrowRight aria-hidden="true" className="size-4 opacity-0 transition-opacity group-hover:opacity-100" /></span>
+                    <p className="mt-0.5 text-sm text-muted-foreground">{blurbs[s.path]}</p>
+                  </div>
+                </div>
+              </Link>
+            </li>
+          )
+        })}
       </ul>
-      {can(me.roles, 'auditor', 'draw_official') ? <ReconcileCard path="/v1/staff/draws/reconcile" title="Draws reconciliation" /> : null}
-      {can(me.roles, 'auditor', 'payout_operator') ? <ReconcileCard path="/v1/staff/payouts/reconcile" title="Payouts reconciliation" /> : null}
+      {can(me.roles, 'auditor', 'draw_official') || can(me.roles, 'auditor', 'payout_operator') ? (
+        <>
+          <SectionTitle>Reconciliations</SectionTitle>
+          <div className="grid gap-4 lg:grid-cols-2">
+            {can(me.roles, 'auditor', 'draw_official') ? <ReconcileCard path="/v1/staff/draws/reconcile" title="Draws reconciliation" description="Entries, seeds and prize pools against the ledger." /> : null}
+            {can(me.roles, 'auditor', 'payout_operator') ? <ReconcileCard path="/v1/staff/payouts/reconcile" title="Payouts reconciliation" description="Payouts against M-Pesa and the ledger." /> : null}
+          </div>
+        </>
+      ) : null}
     </section>
   )
 }

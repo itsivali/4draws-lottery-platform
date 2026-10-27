@@ -1,42 +1,108 @@
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
+import { CircleAlert, CircleCheck, CircleDot, CircleX, Clock, Inbox, TriangleAlert } from 'lucide-react'
+import { useId, useState, type ReactNode } from 'react'
 import { ProblemError } from '../api'
 import type { ActionState, Load } from '../hooks'
+import { cn } from '@/lib/utils'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Skeleton } from '@/components/ui/skeleton'
 
 export type Tone = 'success' | 'warning' | 'error' | 'pending' | 'neutral'
 
-const toneIcon: Record<Tone, string> = { success: '✓', warning: '!', error: '×', pending: '◷', neutral: '•' }
+const tones: Record<Tone, { icon: typeof CircleCheck; className: string }> = {
+  success: { icon: CircleCheck, className: 'border-success/40 bg-success/10 text-success' },
+  warning: { icon: TriangleAlert, className: 'border-warning/40 bg-warning/10 text-warning' },
+  error: { icon: CircleX, className: 'border-destructive/40 bg-destructive/10 text-destructive' },
+  pending: { icon: Clock, className: 'border-pending/40 bg-pending/10 text-pending' },
+  neutral: { icon: CircleDot, className: 'border-border bg-muted text-muted-foreground' },
+}
 
 /** A state shown with a symbol, a word and a colour: never colour alone. */
-export function Pill({ tone, children }: { tone: Tone; children: ReactNode }) {
+export function Pill({ tone, children, className }: { tone: Tone; children: ReactNode; className?: string }) {
+  const Icon = tones[tone].icon
   return (
-    <span className={`pill pill-${tone}`}>
-      <span aria-hidden="true">{toneIcon[tone]}</span> {children}
-    </span>
+    <Badge variant="outline" className={cn('gap-1 rounded-full px-2.5 py-0.5 font-medium', tones[tone].className, className)}>
+      <Icon aria-hidden="true" className="size-3.5" />
+      {children}
+    </Badge>
   )
 }
 
-export function PageHeader({ title, children }: { title: string; children?: ReactNode }) {
+export function PageHeader({ title, children, actions }: { title: string; children?: ReactNode; actions?: ReactNode }) {
   return (
-    <header className="page-header">
-      <h1>{title}</h1>
-      {children ? <p className="muted">{children}</p> : null}
+    <header className="mb-6 flex flex-wrap items-start justify-between gap-4">
+      <div className="max-w-[70ch]">
+        <h1 className="text-2xl font-bold leading-tight md:text-3xl">{title}</h1>
+        {children ? <p className="mt-1.5 text-sm text-muted-foreground md:text-[15px]">{children}</p> : null}
+      </div>
+      {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
     </header>
   )
 }
 
-/** Loading, error and data for one read. */
-export function Loaded<T>({ load, what, children }: { load: Load<T>; what: string; children: (data: T) => ReactNode }) {
-  if (load.data !== undefined) return <>{children(load.data)}</>
-  if (load.error !== undefined) {
-    const msg = load.error instanceof ProblemError ? load.error.title : 'The server could not be reached'
+/** A short monospace reference (ids, receipts, hashes) that wraps anywhere and can be selected. */
+export function Mono({ children, className }: { children: ReactNode; className?: string }) {
+  return <span className={cn('font-mono text-[13px] [overflow-wrap:anywhere]', className)}>{children}</span>
+}
+
+export function SectionTitle({ children, className }: { children: ReactNode; className?: string }) {
+  return <h2 className={cn('mb-3 mt-8 text-lg font-semibold', className)}>{children}</h2>
+}
+
+function LoadError({ what, error, reload }: { what: string; error: unknown; reload: () => void }) {
+  const msg = error instanceof ProblemError ? error.title : 'The server could not be reached'
+  return (
+    <Alert variant="destructive" className="my-4">
+      <CircleAlert />
+      <AlertTitle>Couldn’t load {what}</AlertTitle>
+      <AlertDescription className="flex flex-wrap items-center gap-3">
+        <span>{msg}</span>
+        <Button type="button" size="sm" variant="outline" onClick={reload}>Try again</Button>
+      </AlertDescription>
+    </Alert>
+  )
+}
+
+/**
+ * Loading, error and data for one read. Data stays up while it reloads (with a progress line); an error on reload is
+ * shown above the data it could not refresh, so stale figures are never mistaken for fresh ones.
+ */
+export function Loaded<T>({ load, what, children, skeleton }: { load: Load<T>; what: string; children: (data: T) => ReactNode; skeleton?: ReactNode }) {
+  const error = load.error !== undefined ? <LoadError what={what} error={load.error} reload={load.reload} /> : null
+  if (load.data !== undefined) {
     return (
-      <div className="notice notice-error" role="alert">
-        <p>Couldn’t load {what}: {msg}</p>
-        <button type="button" onClick={load.reload}>Try again</button>
+      <div className="relative">
+        {load.loading ? <div aria-hidden="true" className="absolute inset-x-0 -top-2 h-0.5 overflow-hidden rounded-full"><div className="h-full w-1/3 animate-[slide_1.1s_ease-in-out_infinite] rounded-full bg-primary" /></div> : null}
+        {error}
+        {children(load.data)}
       </div>
     )
   }
-  return <p className="muted" aria-live="polite">Loading {what}…</p>
+  if (error) return error
+  return (
+    <div aria-live="polite">
+      <p className="sr-only">Loading {what}…</p>
+      {skeleton ?? <TableSkeleton />}
+    </div>
+  )
+}
+
+export function TableSkeleton({ rows = 4 }: { rows?: number }) {
+  return (
+    <div aria-hidden="true" className="mt-4 overflow-hidden rounded-xl border bg-card shadow-card">
+      <div className="h-10 border-b bg-muted/60" />
+      {Array.from({ length: rows }, (_, i) => (
+        <div key={i} className="flex items-center gap-6 border-b px-4 py-3.5 last:border-b-0">
+          <Skeleton className="h-4 w-40" /><Skeleton className="h-4 w-24" /><Skeleton className="h-4 w-32" /><Skeleton className="ml-auto h-8 w-20 rounded-lg" />
+        </div>
+      ))}
+    </div>
+  )
 }
 
 /** What happened to the last action, in words, announced to screen readers. */
@@ -46,24 +112,41 @@ export function ActionResult({ state, onCheckAgain }: { state: ActionState; onCh
     case 'busy':
       return null
     case 'done':
-      return <p className="notice notice-success" role="status">{state.message}</p>
+      return (
+        <Alert role="status" className="my-4 border-success/40 bg-success/10 text-success [&>svg]:text-success">
+          <CircleCheck />
+          <AlertTitle>{state.message}</AlertTitle>
+        </Alert>
+      )
     case 'refused':
       return (
-        <div className="notice notice-error" role="alert">
-          <p><strong>{state.error.title}</strong></p>
-          {state.error.detail ? <p>{state.error.detail}</p> : null}
-          <p className="muted">Nothing was changed.</p>
-        </div>
+        <Alert variant="destructive" className="my-4">
+          <CircleX />
+          <AlertTitle>{state.error.title}</AlertTitle>
+          <AlertDescription>
+            {state.error.detail ? <p>{state.error.detail}</p> : null}
+            <p className="text-muted-foreground">Nothing was changed.</p>
+          </AlertDescription>
+        </Alert>
       )
     case 'uncertain':
       return (
-        <div className="notice notice-pending" role="alert">
-          <p><strong>No answer from the server.</strong> The action may or may not have been done. Checking repeats the same request, so it cannot happen twice.</p>
-          {onCheckAgain ? <button type="button" onClick={() => { onCheckAgain(state.retry) }}>Check again</button> : null}
-        </div>
+        <Alert className="my-4 border-pending/40 bg-pending/10 text-pending [&>svg]:text-pending">
+          <Clock />
+          <AlertTitle>No answer from the server.</AlertTitle>
+          <AlertDescription className="text-foreground">
+            <p>The action may or may not have been done. Checking repeats the same request, so it cannot happen twice.</p>
+            {onCheckAgain ? <Button type="button" size="sm" variant="outline" className="mt-1" onClick={() => { onCheckAgain(state.retry) }}>Check again</Button> : null}
+          </AlertDescription>
+        </Alert>
       )
     case 'failed':
-      return <p className="notice notice-error" role="alert">{state.message}</p>
+      return (
+        <Alert variant="destructive" className="my-4">
+          <CircleX />
+          <AlertTitle>{state.message}</AlertTitle>
+        </Alert>
+      )
   }
 }
 
@@ -92,62 +175,69 @@ export function ConfirmDialog({
   onConfirm: (values: Record<string, string>) => void
   onCancel: () => void
 }) {
-  const ref = useRef<HTMLDialogElement>(null)
   const id = useId()
   // the caller remounts the dialog (key) for each question, so initial values apply afresh
   const [values, setValues] = useState<Record<string, string>>(initial ?? {})
-  useEffect(() => {
-    const d = ref.current
-    if (!d) return
-    if (open && !d.open) {
-      if (typeof d.showModal === 'function') d.showModal()
-      else d.setAttribute('open', '')
-    } else if (!open && d.open) {
-      if (typeof d.close === 'function') d.close()
-      else d.removeAttribute('open')
-    }
-  }, [open])
+  const cancel = () => { setValues({}); onCancel() }
   const missing = fields.some((f) => f.required && f.type !== 'checkbox' && !(values[f.name] ?? '').trim())
+  const checks = fields.filter((f) => f.type === 'checkbox')
+  const inputs = fields.filter((f) => f.type !== 'checkbox')
   return (
-    <dialog ref={ref} aria-labelledby={`${id}-t`} onCancel={(e) => { e.preventDefault(); setValues({}); onCancel() }}>
-      <form
-        method="dialog"
-        onSubmit={(e) => {
-          e.preventDefault()
-          if (missing) return
-          const submitted = values
-          setValues({})
-          onConfirm(submitted)
-        }}
-      >
-        <h2 id={`${id}-t`}>{title}</h2>
-        <div className="dialog-body">{body}</div>
-        {fields.map((f) => (
-          <label key={f.name} className={f.type === 'checkbox' ? 'check' : 'field'}>
-            {f.type === 'checkbox' ? (
-              <input type="checkbox" checked={values[f.name] === 'true'} onChange={(e) => { setValues({ ...values, [f.name]: String(e.target.checked) }) }} />
-            ) : null}
-            <span>{f.label}{f.required ? ' (required)' : ''}</span>
-            {f.type === 'checkbox' ? null : (
-              <input
+    <Dialog open={open} onOpenChange={(o) => { if (!o) cancel() }}>
+      <DialogContent showCloseButton={false} aria-describedby={undefined} className="sm:max-w-[520px]">
+        <form
+          onSubmit={(e) => {
+            e.preventDefault()
+            if (missing) return
+            const submitted = values
+            setValues({})
+            onConfirm(submitted)
+          }}
+          className="grid gap-4"
+        >
+          <DialogHeader>
+            <DialogTitle className="text-xl">{title}</DialogTitle>
+          </DialogHeader>
+          <div className="text-sm text-muted-foreground [&_p]:m-0">{body}</div>
+          {inputs.map((f) => (
+            <div key={f.name} className="grid gap-1.5">
+              <Label htmlFor={`${id}-${f.name}`}>{f.label}{f.required ? ' (required)' : ''}</Label>
+              <Input
+                id={`${id}-${f.name}`}
                 type={f.type ?? 'text'}
                 required={f.required}
+                inputMode={f.type === 'number' ? 'numeric' : undefined}
                 value={values[f.name] ?? ''}
                 onChange={(e) => { setValues({ ...values, [f.name]: e.target.value }) }}
               />
-            )}
-            {f.help ? <small className="muted">{f.help}</small> : null}
-          </label>
-        ))}
-        <div className="dialog-actions">
-          <button type="button" className="secondary" onClick={() => { setValues({}); onCancel() }}>Cancel</button>
-          <button type="submit" className={danger ? 'danger' : 'primary'} disabled={missing}>{confirmLabel}</button>
-        </div>
-      </form>
-    </dialog>
+              {f.help ? <p className="text-xs text-muted-foreground">{f.help}</p> : null}
+            </div>
+          ))}
+          {checks.length > 0 ? (
+            <div className="grid gap-2.5 rounded-lg border bg-muted/40 p-3 sm:grid-cols-2">
+              {checks.map((f) => (
+                <div key={f.name} className="flex items-center gap-2.5">
+                  <Checkbox id={`${id}-${f.name}`} checked={values[f.name] === 'true'} onCheckedChange={(c) => { setValues({ ...values, [f.name]: String(c === true) }) }} />
+                  <Label htmlFor={`${id}-${f.name}`} className="font-normal">{f.label}</Label>
+                </div>
+              ))}
+            </div>
+          ) : null}
+          <DialogFooter className="mt-2">
+            <Button type="button" variant="outline" onClick={cancel}>Cancel</Button>
+            <Button type="submit" variant={danger ? 'destructive' : 'default'} disabled={missing}>{confirmLabel}</Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   )
 }
 
-export function Empty({ children }: { children: ReactNode }) {
-  return <p className="empty">{children}</p>
+export function Empty({ children, icon: Icon = Inbox }: { children: ReactNode; icon?: typeof Inbox }) {
+  return (
+    <div className="mt-4 flex flex-col items-center gap-2 rounded-xl border border-dashed bg-card/60 px-6 py-10 text-center text-sm text-muted-foreground">
+      <Icon aria-hidden="true" className="size-6 opacity-60" />
+      <p className="m-0">{children}</p>
+    </div>
+  )
 }

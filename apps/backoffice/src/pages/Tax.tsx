@@ -1,64 +1,95 @@
+import type { ColumnDef } from '@tanstack/react-table'
+import { Download, Receipt } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { ProblemError } from '../api'
 import { useSession } from '../context'
+import { Actions, DataTable, Stack } from '../components/DataTable'
 import { useConfirmedAction } from '../components/useConfirmedAction'
-import { Empty, Loaded, PageHeader, Pill } from '../components/ui'
+import { Empty, Loaded, Mono, PageHeader, Pill } from '../components/ui'
 import { eat, kes } from '../format'
 import { useLoad } from '../hooks'
 import { can } from '../roles'
 import type { Batch } from '../types'
+import { Alert, AlertTitle } from '@/components/ui/alert'
+import { Button } from '@/components/ui/button'
 
 export function TaxPage() {
   const { api, me } = useSession()
   const load = useLoad(() => api.get<{ batches: Batch[] }>('/v1/staff/tax/batches'))
   const { ask, busy, view } = useConfirmedAction(load.reload)
   const officer = can(me.roles, 'tax_officer')
+  const [downloading, setDownloading] = useState<number | null>(null)
+  const [downloadError, setDownloadError] = useState<string | null>(null)
   const download = async (b: Batch) => {
-    const { blob } = await api.download(`/v1/staff/tax/batches/${b.batch_no}/file`)
-    const a = document.createElement('a')
-    a.href = URL.createObjectURL(blob)
-    a.download = `kra-batch-${b.batch_no}.csv`
-    a.click()
-    URL.revokeObjectURL(a.href)
+    setDownloading(b.batch_no)
+    setDownloadError(null)
+    try {
+      const { blob } = await api.download(`/v1/staff/tax/batches/${b.batch_no}/file`)
+      const a = document.createElement('a')
+      a.href = URL.createObjectURL(blob)
+      a.download = `kra-batch-${b.batch_no}.csv`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      setTimeout(() => { URL.revokeObjectURL(a.href) }, 1000)
+    } catch (e) {
+      setDownloadError(e instanceof ProblemError ? e.title : 'The file could not be downloaded. Try again.')
+    } finally {
+      setDownloading(null)
+    }
   }
+
+  const columns = useMemo<ColumnDef<Batch>[]>(() => [
+    { id: 'batch', header: 'Batch', accessorFn: (b) => b.batch_no, cell: ({ row }) => <Stack primary={`#${row.original.batch_no}`} secondary={`${row.original.events} payouts`} /> },
+    { id: 'tax', header: 'Tax', accessorFn: (b) => b.tax_kes, meta: { className: 'tabular-nums' }, cell: ({ row }) => <Stack primary={kes(row.original.tax_kes)} secondary={`on ${kes(row.original.gross_kes)}`} /> },
+    { id: 'prepared', header: 'Prepared', accessorFn: (b) => b.prepared_at, cell: ({ row }) => <Stack primary={<span className="font-normal text-muted-foreground">{eat(row.original.prepared_at)}</span>} secondary={<Mono>{row.original.prepared_by}</Mono>} /> },
+    {
+      id: 'remitted', header: 'Remitted', accessorFn: (b) => b.remitted_at ?? '',
+      cell: ({ row }) => (row.original.remitted_at ? <div className="grid justify-items-start gap-1"><Pill tone="success">Remitted</Pill><span className="text-sm text-muted-foreground">PRN {row.original.prn}</span></div> : <Pill tone="pending">Not yet</Pill>),
+    },
+    {
+      id: 'actions', header: () => <span className="sr-only">Actions</span>, enableSorting: false,
+      cell: ({ row }) => {
+        const b = row.original
+        return (
+          <Actions>
+            <Button type="button" size="sm" variant="outline" disabled={downloading === b.batch_no} onClick={() => void download(b)}>
+              <Download aria-hidden="true" />{downloading === b.batch_no ? 'Downloading…' : 'Download file'}
+            </Button>
+            {officer && !b.remitted_at ? (
+              <Button type="button" size="sm" disabled={busy} onClick={() => {
+                ask({ title: `Record remittance of batch #${b.batch_no}?`, body: <p>Must be recorded by someone other than who prepared it. The amount must equal the batch’s tax, {kes(b.tax_kes)}.</p>,
+                  fields: [{ name: 'prn', label: 'KRA payment registration number', required: true }, { name: 'amount', label: 'Amount remitted (KES)', type: 'number', required: true }],
+                  confirmLabel: 'Record remittance', success: 'Remittance recorded.',
+                  act: (v) => api.post(`/v1/staff/tax/batches/${b.batch_no}/remit`, { prn: v.prn, amount_kes: Number(v.amount) }) })
+              }}>Record remittance</Button>
+            ) : null}
+          </Actions>
+        )
+      },
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  ], [api, ask, busy, officer, downloading])
+
   return (
     <section>
-      <PageHeader title="KRA withholding tax">
+      <PageHeader
+        title="KRA withholding tax"
+        actions={officer ? (
+          <Button type="button" disabled={busy} onClick={() => {
+            ask({ title: 'Prepare the next batch?', body: <p>All withheld tax not yet batched goes into a numbered batch with a hashed file.</p>, confirmLabel: 'Prepare batch', success: 'Batch prepared.',
+              act: () => api.post('/v1/staff/tax/batches') })
+          }}><Receipt aria-hidden="true" /> Prepare batch</Button>
+        ) : undefined}
+      >
         One person prepares a batch and files it with KRA; a different person records the remittance with its payment registration number.
       </PageHeader>
       {view}
-      {officer ? (
-        <button type="button" className="primary" disabled={busy} onClick={() => {
-          ask({ title: 'Prepare the next batch?', body: <p>All withheld tax not yet batched goes into a numbered batch with a hashed file.</p>, confirmLabel: 'Prepare batch', success: 'Batch prepared.',
-            act: () => api.post('/v1/staff/tax/batches') })
-        }}>Prepare batch</button>
-      ) : null}
+      {downloadError ? <Alert variant="destructive" className="my-4"><AlertTitle>{downloadError}</AlertTitle></Alert> : null}
       <Loaded load={load} what="batches">
         {({ batches }) =>
-          batches.length === 0 ? <Empty>No batches yet.</Empty> : (
-            <table>
-              <caption className="sr-only">KRA batches</caption>
-              <thead><tr><th scope="col">Batch</th><th scope="col">Tax</th><th scope="col">Prepared</th><th scope="col">Remitted</th><th scope="col"><span className="sr-only">Actions</span></th></tr></thead>
-              <tbody>
-                {batches.map((b) => (
-                  <tr key={b.batch_no}>
-                    <td>#{b.batch_no}<br /><span className="muted">{b.events} payouts</span></td>
-                    <td>{kes(b.tax_kes)}<div className="muted">on {kes(b.gross_kes)}</div></td>
-                    <td>{eat(b.prepared_at)}<div className="muted mono">{b.prepared_by}</div></td>
-                    <td>{b.remitted_at ? <><Pill tone="success">Remitted</Pill><div className="muted">PRN {b.prn}</div></> : <Pill tone="pending">Not yet</Pill>}</td>
-                    <td className="actions">
-                      <button type="button" className="secondary" onClick={() => void download(b)}>Download file</button>
-                      {officer && !b.remitted_at ? (
-                        <button type="button" className="primary" disabled={busy} onClick={() => {
-                          ask({ title: `Record remittance of batch #${b.batch_no}?`, body: <p>Must be recorded by someone other than who prepared it. The amount must equal the batch’s tax, {kes(b.tax_kes)}.</p>,
-                            fields: [{ name: 'prn', label: 'KRA payment registration number', required: true }, { name: 'amount', label: 'Amount remitted (KES)', type: 'number', required: true }],
-                            confirmLabel: 'Record remittance', success: 'Remittance recorded.',
-                            act: (v) => api.post(`/v1/staff/tax/batches/${b.batch_no}/remit`, { prn: v.prn, amount_kes: Number(v.amount) }) })
-                        }}>Record remittance</button>
-                      ) : null}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          batches.length === 0 ? <Empty icon={Receipt}>No batches yet.</Empty> : (
+            <DataTable columns={columns} data={batches} rowId={(b) => String(b.batch_no)} caption="KRA batches" />
           )
         }
       </Loaded>

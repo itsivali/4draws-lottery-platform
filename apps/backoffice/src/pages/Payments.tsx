@@ -1,8 +1,10 @@
 import { useSession } from '../context'
 import { ReconcileCard } from '../components/Reconcile'
 import { useConfirmedAction, type ActionSpec } from '../components/useConfirmedAction'
-import { PageHeader } from '../components/ui'
+import { PageHeader, SectionTitle } from '../components/ui'
 import { can } from '../roles'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 
 export function PaymentsPage() {
   const { api, me } = useSession()
@@ -48,21 +50,31 @@ export function PaymentsPage() {
   return (
     <section>
       <PageHeader title="Payments">Money in: reconciliation, reversals, unconfirmed top-ups and the paybill suspense queue (listed in the reconciliation’s “needs attention”).</PageHeader>
-      <ReconcileCard path="/v1/staff/payments/reconcile" title="Payments reconciliation" />
-      <ReconcileCard path="/v1/staff/game/reconcile" title="Game reconciliation" />
+      <div className="grid gap-4 lg:grid-cols-2">
+        <ReconcileCard path="/v1/staff/payments/reconcile" title="Payments reconciliation" description="Top-ups and paybill payments against M-Pesa and the ledger." />
+        <ReconcileCard path="/v1/staff/game/reconcile" title="Game reconciliation" description="Plays, stakes and chances against the ledger." />
+      </div>
       {operator ? (
-        <div className="card">
-          <h2>Actions</h2>
+        <>
+          <SectionTitle>Actions</SectionTitle>
           {view}
-          <ul className="action-list">
-            {actions.map((a) => (
-              <li key={a.button}>
-                <button type="button" className="secondary" disabled={busy} onClick={() => { ask(a) }}>{a.button}</button>
-                <span className="muted">{a.help}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
+          <Card className="shadow-card">
+            <CardHeader>
+              <CardTitle className="text-lg">Corrections from the M-Pesa statement</CardTitle>
+              <CardDescription>Each one asks for the receipt and a reason, and is recorded in the audit log.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ul className="m-0 grid list-none gap-3 p-0">
+                {actions.map((a) => (
+                  <li key={a.button} className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t pt-3 first:border-t-0 first:pt-0">
+                    <Button type="button" variant="outline" className="min-w-64 justify-start" disabled={busy} onClick={() => { ask(a) }}>{a.button}</Button>
+                    <span className="text-sm text-muted-foreground">{a.help}</span>
+                  </li>
+                ))}
+              </ul>
+            </CardContent>
+          </Card>
+        </>
       ) : null}
     </section>
   )

@@ -1,15 +1,43 @@
+import type { ColumnDef } from '@tanstack/react-table'
+import { UserX } from 'lucide-react'
+import { useMemo } from 'react'
 import { useSession } from '../context'
+import { Actions, DataTable, Stack } from '../components/DataTable'
 import { useConfirmedAction } from '../components/useConfirmedAction'
-import { Empty, Loaded, PageHeader } from '../components/ui'
+import { Empty, Loaded, Mono, PageHeader, Pill } from '../components/ui'
 import { eat, msisdn } from '../format'
 import { useLoad } from '../hooks'
 import { can } from '../roles'
 import type { Closure } from '../types'
+import { Button } from '@/components/ui/button'
 
 export function ClosuresPage() {
   const { api, me } = useSession()
   const load = useLoad(() => api.get<{ closures: Closure[] }>('/v1/staff/closures'))
   const { ask, busy, view } = useConfirmedAction(load.reload)
+  const support = can(me.roles, 'support')
+
+  const columns = useMemo<ColumnDef<Closure>[]>(() => [
+    { id: 'phone', header: 'Phone', accessorFn: (c) => `${msisdn(c.msisdn)} ${c.user_id}`, cell: ({ row }) => <Stack primary={<span className="tabular-nums">{msisdn(row.original.msisdn)}</span>} secondary={<Mono>{row.original.user_id}</Mono>} /> },
+    { id: 'status', header: 'Account', accessorFn: (c) => c.status, cell: ({ row }) => <Pill tone={row.original.status === 'active' ? 'success' : 'neutral'}><span className="capitalize">{row.original.status.replace(/_/g, ' ')}</span></Pill> },
+    { id: 'requested', header: 'Requested', accessorFn: (c) => c.requested_at, cell: ({ row }) => <span className="text-muted-foreground">{eat(row.original.requested_at)}</span> },
+    {
+      id: 'actions', header: () => <span className="sr-only">Actions</span>, enableSorting: false,
+      cell: ({ row }) => {
+        const c = row.original
+        if (!support) return null
+        return (
+          <Actions>
+            <Button type="button" size="sm" variant="outline" className="border-destructive/50 text-destructive hover:bg-destructive/10 hover:text-destructive" disabled={busy} onClick={() => {
+              ask({ title: `Close the account of ${msisdn(c.msisdn)}?`, body: <p>Sign-in, play, top-ups and withdrawals stop and every session ends. This cannot be undone here.</p>,
+                confirmLabel: 'Close account', danger: true, success: 'Account closed.', act: () => api.post(`/v1/staff/closures/${c.user_id}/close`) })
+            }}>Close account</Button>
+          </Actions>
+        )
+      },
+    },
+  ], [api, ask, busy, support])
+
   return (
     <section>
       <PageHeader title="Account closures">
@@ -19,28 +47,8 @@ export function ClosuresPage() {
       {view}
       <Loaded load={load} what="closure requests">
         {({ closures }) =>
-          closures.length === 0 ? <Empty>No open requests.</Empty> : (
-            <table>
-              <caption className="sr-only">Open closure requests, oldest first</caption>
-              <thead><tr><th scope="col">Phone</th><th scope="col">Account</th><th scope="col">Requested</th><th scope="col"><span className="sr-only">Actions</span></th></tr></thead>
-              <tbody>
-                {closures.map((c) => (
-                  <tr key={c.user_id}>
-                    <td>{msisdn(c.msisdn)}<div className="muted mono">{c.user_id}</div></td>
-                    <td>{c.status}</td>
-                    <td>{eat(c.requested_at)}</td>
-                    <td className="actions">
-                      {can(me.roles, 'support') ? (
-                        <button type="button" className="danger-outline" disabled={busy} onClick={() => {
-                          ask({ title: `Close the account of ${msisdn(c.msisdn)}?`, body: <p>Sign-in, play, top-ups and withdrawals stop and every session ends. This cannot be undone here.</p>,
-                            confirmLabel: 'Close account', danger: true, success: 'Account closed.', act: () => api.post(`/v1/staff/closures/${c.user_id}/close`) })
-                        }}>Close account</button>
-                      ) : null}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          closures.length === 0 ? <Empty icon={UserX}>No open requests.</Empty> : (
+            <DataTable columns={columns} data={closures} rowId={(c) => c.user_id} caption="Open closure requests, oldest first" filter="Search by phone or id" />
           )
         }
       </Loaded>

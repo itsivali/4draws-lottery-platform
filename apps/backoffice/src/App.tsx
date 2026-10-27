@@ -1,4 +1,8 @@
-import { Link, NavLink, Navigate, Route, Routes } from 'react-router-dom'
+import {
+  Banknote, Bell, ChevronsUpDown, IdCard, Landmark, LayoutDashboard, LogOut, Monitor, Moon, Receipt, Search, Sun, Ticket, UserX, Users, Wallet,
+} from 'lucide-react'
+import { useEffect, useState, type ComponentType } from 'react'
+import { Link, NavLink, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { useSession } from './context'
 import { AlertsPage } from './pages/Alerts'
 import { ClosuresPage } from './pages/Closures'
@@ -11,7 +15,18 @@ import { PayoutsPage } from './pages/Payouts'
 import { StaffPage } from './pages/Staff'
 import { TaxPage } from './pages/Tax'
 import { ReviewQueueProvider, useReviewQueue } from './reviewQueue'
-import { visibleSections } from './roles'
+import { roleLabels, visibleSections, type Section } from './roles'
+import { applyTheme, readTheme, type ThemeMode } from './theme'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from '@/components/ui/breadcrumb'
+import { Button } from '@/components/ui/button'
+import { CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator } from '@/components/ui/command'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { Separator } from '@/components/ui/separator'
+import {
+  Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarHeader, SidebarInset, SidebarMenu, SidebarMenuBadge,
+  SidebarMenuButton, SidebarMenuItem, SidebarProvider, SidebarRail, SidebarTrigger, useSidebar,
+} from '@/components/ui/sidebar'
 
 const pages: Record<string, () => React.JSX.Element> = {
   '/finance': FinancePage,
@@ -25,59 +40,267 @@ const pages: Record<string, () => React.JSX.Element> = {
   '/closures': ClosuresPage,
 }
 
+const icons: Record<string, ComponentType<{ className?: string }>> = {
+  '/finance': Landmark,
+  '/kyc': IdCard,
+  '/draws': Ticket,
+  '/payouts': Banknote,
+  '/payments': Wallet,
+  '/tax': Receipt,
+  '/alerts': Bell,
+  '/closures': UserX,
+  '/staff': Users,
+}
+
+/** The navigation's groups, in order; a section appears under the first group that lists it. */
+const groups: { label: string; paths: string[] }[] = [
+  { label: 'Money', paths: ['/finance', '/payments', '/payouts', '/tax'] },
+  { label: 'Players', paths: ['/kyc', '/closures'] },
+  { label: 'Operations', paths: ['/draws', '/alerts'] },
+  { label: 'Administration', paths: ['/staff'] },
+]
+
 /** The signed-in back office: only the sections the member's roles allow are linked or routed. */
 export function App() {
   return (
     <ReviewQueueProvider>
-      <Layout />
+      <SidebarProvider>
+        <Layout />
+      </SidebarProvider>
     </ReviewQueueProvider>
   )
 }
 
 function Layout() {
-  const { me, signOut } = useSession()
-  const { queue, arrived, dismiss } = useReviewQueue()
+  const { me } = useSession()
+  const { arrived, dismiss } = useReviewQueue()
   const sections = visibleSections(me.roles)
+  const { pathname } = useLocation()
+  const current = sections.find((s) => pathname === s.path || pathname.startsWith(`${s.path}/`))
   return (
-    <div className="layout">
-      <a className="skip" href="#main">Skip to content</a>
-      <nav aria-label="Back office">
-        <p className="brand">Back office</p>
-        <ul>
-          <li><NavLink to="/" end>Overview</NavLink></li>
-          {sections.map((s) => (
-            <li key={s.path}>
-              <NavLink to={s.path}>
-                {s.label}
-                {s.path === '/kyc' && queue && queue.waiting > 0 ? (
-                  <>
-                    <span className="badge" aria-hidden="true">{queue.waiting}</span>
-                    <span className="sr-only">, {queue.waiting} waiting</span>
-                  </>
-                ) : null}
-              </NavLink>
-            </li>
-          ))}
-        </ul>
-        <button type="button" className="secondary signout" onClick={signOut}>Sign out</button>
-      </nav>
-      <main id="main" tabIndex={-1}>
-        {arrived > 0 ? (
-          <div className="notice notice-pending arrival" role="status">
-            <p>{arrived === 1 ? 'A new identity submission is waiting for review.' : `${arrived} new identity submissions are waiting for review.`}</p>
-            <Link to="/kyc" onClick={dismiss}>Review now</Link>
-            <button type="button" className="secondary" onClick={dismiss}>Dismiss</button>
+    <>
+      <a className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-lg focus:bg-card focus:px-3 focus:py-2 focus:shadow-float" href="#main">Skip to content</a>
+      <AppSidebar sections={sections} />
+      <SidebarInset id="main" tabIndex={-1} className="min-w-0 outline-none">
+        <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center gap-2 border-b bg-background/80 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+          <SidebarTrigger className="-ml-1" />
+          <Separator orientation="vertical" className="mr-1 data-[orientation=vertical]:h-4" />
+          <Breadcrumb>
+            <BreadcrumbList>
+              <BreadcrumbItem>
+                {current ? <BreadcrumbLink asChild><Link to="/">Overview</Link></BreadcrumbLink> : <BreadcrumbPage>Overview</BreadcrumbPage>}
+              </BreadcrumbItem>
+              {current ? (
+                <>
+                  <BreadcrumbSeparator />
+                  <BreadcrumbItem><BreadcrumbPage>{current.label}</BreadcrumbPage></BreadcrumbItem>
+                </>
+              ) : null}
+            </BreadcrumbList>
+          </Breadcrumb>
+          <div className="ml-auto flex items-center gap-1">
+            <CommandMenu sections={sections} />
+            <ThemeMenu />
           </div>
-        ) : null}
-        <Routes>
-          <Route path="/" element={<OverviewPage />} />
-          {sections.map((s) => {
-            const Page = pages[s.path]
-            return Page ? <Route key={s.path} path={s.path} element={<Page />} /> : null
+        </header>
+        <div className="mx-auto w-full max-w-[1200px] px-4 py-6 md:px-8 md:py-8">
+          {arrived > 0 ? (
+            <Alert role="status" className="mb-6 border-pending/40 bg-pending/10 [&>svg]:text-pending">
+              <IdCard />
+              <AlertTitle>{arrived === 1 ? 'A new identity submission is waiting for review.' : `${arrived} new identity submissions are waiting for review.`}</AlertTitle>
+              <AlertDescription className="flex flex-wrap items-center gap-2">
+                <Button asChild size="sm"><Link to="/kyc" onClick={dismiss}>Review now</Link></Button>
+                <Button type="button" size="sm" variant="ghost" onClick={dismiss}>Dismiss</Button>
+              </AlertDescription>
+            </Alert>
+          ) : null}
+          <Routes>
+            <Route path="/" element={<OverviewPage />} />
+            {sections.map((s) => {
+              const Page = pages[s.path]
+              return Page ? <Route key={s.path} path={s.path} element={<Page />} /> : null
+            })}
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </div>
+      </SidebarInset>
+    </>
+  )
+}
+
+function AppSidebar({ sections }: { sections: Section[] }) {
+  const { me, signOut } = useSession()
+  const { queue } = useReviewQueue()
+  const { pathname } = useLocation()
+  const { isMobile, setOpenMobile } = useSidebar()
+  const close = () => { if (isMobile) setOpenMobile(false) }
+  const waiting = queue && queue.waiting > 0 ? queue.waiting : 0
+  const initials = (me.name || me.email).split(/[\s@.]+/).filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase() ?? '').join('')
+  return (
+    <Sidebar collapsible="icon" variant="inset">
+      <SidebarHeader>
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton size="lg" asChild tooltip="Overview">
+              <Link to="/" onClick={close}>
+                <span aria-hidden="true" className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-card">
+                  <BrandGlyph />
+                </span>
+                <span className="grid flex-1 text-left leading-tight">
+                  <span className="truncate font-display text-[15px] font-bold tracking-tight">Bahati</span>
+                  <span className="truncate text-xs text-muted-foreground">Back office</span>
+                </span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
+      </SidebarHeader>
+      <SidebarContent>
+        <nav aria-label="Back office" className="contents">
+          <SidebarGroup>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={pathname === '/'} tooltip="Overview">
+                    <NavLink to="/" end onClick={close}><LayoutDashboard /><span>Overview</span></NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+          {groups.map((g) => {
+            const items = g.paths.map((p) => sections.find((s) => s.path === p)).filter((s): s is Section => s !== undefined)
+            if (items.length === 0) return null
+            return (
+              <SidebarGroup key={g.label}>
+                <SidebarGroupLabel>{g.label}</SidebarGroupLabel>
+                <SidebarGroupContent>
+                  <SidebarMenu>
+                    {items.map((s) => {
+                      const Icon = icons[s.path] ?? LayoutDashboard
+                      const active = pathname === s.path || pathname.startsWith(`${s.path}/`)
+                      return (
+                        <SidebarMenuItem key={s.path}>
+                          <SidebarMenuButton asChild isActive={active} tooltip={s.label}>
+                            <NavLink to={s.path} onClick={close}>
+                              <Icon />
+                              <span>{s.label}</span>
+                              {s.path === '/kyc' && waiting > 0 ? <span className="sr-only">, {waiting} waiting</span> : null}
+                            </NavLink>
+                          </SidebarMenuButton>
+                          {s.path === '/kyc' && waiting > 0 ? (
+                            <SidebarMenuBadge aria-hidden="true" className="rounded-full bg-primary px-1.5 text-primary-foreground">{waiting}</SidebarMenuBadge>
+                          ) : null}
+                        </SidebarMenuItem>
+                      )
+                    })}
+                  </SidebarMenu>
+                </SidebarGroupContent>
+              </SidebarGroup>
+            )
           })}
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </main>
-    </div>
+        </nav>
+      </SidebarContent>
+      <SidebarFooter>
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <SidebarMenuButton size="lg" className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground">
+                  <span aria-hidden="true" className="flex size-8 items-center justify-center rounded-lg bg-primary-container text-sm font-semibold text-primary-container-foreground">{initials}</span>
+                  <span className="grid flex-1 text-left text-sm leading-tight">
+                    <span className="truncate font-medium">{me.name || me.email}</span>
+                    <span className="truncate text-xs text-muted-foreground">{me.email}</span>
+                  </span>
+                  <ChevronsUpDown aria-hidden="true" className="ml-auto size-4" />
+                </SidebarMenuButton>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent side={isMobile ? 'bottom' : 'right'} align="end" sideOffset={4} className="min-w-56 rounded-lg">
+                <DropdownMenuLabel className="font-normal">
+                  <span className="block truncate font-medium">{me.name || me.email}</span>
+                  <span className="block truncate text-xs text-muted-foreground">{me.roles.map((r) => roleLabels[r]).join(', ') || 'No role'}</span>
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onSelect={signOut}><LogOut /> Sign out</DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </SidebarMenuItem>
+        </SidebarMenu>
+      </SidebarFooter>
+      <SidebarRail />
+    </Sidebar>
+  )
+}
+
+/** The brand's disc: an emerald circle with a gold pointer notch (the player app's BrandMark, in one glyph). */
+function BrandGlyph() {
+  return (
+    <svg viewBox="0 0 24 24" className="size-5" aria-hidden="true">
+      <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeWidth="2.2" />
+      <circle cx="12" cy="12" r="2.4" fill="currentColor" />
+      <path d="M12 1.5 L14.6 6.5 L9.4 6.5 Z" className="fill-gold" />
+    </svg>
+  )
+}
+
+/** ⌘K: jump to a section or sign out. */
+function CommandMenu({ sections }: { sections: Section[] }) {
+  const [open, setOpen] = useState(false)
+  const navigate = useNavigate()
+  const { signOut } = useSession()
+  useEffect(() => {
+    const down = (e: KeyboardEvent) => {
+      if (e.key === 'k' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); setOpen((o) => !o) }
+    }
+    document.addEventListener('keydown', down)
+    return () => { document.removeEventListener('keydown', down) }
+  }, [])
+  const go = (path: string) => { setOpen(false); void navigate(path) }
+  return (
+    <>
+      <Button type="button" variant="outline" size="sm" className="hidden h-8 gap-2 text-muted-foreground md:inline-flex" onClick={() => { setOpen(true) }}>
+        <Search aria-hidden="true" />
+        <span>Jump to…</span>
+        <kbd aria-hidden="true" className="pointer-events-none rounded border bg-muted px-1.5 font-mono text-[10px] font-medium">⌘K</kbd>
+      </Button>
+      <Button type="button" variant="ghost" size="icon-sm" className="md:hidden" aria-label="Jump to a section" onClick={() => { setOpen(true) }}><Search /></Button>
+      <CommandDialog open={open} onOpenChange={setOpen} title="Jump to" description="Search the back office's sections">
+        <CommandInput placeholder="Jump to a section…" />
+        <CommandList>
+          <CommandEmpty>No section matches.</CommandEmpty>
+          <CommandGroup heading="Sections">
+            <CommandItem value="Overview" onSelect={() => { go('/') }}><LayoutDashboard /> Overview</CommandItem>
+            {sections.map((s) => {
+              const Icon = icons[s.path] ?? LayoutDashboard
+              return <CommandItem key={s.path} value={s.label} onSelect={() => { go(s.path) }}><Icon /> {s.label}</CommandItem>
+            })}
+          </CommandGroup>
+          <CommandSeparator />
+          <CommandGroup heading="Session">
+            <CommandItem value="Sign out" onSelect={() => { setOpen(false); signOut() }}><LogOut /> Sign out</CommandItem>
+          </CommandGroup>
+        </CommandList>
+      </CommandDialog>
+    </>
+  )
+}
+
+function ThemeMenu() {
+  const [mode, setMode] = useState<ThemeMode>(readTheme)
+  useEffect(() => { applyTheme(mode) }, [mode])
+  const Icon = mode === 'dark' ? Moon : mode === 'light' ? Sun : Monitor
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button type="button" variant="ghost" size="icon-sm" aria-label="Appearance"><Icon /></Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuRadioGroup value={mode} onValueChange={(v) => { setMode(v as ThemeMode) }}>
+          <DropdownMenuRadioItem value="system"><Monitor /> System</DropdownMenuRadioItem>
+          <DropdownMenuRadioItem value="light"><Sun /> Light</DropdownMenuRadioItem>
+          <DropdownMenuRadioItem value="dark"><Moon /> Dark</DropdownMenuRadioItem>
+        </DropdownMenuRadioGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }

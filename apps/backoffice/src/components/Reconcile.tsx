@@ -1,35 +1,53 @@
+import { RefreshCw } from 'lucide-react'
 import { useState } from 'react'
 import { useSession } from '../context'
 import { useAction } from '../hooks'
 import type { Reconciliation } from '../types'
-import { ActionResult, Pill } from './ui'
+import { ActionResult, Mono, Pill } from './ui'
+import { Button } from '@/components/ui/button'
+import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 
 /** Runs one reconciliation now and shows its findings (the run is stored by the server). */
-export function ReconcileCard({ path, title }: { path: string; title: string }) {
+export function ReconcileCard({ path, title, description }: { path: string; title: string; description?: string }) {
   const { api } = useSession()
   const [report, setReport] = useState<Reconciliation | null>(null)
   const { state, run } = useAction()
   const issues = (m: Record<string, string[] | undefined> | null | undefined) => Object.entries(m ?? {}).filter(([, v]) => (v?.length ?? 0) > 0)
+  const busy = state.kind === 'busy'
   return (
-    <div className="card">
-      <div className="card-head">
-        <h2>{title}</h2>
-        <button type="button" className="secondary" disabled={state.kind === 'busy'} onClick={() => void run(async () => { setReport(await api.post<Reconciliation>(path)) }, 'Reconciliation finished.')}>
-          {state.kind === 'busy' ? 'Running…' : 'Run now'}
-        </button>
-      </div>
-      <ActionResult state={state} />
-      {report ? (
-        <div>
-          <Pill tone={report.ok ? 'success' : 'error'}>{report.ok ? 'Everything matches' : 'Mismatches found'}</Pill>
-          {issues(report.mismatches).map(([k, v]) => (
-            <details key={k} open><summary>{k} ({v?.length})</summary><ul>{v?.map((x) => <li key={x} className="mono">{x}</li>)}</ul></details>
-          ))}
-          {issues(report.attention).map(([k, v]) => (
-            <details key={k}><summary>Needs attention: {k} ({v?.length})</summary><ul>{v?.map((x) => <li key={x} className="mono">{x}</li>)}</ul></details>
-          ))}
-        </div>
+    <Card className="shadow-card">
+      <CardHeader>
+        <CardTitle className="text-lg">{title}</CardTitle>
+        {description ? <CardDescription>{description}</CardDescription> : null}
+        <CardAction>
+          <Button type="button" variant="outline" disabled={busy} onClick={() => void run(async () => { setReport(await api.post<Reconciliation>(path)) }, 'Reconciliation finished.')}>
+            <RefreshCw aria-hidden="true" className={busy ? 'animate-spin' : ''} />
+            {busy ? 'Running…' : 'Run now'}
+          </Button>
+        </CardAction>
+      </CardHeader>
+      {state.kind !== 'idle' || report ? (
+        <CardContent className="grid gap-3">
+          <ActionResult state={state} onCheckAgain={(retry) => void run(retry, 'Confirmed by the server.')} />
+          {report ? (
+            <div className="grid gap-2">
+              <div><Pill tone={report.ok ? 'success' : 'error'}>{report.ok ? 'Everything matches' : 'Mismatches found'}</Pill></div>
+              {issues(report.mismatches).map(([k, v]) => (
+                <details key={k} open className="rounded-lg border bg-muted/30 px-3 py-2 text-sm">
+                  <summary className="cursor-pointer font-medium">{k} ({v?.length})</summary>
+                  <ul className="mt-2 grid gap-1 pl-4">{v?.map((x) => <li key={x}><Mono>{x}</Mono></li>)}</ul>
+                </details>
+              ))}
+              {issues(report.attention).map(([k, v]) => (
+                <details key={k} className="rounded-lg border bg-muted/30 px-3 py-2 text-sm">
+                  <summary className="cursor-pointer font-medium">Needs attention: {k} ({v?.length})</summary>
+                  <ul className="mt-2 grid gap-1 pl-4">{v?.map((x) => <li key={x}><Mono>{x}</Mono></li>)}</ul>
+                </details>
+              ))}
+            </div>
+          ) : null}
+        </CardContent>
       ) : null}
-    </div>
+    </Card>
   )
 }
