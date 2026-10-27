@@ -50,6 +50,13 @@ class PlayStatusPanel extends StatelessWidget {
       duration: context.reduceMotion ? Duration.zero : Motion.emphasis,
       switchInCurve: Motion.enter,
       switchOutCurve: Motion.exit,
+      transitionBuilder: (child, animation) => FadeTransition(
+        opacity: animation,
+        child: SlideTransition(
+          position: Tween(begin: const Offset(0, 0.04), end: Offset.zero).animate(animation),
+          child: child,
+        ),
+      ),
       child: child,
     );
   }
@@ -66,15 +73,22 @@ class _Line extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Semantics(
     liveRegion: true,
-    child: Row(
-      children: [
-        if (busy)
-          SizedBox.square(dimension: 20, child: CircularProgressIndicator(strokeWidth: 2.5, color: tone))
-        else
-          ExcludeSemantics(child: Icon(icon, color: tone)),
-        const SizedBox(width: Space.md),
-        Expanded(child: Text(title, style: Theme.of(context).textTheme.bodyLarge)),
-      ],
+    child: Container(
+      padding: const EdgeInsets.symmetric(horizontal: Space.lg, vertical: Space.md),
+      decoration: BoxDecoration(
+        color: tone.withValues(alpha: context.colors.isDark ? 0.12 : 0.07),
+        borderRadius: BorderRadius.circular(Radii.lg),
+      ),
+      child: Row(
+        children: [
+          if (busy)
+            SizedBox.square(dimension: 20, child: CircularProgressIndicator(strokeWidth: 2.5, color: tone))
+          else
+            ExcludeSemantics(child: Icon(icon, color: tone)),
+          const SizedBox(width: Space.md),
+          Expanded(child: Text(title, style: Theme.of(context).textTheme.bodyLarge)),
+        ],
+      ),
     ),
   );
 }
@@ -90,12 +104,14 @@ class _Panel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context).textTheme;
+    final c = context.colors;
     return Container(
       padding: const EdgeInsets.all(Space.lg),
       decoration: BoxDecoration(
-        color: context.colors.surface,
+        color: c.surface,
         borderRadius: BorderRadius.circular(Radii.lg),
-        border: Border.all(color: tone.withValues(alpha: 0.5)),
+        border: Border.all(color: tone.withValues(alpha: 0.45)),
+        boxShadow: Elevation.card(c),
       ),
       child: Semantics(
         liveRegion: true,
@@ -106,14 +122,22 @@ class _Panel extends StatelessWidget {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                ExcludeSemantics(child: Icon(icon, color: tone)),
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(color: tone.withValues(alpha: 0.14), shape: BoxShape.circle),
+                  child: ExcludeSemantics(child: Icon(icon, color: tone, size: 20)),
+                ),
                 const SizedBox(width: Space.md),
                 Expanded(
-                  child: Semantics(header: true, child: Text(title, style: t.titleMedium)),
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: Space.xs),
+                    child: Semantics(header: true, child: Text(title, style: t.titleMedium)),
+                  ),
                 ),
               ],
             ),
-            const SizedBox(height: Space.sm),
+            const SizedBox(height: Space.md),
             ...children,
           ],
         ),

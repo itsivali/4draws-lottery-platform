@@ -17,9 +17,9 @@ class StartingScreen extends StatelessWidget {
         child: const Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            BrandMark(height: 40),
-            SizedBox(height: Space.xl),
-            CircularProgressIndicator(),
+            BrandMark(height: 44),
+            SizedBox(height: Space.xxl),
+            SizedBox.square(dimension: 28, child: CircularProgressIndicator(strokeWidth: 3)),
           ],
         ),
       ),
@@ -47,26 +47,35 @@ class _OfflineScreenState extends ConsumerState<OfflineScreen> {
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context).textTheme;
+    final c = context.colors;
     return Scaffold(
       body: Center(
         child: Padding(
           padding: const EdgeInsets.all(Space.xl),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ExcludeSemantics(child: Icon(Icons.cloud_off_rounded, size: 48, color: context.colors.inkMuted)),
-              const SizedBox(height: Space.lg),
-              Text("You're offline", style: t.headlineSmall, textAlign: TextAlign.center),
-              const SizedBox(height: Space.sm),
-              Text(
-                "We couldn't reach the server to resume your session. Nothing has changed with your account; "
-                'connect and try again.',
-                style: t.bodyMedium,
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: Space.xl),
-              FilledButton(onPressed: _busy ? null : _retry, child: Text(_busy ? 'Trying…' : 'Try again')),
-            ],
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 420),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 72,
+                  height: 72,
+                  decoration: BoxDecoration(color: c.surfaceMuted, shape: BoxShape.circle),
+                  child: ExcludeSemantics(child: Icon(Icons.cloud_off_rounded, size: 32, color: c.inkMuted)),
+                ),
+                const SizedBox(height: Space.xl),
+                Text("You're offline", style: t.headlineSmall, textAlign: TextAlign.center),
+                const SizedBox(height: Space.sm),
+                Text(
+                  "We couldn't reach the server to resume your session. Nothing has changed with your account; "
+                  'connect and try again.',
+                  style: t.bodyMedium?.copyWith(color: c.inkMuted),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: Space.xl),
+                FilledButton(onPressed: _busy ? null : _retry, child: Text(_busy ? 'Trying…' : 'Try again')),
+              ],
+            ),
           ),
         ),
       ),

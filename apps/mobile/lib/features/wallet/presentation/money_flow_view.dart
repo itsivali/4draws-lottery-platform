@@ -35,7 +35,6 @@ class _SettlementStatusViewState<T> extends State<SettlementStatusView<T>> {
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context).textTheme;
-    final c = context.colors;
     return ValueListenableBuilder<SettlementState<T>>(
       valueListenable: widget.flow.state,
       builder: (context, s, _) {
@@ -51,41 +50,44 @@ class _SettlementStatusViewState<T> extends State<SettlementStatusView<T>> {
         }
         final Widget body = switch (s.stage) {
           SettlementStage.ready => const SizedBox.shrink(),
-          SettlementStage.sending => _row(context, c.pending, 'Sending your request…', busy: true),
-          SettlementStage.sendUncertain => Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          SettlementStage.sending => _Stage(
+            tone: StatusTone.pending,
+            busy: true,
+            label: 'Sending',
+            children: [Text('Sending your request…', style: t.bodyLarge)],
+          ),
+          SettlementStage.sendUncertain => _Stage(
+            tone: StatusTone.pending,
+            busy: s.checking,
+            label: 'Checking your request',
             children: [
-              const StatusPill(tone: StatusTone.pending, label: 'Checking your request'),
-              const SizedBox(height: Space.sm),
               Text(
                 "The connection dropped before the server answered. Checking refers to the same request, so it can't "
                 'be made twice. Please do not start another one.',
                 style: t.bodyMedium,
               ),
-              const SizedBox(height: Space.sm),
-              if (s.checking)
-                _row(context, c.pending, 'Checking…', busy: true)
-              else
-                OutlinedButton(onPressed: widget.flow.checkSend, child: const Text('Check again')),
+              if (!s.checking) ...[
+                const SizedBox(height: Space.md),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: OutlinedButton(onPressed: widget.flow.checkSend, child: const Text('Check again')),
+                ),
+              ],
             ],
           ),
-          SettlementStage.refused => Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          SettlementStage.refused => _Stage(
+            tone: StatusTone.error,
+            label: describeFailure(s.failure!).title,
             children: [
-              StatusPill(tone: StatusTone.error, label: describeFailure(s.failure!).title),
-              if (describeFailure(s.failure!).detail case final d?)
-                Padding(
-                  padding: const EdgeInsets.only(top: Space.sm),
-                  child: Text(d, style: t.bodyMedium),
-                ),
+              if (describeFailure(s.failure!).detail case final d?) Text(d, style: t.bodyMedium),
               Text('Nothing was started.', style: t.bodySmall),
             ],
           ),
-          SettlementStage.waiting || SettlementStage.stillWaiting => Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          SettlementStage.waiting || SettlementStage.stillWaiting => _Stage(
+            tone: StatusTone.pending,
+            busy: s.checking || s.stage == SettlementStage.waiting,
+            label: 'Pending',
             children: [
-              const StatusPill(tone: StatusTone.pending, label: 'Pending'),
-              const SizedBox(height: Space.sm),
               Text(widget.pendingText, style: t.bodyLarge),
               const SizedBox(height: Space.xs),
               Text(
@@ -95,41 +97,77 @@ class _SettlementStatusViewState<T> extends State<SettlementStatusView<T>> {
                 style: t.bodySmall,
               ),
               const SizedBox(height: Space.sm),
-              Row(
-                children: [
-                  if (s.checking || s.stage == SettlementStage.waiting) ...[
-                    SizedBox.square(
-                      dimension: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2.5, color: c.pending),
-                    ),
-                    const SizedBox(width: Space.md),
-                  ],
-                  TextButton(onPressed: s.checking ? null : widget.flow.refresh, child: const Text('Check status now')),
-                ],
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton(
+                  onPressed: s.checking ? null : widget.flow.refresh,
+                  child: const Text('Check status now'),
+                ),
               ),
             ],
           ),
-          SettlementStage.settled => Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          SettlementStage.settled => _Stage(
+            tone: widget.describe(s.item as T).$1,
+            label: widget.describe(s.item as T).$2,
             children: [
-              StatusPill(tone: widget.describe(s.item as T).$1, label: widget.describe(s.item as T).$2),
-              const SizedBox(height: Space.sm),
               Text(widget.describe(s.item as T).$3, style: t.bodyLarge),
-              const SizedBox(height: Space.md),
+              const SizedBox(height: Space.lg),
               FilledButton(onPressed: widget.onDone, child: const Text('Back to wallet')),
             ],
           ),
         };
-        return Semantics(liveRegion: true, child: body);
+        return Semantics(
+          liveRegion: true,
+          child: AnimatedSwitcher(
+            duration: context.reduceMotion ? Duration.zero : Motion.standard,
+            child: KeyedSubtree(key: ValueKey(s.stage), child: body),
+          ),
+        );
       },
     );
   }
+}
 
-  Widget _row(BuildContext context, Color color, String text, {bool busy = false}) => Row(
-    children: [
-      if (busy) SizedBox.square(dimension: 18, child: CircularProgressIndicator(strokeWidth: 2.5, color: color)),
-      const SizedBox(width: Space.md),
-      Expanded(child: Text(text, style: Theme.of(context).textTheme.bodyLarge)),
-    ],
-  );
+/// One stage of a settlement: a toned icon disc, the state as a pill, and what it means.
+class _Stage extends StatelessWidget {
+  const _Stage({required this.tone, required this.label, required this.children, this.busy = false});
+
+  final StatusTone tone;
+  final String label;
+  final List<Widget> children;
+  final bool busy;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final (color, icon) = tone.resolve(c);
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(color: color.withValues(alpha: 0.14), shape: BoxShape.circle),
+          alignment: Alignment.center,
+          child: busy
+              ? SizedBox.square(dimension: 20, child: CircularProgressIndicator(strokeWidth: 2.5, color: color))
+              : ExcludeSemantics(child: Icon(icon, color: color, size: 22)),
+        ),
+        const SizedBox(width: Space.md),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Align(
+                alignment: Alignment.centerLeft,
+                child: StatusPill(tone: tone, label: label),
+              ),
+              const SizedBox(height: Space.sm),
+              ...children,
+            ],
+          ),
+        ),
+      ],
+    );
+  }
 }

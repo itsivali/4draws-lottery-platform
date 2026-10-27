@@ -55,7 +55,8 @@ dev_dependencies:
 flutter:
   uses-material-design: true
   fonts:
-    # IBM Plex Sans 3.005 (SIL Open Font License, assets/fonts/OFL.txt). Bundled: no runtime font download.
+    # IBM Plex Sans 3.005 (SIL Open Font License, assets/fonts/OFL.txt) and Manrope (OFL, assets/fonts/OFL-Manrope.txt,
+    # a variable font: its weight follows FontWeight through FontVariation). Bundled: no runtime font download.
     - family: IBMPlexSans
       fonts:
         - asset: assets/fonts/IBMPlexSans-Regular.ttf
@@ -66,3 +67,6 @@ flutter:
           weight: 600
         - asset: assets/fonts/IBMPlexSans-Bold.ttf
           weight: 700
+    - family: Manrope
+      fonts:
+        - asset: assets/fonts/Manrope-Variable.ttf

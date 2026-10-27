@@ -11,6 +11,7 @@ import '../../../core/widgets/busy_button.dart';
 import '../../../core/widgets/confirm_sheet.dart';
 import '../../../core/widgets/content_frame.dart';
 import '../../../core/widgets/failure_text.dart';
+import '../../../core/widgets/inline_banner.dart';
 import '../../../core/widgets/status_pill.dart';
 import '../application/account_providers.dart';
 
@@ -53,7 +54,7 @@ class _ClosureScreenState extends ConsumerState<ClosureScreen> {
       }
       ref.invalidate(accountProvider);
     } on ApiFailure catch (f) {
-      setState(() => _error = describeFailure(f).title);
+      if (mounted) setState(() => _error = describeFailure(f).title);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -63,6 +64,7 @@ class _ClosureScreenState extends ConsumerState<ClosureScreen> {
   Widget build(BuildContext context) {
     final account = ref.watch(accountProvider);
     final t = Theme.of(context).textTheme;
+    final c = context.colors;
     return PageScaffold(
       title: 'Close account',
       children: [
@@ -70,37 +72,33 @@ class _ClosureScreenState extends ConsumerState<ClosureScreen> {
           value: account,
           what: 'your account',
           onRetry: () => ref.invalidate(accountProvider),
-          data: (a) => AppCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                if (a.closureRequestedAt != null) ...[
-                  const Align(
-                    alignment: Alignment.centerLeft,
-                    child: StatusPill(tone: StatusTone.pending, label: 'Closure requested'),
+          data: (a) => a.closureRequestedAt != null
+              ? InlineBanner(
+                  tone: StatusTone.pending,
+                  title: 'Closure requested',
+                  message:
+                      'You asked on ${formatEat(a.closureRequestedAt!)}. Staff will pay out any balance and close the '
+                      'account. Until then you can still sign in and withdraw.',
+                )
+              : AppCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text(
+                        'You can ask for your account to be closed. Staff close it once any balance has been paid out '
+                        'to your M-Pesa number. Records the law requires are kept; everything else about you is no '
+                        'longer used.',
+                        style: t.bodyMedium?.copyWith(color: c.inkMuted),
+                      ),
+                      if (_error != null) ...[
+                        const SizedBox(height: Space.lg),
+                        InlineBanner(tone: StatusTone.error, live: true, title: _error!),
+                      ],
+                      const SizedBox(height: Space.xl),
+                      BusyButton(label: 'Ask to close my account', busy: _busy, onPressed: _request),
+                    ],
                   ),
-                  const SizedBox(height: Space.md),
-                  Text(
-                    'You asked on ${formatEat(a.closureRequestedAt!)}. Staff will pay out any balance and close the account. '
-                    'Until then you can still sign in and withdraw.',
-                    style: t.bodyMedium,
-                  ),
-                ] else ...[
-                  Text(
-                    'You can ask for your account to be closed. Staff close it once any balance has been paid out to your '
-                    'M-Pesa number. Records the law requires are kept; everything else about you is no longer used.',
-                    style: t.bodyMedium,
-                  ),
-                  if (_error != null) ...[
-                    const SizedBox(height: Space.md),
-                    Text(_error!, style: t.bodyMedium?.copyWith(color: context.colors.error)),
-                  ],
-                  const SizedBox(height: Space.xl),
-                  BusyButton(label: 'Ask to close my account', busy: _busy, onPressed: _request),
-                ],
-              ],
-            ),
-          ),
+                ),
         ),
       ],
     );

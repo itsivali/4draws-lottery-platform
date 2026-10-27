@@ -4,7 +4,8 @@ import 'package:flutter/services.dart';
 import '../../../app/theme/tokens.dart';
 import '../../../core/formatting/money.dart';
 
-/// A whole-shilling amount with quick picks, validated against the API's own range.
+/// A whole-shilling amount with quick picks, validated against the API's own range. The amount is set large, as the
+/// one number on the screen that matters.
 class AmountField extends StatelessWidget {
   const AmountField({
     super.key,
@@ -28,36 +29,41 @@ class AmountField extends StatelessWidget {
   final bool enabled;
 
   @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    children: [
-      TextFormField(
-        controller: controller,
-        enabled: enabled,
-        keyboardType: TextInputType.number,
-        inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(6)],
-        style: Theme.of(context).textTheme.titleLarge,
-        decoration: InputDecoration(
-          labelText: label,
-          prefixText: 'KES ',
-          helperText: helper ?? '${formatKes(min)} to ${formatKes(max)}, whole shillings',
+  Widget build(BuildContext context) {
+    final t = Theme.of(context).textTheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        TextFormField(
+          controller: controller,
+          enabled: enabled,
+          keyboardType: TextInputType.number,
+          inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(6)],
+          style: t.headlineMedium,
+          decoration: InputDecoration(
+            labelText: label,
+            prefixText: 'KES ',
+            prefixStyle: t.headlineMedium?.copyWith(color: context.colors.inkMuted),
+            helperText: helper ?? '${formatKes(min)} to ${formatKes(max)}, whole shillings',
+            contentPadding: const EdgeInsets.symmetric(horizontal: Space.lg, vertical: Space.xl),
+          ),
+          validator: (v) {
+            final n = int.tryParse(v ?? '');
+            if (n == null) return 'Enter an amount.';
+            if (n < min || n > max) return 'Enter ${formatKes(min)} to ${formatKes(max)}.';
+            return extraValidator?.call(n);
+          },
         ),
-        validator: (v) {
-          final n = int.tryParse(v ?? '');
-          if (n == null) return 'Enter an amount.';
-          if (n < min || n > max) return 'Enter ${formatKes(min)} to ${formatKes(max)}.';
-          return extraValidator?.call(n);
-        },
-      ),
-      const SizedBox(height: Space.md),
-      Wrap(
-        spacing: Space.sm,
-        runSpacing: Space.sm,
-        children: [
-          for (final q in quick)
-            ActionChip(label: Text(formatKes(q)), onPressed: enabled ? () => controller.text = '$q' : null),
-        ],
-      ),
-    ],
-  );
+        const SizedBox(height: Space.md),
+        Wrap(
+          spacing: Space.sm,
+          runSpacing: Space.sm,
+          children: [
+            for (final q in quick)
+              ActionChip(label: Text(formatKes(q)), onPressed: enabled ? () => controller.text = '$q' : null),
+          ],
+        ),
+      ],
+    );
+  }
 }

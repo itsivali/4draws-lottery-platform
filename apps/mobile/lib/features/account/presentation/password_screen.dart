@@ -9,6 +9,8 @@ import '../../../core/widgets/app_card.dart';
 import '../../../core/widgets/busy_button.dart';
 import '../../../core/widgets/content_frame.dart';
 import '../../../core/widgets/failure_text.dart';
+import '../../../core/widgets/inline_banner.dart';
+import '../../../core/widgets/status_pill.dart';
 import '../application/account_providers.dart';
 
 class PasswordScreen extends ConsumerStatefulWidget {
@@ -23,6 +25,7 @@ class _PasswordScreenState extends ConsumerState<PasswordScreen> {
   final _current = TextEditingController();
   final _next = TextEditingController();
   var _busy = false;
+  var _obscure = true;
   String? _error;
 
   @override
@@ -45,6 +48,7 @@ class _PasswordScreenState extends ConsumerState<PasswordScreen> {
           .showSnackBar(const SnackBar(content: Text('Password changed. Other devices are signed out.')));
       context.go('/account');
     } on ApiFailure catch (f) {
+      if (!mounted) return;
       final d = describeFailure(f);
       setState(() => _error = [d.title, ?d.detail].join(': '));
     } finally {
@@ -65,28 +69,34 @@ class _PasswordScreenState extends ConsumerState<PasswordScreen> {
               children: [
                 TextFormField(
                   controller: _current,
-                  obscureText: true,
+                  obscureText: _obscure,
                   autofillHints: const [AutofillHints.password],
-                  decoration: const InputDecoration(labelText: 'Current password'),
+                  decoration: InputDecoration(
+                    labelText: 'Current password',
+                    prefixIcon: const Icon(Icons.lock_outline_rounded),
+                    suffixIcon: IconButton(
+                      tooltip: _obscure ? 'Show passwords' : 'Hide passwords',
+                      icon: Icon(_obscure ? Icons.visibility_rounded : Icons.visibility_off_rounded),
+                      onPressed: () => setState(() => _obscure = !_obscure),
+                    ),
+                  ),
                   validator: (v) => (v ?? '').isEmpty ? 'Enter your current password.' : null,
                 ),
                 const SizedBox(height: Space.lg),
                 TextFormField(
                   controller: _next,
-                  obscureText: true,
+                  obscureText: _obscure,
                   autofillHints: const [AutofillHints.newPassword],
                   decoration: const InputDecoration(
                     labelText: 'New password',
+                    prefixIcon: Icon(Icons.lock_rounded),
                     helperText: '8 to 128 characters, not a common password, not your number',
                   ),
                   validator: (v) => (v ?? '').length < 8 ? 'Use at least 8 characters.' : null,
                 ),
                 if (_error != null) ...[
                   const SizedBox(height: Space.lg),
-                  Semantics(
-                    liveRegion: true,
-                    child: Text(_error!, style: TextStyle(color: context.colors.error)),
-                  ),
+                  InlineBanner(tone: StatusTone.error, live: true, title: _error!),
                 ],
                 const SizedBox(height: Space.xl),
                 BusyButton(label: 'Change password', busy: _busy, onPressed: _submit),

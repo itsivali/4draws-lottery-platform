@@ -12,6 +12,8 @@ import '../../../core/widgets/async_view.dart';
 import '../../../core/widgets/confirm_sheet.dart';
 import '../../../core/widgets/content_frame.dart';
 import '../../../core/widgets/failure_text.dart';
+import '../../../core/widgets/inline_banner.dart';
+import '../../../core/widgets/list_row.dart';
 import '../../../core/widgets/status_pill.dart';
 import '../application/account_providers.dart';
 import '../domain/account_models.dart';
@@ -53,42 +55,10 @@ class _ResponsibleGamingScreenState extends ConsumerState<ResponsibleGamingScree
   }
 
   Future<void> _editLimit(String period, LimitState state) async {
-    final controller = TextEditingController(text: state.current?.amountKes.toString() ?? '');
     final amount = await showDialog<int>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('${_periodLabel(period)} deposit limit'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            TextField(
-              controller: controller,
-              autofocus: true,
-              keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              decoration: const InputDecoration(prefixText: 'KES ', labelText: 'Most you can deposit'),
-            ),
-            const SizedBox(height: Space.md),
-            Text(
-              'Lowering a limit applies now. Raising it applies after a cooling-off period.',
-              style: Theme.of(ctx).textTheme.bodySmall,
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          FilledButton(
-            onPressed: () {
-              final n = int.tryParse(controller.text);
-              if (n != null && n > 0) Navigator.pop(ctx, n);
-            },
-            child: const Text('Save'),
-          ),
-        ],
-      ),
+      builder: (ctx) => _LimitDialog(period: _periodLabel(period), initial: state.current?.amountKes),
     );
-    controller.dispose();
     if (amount == null) return;
     await _run(
       'limit-$period',
@@ -145,45 +115,44 @@ class _ResponsibleGamingScreenState extends ConsumerState<ResponsibleGamingScree
     final account = ref.watch(accountProvider);
     final limits = ref.watch(limitsProvider);
     final t = Theme.of(context).textTheme;
+    final c = context.colors;
     final restricted = account.value?.restriction;
     return PageScaffold(
       title: 'Play safely',
+      onRefresh: () async {
+        ref
+          ..invalidate(accountProvider)
+          ..invalidate(limitsProvider);
+      },
       children: [
         if (restricted != null)
-          AppCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                StatusPill(tone: StatusTone.pending, label: restricted.selfExclusion ? 'Self-excluded' : 'On a break'),
-                const SizedBox(height: Space.sm),
-                Text(
-                  restricted.until == null
-                      ? 'Permanently. Play and top-ups are closed.'
-                      : 'Until ${formatEat(restricted.until!)}. Play and top-ups are closed until then.',
-                  style: t.bodyMedium,
-                ),
-              ],
-            ),
+          InlineBanner(
+            tone: StatusTone.pending,
+            title: restricted.selfExclusion ? 'Self-excluded' : 'On a break',
+            message: restricted.until == null
+                ? 'Permanently. Play and top-ups are closed.'
+                : 'Until ${formatEat(restricted.until!)}. Play and top-ups are closed until then.',
           ),
         AppCard(
           title: 'Deposit limits',
+          padding: const EdgeInsets.only(top: Space.lg),
           child: AsyncView(
             value: limits,
             what: 'your limits',
             onRetry: () => ref.invalidate(limitsProvider),
             data: (map) => Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                for (final p in const ['daily', 'weekly', 'monthly'])
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: Text(_periodLabel(p)),
-                    subtitle: Text(
-                      [
-                        map[p]?.current == null ? 'No limit' : formatKes(map[p]!.current!.amountKes),
-                        if (map[p]?.pending case final pending?)
-                          'rising to ${formatKes(pending.amountKes)} from ${formatEat(pending.effectiveFrom)}',
-                      ].join(' · '),
-                    ),
+                for (final (i, p) in const ['daily', 'weekly', 'monthly'].indexed) ...[
+                  if (i > 0) Divider(indent: Space.lg, endIndent: Space.lg, color: c.border),
+                  ListRow(
+                    icon: Icons.speed_rounded,
+                    title: _periodLabel(p),
+                    subtitle: [
+                      map[p]?.current == null ? 'No limit' : formatKes(map[p]!.current!.amountKes),
+                      if (map[p]?.pending case final pending?)
+                        'rising to ${formatKes(pending.amountKes)} from ${formatEat(pending.effectiveFrom)}',
+                    ].join(' · '),
                     trailing: _busy == 'limit-$p'
                         ? const SizedBox.square(dimension: 20, child: CircularProgressIndicator(strokeWidth: 2))
                         : TextButton(
@@ -191,6 +160,7 @@ class _ResponsibleGamingScreenState extends ConsumerState<ResponsibleGamingScree
                             child: const Text('Change'),
                           ),
                   ),
+                ],
               ],
             ),
           ),
@@ -200,7 +170,7 @@ class _ResponsibleGamingScreenState extends ConsumerState<ResponsibleGamingScree
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Pause play and top-ups for a while.', style: t.bodyMedium),
+              Text('Pause play and top-ups for a while.', style: t.bodyMedium?.copyWith(color: c.inkMuted)),
               const SizedBox(height: Space.md),
               Wrap(
                 spacing: Space.sm,
@@ -218,7 +188,10 @@ class _ResponsibleGamingScreenState extends ConsumerState<ResponsibleGamingScree
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Stop for a long time. It cannot be shortened once started.', style: t.bodyMedium),
+              Text(
+                'Stop for a long time. It cannot be shortened once started.',
+                style: t.bodyMedium?.copyWith(color: c.inkMuted),
+              ),
               const SizedBox(height: Space.md),
               Wrap(
                 spacing: Space.sm,
@@ -237,21 +210,81 @@ class _ResponsibleGamingScreenState extends ConsumerState<ResponsibleGamingScree
         ),
         AppCard(
           title: 'Getting help',
+          tinted: true,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
                 'If gambling stops being fun, take a break with the tools above and talk to someone you trust. '
                 'Free, confidential support is available from:',
-                style: t.bodyMedium,
+                style: t.bodyMedium?.copyWith(color: c.onPrimaryContainer),
               ),
-              const SizedBox(height: Space.sm),
-              Text('Responsible Gambling Kenya', style: t.titleMedium),
-              const SelectableText('responsiblegambling.or.ke'),
+              const SizedBox(height: Space.md),
+              Text('Responsible Gambling Kenya', style: t.titleMedium?.copyWith(color: c.onPrimaryContainer)),
+              SelectableText('responsiblegambling.or.ke', style: t.bodyMedium?.copyWith(color: c.onPrimaryContainer)),
             ],
           ),
         ),
       ],
     );
   }
+}
+
+/// Asks for one limit. The controller lives with the dialog, so it outlives the exit animation.
+class _LimitDialog extends StatefulWidget {
+  const _LimitDialog({required this.period, required this.initial});
+
+  final String period;
+  final int? initial;
+
+  @override
+  State<_LimitDialog> createState() => _LimitDialogState();
+}
+
+class _LimitDialogState extends State<_LimitDialog> {
+  late final _controller = TextEditingController(text: widget.initial?.toString() ?? '');
+  String? _error;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _save() {
+    final n = int.tryParse(_controller.text);
+    if (n == null || n <= 0) {
+      setState(() => _error = 'Enter a whole number of shillings above zero.');
+      return;
+    }
+    Navigator.pop(context, n);
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: Text('${widget.period} deposit limit'),
+    content: Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        TextField(
+          controller: _controller,
+          autofocus: true,
+          keyboardType: TextInputType.number,
+          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+          onSubmitted: (_) => _save(),
+          decoration: InputDecoration(prefixText: 'KES ', labelText: 'Most you can deposit', errorText: _error),
+        ),
+        const SizedBox(height: Space.md),
+        Text(
+          'Lowering a limit applies now. Raising it applies after a cooling-off period.',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+      ],
+    ),
+    actions: [
+      TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+      FilledButton(onPressed: _save, child: const Text('Save')),
+    ],
+  );
 }

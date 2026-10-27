@@ -10,6 +10,7 @@ import '../../../core/widgets/async_view.dart';
 import '../../../core/widgets/busy_button.dart';
 import '../../../core/widgets/confirm_sheet.dart';
 import '../../../core/widgets/content_frame.dart';
+import '../../../core/widgets/inline_banner.dart';
 import '../../../core/widgets/status_pill.dart';
 import '../../account/application/account_providers.dart';
 import '../../account/domain/account_models.dart';
@@ -64,6 +65,7 @@ class _WithdrawScreenState extends ConsumerState<WithdrawScreen> {
     final wallet = ref.watch(walletStatementProvider);
     final m = ref.watch(withdrawFlowProvider);
     final t = Theme.of(context).textTheme;
+    final c = context.colors;
     return PageScaffold(
       title: 'Withdraw to M-Pesa',
       children: [
@@ -76,17 +78,28 @@ class _WithdrawScreenState extends ConsumerState<WithdrawScreen> {
             what: 'your wallet',
             onRetry: () => ref.invalidate(walletStatementProvider),
             data: (w) {
-              final blocked = a.kycStatus != KycStatus.verified
-                  ? 'Withdrawals need a verified national ID.'
+              final (blocked, action, route) = a.kycStatus != KycStatus.verified
+                  ? (
+                      'Withdrawals need a verified national ID.',
+                      a.kycStatus == KycStatus.none ? 'Verify my ID' : null,
+                      '/account/verify',
+                    )
                   : !a.phoneVerified
-                  ? 'Withdrawals go to a proved number. Your first top-up proves it.'
+                  ? ('Withdrawals go to a proved number. Your first top-up proves it.', 'Top up', '/wallet/top-up')
                   : w.debtKes > 0
-                  ? 'Withdrawals are paused while you owe money from a reversed top-up.'
-                  : null;
+                  ? (
+                      'Withdrawals are paused while you owe money from a reversed top-up. Your next top-up repays it.',
+                      'Top up',
+                      '/wallet/top-up',
+                    )
+                  : (null, null, null);
               if (blocked != null) {
-                return AppCard(
+                return InlineBanner(
+                  tone: StatusTone.warning,
                   title: "You can't withdraw yet",
-                  child: Text(blocked, style: t.bodyMedium),
+                  message: blocked,
+                  actionLabel: action,
+                  onAction: action == null ? null : () => context.go(route!),
                 );
               }
               return ValueListenableBuilder<SettlementState<Payout>>(
@@ -102,10 +115,29 @@ class _WithdrawScreenState extends ConsumerState<WithdrawScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
-                              Text('Available: ${formatKes(w.balanceKes)}', style: t.titleMedium),
-                              const SizedBox(height: Space.xs),
-                              Text('Paid to your proved number, ${formatMsisdn(a.msisdn)}.', style: t.bodySmall),
-                              const SizedBox(height: Space.lg),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text('Available', style: t.labelSmall),
+                                        Text(formatKes(w.balanceKes), style: t.headlineSmall),
+                                      ],
+                                    ),
+                                  ),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text('Paid to', style: t.labelSmall),
+                                        Text(formatMsisdn(a.msisdn), style: t.titleMedium),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              Divider(height: Space.xxl, color: c.border),
                               AmountField(
                                 controller: _amount,
                                 min: 50,
@@ -115,7 +147,7 @@ class _WithdrawScreenState extends ConsumerState<WithdrawScreen> {
                                 enabled: !started,
                                 extraValidator: (n) => n > w.balanceKes ? 'That is more than your balance.' : null,
                               ),
-                              const SizedBox(height: Space.lg),
+                              const SizedBox(height: Space.xl),
                               if (!started)
                                 BusyButton(label: 'Continue', busy: false, onPressed: () => _submit(a, w, m)),
                             ],

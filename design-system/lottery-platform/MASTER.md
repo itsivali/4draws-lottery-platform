@@ -1,4 +1,4 @@
-# Lottery Platform — Design System (Master)
+# Lottery Platform — Design System (Master, v2)
 
 The single source of truth for how the player app (`apps/mobile`, Flutter: iOS, Android, web) looks, moves and feels.
 Page files in `pages/` record only deviations from this file; when a page file exists its rules win for that page.
@@ -12,9 +12,9 @@ adapted; the deviations from its output are listed under *Provenance* at the end
 
 ## 1. Brand personality
 
-**Calm, exact, honest — with one moment of theatre.** The app sits between a fintech wallet and a well-made physical
-object. Everything is quiet, legible and financially transparent; the wheel is the one place with depth, metal and
-motion, and even there it only ever shows what the server decided.
+**Calm, exact, honest — with two moments of theatre.** The app sits between a fintech wallet and a well-made physical
+object. Everything is quiet, legible and financially transparent; the balance and the wheel are the two places with
+depth, metal and motion (the *hero surfaces*, §5), and even there they only ever show what the server decided.
 
 - Trustworthy before exciting. Numbers are large, aligned and never ambiguous.
 - Plain language. "Play recorded", "1 draw chance", "Pending M-Pesa confirmation" — never "JACKPOT!", "So close!" or
@@ -50,6 +50,9 @@ of an ordinary success, a button or a balance: it must not suggest that money wa
 | `pending` | `#33528F` | `#9DB6F2` | Waiting on M-Pesa / the server — never green |
 | `border` | `#D9D2C2` | `#2B3B35` | Hairlines and dividers (decorative) |
 | `outline` | `#7C8580` | `#7F8C86` | Input and control boundaries (≥ 3:1) |
+| `surfaceRaised` | `#FFFFFF` | `#182822` | Inputs and panels that sit on `surface` |
+| `heroStart` → `heroEnd` | `#0E6A4F` → `#063A2C` | `#145640` → `#0B2E24` | The hero surfaces' gradient, lit from the top left by `heroGlow` |
+| `onHero` / `onHeroMuted` | `#FFFFFF` / `#CFE6DB` | `#F2F7F3` / `#B8D8C8` | Text on a hero surface |
 
 Every status colour is paired with an icon and a word (`StatusPill`): colour is never the only signal.
 
@@ -57,13 +60,16 @@ Every status colour is paired with an icon and a word (`StatusPill`): colour is 
 
 ## 3. Typography
 
-**IBM Plex Sans** (bundled, OFL; no runtime font download) for everything. Its tabular figures (`tnum`) are switched
-on for every number style so KES amounts, counts and times align and do not jitter as they change.
+**IBM Plex Sans** (bundled, OFL; no runtime font download) for everything. Headlines, titles and the balance are the
+*display* styles: heavier (700 for display sizes) and set tighter (−0.2 to −1.2 tracking) so they read as a distinct
+voice from the body without a second family. `AppType.display` names the display family: **Manrope** (bundled, OFL; a
+variable font whose weight the theme sets through `FontVariation`). Tabular figures (`tnum`) are switched on for
+every number style so KES amounts, counts and times align and do not jitter as they change.
 
 | Token | Size / line height | Weight | Use |
 |---|---|---|---|
-| `display` | 40 / 48 | 600 | The balance on Wallet; the result headline number |
-| `headline` | 28 / 36 | 600 | Screen titles |
+| `display` | 48 / 56 and 40 / 48 | 700 | The balance on Wallet and Home (on the hero surface) |
+| `headline` | 28 / 36 | 700 / 600 | Screen titles |
 | `title` | 20 / 28 | 600 | Card titles, sheet titles |
 | `titleSmall` | 16 / 24 | 600 | Section headers, list titles |
 | `body` | 16 / 24 | 400 | Body text (minimum body size: 16) |
@@ -92,11 +98,18 @@ Touch targets ≥ 48×48 dp, ≥ 8 dp apart. Safe areas respected; the bottom ba
 
 ## 5. Surfaces, elevation, radius
 
-- Flat by default. Cards are `surface` with a 1 dp `border` hairline and **no shadow**.
-- Elevation exists in three steps only: `0` (cards), `1` (sticky bars: 1 dp border top), `2` (sheets and dialogs: a
-  single soft shadow `0 8 24 / 12% ink`). The wheel has its own lighting (see `pages/play.md`).
-- Radii: `sm 8` (chips, inputs), `md 12` (buttons), `lg 16` (cards), `xl 24` (sheets top corners), `full` (pills).
-- No glassmorphism, no blur as decoration; no gradients except the wheel's rim and hub.
+- Cards are `surface` with a 1 dp `border` hairline and a **soft lift** (`Elevation.card`: `0 1 2 / 4%` + `0 8 24 / 6%`
+  ink in light; `0 8 24 / 35%` black in dark). `flat` cards (inside sheets, nested lists) keep the border and drop the
+  lift; `tinted` cards sit on `primaryContainer` for quiet emphasis.
+- Elevation exists in three steps: `card` (above), `float` (sheets, dialogs, tooltips: `0 12 40 / 14%`) and `hero`
+  (`0 16 40 / 35% heroEnd`). The wheel has its own lighting (see `pages/play.md`).
+- **Hero surfaces** (`HeroCard`): the deep-emerald gradient `heroStart → heroEnd` with a radial `heroGlow` from the
+  top left, faint concentric rings in a corner, `hero` elevation and `xl` corners. Exactly two uses: the balance
+  (Home, Wallet) and the wheel's stage (Play). On wide screens the sign-in page's brand panel borrows it for words,
+  never for money. Nothing else is a hero.
+- Radii: `sm 8` (chips), `md 12` (buttons, inputs), `lg 16` (cards), `xl 24` (hero cards, dialogs), `xxl 28` (sheets'
+  top corners, the wheel's stage), `full` (pills).
+- No glassmorphism, no blur as decoration; no gradients except the hero surfaces and the wheel's rim and hub.
 
 ## 6. Iconography
 
@@ -116,8 +129,14 @@ success = `check_circle_rounded`; error = `error_rounded`; warning = `warning_ro
   other actions.
 - **Fields:** visible label above, helper text below, error text below in `error` with an icon, announced. Phone fields
   use the phone keyboard and autofill hints; password fields have a show/hide toggle and allow paste and managers.
-- **Cards:** `AppCard` — `surface`, radius `lg`, 16 padding, optional title row.
-- **Status pill:** icon + word + colour (`StatusPill`), for draw, top-up, payout and KYC states.
+- **Cards:** `AppCard` — `surface`, radius `lg`, 16 padding, optional title row; `flat`, `tinted` and `onTap` variants.
+  `HeroCard` for the two hero surfaces. `FactRow` / `FactGrid` for every label-over-value fact (prices, dates, hashes).
+- **Rows:** `ListRow` (icon in a tinted disc, title, second line, trailing amount or pill, chevron) in a `RowGroup`
+  with hairlines, or inside a title-only `AppCard`. No bare `ListTile`s.
+- **Banners:** `InlineBanner` (tone, icon, title, one sentence, at most one action) for every in-page notice: blocks,
+  next steps, errors (`ErrorNotice` is one), pending states. `EmptyState` (icon disc, sentence, one action) for every
+  empty list. `SectionHeader` for a titled run of rows.
+- **Status pill:** icon + word + colour (`StatusPill`, `compact` inside rows), for draw, top-up, payout and KYC states.
 - **Sheets:** confirmation of anything that moves money is a bottom sheet (compact) or dialog (medium+): what it costs,
   what you get, what happens next, then *Confirm* (primary) and *Cancel*. Focus starts on the title.
 - **Navigation:** 5 destinations — Home, Play, Draws, Wallet, Account. Icon + label always. Play's selected icon is the
@@ -131,6 +150,10 @@ Durations (`MotionTokens`): `quick 120ms` (press, toggles), `standard 220ms` (st
 `Curves.easeInCubic` leaving; linear only for constant rotation.
 
 - Animate 1–2 elements per view. Content replacement crossfades; nothing slides in from nowhere.
+- **Entrance:** a screen's cards arrive together with `Staggered`: each fades and rises 10 dp over `emphasis`, starting
+  `stagger` (45 ms) after the one before. **Press:** tappable cards and the play button shrink to 0.98 for `press`
+  (90 ms) under the finger (`PressScale`). Status panels enter with a fade and a 4% rise. All of it is off under
+  reduced motion.
 - Skeletons are static `surfaceMuted` blocks (a slow 1.2 s opacity pulse, off under reduced motion).
 - Balance and counts do **not** count up: they crossfade to the new server value.
 - **Reduced motion** (`MediaQuery.disableAnimations` or the in-app setting): page transitions become fades, skeletons
@@ -191,8 +214,11 @@ brighter rim.
 
 ## 13. Consistency rules (review checklist)
 
-- [ ] No `Color(0x…)`, `fontSize:`, `BorderRadius.circular(<literal>)`, `EdgeInsets.all(<literal>)` or
-      `Duration(milliseconds: <literal>)` outside `lib/app/theme/` and the wheel painter's geometry constants.
+- [ ] No `Color(0x…)`, `fontSize:`, `BorderRadius.circular(<literal>)`, `EdgeInsets.all(<literal>)`,
+      `BoxShadow(` or `Duration(milliseconds: <literal>)` outside `lib/app/theme/` and the wheel painter's geometry
+      constants. Depth comes from `Elevation`, gradients from `Gradients`.
+- [ ] `HeroCard` appears only for the balance, the wheel's stage and the sign-in brand panel.
+- [ ] No bare `ListTile`; rows are `ListRow`. No ad-hoc icon-and-text notices; they are `InlineBanner`.
 - [ ] Money only via `formatKes` / `MoneyText`; dates only via `core/formatting`.
 - [ ] Every status shown with `StatusPill` (icon + word + colour).
 - [ ] One primary button per screen.

@@ -4,7 +4,7 @@ import 'package:flutter/services.dart';
 
 bool _loaded = false;
 
-/// Loads the bundled IBM Plex Sans and Material Icons so golden images show real text instead of test boxes.
+/// Loads the bundled IBM Plex Sans, Manrope and Material Icons so golden images show real text instead of test boxes.
 Future<void> loadAppFonts() async {
   if (_loaded) return;
   _loaded = true;
@@ -13,6 +13,7 @@ Future<void> loadAppFonts() async {
     plex.addFont(_bytes('assets/fonts/IBMPlexSans-$w.ttf'));
   }
   await plex.load();
+  await (FontLoader('Manrope')..addFont(_bytes('assets/fonts/Manrope-Variable.ttf'))).load();
   final root = Platform.environment['FLUTTER_ROOT'];
   final icons = File('$root/bin/cache/artifacts/material_fonts/MaterialIcons-Regular.otf');
   if (root != null && icons.existsSync()) {

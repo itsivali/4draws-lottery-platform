@@ -10,6 +10,7 @@ import '../../../core/widgets/async_view.dart';
 import '../../../core/widgets/busy_button.dart';
 import '../../../core/widgets/confirm_sheet.dart';
 import '../../../core/widgets/content_frame.dart';
+import '../../../core/widgets/inline_banner.dart';
 import '../../../core/widgets/status_pill.dart';
 import '../../account/application/account_providers.dart';
 import '../../account/domain/account_models.dart';
@@ -61,6 +62,7 @@ class _TopUpScreenState extends ConsumerState<TopUpScreen> {
     final bounds = ref.watch(walletStatementProvider).value?.topUp ?? TopUpBounds.fallback;
     final m = ref.watch(topUpFlowProvider);
     final t = Theme.of(context).textTheme;
+    final c = context.colors;
     return PageScaffold(
       title: 'Top up with M-Pesa',
       children: [
@@ -70,18 +72,25 @@ class _TopUpScreenState extends ConsumerState<TopUpScreen> {
           onRetry: () => ref.invalidate(accountProvider),
           data: (a) {
             if (a.kycStatus != KycStatus.verified) {
-              return AppCard(
-                title: 'Verify your identity first',
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Top-ups need a verified national ID.', style: t.bodyMedium),
-                    const SizedBox(height: Space.md),
-                    if (a.kycStatus == KycStatus.none)
-                      FilledButton(onPressed: () => context.go('/account/verify'), child: const Text('Verify my ID')),
-                  ],
+              return switch (a.kycStatus) {
+                KycStatus.none => InlineBanner(
+                  tone: StatusTone.warning,
+                  title: 'Verify your identity first',
+                  message: 'Top-ups need a verified national ID.',
+                  actionLabel: 'Verify my ID',
+                  onAction: () => context.go('/account/verify'),
                 ),
-              );
+                KycStatus.rejected => const InlineBanner(
+                  tone: StatusTone.error,
+                  title: 'Your ID was not accepted',
+                  message: 'Top-ups need a verified national ID. Contact support if you think this is a mistake.',
+                ),
+                _ => const InlineBanner(
+                  tone: StatusTone.pending,
+                  title: 'Your ID is being checked',
+                  message: 'Top-ups open once staff have approved it. They review each ID by hand.',
+                ),
+              };
             }
             return ValueListenableBuilder<SettlementState<TopUp>>(
               valueListenable: m.flow.state,
@@ -100,18 +109,31 @@ class _TopUpScreenState extends ConsumerState<TopUpScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            Text(
-                              'The prompt goes to your account number, ${formatMsisdn(a.msisdn)}. It cannot be sent to another number.',
-                              style: t.bodyMedium,
+                            Row(
+                              children: [
+                                ExcludeSemantics(child: Icon(Icons.phone_iphone_rounded, color: c.primary)),
+                                const SizedBox(width: Space.md),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'The prompt goes to your account number, ${formatMsisdn(a.msisdn)}. It cannot be sent to another number.',
+                                        style: t.bodyMedium,
+                                      ),
+                                      if (!a.phoneVerified) ...[
+                                        const SizedBox(height: Space.xs),
+                                        Text(
+                                          'Approving this first prompt also confirms that the number is yours.',
+                                          style: t.bodySmall,
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                ),
+                              ],
                             ),
-                            if (!a.phoneVerified) ...[
-                              const SizedBox(height: Space.sm),
-                              Text(
-                                'Approving this first prompt also confirms that the number is yours.',
-                                style: t.bodySmall,
-                              ),
-                            ],
-                            const SizedBox(height: Space.lg),
+                            const SizedBox(height: Space.xl),
                             AmountField(
                               controller: _amount,
                               min: bounds.minKes,
@@ -120,7 +142,7 @@ class _TopUpScreenState extends ConsumerState<TopUpScreen> {
                               label: 'Amount',
                               enabled: !started,
                             ),
-                            const SizedBox(height: Space.lg),
+                            const SizedBox(height: Space.xl),
                             if (!started) BusyButton(label: 'Continue', busy: false, onPressed: () => _submit(a, m)),
                           ],
                         ),
@@ -172,24 +194,13 @@ class _PendingElsewhere extends StatelessWidget {
   final VoidCallback onTrack;
 
   @override
-  Widget build(BuildContext context) {
-    final t = Theme.of(context).textTheme;
-    return AppCard(
-      title: 'A top-up is still pending',
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const StatusPill(tone: StatusTone.pending, label: 'Pending M-Pesa confirmation'),
-          const SizedBox(height: Space.sm),
-          Text(
-            'Your top-up of ${formatKes(topUp.amountRequestedKes)} has not been confirmed yet. To avoid paying twice, a new '
-            'top-up can start once this one is settled.',
-            style: t.bodyMedium,
-          ),
-          const SizedBox(height: Space.md),
-          FilledButton(onPressed: onTrack, child: const Text('Follow its status')),
-        ],
-      ),
-    );
-  }
+  Widget build(BuildContext context) => InlineBanner(
+    tone: StatusTone.pending,
+    title: 'A top-up is still pending',
+    message:
+        'Your top-up of ${formatKes(topUp.amountRequestedKes)} has not been confirmed yet. To avoid paying twice, a new '
+        'top-up can start once this one is settled.',
+    actionLabel: 'Follow its status',
+    onAction: onTrack,
+  );
 }

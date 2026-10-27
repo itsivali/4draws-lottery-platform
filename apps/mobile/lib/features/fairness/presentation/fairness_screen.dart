@@ -10,6 +10,7 @@ import '../../../core/widgets/async_view.dart';
 import '../../../core/widgets/confirm_sheet.dart';
 import '../../../core/widgets/content_frame.dart';
 import '../../../core/widgets/failure_text.dart';
+import '../../../core/widgets/list_row.dart';
 import '../../../core/widgets/status_pill.dart';
 import '../../play/application/play_providers.dart';
 import '../../play/domain/play_models.dart';
@@ -35,7 +36,7 @@ class _FairnessScreenState extends ConsumerState<FairnessScreen> {
         ('Reveals', 'The secret server seed of your current chain'),
         ('Then', 'A new chain starts, with a new committed seed'),
       ],
-      note: 'After revealing, every spin made with the old seed can be checked here or with tools/verifier.',
+      note: 'After revealing, every spin made with the old seed can be checked here, on this device.',
       confirmLabel: 'Reveal and start a new chain',
     );
     if (!ok || !mounted) return;
@@ -61,15 +62,25 @@ class _FairnessScreenState extends ConsumerState<FairnessScreen> {
     final fairness = ref.watch(fairnessProvider);
     final plays = ref.watch(todayProvider).value?.tickets ?? const <Play>[];
     final t = Theme.of(context).textTheme;
+    final c = context.colors;
     return PageScaffold(
       title: 'Fairness',
       onRefresh: () async => ref.invalidate(fairnessProvider),
       children: [
-        Text(
-          'Every spin is computed from a secret server seed, your client seed and a counter (the nonce). The server '
-          'publishes the seed’s SHA-256 fingerprint before any spin uses it, so it cannot change the seed afterwards. '
-          'Reveal the seed to check the spins yourself.',
-          style: t.bodyMedium,
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ExcludeSemantics(child: Icon(Icons.verified_rounded, color: c.primary)),
+            const SizedBox(width: Space.md),
+            Expanded(
+              child: Text(
+                'Every spin is computed from a secret server seed, your client seed and a counter (the nonce). The server '
+                'publishes the seed’s SHA-256 fingerprint before any spin uses it, so it cannot change the seed afterwards. '
+                'Reveal the seed to check the spins yourself.',
+                style: t.bodyMedium?.copyWith(color: c.inkMuted),
+              ),
+            ),
+          ],
         ),
         AsyncView(
           value: fairness,
@@ -80,17 +91,30 @@ class _FairnessScreenState extends ConsumerState<FairnessScreen> {
             children: [
               AppCard(
                 title: 'Current chain',
+                trailing: const StatusPill(tone: StatusTone.pending, label: 'Committed', compact: true),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    _Field('Commitment (SHA-256 of the secret seed)', f.active.commitment),
-                    _Field('Client seed', f.active.clientSeed),
-                    _Field('Next nonce', '${f.active.nextNonce}'),
-                    _Field('Committed', formatEat(f.active.createdAt), mono: false),
-                    const SizedBox(height: Space.sm),
-                    OutlinedButton(
+                    FactRow(
+                      label: 'Commitment (SHA-256 of the secret seed)',
+                      value: f.active.commitment,
+                      mono: true,
+                      selectable: true,
+                    ),
+                    const SizedBox(height: Space.md),
+                    FactRow(label: 'Client seed', value: f.active.clientSeed, mono: true, selectable: true),
+                    const SizedBox(height: Space.md),
+                    FactGrid(
+                      facts: [
+                        FactRow(label: 'Next nonce', value: '${f.active.nextNonce}', mono: true),
+                        FactRow(label: 'Committed', value: formatEat(f.active.createdAt)),
+                      ],
+                    ),
+                    const SizedBox(height: Space.lg),
+                    OutlinedButton.icon(
                       onPressed: _busy ? null : _rotate,
-                      child: Text(_busy ? 'Revealing…' : 'Reveal seed and start a new chain'),
+                      icon: const Icon(Icons.key_rounded),
+                      label: Text(_busy ? 'Revealing…' : 'Reveal seed and start a new chain'),
                     ),
                   ],
                 ),
@@ -116,20 +140,40 @@ class _RevealedChain extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context).textTheme;
+    final c = context.colors;
     final mine = plays.where((p) => p.spin.chainId == chain.id).toList();
     return AppCard(
       title: 'Revealed chain',
+      trailing: const StatusPill(tone: StatusTone.success, label: 'Revealed', compact: true),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _Field('Commitment', chain.commitment),
-          _Field('Revealed seed', chain.revealedSeed ?? '—'),
-          _Field('Client seed', chain.clientSeed),
-          if (chain.revealedAt != null) _Field('Revealed', formatEat(chain.revealedAt!), mono: false),
+          FactRow(label: 'Commitment', value: chain.commitment, mono: true, selectable: true),
+          const SizedBox(height: Space.md),
+          FactRow(label: 'Revealed seed', value: chain.revealedSeed ?? '—', mono: true, selectable: true),
+          const SizedBox(height: Space.md),
+          FactRow(label: 'Client seed', value: chain.clientSeed, mono: true, selectable: true),
+          if (chain.revealedAt != null) ...[
+            const SizedBox(height: Space.md),
+            FactRow(label: 'Revealed', value: formatEat(chain.revealedAt!)),
+          ],
+          const SizedBox(height: Space.lg),
+          Text("Today's spins on this chain", style: t.titleSmall),
+          const SizedBox(height: Space.sm),
           if (mine.isEmpty)
             Text("None of today's plays used this chain.", style: t.bodySmall)
           else
-            for (final p in mine) _SpinCheckRow(play: p, chain: chain),
+            RowGroup(
+              flat: true,
+              children: [for (final p in mine) _SpinCheckRow(play: p, chain: chain)],
+            ),
+          if (mine.isNotEmpty) ...[
+            const SizedBox(height: Space.sm),
+            Text(
+              'Each slot is recomputed on this device from the seed, your client seed and the nonce.',
+              style: t.bodySmall?.copyWith(color: c.inkMuted),
+            ),
+          ],
         ],
       ),
     );
@@ -152,49 +196,28 @@ class _SpinCheckRow extends StatelessWidget {
       nonce: s.nonce,
       slots: s.slots,
     );
-    final (tone, label) = switch (check) {
+    final (tone, label, detail) = switch (check) {
       SpinVerified(:final slot) when slot == s.slot => (
         StatusTone.success,
-        'Play ${play.seq}: slot $slot recomputed on this device — matches',
+        'Matches',
+        'Slot $slot recomputed on this device',
       ),
       SpinVerified(:final slot) => (
         StatusTone.error,
-        'Play ${play.seq}: recomputed slot $slot, but the server said ${s.slot}',
+        'Mismatch',
+        'Recomputed slot $slot, but the server said ${s.slot}',
       ),
-      CommitmentMismatch() => (StatusTone.error, 'Play ${play.seq}: the revealed seed does not match the commitment'),
-      InvalidSpinInput(:final reason) => (StatusTone.warning, 'Play ${play.seq}: cannot check ($reason)'),
+      CommitmentMismatch() => (StatusTone.error, 'Mismatch', 'The revealed seed does not match the commitment'),
+      InvalidSpinInput(:final reason) => (StatusTone.warning, 'Cannot check', reason),
     };
-    return Padding(
-      padding: const EdgeInsets.only(top: Space.sm),
-      child: StatusPill(tone: tone, label: label),
-    );
-  }
-}
-
-class _Field extends StatelessWidget {
-  const _Field(this.label, this.value, {this.mono = true});
-
-  final String label;
-  final String value;
-  final bool mono;
-
-  @override
-  Widget build(BuildContext context) {
-    final t = Theme.of(context).textTheme;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: Space.md),
-      child: MergeSemantics(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(label, style: t.bodySmall),
-            SelectableText(
-              value,
-              style: mono ? t.bodyMedium?.copyWith(fontFamily: 'monospace', fontSize: 13) : t.bodyLarge,
-            ),
-          ],
-        ),
-      ),
+    final (color, icon) = tone.resolve(context.colors);
+    return ListRow(
+      icon: icon,
+      iconColor: color,
+      title: 'Play ${play.seq} · slot ${s.slot}',
+      subtitle: detail,
+      trailing: StatusPill(tone: tone, label: label, compact: true),
+      semanticsLabel: 'Play ${play.seq}: $label. $detail',
     );
   }
 }

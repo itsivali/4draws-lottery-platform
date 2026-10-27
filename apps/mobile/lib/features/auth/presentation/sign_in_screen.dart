@@ -10,7 +10,11 @@ import '../../../core/auth/session_manager.dart';
 import '../../../core/formatting/phone.dart';
 import '../../../core/widgets/brand_mark.dart';
 import '../../../core/widgets/busy_button.dart';
+import '../../../core/widgets/content_frame.dart';
 import '../../../core/widgets/failure_text.dart';
+import '../../../core/widgets/hero_card.dart';
+import '../../../core/widgets/inline_banner.dart';
+import '../../../core/widgets/status_pill.dart';
 import '../application/auth_providers.dart';
 
 enum _Mode { signIn, create }
@@ -78,153 +82,234 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final t = Theme.of(context).textTheme;
-    final c = context.colors;
-    final expired = ref.watch(sessionManagerProvider).endReason == SessionEndReason.expired;
-    final creating = _mode == _Mode.create;
+    final wide = widthClassOf(context) == WidthClass.expanded;
+    final form = _Form(
+      formKey: _form,
+      phone: _phone,
+      password: _password,
+      mode: _mode,
+      obscure: _obscure,
+      adult: _adult,
+      busy: _busy,
+      phoneError: _phoneError,
+      passwordError: _passwordError,
+      formError: _formError,
+      formDetail: _formDetail,
+      expired: ref.watch(sessionManagerProvider).endReason == SessionEndReason.expired,
+      onMode: (m) => setState(() => _mode = m),
+      onObscure: () => setState(() => _obscure = !_obscure),
+      onAdult: (v) => setState(() => _adult = v),
+      onSubmit: _submit,
+    );
     return Scaffold(
       body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(Space.xl),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 420),
-              child: AutofillGroup(
-                child: Form(
-                  key: _form,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      const Align(alignment: Alignment.centerLeft, child: BrandMark(height: 36)),
-                      const SizedBox(height: Space.xxl),
-                      Semantics(
-                        header: true,
-                        child: Text(creating ? 'Create your account' : 'Welcome back', style: t.headlineMedium),
+        child: wide
+            ? Row(
+                children: [
+                  const Expanded(child: _Panel()),
+                  Expanded(
+                    child: Center(
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.all(Space.xxl),
+                        child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 420), child: form),
                       ),
-                      const SizedBox(height: Space.sm),
-                      Text(
-                        creating
-                            ? 'Use your M-Pesa number. It is confirmed by the M-Pesa prompt of your first top-up — no SMS code.'
-                            : 'Sign in with your phone number and password.',
-                        style: t.bodyMedium?.copyWith(color: c.inkMuted),
-                      ),
-                      if (expired) ...[
-                        const SizedBox(height: Space.lg),
-                        _Notice(
-                          icon: Icons.info_rounded,
-                          color: c.pending,
-                          text: 'Your session ended. Sign in again to continue.',
-                        ),
+                    ),
+                  ),
+                ],
+              )
+            : Center(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(Space.xl),
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 420),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        const Align(alignment: Alignment.centerLeft, child: BrandMark(height: 36)),
+                        const SizedBox(height: Space.xxl),
+                        form,
                       ],
-                      const SizedBox(height: Space.xl),
-                      SegmentedButton<_Mode>(
-                        segments: const [
-                          ButtonSegment(value: _Mode.signIn, label: Text('Sign in')),
-                          ButtonSegment(value: _Mode.create, label: Text('Create account')),
-                        ],
-                        selected: {_mode},
-                        showSelectedIcon: false,
-                        onSelectionChanged: _busy ? null : (s) => setState(() => _mode = s.first),
-                      ),
-                      const SizedBox(height: Space.xl),
-                      TextFormField(
-                        controller: _phone,
-                        keyboardType: TextInputType.phone,
-                        autofillHints: const [AutofillHints.telephoneNumber],
-                        textInputAction: TextInputAction.next,
-                        inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9+ ]'))],
-                        decoration: InputDecoration(
-                          labelText: 'M-Pesa phone number',
-                          helperText: 'For example 0712 345 678',
-                          errorText: _phoneError,
-                          prefixIcon: const Icon(Icons.phone_iphone_rounded),
-                        ),
-                        validator: (v) =>
-                            isLikelyKenyanMobile(v ?? '') ? null : 'Enter a Kenyan mobile number such as 0712 345 678.',
-                      ),
-                      const SizedBox(height: Space.lg),
-                      TextFormField(
-                        controller: _password,
-                        obscureText: _obscure,
-                        autofillHints: [creating ? AutofillHints.newPassword : AutofillHints.password],
-                        textInputAction: TextInputAction.done,
-                        onFieldSubmitted: (_) => _submit(),
-                        decoration: InputDecoration(
-                          labelText: 'Password',
-                          helperText: creating ? '8 to 128 characters, not a common password, not your number' : null,
-                          errorText: _passwordError,
-                          prefixIcon: const Icon(Icons.lock_rounded),
-                          suffixIcon: IconButton(
-                            tooltip: _obscure ? 'Show password' : 'Hide password',
-                            icon: Icon(_obscure ? Icons.visibility_rounded : Icons.visibility_off_rounded),
-                            onPressed: () => setState(() => _obscure = !_obscure),
-                          ),
-                        ),
-                        validator: (v) => (v ?? '').length < 8 ? 'Use at least 8 characters.' : null,
-                      ),
-                      if (creating) ...[
-                        const SizedBox(height: Space.md),
-                        CheckboxListTile(
-                          value: _adult,
-                          onChanged: (v) => setState(() => _adult = v ?? false),
-                          controlAffinity: ListTileControlAffinity.leading,
-                          contentPadding: EdgeInsets.zero,
-                          title: const Text('I am 18 or older'),
-                          subtitle: const Text('Your age is checked against your national ID before you can play.'),
-                        ),
-                      ],
-                      if (_formError != null) ...[
-                        const SizedBox(height: Space.lg),
-                        _Notice(icon: Icons.error_rounded, color: c.error, text: _formError!, detail: _formDetail),
-                      ],
-                      const SizedBox(height: Space.xl),
-                      BusyButton(label: creating ? 'Create account' : 'Sign in', busy: _busy, onPressed: _submit),
-                      const SizedBox(height: Space.xl),
-                      Text(
-                        'Play responsibly. Lottery plays cost money and most plays do not win a prize. '
-                        'You can set deposit limits, take a break or self-exclude at any time from your account.',
-                        style: t.bodySmall,
-                      ),
-                    ],
+                    ),
                   ),
                 ),
               ),
+      ),
+    );
+  }
+}
+
+/// The brand panel beside the form on wide screens: the one place the hero surface carries words, not money.
+class _Panel extends StatelessWidget {
+  const _Panel();
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context).textTheme;
+    final c = context.colors;
+    return Padding(
+      padding: const EdgeInsets.all(Space.xl),
+      child: HeroCard(
+        radius: Radii.xxl,
+        padding: const EdgeInsets.all(Space.xxxl),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(BrandMark.name, style: t.titleLarge?.copyWith(color: c.onHero)),
+            const Spacer(),
+            Text('One spin a day.\nEvery draw on the record.', style: t.displaySmall?.copyWith(color: c.onHero)),
+            const SizedBox(height: Space.lg),
+            Text(
+              'Plays cost what they say, draws use a public randomness beacon, and every prize is paid to your M-Pesa.',
+              style: t.bodyLarge?.copyWith(color: c.onHeroMuted),
             ),
-          ),
+            const Spacer(),
+            Text('Play responsibly · 18+', style: t.labelMedium?.copyWith(color: c.onHeroMuted)),
+          ],
         ),
       ),
     );
   }
 }
 
-class _Notice extends StatelessWidget {
-  const _Notice({required this.icon, required this.color, required this.text, this.detail});
+class _Form extends StatelessWidget {
+  const _Form({
+    required this.formKey,
+    required this.phone,
+    required this.password,
+    required this.mode,
+    required this.obscure,
+    required this.adult,
+    required this.busy,
+    required this.phoneError,
+    required this.passwordError,
+    required this.formError,
+    required this.formDetail,
+    required this.expired,
+    required this.onMode,
+    required this.onObscure,
+    required this.onAdult,
+    required this.onSubmit,
+  });
 
-  final IconData icon;
-  final Color color;
-  final String text;
-  final String? detail;
+  final GlobalKey<FormState> formKey;
+  final TextEditingController phone;
+  final TextEditingController password;
+  final _Mode mode;
+  final bool obscure;
+  final bool adult;
+  final bool busy;
+  final String? phoneError;
+  final String? passwordError;
+  final String? formError;
+  final String? formDetail;
+  final bool expired;
+  final ValueChanged<_Mode> onMode;
+  final VoidCallback onObscure;
+  final ValueChanged<bool> onAdult;
+  final VoidCallback onSubmit;
 
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context).textTheme;
-    return Semantics(
-      liveRegion: true,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          ExcludeSemantics(child: Icon(icon, color: color)),
-          const SizedBox(width: Space.md),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(text, style: t.bodyMedium),
-                if (detail != null) Text(detail!, style: t.bodySmall),
-              ],
+    final c = context.colors;
+    final creating = mode == _Mode.create;
+    return AutofillGroup(
+      child: Form(
+        key: formKey,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Semantics(
+              header: true,
+              child: Text(creating ? 'Create your account' : 'Welcome back', style: t.headlineLarge),
             ),
-          ),
-        ],
+            const SizedBox(height: Space.sm),
+            Text(
+              creating
+                  ? 'Use your M-Pesa number. It is confirmed by the M-Pesa prompt of your first top-up — no SMS code.'
+                  : 'Sign in with your phone number and password.',
+              style: t.bodyMedium?.copyWith(color: c.inkMuted),
+            ),
+            if (expired) ...[
+              const SizedBox(height: Space.lg),
+              const InlineBanner(
+                tone: StatusTone.pending,
+                icon: Icons.info_rounded,
+                live: true,
+                title: 'Your session ended. Sign in again to continue.',
+              ),
+            ],
+            const SizedBox(height: Space.xl),
+            SegmentedButton<_Mode>(
+              segments: const [
+                ButtonSegment(value: _Mode.signIn, label: Text('Sign in')),
+                ButtonSegment(value: _Mode.create, label: Text('Create account')),
+              ],
+              selected: {mode},
+              showSelectedIcon: false,
+              onSelectionChanged: busy ? null : (s) => onMode(s.first),
+            ),
+            const SizedBox(height: Space.xl),
+            TextFormField(
+              controller: phone,
+              keyboardType: TextInputType.phone,
+              autofillHints: const [AutofillHints.telephoneNumber],
+              textInputAction: TextInputAction.next,
+              inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9+ ]'))],
+              decoration: InputDecoration(
+                labelText: 'M-Pesa phone number',
+                helperText: 'For example 0712 345 678',
+                errorText: phoneError,
+                prefixIcon: const Icon(Icons.phone_iphone_rounded),
+              ),
+              validator: (v) =>
+                  isLikelyKenyanMobile(v ?? '') ? null : 'Enter a Kenyan mobile number such as 0712 345 678.',
+            ),
+            const SizedBox(height: Space.lg),
+            TextFormField(
+              controller: password,
+              obscureText: obscure,
+              autofillHints: [creating ? AutofillHints.newPassword : AutofillHints.password],
+              textInputAction: TextInputAction.done,
+              onFieldSubmitted: (_) => onSubmit(),
+              decoration: InputDecoration(
+                labelText: 'Password',
+                helperText: creating ? '8 to 128 characters, not a common password, not your number' : null,
+                errorText: passwordError,
+                prefixIcon: const Icon(Icons.lock_rounded),
+                suffixIcon: IconButton(
+                  tooltip: obscure ? 'Show password' : 'Hide password',
+                  icon: Icon(obscure ? Icons.visibility_rounded : Icons.visibility_off_rounded),
+                  onPressed: onObscure,
+                ),
+              ),
+              validator: (v) => (v ?? '').length < 8 ? 'Use at least 8 characters.' : null,
+            ),
+            if (creating) ...[
+              const SizedBox(height: Space.md),
+              CheckboxListTile(
+                value: adult,
+                onChanged: (v) => onAdult(v ?? false),
+                controlAffinity: ListTileControlAffinity.leading,
+                contentPadding: EdgeInsets.zero,
+                title: const Text('I am 18 or older'),
+                subtitle: const Text('Your age is checked against your national ID before you can play.'),
+              ),
+            ],
+            if (formError != null) ...[
+              const SizedBox(height: Space.lg),
+              InlineBanner(tone: StatusTone.error, live: true, title: formError!, message: formDetail),
+            ],
+            const SizedBox(height: Space.xl),
+            BusyButton(label: creating ? 'Create account' : 'Sign in', busy: busy, onPressed: onSubmit),
+            const SizedBox(height: Space.xl),
+            Text(
+              'Play responsibly. Lottery plays cost money and most plays do not win a prize. '
+              'You can set deposit limits, take a break or self-exclude at any time from your account.',
+              style: t.bodySmall,
+            ),
+          ],
+        ),
       ),
     );
   }

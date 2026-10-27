@@ -11,6 +11,7 @@ import '../../../core/widgets/app_card.dart';
 import '../../../core/widgets/async_view.dart';
 import '../../../core/widgets/confirm_sheet.dart';
 import '../../../core/widgets/content_frame.dart';
+import '../../../core/widgets/list_row.dart';
 import '../../../core/widgets/status_pill.dart';
 import '../application/account_providers.dart';
 import '../domain/account_models.dart';
@@ -32,14 +33,8 @@ class AccountScreen extends ConsumerWidget {
     final hapticsSupported = ref.watch(hapticsSupportedProvider);
     final t = Theme.of(context).textTheme;
     final c = context.colors;
-    Widget link(IconData icon, String title, String route, {String? subtitle}) => ListTile(
-      contentPadding: EdgeInsets.zero,
-      leading: Icon(icon),
-      title: Text(title),
-      subtitle: subtitle == null ? null : Text(subtitle),
-      trailing: const Icon(Icons.chevron_right_rounded),
-      onTap: () => context.go(route),
-    );
+    Widget link(IconData icon, String title, String route, {String? subtitle}) =>
+        ListRow(icon: icon, title: title, subtitle: subtitle, chevron: true, onTap: () => context.go(route));
     return PageScaffold(
       title: 'Account',
       onRefresh: () async => ref.invalidate(accountProvider),
@@ -49,105 +44,124 @@ class AccountScreen extends ConsumerWidget {
             value: account,
             what: 'your account',
             onRetry: () => ref.invalidate(accountProvider),
-            data: (a) => Column(
+            data: (a) => Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(formatMsisdn(a.msisdn), style: t.headlineSmall),
-                const SizedBox(height: Space.sm),
-                Wrap(
-                  spacing: Space.sm,
-                  runSpacing: Space.sm,
-                  children: [
-                    StatusPill(tone: kycPill(a.kycStatus).$1, label: kycPill(a.kycStatus).$2),
-                    a.phoneVerified
-                        ? const StatusPill(tone: StatusTone.success, label: 'Number confirmed')
-                        : const StatusPill(tone: StatusTone.warning, label: 'Number not confirmed yet'),
-                    if (a.restriction case final r?)
-                      StatusPill(
-                        tone: StatusTone.pending,
-                        label: r.selfExclusion
-                            ? (r.until == null
-                                  ? 'Self-excluded permanently'
-                                  : 'Self-excluded until ${formatEat(r.until!)}')
-                            : 'Break until ${formatEat(r.until!)}',
+                Container(
+                  width: 52,
+                  height: 52,
+                  decoration: BoxDecoration(color: c.primaryContainer, shape: BoxShape.circle),
+                  child: ExcludeSemantics(child: Icon(Icons.person_rounded, color: c.onPrimaryContainer, size: 28)),
+                ),
+                const SizedBox(width: Space.lg),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(formatMsisdn(a.msisdn), style: t.headlineSmall),
+                      Text('Member since ${formatDay(a.createdAt)} ${a.createdAt.year}', style: t.bodySmall),
+                      const SizedBox(height: Space.md),
+                      Wrap(
+                        spacing: Space.sm,
+                        runSpacing: Space.sm,
+                        children: [
+                          StatusPill(tone: kycPill(a.kycStatus).$1, label: kycPill(a.kycStatus).$2),
+                          a.phoneVerified
+                              ? const StatusPill(tone: StatusTone.success, label: 'Number confirmed')
+                              : const StatusPill(tone: StatusTone.warning, label: 'Number not confirmed yet'),
+                          if (a.status == 'suspended')
+                            const StatusPill(tone: StatusTone.error, label: 'Account suspended'),
+                          if (a.status == 'closed') const StatusPill(tone: StatusTone.neutral, label: 'Account closed'),
+                          if (a.restriction case final r?)
+                            StatusPill(
+                              tone: StatusTone.pending,
+                              label: r.selfExclusion
+                                  ? (r.until == null
+                                        ? 'Self-excluded permanently'
+                                        : 'Self-excluded until ${formatEat(r.until!)}')
+                                  : (r.until == null ? 'On a break' : 'Break until ${formatEat(r.until!)}'),
+                            ),
+                          if (a.closureRequestedAt != null)
+                            const StatusPill(tone: StatusTone.pending, label: 'Closure requested'),
+                        ],
                       ),
-                    if (a.closureRequestedAt != null)
-                      const StatusPill(tone: StatusTone.pending, label: 'Closure requested'),
-                  ],
+                    ],
+                  ),
                 ),
               ],
             ),
           ),
         ),
-        AppCard(
-          title: 'Your account',
-          child: Column(
-            children: [
-              link(Icons.badge_rounded, 'Identity verification', '/account/verify'),
-              link(Icons.lock_rounded, 'Change password', '/account/password'),
-            ],
-          ),
+        const SectionHeader(title: 'Your account'),
+        RowGroup(
+          children: [
+            link(Icons.badge_rounded, 'Identity verification', '/account/verify'),
+            link(Icons.lock_rounded, 'Change password', '/account/password'),
+          ],
         ),
-        AppCard(
-          title: 'Play safely',
-          child: Column(
-            children: [
-              link(
-                Icons.self_improvement_rounded,
-                'Limits, breaks and self-exclusion',
-                '/account/limits',
-                subtitle: 'Set deposit limits, take a break or stop for a long time',
-              ),
-              link(
-                Icons.menu_book_rounded,
-                'How it works',
-                '/account/how-it-works',
-                subtitle: 'Plays, chances, draws and prizes',
-              ),
-              link(Icons.verified_rounded, 'Fairness', '/account/fairness', subtitle: 'Check your spins yourself'),
-            ],
-          ),
+        const SectionHeader(title: 'Play safely'),
+        RowGroup(
+          children: [
+            link(
+              Icons.self_improvement_rounded,
+              'Limits, breaks and self-exclusion',
+              '/account/limits',
+              subtitle: 'Set deposit limits, take a break or stop for a long time',
+            ),
+            link(
+              Icons.menu_book_rounded,
+              'How it works',
+              '/account/how-it-works',
+              subtitle: 'Plays, chances, draws and prizes',
+            ),
+            link(Icons.verified_rounded, 'Fairness', '/account/fairness', subtitle: 'Check your spins yourself'),
+          ],
         ),
-        AppCard(
-          title: 'Preferences',
-          child: SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            value: hapticsSupported && hapticsOn,
-            onChanged: hapticsSupported ? (v) => ref.read(hapticsEnabledProvider.notifier).set(v) : null,
-            title: const Text('Wheel haptics'),
-            subtitle: Text(
-              hapticsSupported
+        const SectionHeader(title: 'Preferences'),
+        RowGroup(
+          children: [
+            ListRow(
+              icon: Icons.vibration_rounded,
+              title: 'Wheel haptics',
+              subtitle: hapticsSupported
                   ? 'Gentle vibrations as the wheel slows and stops. Your phone’s own settings still apply.'
                   : 'Not available in the browser.',
-            ),
-          ),
-        ),
-        AppCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              OutlinedButton.icon(
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: c.error,
-                  side: BorderSide(color: c.error),
-                ),
-                icon: const Icon(Icons.logout_rounded),
-                label: const Text('Sign out'),
-                onPressed: () async {
-                  final ok = await confirmAction(
-                    context,
-                    title: 'Sign out?',
-                    facts: const [],
-                    confirmLabel: 'Sign out',
-                    destructive: true,
-                  );
-                  if (ok) await ref.read(sessionManagerProvider).signOut();
-                },
+              trailing: Switch(
+                value: hapticsSupported && hapticsOn,
+                onChanged: hapticsSupported ? (v) => ref.read(hapticsEnabledProvider.notifier).set(v) : null,
               ),
-              const SizedBox(height: Space.sm),
-              TextButton(onPressed: () => context.go('/account/close'), child: const Text('Close my account')),
-            ],
-          ),
+            ),
+          ],
+        ),
+        const SizedBox(height: Space.sm),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(
+                foregroundColor: c.error,
+                side: BorderSide(color: c.error),
+              ),
+              icon: const Icon(Icons.logout_rounded),
+              label: const Text('Sign out'),
+              onPressed: () async {
+                final ok = await confirmAction(
+                  context,
+                  title: 'Sign out?',
+                  facts: const [],
+                  confirmLabel: 'Sign out',
+                  destructive: true,
+                );
+                if (ok) await ref.read(sessionManagerProvider).signOut();
+              },
+            ),
+            const SizedBox(height: Space.sm),
+            TextButton(
+              style: TextButton.styleFrom(foregroundColor: c.inkMuted),
+              onPressed: () => context.go('/account/close'),
+              child: const Text('Close my account'),
+            ),
+          ],
         ),
       ],
     );

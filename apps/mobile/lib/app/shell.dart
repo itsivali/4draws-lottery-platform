@@ -33,16 +33,22 @@ class AppShell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final width = widthClassOf(context);
+    final c = context.colors;
     if (width == WidthClass.compact) {
       return Scaffold(
         body: shell,
-        bottomNavigationBar: NavigationBar(
-          selectedIndex: shell.currentIndex,
-          onDestinationSelected: _go,
-          destinations: [
-            for (final d in _destinations)
-              NavigationDestination(icon: Icon(d.icon), selectedIcon: Icon(d.selectedIcon), label: d.label),
-          ],
+        bottomNavigationBar: DecoratedBox(
+          decoration: BoxDecoration(
+            border: Border(top: BorderSide(color: c.border)),
+          ),
+          child: NavigationBar(
+            selectedIndex: shell.currentIndex,
+            onDestinationSelected: _go,
+            destinations: [
+              for (final d in _destinations)
+                NavigationDestination(icon: Icon(d.icon), selectedIcon: Icon(d.selectedIcon), label: d.label),
+            ],
+          ),
         ),
       );
     }
@@ -53,13 +59,13 @@ class AppShell extends StatelessWidget {
           children: [
             NavigationRail(
               extended: extended,
-              minExtendedWidth: 220,
+              minExtendedWidth: 232,
               labelType: extended ? NavigationRailLabelType.none : NavigationRailLabelType.all,
               selectedIndex: shell.currentIndex,
               onDestinationSelected: _go,
               leading: Padding(
-                padding: const EdgeInsets.symmetric(vertical: Space.xl),
-                child: BrandMark(height: 28, showWordmark: extended),
+                padding: const EdgeInsets.fromLTRB(Space.sm, Space.xl, Space.sm, Space.xl),
+                child: BrandMark(height: 30, showWordmark: extended),
               ),
               destinations: [
                 for (final d in _destinations)
@@ -67,10 +73,11 @@ class AppShell extends StatelessWidget {
                     icon: Icon(d.icon),
                     selectedIcon: Icon(d.selectedIcon),
                     label: Text(d.label),
+                    padding: const EdgeInsets.symmetric(vertical: Space.xxs),
                   ),
               ],
             ),
-            VerticalDivider(width: 1, color: context.colors.border),
+            VerticalDivider(width: 1, color: c.border),
             Expanded(child: shell),
           ],
         ),

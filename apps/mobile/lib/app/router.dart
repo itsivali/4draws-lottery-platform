@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../core/auth/session_manager.dart';
+import '../core/widgets/inline_banner.dart';
 import '../features/account/presentation/account_screen.dart';
 import '../features/account/presentation/closure_screen.dart';
 import '../features/account/presentation/how_it_works_screen.dart';
@@ -114,7 +115,13 @@ final routerProvider = Provider<GoRouter>((ref) {
     errorBuilder: (context, state) => Scaffold(
       appBar: AppBar(title: const Text('Not found')),
       body: Center(
-        child: TextButton(onPressed: () => context.go('/home'), child: const Text('Go to Home')),
+        child: EmptyState(
+          icon: Icons.explore_off_rounded,
+          title: 'That page does not exist',
+          message: 'The link may be old or mistyped.',
+          actionLabel: 'Go to Home',
+          onAction: () => context.go('/home'),
+        ),
       ),
     ),
   );
