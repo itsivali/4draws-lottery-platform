@@ -61,6 +61,13 @@ type staffRoute struct {
 
 var staffRoutes = []staffRoute{
 	{http.MethodGet, "/v1/staff/kyc/pending", staff.KYCReviewer},
+	{http.MethodGet, "/v1/staff/kyc/queue", staff.KYCReviewer},
+	{http.MethodGet, "/v1/staff/members", staff.Admin},
+	{http.MethodPost, "/v1/staff/members", staff.Admin},
+	{http.MethodPut, "/v1/staff/members/0192f000-0000-7000-8000-000000000001/roles", staff.Admin},
+	{http.MethodPost, "/v1/staff/members/0192f000-0000-7000-8000-000000000001/disable", staff.Admin},
+	{http.MethodPost, "/v1/staff/members/0192f000-0000-7000-8000-000000000001/enable", staff.Admin},
+	{http.MethodGet, "/v1/staff/finance", staff.Finance},
 	{http.MethodPost, "/v1/staff/kyc/0192f000-0000-7000-8000-000000000001/approve", staff.KYCReviewer},
 	{http.MethodPost, "/v1/staff/kyc/0192f000-0000-7000-8000-000000000001/reject", staff.KYCReviewer},
 	{http.MethodPost, "/v1/staff/payments/reconcile", staff.PaymentsOperator},
@@ -134,6 +141,33 @@ func TestStaffAPI_MeShowsRoles(t *testing.T) {
 	}
 }
 
+func TestStaffAPI_KYCQueueCountsWaitingSubmissionsWithoutUnmaskingThem(t *testing.T) {
+	e := setup(t)
+	reviewer := e.member(staff.KYCReviewer)
+	if r := e.do(t, http.MethodGet, "/v1/staff/kyc/queue", reviewer, nil); r.Code != http.StatusOK || r.Body["waiting"] != float64(0) ||
+		r.Body["oldest_submitted_at"] != nil {
+		t.Fatalf("empty queue: %d %s", r.Code, r.Raw)
+	}
+	for i, id := range []string{"87654321", "87654322"} {
+		s := e.signIn(t)
+		if r := e.do(t, http.MethodPost, "/v1/kyc", s.access, map[string]any{"national_id": id, "full_name": "Amina Otieno", "date_of_birth": "1992-03-04"}); r.Code != http.StatusAccepted {
+			t.Fatalf("submit %d: %d %s", i, r.Code, r.Raw)
+		}
+	}
+	e.drainKYC(t)
+	r := e.do(t, http.MethodGet, "/v1/staff/kyc/queue", reviewer, nil)
+	if oldest, _ := r.Body["oldest_submitted_at"].(string); r.Code != http.StatusOK || r.Body["waiting"] != float64(2) || oldest == "" {
+		t.Fatalf("queue: %d %s", r.Code, r.Raw)
+	}
+	if len(r.Body) != 2 {
+		t.Fatalf("the queue carries counts only, never personal details: %s", r.Raw)
+	}
+	var unmasked int
+	if err := e.pool.QueryRow(context.Background(), `SELECT count(*) FROM audit.audit_log WHERE action = 'kyc.unmask'`).Scan(&unmasked); err != nil || unmasked != 0 {
+		t.Fatalf("reading the queue unmasked %d submissions (%v)", unmasked, err)
+	}
+}
+
 func TestStaffAPI_KYCReviewShowsTheSubmissionAndRecordsTheDecision(t *testing.T) {
 	e := setup(t)
 	s := e.signIn(t)
@@ -167,6 +201,9 @@ func TestStaffAPI_KYCReviewShowsTheSubmissionAndRecordsTheDecision(t *testing.T)
 	}
 	if r := e.do(t, http.MethodPost, "/v1/staff/kyc/"+user+"/approve", reviewer, map[string]any{"reason": "again"}); r.Code != http.StatusConflict || !hasType(r, "nothing-to-review") {
 		t.Fatalf("second decision: %d %s", r.Code, r.Raw)
+	}
+	if r := e.do(t, http.MethodGet, "/v1/staff/kyc/queue", reviewer, nil); r.Body["waiting"] != float64(0) {
+		t.Fatalf("a decided submission still waits: %s", r.Raw)
 	}
 }
 
@@ -306,7 +343,7 @@ func TestStaffAPI_AnAccountWithAStakeInADrawIsNotClosedUntilTheDrawIsSettled(t *
 	if r := e.do(t, http.MethodPost, "/v1/plays", s.access, nil); r.Code != http.StatusCreated {
 		t.Fatalf("play: %d %s", r.Code, r.Raw)
 	}
-	e.freezeDaily(t) // today's draws (daily frozen; weekly, monthly, quarterly still open) hold this player's chances
+	e.freezeDaily(t) // the day's draw (frozen) holds this player's chances
 	// pay out the rest of the wallet so only the draw stake remains
 	w := e.do(t, http.MethodPost, "/v1/payouts/withdrawals", s.access, map[string]any{"amount_kes": 850})
 	if w.Code != http.StatusCreated {

@@ -9,42 +9,6 @@
   "accessTokenLifespan": 600,
   "ssoSessionIdleTimeout": 1800,
   "ssoSessionMaxLifespan": 36000,
-  "roles": {
-    "realm": [
-      {
-        "name": "kyc_reviewer",
-        "description": "Reads submitted identity details; approves or rejects them"
-      },
-      {
-        "name": "payments_operator",
-        "description": "Reconciliation, reversals, unconfirmed top-ups, suspense"
-      },
-      {
-        "name": "draw_official",
-        "description": "Signs, approves and voids draws"
-      },
-      {
-        "name": "payout_operator",
-        "description": "Approves, rejects and settles payouts; retries prizes"
-      },
-      {
-        "name": "tax_officer",
-        "description": "Prepares and records KRA remittance batches"
-      },
-      {
-        "name": "alerts_operator",
-        "description": "Acknowledges alerts (lifts a payout freeze)"
-      },
-      {
-        "name": "support",
-        "description": "Closes accounts on request"
-      },
-      {
-        "name": "auditor",
-        "description": "Runs reconciliations and reads; changes nothing"
-      }
-    ]
-  },
   "clients": [
     {
       "clientId": "lottery-backoffice",
@@ -114,6 +78,21 @@
   ],
   "users": [
     {
+      "username": "ada",
+      "enabled": true,
+      "email": "ada@staff.local",
+      "emailVerified": true,
+      "firstName": "Ada",
+      "lastName": "Admin",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "local-dev-staff",
+          "temporary": false
+        }
+      ]
+    },
+    {
       "username": "alice",
       "enabled": true,
       "email": "alice@staff.local",
@@ -126,10 +105,6 @@
           "value": "local-dev-staff",
           "temporary": false
         }
-      ],
-      "realmRoles": [
-        "draw_official",
-        "auditor"
       ]
     },
     {
@@ -145,9 +120,6 @@
           "value": "local-dev-staff",
           "temporary": false
         }
-      ],
-      "realmRoles": [
-        "draw_official"
       ]
     },
     {
@@ -163,9 +135,6 @@
           "value": "local-dev-staff",
           "temporary": false
         }
-      ],
-      "realmRoles": [
-        "kyc_reviewer"
       ]
     },
     {
@@ -181,10 +150,6 @@
           "value": "local-dev-staff",
           "temporary": false
         }
-      ],
-      "realmRoles": [
-        "payments_operator",
-        "alerts_operator"
       ]
     },
     {
@@ -200,9 +165,6 @@
           "value": "local-dev-staff",
           "temporary": false
         }
-      ],
-      "realmRoles": [
-        "payout_operator"
       ]
     },
     {
@@ -218,9 +180,6 @@
           "value": "local-dev-staff",
           "temporary": false
         }
-      ],
-      "realmRoles": [
-        "tax_officer"
       ]
     },
     {
@@ -236,9 +195,6 @@
           "value": "local-dev-staff",
           "temporary": false
         }
-      ],
-      "realmRoles": [
-        "tax_officer"
       ]
     },
     {
@@ -254,9 +210,6 @@
           "value": "local-dev-staff",
           "temporary": false
         }
-      ],
-      "realmRoles": [
-        "support"
       ]
     }
   ]

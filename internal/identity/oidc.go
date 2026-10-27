@@ -33,6 +33,9 @@ type OIDCProvider struct {
 	Audiences   []string // accepted `aud` values (our client ids)
 	JWKSURL     string
 	NonceSHA256 bool // Apple sends the hex SHA-256 of the nonce; Google sends it as given
+	// NonceOptional accepts ID tokens without a nonce. Only for the local staff realm's test sign-in (a password grant
+	// has no nonce); never set for Google or Apple.
+	NonceOptional bool
 }
 
 type jwks struct {
@@ -57,12 +60,29 @@ func NewOIDCVerifier(clk clock.Clock, hc *http.Client, providers map[string]OIDC
 
 // VerifyIDToken implements IDTokenVerifier.
 func (v *OIDCVerifier) VerifyIDToken(ctx context.Context, provider, idToken, nonce string) (string, error) {
-	if nonce == "" {
-		return "", errors.New("oidc: nonce required")
+	claims, err := v.VerifyIDTokenClaims(ctx, provider, idToken, nonce)
+	if err != nil {
+		return "", err
+	}
+	sub, _ := claims.GetSubject()
+	return sub, nil
+}
+
+// VerifyIDTokenClaims validates an ID token like VerifyIDToken and returns its claims (staff sign-in reads the email).
+func (v *OIDCVerifier) VerifyIDTokenClaims(ctx context.Context, provider, idToken, nonce string) (jwt.MapClaims, error) {
+	p, ok := v.providers[provider]
+	if !ok {
+		return nil, fmt.Errorf("oidc: unknown provider %q", provider)
+	}
+	if nonce == "" && !p.NonceOptional {
+		return nil, errors.New("oidc: nonce required")
 	}
 	p, claims, err := v.verify(ctx, provider, idToken)
 	if err != nil {
-		return "", err
+		return nil, err
+	}
+	if nonce == "" && p.NonceOptional {
+		return claims, nil
 	}
 	want := nonce
 	if p.NonceSHA256 {
@@ -70,18 +90,9 @@ func (v *OIDCVerifier) VerifyIDToken(ctx context.Context, provider, idToken, non
 		want = hex.EncodeToString(h[:])
 	}
 	if got, _ := claims["nonce"].(string); got == "" || got != want {
-		return "", errors.New("oidc: nonce mismatch")
+		return nil, errors.New("oidc: nonce mismatch")
 	}
-	sub, _ := claims.GetSubject()
-	return sub, nil
-}
-
-// VerifyAccessToken validates an OAuth access token issued by the provider (staff tokens from Keycloak): signature
-// (RS256 only), issuer, audience, expiry and subject. Access tokens carry no nonce. It returns the claims so the caller
-// can read roles.
-func (v *OIDCVerifier) VerifyAccessToken(ctx context.Context, provider, token string) (jwt.MapClaims, error) {
-	_, claims, err := v.verify(ctx, provider, token)
-	return claims, err
+	return claims, nil
 }
 
 func (v *OIDCVerifier) verify(ctx context.Context, provider, token string) (OIDCProvider, jwt.MapClaims, error) {

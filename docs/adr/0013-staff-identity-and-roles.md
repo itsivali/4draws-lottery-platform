@@ -1,6 +1,6 @@
 # 0013. Staff sign in with Keycloak; every back-office action needs a role and runs with the worker's database role
 
-Status: accepted
+Status: accepted; identity superseded by 0018 (staff sign in with Google or Apple, roles kept by the platform)
 Date: 2026-10-26
 
 ## Context

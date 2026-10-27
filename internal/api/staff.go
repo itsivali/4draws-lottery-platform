@@ -14,6 +14,7 @@ import (
 
 	"github.com/itsivali/lottery-platform/internal/alerts"
 	"github.com/itsivali/lottery-platform/internal/draws"
+	"github.com/itsivali/lottery-platform/internal/finance"
 	"github.com/itsivali/lottery-platform/internal/game"
 	"github.com/itsivali/lottery-platform/internal/identity"
 	"github.com/itsivali/lottery-platform/internal/kyc"
@@ -25,7 +26,7 @@ import (
 )
 
 // The back-office API (/v1/staff): the operations lotteryctl performs, for staff signed in with the staff realm
-// (Keycloak). Every route needs a role; every action is audited by the service as the staff member
+// (sessions opened with Google or Apple sign-in, ADR 0018). Every route needs a role; every action is audited by the service as the staff member
 // ("staff:<id>"), so the two-person rules (draw sign-off, tax remittance) compare real people.
 
 // StaffServices are the services the back office acts through. They run on their own database pool with the worker's
@@ -39,6 +40,8 @@ type StaffServices struct {
 	Payouts  *payouts.Service
 	Alerts   *alerts.Service
 	Game     *game.Service
+	Members  *staff.Service   // sign-in, sessions and members (ADR 0018)
+	Finance  *finance.Service // the financial dashboard
 }
 
 type staffKey struct{}
@@ -48,14 +51,17 @@ func staffFrom(ctx context.Context) (staff.Member, bool) {
 	return m, ok
 }
 
-const staffPrefix = "/v1/staff/"
+const (
+	staffPrefix  = "/v1/staff/"
+	staffSession = "/v1/staff/session"
+)
 
 // staffAuth authenticates staff tokens on /v1/staff routes, before idempotency (so keys are scoped to the staff
 // member). Player tokens never authenticate here: they are not issued by the staff realm.
 func (h *handlers) staffAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !strings.HasPrefix(r.URL.Path, staffPrefix) {
-			next.ServeHTTP(w, r)
+		if !strings.HasPrefix(r.URL.Path, staffPrefix) || (r.URL.Path == staffSession && r.Method == http.MethodPost) {
+			next.ServeHTTP(w, r) // signing in is how a staff member gets a token
 			return
 		}
 		auth := h.Staff
@@ -105,8 +111,18 @@ func requireRole(roles ...staff.Role) func(http.Handler) http.Handler {
 }
 
 func (h *handlers) mountStaff(r chi.Router) {
+	signIn := h.StaffServices.Members != nil
+	r.Post("/session", h.needs(signIn, "Staff sign-in", h.staffSignIn))
+	r.Delete("/session", h.needs(signIn, "Staff sign-in", h.staffSignOut))
 	r.Get("/me", h.staffMe)
+	r.With(requireRole(staff.Admin)).Get("/members", h.needs(signIn, "Staff members", h.staffMembers))
+	r.With(requireRole(staff.Admin)).Post("/members", h.needs(signIn, "Staff members", h.staffInvite))
+	r.With(requireRole(staff.Admin)).Put("/members/{id}/roles", h.needs(signIn, "Staff members", h.staffSetRoles))
+	r.With(requireRole(staff.Admin)).Post("/members/{id}/disable", h.needs(signIn, "Staff members", h.staffSetActive(false)))
+	r.With(requireRole(staff.Admin)).Post("/members/{id}/enable", h.needs(signIn, "Staff members", h.staffSetActive(true)))
+	r.With(requireRole(staff.Finance, staff.Auditor)).Get("/finance", h.needs(h.StaffServices.Finance != nil, "Finance", h.staffFinance))
 
+	r.With(requireRole(staff.KYCReviewer)).Get("/kyc/queue", h.needs(h.StaffServices.KYC != nil, "KYC review", h.staffKYCQueue))
 	r.With(requireRole(staff.KYCReviewer)).Get("/kyc/pending", h.needs(h.StaffServices.KYC != nil, "KYC review", h.staffKYCPending))
 	r.With(requireRole(staff.KYCReviewer)).Post("/kyc/{user}/approve", h.needs(h.StaffServices.KYC != nil, "KYC review", h.staffKYCReview(true)))
 	r.With(requireRole(staff.KYCReviewer)).Post("/kyc/{user}/reject", h.needs(h.StaffServices.KYC != nil, "KYC review", h.staffKYCReview(false)))
@@ -173,6 +189,12 @@ func staffError(w http.ResponseWriter, err error) {
 		m   m
 	}{
 		{kyc.ErrNothingToReview, m{http.StatusConflict, "nothing-to-review", "No submission awaits review"}},
+		{staff.ErrExists, m{http.StatusConflict, "exists", "A member with this email address exists"}},
+		{staff.ErrInvalid, m{http.StatusBadRequest, "invalid", "Invalid email address or role"}},
+		{staff.ErrNotFound, m{http.StatusNotFound, "not-found", "No such member"}},
+		{staff.ErrSelf, m{http.StatusConflict, "self", "You cannot change your own roles or disable yourself"}},
+		{staff.ErrLastAdmin, m{http.StatusConflict, "last-admin", "The last admin cannot be removed"}},
+		{finance.ErrRange, m{http.StatusBadRequest, "invalid-range", "The range must run forward and cover at most 366 days"}},
 		{payments.ErrNotFound, m{http.StatusNotFound, "not-found", "Not found"}},
 		{payments.ErrNotReversible, m{http.StatusConflict, "state", "Only a credited payment can be reversed"}},
 		{payments.ErrNotResolvable, m{http.StatusConflict, "state", "Only an unconfirmed payment can be resolved"}},
@@ -225,6 +247,16 @@ func (h *handlers) staffMe(w http.ResponseWriter, r *http.Request) {
 		roles = append(roles, string(role))
 	}
 	httpx.WriteJSON(w, http.StatusOK, map[string]any{"id": m.ID, "name": m.Name, "email": m.Email, "roles": roles})
+}
+
+// staffKYCQueue is what the back office polls to tell reviewers that submissions wait: counts only, not audited.
+func (h *handlers) staffKYCQueue(w http.ResponseWriter, r *http.Request) {
+	q, err := h.StaffServices.KYC.ReviewQueue(r.Context())
+	if err != nil {
+		staffError(w, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{"waiting": q.Waiting, "oldest_submitted_at": q.Oldest})
 }
 
 func (h *handlers) staffKYCPending(w http.ResponseWriter, r *http.Request) {
@@ -705,4 +737,129 @@ func (h *handlers) closureGuard(ctx context.Context, tx pgx.Tx, userID string) e
 			identity.ErrClosureBlocked, pi.OpenDrawTickets, pi.UndecidedEntries, pi.UnpaidPrizes)
 	}
 	return nil
+}
+
+// staffSignIn exchanges a Google or Apple ID token of an invited member for a back-office session (ADR 0018).
+func (h *handlers) staffSignIn(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Provider string `json:"provider"`
+		IDToken  string `json:"id_token"`
+		Nonce    string `json:"nonce"`
+	}
+	if !httpx.DecodeJSON(w, r, &in) || !h.limit(w, r, "staff-sign-in:ip:"+h.clientIP(r), 30, time.Hour) {
+		return
+	}
+	s, err := h.StaffServices.Members.SignIn(r.Context(), in.Provider, in.IDToken, in.Nonce)
+	switch {
+	case err == nil:
+		httpx.WriteJSON(w, http.StatusCreated, map[string]any{"token": s.Token, "expires_at": s.ExpiresAt, "member": memberJSON(s.Member)})
+	case errors.Is(err, staff.ErrNotInvited):
+		httpx.WriteProblem(w, http.StatusForbidden, "not-invited", "This account is not a staff member",
+			"ask an admin to invite the email address of the Google or Apple account you used")
+	case errors.Is(err, staff.ErrDisabled):
+		httpx.WriteProblem(w, http.StatusForbidden, "disabled", "This staff member is disabled", "")
+	case errors.Is(err, staff.ErrNoRole):
+		httpx.WriteProblem(w, http.StatusForbidden, "forbidden", "No back-office role", "ask an admin for a role")
+	case errors.Is(err, staff.ErrUnauthenticated):
+		w.Header().Set("WWW-Authenticate", "Bearer")
+		httpx.WriteProblem(w, http.StatusUnauthorized, "unauthenticated", "The sign-in could not be verified", "sign in again")
+	default:
+		internalError(w, err)
+	}
+}
+
+func (h *handlers) staffSignOut(w http.ResponseWriter, r *http.Request) {
+	tok, _ := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
+	if err := h.StaffServices.Members.SignOut(r.Context(), tok); err != nil {
+		internalError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func memberJSON(m staff.Member) map[string]any {
+	roles := make([]string, 0, len(m.Roles))
+	for _, role := range m.Roles {
+		roles = append(roles, string(role))
+	}
+	return map[string]any{"id": m.ID, "name": m.Name, "email": m.Email, "roles": roles}
+}
+
+func (h *handlers) staffMembers(w http.ResponseWriter, r *http.Request) {
+	list, err := h.StaffServices.Members.Members(r.Context())
+	if err != nil {
+		staffError(w, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{"members": list, "roles": staff.AllRoles})
+}
+
+func (h *handlers) staffInvite(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Email string   `json:"email"`
+		Name  string   `json:"name"`
+		Roles []string `json:"roles"`
+	}
+	if !httpx.DecodeJSON(w, r, &in) {
+		return
+	}
+	roles, err := staff.ParseRoles(in.Roles)
+	if err == nil {
+		var rec staff.Record
+		if rec, err = h.StaffServices.Members.Invite(r.Context(), member(r), in.Email, in.Name, roles); err == nil {
+			httpx.WriteJSON(w, http.StatusCreated, rec)
+			return
+		}
+	}
+	staffError(w, err)
+}
+
+func (h *handlers) staffSetRoles(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Roles []string `json:"roles"`
+	}
+	if !httpx.DecodeJSON(w, r, &in) {
+		return
+	}
+	roles, err := staff.ParseRoles(in.Roles)
+	if err == nil {
+		var rec staff.Record
+		if rec, err = h.StaffServices.Members.SetRoles(r.Context(), member(r), chi.URLParam(r, "id"), roles); err == nil {
+			httpx.WriteJSON(w, http.StatusOK, rec)
+			return
+		}
+	}
+	staffError(w, err)
+}
+
+func (h *handlers) staffSetActive(active bool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		rec, err := h.StaffServices.Members.SetActive(r.Context(), member(r), chi.URLParam(r, "id"), active)
+		if err != nil {
+			staffError(w, err)
+			return
+		}
+		httpx.WriteJSON(w, http.StatusOK, rec)
+	}
+}
+
+// staffFinance is the financial dashboard over Nairobi days from..to (default: the last 30 days, today included).
+func (h *handlers) staffFinance(w http.ResponseWriter, r *http.Request) {
+	var from, to time.Time
+	for name, into := range map[string]*time.Time{"from": &from, "to": &to} {
+		if v := r.URL.Query().Get(name); v != "" {
+			t, err := time.Parse(time.DateOnly, v)
+			if err != nil {
+				httpx.WriteProblem(w, http.StatusBadRequest, "invalid-range", "Invalid date", name+" must be YYYY-MM-DD")
+				return
+			}
+			*into = t
+		}
+	}
+	sum, err := h.StaffServices.Finance.Summary(r.Context(), from, to)
+	if err != nil {
+		staffError(w, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, sum)
 }

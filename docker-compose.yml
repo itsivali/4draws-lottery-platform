@@ -20,7 +20,8 @@ services:
       retries: 20
   keycloak:
     image: quay.io/keycloak/keycloak:26.0
-    # The staff realm (deploy/keycloak): local test staff, password local-dev-staff. Tokens are issued for
+    # The staff realm (deploy/keycloak): local test staff, password local-dev-staff, standing in for Google and Apple
+    # sign-in; their roles are in the database (scripts/seed-staff.sh), not here. Tokens are issued for
     # http://localhost:8081 (the browser's address); the api fetches the keys over the compose network.
     command: start-dev --import-realm
     environment:
@@ -45,13 +46,6 @@ services:
     # POST /__mock/b2c-fault payout failures.
     environment: { MOCK_AUTO_COMPLETE: 2s, MOCK_C2B_SHORTCODE: "600992", MOCK_B2C_SHORTCODE: "600992", MOCK_INITIATOR: local, MOCK_SECURITY_CREDENTIAL: bG9jYWwtZGV2LW9ubHk= }
     ports: ["8090:8080"]
-  kyc-mock:
-    build: { context: ., target: mock, args: { TARGET: mocks/stub } }
-    # local dev only: every ID verifies. Real fault-injecting mocks arrive with the phases that need them.
-    environment:
-      MOCK_NAME: kyc-mock
-      MOCK_ROUTES: '{"/verify":"{\"found\":true,\"name_match\":true,\"dob_match\":true,\"reference\":\"local\"}"}'
-    ports: ["8091:8080"]
   drand-mock:
     build: { context: ., target: mock, args: { TARGET: mocks/stub } }
     environment: { MOCK_NAME: drand-mock }
@@ -72,8 +66,7 @@ services:
       IDENTITY_KEY: bG9jYWwtZGV2LW9ubHktaWQta2V5LTAwMDAwMDAwMDA=
       VALKEY_ADDR: valkey:6379
       TRUSTED_PROXY_HEADER: none
-      KYC_API_URL: http://kyc-mock:8080/verify
-      KYC_API_KEY: local
+      # no KYC_API_URL: identities wait for a reviewer in the back office, as in production (ADR 0009)
       WORKERS_IN_PROCESS: "true"
       DARAJA_BASE_URL: http://daraja-mock:8080
       TOP_UP_MIN_KES: "1" # as on Render while the apps are tested
@@ -88,9 +81,14 @@ services:
       DARAJA_SECURITY_CREDENTIAL: bG9jYWwtZGV2LW9ubHk=
       PUBLIC_BASE_URL: http://api:8080
       CORS_ALLOWED_ORIGINS: http://localhost:5173,http://localhost:8088
-      STAFF_OIDC_ISSUER: http://localhost:8081/realms/lottery-staff
-      STAFF_OIDC_AUDIENCE: lottery-backoffice-api
-      STAFF_OIDC_JWKS_URL: http://keycloak:8080/realms/lottery-staff/protocol/openid-connect/certs
+      # Staff sign in with Google or Apple (ADR 0018); locally the staff realm stands in for them ("dev"), and ada is
+      # the first admin (scripts/seed-staff.sh invites the rest). Set STAFF_GOOGLE_CLIENT_ID in your shell to try
+      # Google locally (its OAuth client must allow http://localhost:5173).
+      STAFF_DEV_OIDC_ISSUER: http://localhost:8081/realms/lottery-staff
+      STAFF_DEV_OIDC_CLIENT_IDS: lottery-backoffice,lottery-e2e
+      STAFF_DEV_OIDC_JWKS_URL: http://keycloak:8080/realms/lottery-staff/protocol/openid-connect/certs
+      STAFF_BOOTSTRAP_ADMIN: ada@staff.local
+      STAFF_GOOGLE_CLIENT_ID: ${STAFF_GOOGLE_CLIENT_ID:-}
     ports: ["8080:8080"]
     depends_on:
       migrate: { condition: service_completed_successfully }

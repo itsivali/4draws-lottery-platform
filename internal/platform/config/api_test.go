@@ -20,7 +20,7 @@ func fullAPIEnv(t *testing.T) {
 	t.Setenv("IDENTITY_KEY", b64(32))
 	t.Setenv("VALKEY_ADDR", "valkey:6379")
 	t.Setenv("TRUSTED_PROXY_HEADER", "X-Forwarded-For")
-	for _, k := range []string{"TRUSTED_PROXY_HOPS", "DATA_KEY_ACTIVE", "KYC_API_URL", "KYC_API_KEY", "GOOGLE_CLIENT_ID", "APPLE_CLIENT_ID", "CORS_ALLOWED_ORIGINS", "STAFF_OIDC_ISSUER", "STAFF_OIDC_AUDIENCE", "STAFF_OIDC_JWKS_URL", "STAFF_DATABASE_URL", "ATTESTATION_MODE", "APP_ATTEST_APP_ID", "APP_ATTEST_ALLOW_DEVELOPMENT", "PLAY_INTEGRITY_PACKAGE", "PLAY_INTEGRITY_SERVICE_ACCOUNT", "PLAY_INTEGRITY_CERT_DIGESTS", "ATTESTATION_WEB"} {
+	for _, k := range []string{"TRUSTED_PROXY_HOPS", "DATA_KEY_ACTIVE", "KYC_API_URL", "KYC_API_KEY", "GOOGLE_CLIENT_ID", "APPLE_CLIENT_ID", "CORS_ALLOWED_ORIGINS", "STAFF_GOOGLE_CLIENT_ID", "STAFF_APPLE_CLIENT_ID", "STAFF_DEV_OIDC_ISSUER", "STAFF_DEV_OIDC_CLIENT_IDS", "STAFF_DEV_OIDC_JWKS_URL", "STAFF_BOOTSTRAP_ADMIN", "STAFF_DATABASE_URL", "ATTESTATION_MODE", "APP_ATTEST_APP_ID", "APP_ATTEST_ALLOW_DEVELOPMENT", "PLAY_INTEGRITY_PACKAGE", "PLAY_INTEGRITY_SERVICE_ACCOUNT", "PLAY_INTEGRITY_CERT_DIGESTS", "ATTESTATION_WEB"} {
 		t.Setenv(k, "")
 	}
 }
@@ -194,37 +194,55 @@ func TestAPI_CORSOriginsAreExactHTTPSOriginsOrLocalhost(t *testing.T) {
 	}
 }
 
-func TestAPI_StaffSignInIsAllOrNothingAndUsesSecureURLs(t *testing.T) {
+func TestAPI_StaffSignInIsGoogleAppleOrTheLocalTestRealm(t *testing.T) {
 	fullAPIEnv(t)
+	for _, k := range []string{"STAFF_GOOGLE_CLIENT_ID", "STAFF_APPLE_CLIENT_ID", "STAFF_DEV_OIDC_ISSUER", "STAFF_DEV_OIDC_CLIENT_IDS",
+		"STAFF_DEV_OIDC_JWKS_URL", "STAFF_BOOTSTRAP_ADMIN", "STAFF_DATABASE_URL"} {
+		t.Setenv(k, "")
+	}
 	cfg, err := config.Load()
 	if err != nil || cfg.API.Staff.Enabled {
 		t.Fatalf("unset: %+v %v", cfg.API.Staff, err)
 	}
-	t.Setenv("STAFF_OIDC_ISSUER", "https://sso.example.co.ke/realms/lottery-staff")
-	t.Setenv("STAFF_OIDC_AUDIENCE", "lottery-backoffice-api")
-	t.Setenv("STAFF_OIDC_JWKS_URL", "https://sso.example.co.ke/realms/lottery-staff/protocol/openid-connect/certs")
+	t.Setenv("STAFF_GOOGLE_CLIENT_ID", "123-abc.apps.googleusercontent.com")
+	t.Setenv("STAFF_APPLE_CLIENT_ID", "ke.bahati.backoffice")
+	t.Setenv("STAFF_BOOTSTRAP_ADMIN", "Owner@Example.com")
 	t.Setenv("STAFF_DATABASE_URL", "postgres://worker@db/lottery")
 	cfg, err = config.Load()
 	if err != nil {
 		t.Fatal(err)
 	}
 	s := cfg.API.Staff
-	if !s.Enabled || s.Issuer != "https://sso.example.co.ke/realms/lottery-staff" || s.Audience != "lottery-backoffice-api" ||
-		s.JWKSURL == "" || s.DatabaseURL != "postgres://worker@db/lottery" {
+	if !s.Enabled || s.GoogleClientID != "123-abc.apps.googleusercontent.com" || s.AppleClientID != "ke.bahati.backoffice" ||
+		s.BootstrapAdmin != "owner@example.com" || s.DatabaseURL != "postgres://worker@db/lottery" || s.Dev != nil {
 		t.Fatalf("staff: %+v", s)
 	}
-	t.Setenv("STAFF_OIDC_AUDIENCE", "")
-	if _, err := config.Load(); err == nil || !strings.Contains(err.Error(), "STAFF_OIDC_AUDIENCE") {
-		t.Fatalf("partial staff config accepted: %v", err)
+	if got := s.Providers(); len(got) != 2 || got[0] != "google" || got[1] != "apple" {
+		t.Fatalf("providers %v", got)
 	}
-	t.Setenv("STAFF_OIDC_AUDIENCE", "lottery-backoffice-api")
-	t.Setenv("STAFF_OIDC_JWKS_URL", "http://sso.example.co.ke/certs")
+	t.Setenv("STAFF_BOOTSTRAP_ADMIN", "not-an-email")
+	if _, err := config.Load(); err == nil || !strings.Contains(err.Error(), "STAFF_BOOTSTRAP_ADMIN") {
+		t.Fatalf("bad bootstrap admin accepted: %v", err)
+	}
+	t.Setenv("STAFF_BOOTSTRAP_ADMIN", "")
+
+	// the local staff realm, for local development and the e2e journey only: all three or none, https except in compose
+	t.Setenv("STAFF_DEV_OIDC_ISSUER", "http://localhost:8081/realms/lottery-staff")
+	if _, err := config.Load(); err == nil || !strings.Contains(err.Error(), "STAFF_DEV_OIDC_CLIENT_IDS") {
+		t.Fatalf("partial dev realm accepted: %v", err)
+	}
+	t.Setenv("STAFF_DEV_OIDC_CLIENT_IDS", "lottery-backoffice, lottery-e2e")
+	t.Setenv("STAFF_DEV_OIDC_JWKS_URL", "http://sso.example.co.ke/certs")
 	if _, err := config.Load(); err == nil {
 		t.Fatal("plain http JWKS accepted")
 	}
-	t.Setenv("STAFF_OIDC_JWKS_URL", "http://keycloak:8080/realms/lottery-staff/protocol/openid-connect/certs")
-	if _, err := config.Load(); err != nil {
-		t.Fatalf("local compose host refused: %v", err)
+	t.Setenv("STAFF_DEV_OIDC_JWKS_URL", "http://keycloak:8080/realms/lottery-staff/protocol/openid-connect/certs")
+	cfg, err = config.Load()
+	if err != nil || cfg.API.Staff.Dev == nil || len(cfg.API.Staff.Dev.ClientIDs) != 2 || cfg.API.Staff.Dev.ClientIDs[1] != "lottery-e2e" {
+		t.Fatalf("dev realm: %+v %v", cfg.API.Staff.Dev, err)
+	}
+	if got := cfg.API.Staff.Providers(); len(got) != 3 || got[2] != "dev" {
+		t.Fatalf("providers %v", got)
 	}
 }
 

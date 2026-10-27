@@ -39,7 +39,7 @@ func TestRenderBlueprint_ProvidesEveryVariableTheAPIRequires(t *testing.T) {
 	var kinds = map[string]string{}
 	for _, s := range bp.Services {
 		kinds[s.Name] = s.Type
-		if s.Type == "web" {
+		if s.Name == "lottery-api" { // the other web service is the player web app's static site
 			api = map[string]string{}
 			for _, e := range s.EnvVars {
 				api[e.Key] = e.Value
@@ -47,7 +47,7 @@ func TestRenderBlueprint_ProvidesEveryVariableTheAPIRequires(t *testing.T) {
 		}
 	}
 	if api == nil {
-		t.Fatal("no web service in render.yaml")
+		t.Fatal("no lottery-api service in render.yaml")
 	}
 	for _, k := range []string{"AUTH_KEY", "TOKEN_SEED", "DATA_KEY", "IDENTITY_KEY", "VALKEY_ADDR", "TRUSTED_PROXY_HEADER", "DATABASE_URL"} {
 		if _, ok := api[k]; !ok {
@@ -75,7 +75,7 @@ func TestRenderBlueprint_AFreshDeployStarts(t *testing.T) {
 	}
 	var bp struct {
 		Services []struct {
-			Type    string `yaml:"type"`
+			Name    string `yaml:"name"`
 			EnvVars []struct {
 				Key           string `yaml:"key"`
 				Value         string `yaml:"value"`
@@ -89,7 +89,7 @@ func TestRenderBlueprint_AFreshDeployStarts(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, s := range bp.Services {
-		if s.Type != "web" {
+		if s.Name != "lottery-api" {
 			continue
 		}
 		for _, e := range s.EnvVars {

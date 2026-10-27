@@ -187,7 +187,7 @@ func parse(args []string) (command, error) {
 		return command{}, bad
 	}
 	if c.operator != "" {
-		// the staff member's id (their Keycloak subject), recorded as the back office records it, so a two-person rule
+		// the staff member's id (their member id in the back office's Staff page), recorded as the back office records it, so a two-person rule
 		// (draw sign-off, KRA remittance) cannot be met by one person acting once here and once in the back office
 		if !staffID.MatchString(c.operator) {
 			return command{}, errors.New("-operator must be your staff id (the uuid of your staff account), not a name")

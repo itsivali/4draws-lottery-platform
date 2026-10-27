@@ -77,6 +77,7 @@ export function ConfirmDialog({
   fields = [],
   confirmLabel,
   danger = false,
+  initial,
   onConfirm,
   onCancel,
 }: {
@@ -84,6 +85,8 @@ export function ConfirmDialog({
   title: string
   body: ReactNode
   fields?: ConfirmField[]
+  /** values the fields start with (checkboxes: "true") */
+  initial?: Record<string, string> | undefined
   confirmLabel: string
   danger?: boolean
   onConfirm: (values: Record<string, string>) => void
@@ -91,7 +94,8 @@ export function ConfirmDialog({
 }) {
   const ref = useRef<HTMLDialogElement>(null)
   const id = useId()
-  const [values, setValues] = useState<Record<string, string>>({})
+  // the caller remounts the dialog (key) for each question, so initial values apply afresh
+  const [values, setValues] = useState<Record<string, string>>(initial ?? {})
   useEffect(() => {
     const d = ref.current
     if (!d) return

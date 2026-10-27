@@ -54,10 +54,13 @@ Read this first at the start of every session.
 - Free-tier deployment: migrate on start (advisory lock), workers in-process, free Postgres + Key Value.
 - **Draws (owner, 2026-10-26, ADR 0017):** weekly, monthly and quarterly periods are each player's own, 7, 30 and 90
   days back to back from their first play; a draw closes each day for the players whose period ends that day.
+- **Staff (owner, 2026-10-26, ADR 0018):** the back office signs staff in with Google or Apple; members and roles
+  (with new `admin` and `finance` roles) are managed on its Staff page; itsivali@gmail.com is the bootstrap admin.
+  The back office has a Finance dashboard read from the ledger and deploys as the `lottery-backoffice` static site.
 - **Testing with real M-Pesa (owner, 2026-10-26):** top-ups from KES 1 (`TOP_UP_MIN_KES=1` on Render and in compose;
   the apps read the bounds from `GET /v1/wallet`) and plays at KES 1 from 2026-10-26 (migration 00028). Before launch:
   set `TOP_UP_MIN_KES` and add an odds/price version with the launch price from the launch date. The apps point at
-  `https://lottery-api-4u9g.onrender.com` (repo variable `MOBILE_API_BASE_URL`)
+  `https://lottery-api-4u9g.onrender.com` (repo variable `MOBILE_API_BASE_URL`; Render static site `lottery-web`)
   until the Cloudflare domain is set up.
 - **Deposit excise (owner, 2026-10-26, ADR 0016): paid by the operator**; the player is credited in full and taxed only
   on winnings (from 2026-10-22 it was deducted from the deposit). Rate version to load: `deposit_excise` 5% `half_up` effective 2025-07-01 (owner's choice, based on the Finance

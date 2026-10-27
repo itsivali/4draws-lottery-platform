@@ -50,6 +50,7 @@ func newOIDC(t *testing.T) *oidcFixture {
 	f.v = identity.NewOIDCVerifier(f.clk, http.DefaultClient, map[string]identity.OIDCProvider{
 		"google": {Issuers: []string{"https://accounts.google.com", "accounts.google.com"}, Audiences: []string{"client-123"}, JWKSURL: f.srv.URL},
 		"apple":  {Issuers: []string{"https://appleid.apple.com"}, Audiences: []string{"com.example.lottery"}, JWKSURL: f.srv.URL, NonceSHA256: true},
+		"dev":    {Issuers: []string{"https://accounts.google.com"}, Audiences: []string{"client-123"}, JWKSURL: f.srv.URL, NonceOptional: true},
 	})
 	return f
 }

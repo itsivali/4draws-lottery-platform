@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -96,38 +97,75 @@ func loadAttestation() (Attestation, error) {
 	return a, nil
 }
 
-// Staff is the back office's sign-in: access tokens from the staff realm (Keycloak), and the database URL the
-// back office acts through (the worker's role; empty uses DATABASE_URL, for single-role mode).
+// Staff is the back office's sign-in (ADR 0018): Google and Apple ID tokens for the back office's own client ids, and
+// optionally the local staff realm for local development and the e2e journey. Members and roles are in the database;
+// BootstrapAdmin is made an admin while there is none. DatabaseURL is what the back office acts through (the worker's
+// role; empty uses DATABASE_URL, for single-role mode).
 type Staff struct {
-	Enabled     bool
-	Issuer      string
-	Audience    string
-	JWKSURL     string
-	DatabaseURL string
+	Enabled        bool
+	GoogleClientID string // STAFF_GOOGLE_CLIENT_ID: the back office's OAuth web client
+	AppleClientID  string // STAFF_APPLE_CLIENT_ID: the back office's Sign in with Apple Services ID
+	Dev            *DevOIDC
+	BootstrapAdmin string
+	DatabaseURL    string
 }
 
-var staffVars = []string{"STAFF_OIDC_ISSUER", "STAFF_OIDC_AUDIENCE", "STAFF_OIDC_JWKS_URL"}
+// DevOIDC is the local staff realm (Keycloak in compose): never configured in production.
+type DevOIDC struct {
+	Issuer    string
+	ClientIDs []string
+	JWKSURL   string
+}
+
+// Providers names the sign-in providers configured, in the order the back office offers them.
+func (s Staff) Providers() []string {
+	var out []string
+	if s.GoogleClientID != "" {
+		out = append(out, "google")
+	}
+	if s.AppleClientID != "" {
+		out = append(out, "apple")
+	}
+	if s.Dev != nil {
+		out = append(out, "dev")
+	}
+	return out
+}
+
+var devOIDCVars = []string{"STAFF_DEV_OIDC_ISSUER", "STAFF_DEV_OIDC_CLIENT_IDS", "STAFF_DEV_OIDC_JWKS_URL"}
+
+var emailRE = regexp.MustCompile(`^[^@\s]+@[^@\s]+\.[^@\s]+$`)
 
 func loadStaff() (Staff, error) {
+	s := Staff{GoogleClientID: os.Getenv("STAFF_GOOGLE_CLIENT_ID"), AppleClientID: os.Getenv("STAFF_APPLE_CLIENT_ID"),
+		BootstrapAdmin: strings.ToLower(strings.TrimSpace(os.Getenv("STAFF_BOOTSTRAP_ADMIN"))), DatabaseURL: os.Getenv("STAFF_DATABASE_URL")}
 	var set, missing []string
-	for _, k := range staffVars {
+	for _, k := range devOIDCVars {
 		if os.Getenv(k) != "" {
 			set = append(set, k)
 		} else {
 			missing = append(missing, k)
 		}
 	}
-	if len(set) == 0 {
-		return Staff{}, nil
+	switch {
+	case len(set) > 0 && len(missing) > 0:
+		return Staff{}, fmt.Errorf("config: the local staff realm is partly configured (%s set) but %s missing", strings.Join(set, ", "), strings.Join(missing, ", "))
+	case len(set) > 0:
+		d := &DevOIDC{Issuer: os.Getenv("STAFF_DEV_OIDC_ISSUER"), JWKSURL: os.Getenv("STAFF_DEV_OIDC_JWKS_URL")}
+		for _, id := range strings.Split(os.Getenv("STAFF_DEV_OIDC_CLIENT_IDS"), ",") {
+			if id = strings.TrimSpace(id); id != "" {
+				d.ClientIDs = append(d.ClientIDs, id)
+			}
+		}
+		if err := checkGatewayURL("STAFF_DEV_OIDC_JWKS_URL", d.JWKSURL); err != nil {
+			return Staff{}, err
+		}
+		s.Dev = d
 	}
-	if len(missing) > 0 {
-		return Staff{}, fmt.Errorf("config: staff sign-in is partly configured (%s set) but %s missing", strings.Join(set, ", "), strings.Join(missing, ", "))
+	if s.BootstrapAdmin != "" && !emailRE.MatchString(s.BootstrapAdmin) {
+		return Staff{}, errors.New("config: STAFF_BOOTSTRAP_ADMIN must be an email address")
 	}
-	s := Staff{Enabled: true, Issuer: os.Getenv("STAFF_OIDC_ISSUER"), Audience: os.Getenv("STAFF_OIDC_AUDIENCE"),
-		JWKSURL: os.Getenv("STAFF_OIDC_JWKS_URL"), DatabaseURL: os.Getenv("STAFF_DATABASE_URL")}
-	if err := checkGatewayURL("STAFF_OIDC_JWKS_URL", s.JWKSURL); err != nil {
-		return Staff{}, err
-	}
+	s.Enabled = len(s.Providers()) > 0
 	return s, nil
 }
 

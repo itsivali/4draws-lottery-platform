@@ -61,6 +61,19 @@ services:
       # is off. There is no SMS gateway: phone ownership is proved by the first M-Pesa top-up.
       - key: GOOGLE_CLIENT_ID
         sync: false
+      # Browser origins (comma-separated, exact, https): the lottery-web and lottery-backoffice static sites' addresses
+      # (shown in their dashboards once created), and later the Cloudflare domains. The phone apps need no entry.
+      - key: CORS_ALLOWED_ORIGINS
+        sync: false
+      # Back-office sign-in (ADR 0018): the back office's own Google OAuth web client id and Sign in with Apple Services
+      # ID (docs/runbooks/back-office.md). Either is enough; neither closes the back office. The bootstrap admin is made
+      # an admin while there is none, and invites everyone else from the Staff page.
+      - key: STAFF_GOOGLE_CLIENT_ID
+        sync: false
+      - key: STAFF_APPLE_CLIENT_ID
+        sync: false
+      - key: STAFF_BOOTSTRAP_ADMIN
+        value: itsivali@gmail.com
       - key: APPLE_CLIENT_ID
         sync: false
 
@@ -108,3 +121,53 @@ services:
         sync: false
       - key: ALERT_HEARTBEAT_URL
         sync: false
+
+  # The player web app (Flutter web), built against the Render api until the Cloudflare domain is set up. Free static
+  # site: Render's build image has no Flutter, so the build fetches the pinned SDK (mise.toml) first.
+  - type: web
+    name: lottery-web
+    runtime: static
+    buildCommand: >-
+      git clone --depth 1 --branch 3.47.7 https://github.com/flutter/flutter.git "$HOME/flutter" &&
+      export PATH="$HOME/flutter/bin:$PATH" && cd apps/mobile && flutter pub get &&
+      flutter build web --release --dart-define=API_BASE_URL="$API_BASE_URL"
+    staticPublishPath: apps/mobile/build/web
+    envVars:
+      - key: API_BASE_URL
+        value: https://lottery-api-4u9g.onrender.com
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    headers:
+      - path: /*
+        name: X-Frame-Options
+        value: DENY
+
+  # The staff back office (React), against the Render api until the Cloudflare domain is set up. Staff sign in with
+  # Google or Apple: the same client ids as the api's STAFF_GOOGLE_CLIENT_ID / STAFF_APPLE_CLIENT_ID.
+  - type: web
+    name: lottery-backoffice
+    runtime: static
+    buildCommand: cd apps/backoffice && npm ci && npm run build
+    staticPublishPath: apps/backoffice/dist
+    envVars:
+      - key: VITE_API_BASE_URL
+        value: https://lottery-api-4u9g.onrender.com
+      - key: VITE_GOOGLE_CLIENT_ID
+        sync: false
+      - key: VITE_APPLE_CLIENT_ID
+        sync: false
+      - key: NODE_VERSION
+        value: "22"
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    headers:
+      - path: /*
+        name: X-Frame-Options
+        value: DENY
+      - path: /*
+        name: Referrer-Policy
+        value: strict-origin-when-cross-origin

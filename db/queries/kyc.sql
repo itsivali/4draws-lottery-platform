@@ -36,3 +36,14 @@ JOIN LATERAL (SELECT k.id_number_enc, k.full_name_enc, k.date_of_birth_enc, k.cr
               WHERE k.user_id = u.id ORDER BY k.created_at DESC, k.id DESC LIMIT 1) c ON true
 WHERE u.kyc_status = 'manual_review'
 ORDER BY c.created_at, u.id;
+
+-- How many accounts wait for a staff decision and when the oldest of their latest submissions arrived (no details).
+-- No row when nobody waits.
+-- name: ReviewQueue :one
+SELECT count(*) OVER () AS waiting, c.created_at AS oldest
+FROM identity.users u
+JOIN LATERAL (SELECT k.created_at FROM kyc.kyc_checks k
+              WHERE k.user_id = u.id ORDER BY k.created_at DESC, k.id DESC LIMIT 1) c ON true
+WHERE u.kyc_status = 'manual_review'
+ORDER BY c.created_at
+LIMIT 1;

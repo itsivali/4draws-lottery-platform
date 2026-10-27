@@ -203,6 +203,25 @@ type PendingReview struct {
 	SubmittedAt                     time.Time
 }
 
+// Queue is how many submissions wait for a staff decision and when the oldest arrived (nil when none waits). It holds
+// no personal details, so reading it is not audited.
+type Queue struct {
+	Waiting int64
+	Oldest  *time.Time
+}
+
+// ReviewQueue counts the submissions waiting for a staff decision.
+func (s *Service) ReviewQueue(ctx context.Context) (Queue, error) {
+	row, err := store.New(s.pool).ReviewQueue(ctx)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Queue{}, nil
+	}
+	if err != nil {
+		return Queue{}, err
+	}
+	return Queue{Waiting: row.Waiting, Oldest: &row.Oldest}, nil
+}
+
 // AwaitingReview returns the submissions waiting for a staff decision, oldest first, with the personal details
 // decrypted. Every submission shown is audited as unmasked by reviewer, who must be named.
 func (s *Service) AwaitingReview(ctx context.Context, reviewer string) ([]PendingReview, error) {

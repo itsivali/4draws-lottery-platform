@@ -453,6 +453,35 @@ type RgRestriction struct {
 	CreatedAt pgtype.Timestamptz
 }
 
+type StaffIdentity struct {
+	Provider  string
+	Subject   string
+	MemberID  string
+	CreatedAt pgtype.Timestamptz
+}
+
+type StaffMember struct {
+	ID        string
+	Email     string
+	Name      string
+	Roles     []string
+	Active    bool
+	InvitedBy string
+	CreatedAt pgtype.Timestamptz
+	UpdatedAt pgtype.Timestamptz
+}
+
+type StaffSession struct {
+	ID         string
+	TokenHash  []byte
+	MemberID   string
+	Provider   string
+	CreatedAt  pgtype.Timestamptz
+	ExpiresAt  pgtype.Timestamptz
+	LastSeenAt pgtype.Timestamptz
+	RevokedAt  pgtype.Timestamptz
+}
+
 type TicketsPlayerDay struct {
 	UserID    string
 	PlayDate  pgtype.Date

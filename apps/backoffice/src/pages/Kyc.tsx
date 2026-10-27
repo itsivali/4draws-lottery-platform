@@ -1,20 +1,32 @@
+import { useEffect } from 'react'
 import { useSession } from '../context'
 import { useConfirmedAction } from '../components/useConfirmedAction'
 import { Empty, Loaded, PageHeader } from '../components/ui'
 import { eat, msisdn } from '../format'
 import { useLoad } from '../hooks'
+import { useReviewQueue } from '../reviewQueue'
 import type { KycSubmission } from '../types'
 
 export function KycPage() {
   const { api } = useSession()
   const load = useLoad(() => api.get<{ submissions: KycSubmission[] }>('/v1/staff/kyc/pending'))
   const { ask, busy, view } = useConfirmedAction(load.reload)
+  const { queue, dismiss } = useReviewQueue()
+  useEffect(dismiss, [dismiss, queue])
+  // the list is reloaded only when asked: every submission it shows is audited as unmasked
+  const fresh = (queue?.waiting ?? 0) - (load.data?.submissions.length ?? Infinity)
   return (
     <section>
       <PageHeader title="Identity review">
         Compare each submission with the person’s national ID. Opening this list is recorded in the audit log.
       </PageHeader>
       {view}
+      {fresh > 0 ? (
+        <div className="notice notice-pending">
+          <p>{fresh === 1 ? 'A new submission arrived.' : `${fresh} new submissions arrived.`}</p>
+          <button type="button" onClick={load.reload}>Show {fresh} new {fresh === 1 ? 'submission' : 'submissions'}</button>
+        </div>
+      ) : null}
       <Loaded load={load} what="submissions">
         {({ submissions }) =>
           submissions.length === 0 ? (

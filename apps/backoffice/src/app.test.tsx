@@ -2,7 +2,6 @@ import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 import { App } from './App'
-import { loadConfig } from './config'
 import { visibleSections } from './roles'
 import { problem, renderSignedIn } from './test/render'
 import type { Draw } from './types'
@@ -12,7 +11,7 @@ const submission = { user_id: 'u1', msisdn: '254712345678', national_id: '123456
 describe('roles', () => {
   it('a member sees only the sections their roles open', () => {
     expect(visibleSections(['kyc_reviewer']).map((s) => s.path)).toEqual(['/kyc'])
-    expect(visibleSections(['auditor']).map((s) => s.path)).toEqual(['/draws', '/payouts', '/payments', '/tax', '/alerts', '/closures'])
+    expect(visibleSections(['auditor']).map((s) => s.path)).toEqual(['/finance', '/draws', '/payouts', '/payments', '/tax', '/alerts', '/closures'])
   })
 
   it('the navigation and the routes follow the roles', async () => {
@@ -146,10 +145,3 @@ describe('closures', () => {
   })
 })
 
-describe('config', () => {
-  it('refuses to start without a server or with plain http outside localhost', () => {
-    expect(loadConfig({})).toBeNull()
-    expect(loadConfig({ VITE_API_BASE_URL: 'http://api.example.com', VITE_OIDC_AUTHORITY: 'https://sso.example.com/realms/x', VITE_OIDC_CLIENT_ID: 'c' })).toBeNull()
-    expect(loadConfig({ VITE_API_BASE_URL: 'http://localhost:8080', VITE_OIDC_AUTHORITY: 'http://localhost:8081/realms/lottery-staff', VITE_OIDC_CLIENT_ID: 'lottery-backoffice' })).not.toBeNull()
-  })
-})

@@ -25,6 +25,7 @@ import (
 	"github.com/itsivali/lottery-platform/internal/audit"
 	"github.com/itsivali/lottery-platform/internal/draws"
 	"github.com/itsivali/lottery-platform/internal/draws/drand"
+	"github.com/itsivali/lottery-platform/internal/finance"
 	"github.com/itsivali/lottery-platform/internal/game"
 	"github.com/itsivali/lottery-platform/internal/identity"
 	"github.com/itsivali/lottery-platform/internal/identity/attest"
@@ -227,16 +228,35 @@ func (a *App) staff(ctx context.Context, sh shared, base services) (staff.Authen
 		}
 		a.staffPool, pool, svc = p, p, buildServices(p, sh)
 	}
-	verifier := identity.NewOIDCVerifier(clock.Wall{}, sh.hc, map[string]identity.OIDCProvider{
-		staffProvider: {Issuers: []string{c.Issuer}, Audiences: []string{c.Audience}, JWKSURL: c.JWKSURL},
-	})
-	return staff.NewAuthenticator(verifier, staffProvider), api.StaffServices{
+	members := staff.NewService(pool, sh.clk, identity.NewOIDCVerifier(clock.Wall{}, sh.hc, staffProviders(c)), sh.aw)
+	if c.BootstrapAdmin != "" {
+		if err := members.Bootstrap(ctx, c.BootstrapAdmin); err != nil {
+			return nil, api.StaffServices{}, fmt.Errorf("app: staff bootstrap admin: %w", err)
+		}
+	}
+	return members, api.StaffServices{
 		Identity: svc.identity, KYC: svc.kyc, Payments: svc.payments, Draws: svc.draws, Payouts: svc.payouts, Game: svc.game,
-		Alerts: a.alertsOn(pool, svc.draws),
+		Alerts: a.alertsOn(pool, svc.draws), Members: members, Finance: finance.NewService(pool, sh.clk),
 	}, nil
 }
 
-const staffProvider = "staff"
+// staffProviders are the ID-token issuers staff may sign in with (ADR 0018): the back office's own Google and Apple
+// clients, and the local staff realm in development (its password grant carries no nonce).
+func staffProviders(c config.Staff) map[string]identity.OIDCProvider {
+	p := map[string]identity.OIDCProvider{}
+	if c.GoogleClientID != "" {
+		p["google"] = identity.OIDCProvider{Issuers: []string{"https://accounts.google.com", "accounts.google.com"},
+			Audiences: []string{c.GoogleClientID}, JWKSURL: "https://www.googleapis.com/oauth2/v3/certs"}
+	}
+	if c.AppleClientID != "" {
+		p["apple"] = identity.OIDCProvider{Issuers: []string{"https://appleid.apple.com"}, Audiences: []string{c.AppleClientID},
+			JWKSURL: "https://appleid.apple.com/auth/keys", NonceSHA256: true}
+	}
+	if c.Dev != nil {
+		p["dev"] = identity.OIDCProvider{Issuers: []string{c.Dev.Issuer}, Audiences: c.Dev.ClientIDs, JWKSURL: c.Dev.JWKSURL, NonceOptional: true}
+	}
+	return p
+}
 
 // newAttestor builds the device attestation verifiers that are configured (App Attest trusts Apple's root; Play
 // Integrity decodes through Google). A platform without one never passes.

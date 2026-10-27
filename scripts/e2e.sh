@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# E2E: bring up the stack, check the probes, then sign up, log in, verify identity and top up through the real API,
+# E2E: bring up the stack, check the probes, then sign up, log in, submit an identity that a reviewer approves in the
+# back office API (as in production: no registry, ADR 0009), and top up through the real API,
 # workers and the Daraja mock (which approves every prompt after two seconds and calls the api back); then pay into the
 # paybill through the mock and wait for the verified credit.
 # Then (phases 6-7): a play, the wallet and account reads, a withdrawal followed until paid, an attestation challenge,
@@ -10,13 +11,17 @@ docker compose up -d --build --wait
 trap 'docker compose down -v' EXIT
 curl -fsS localhost:8080/healthz >/dev/null
 curl -fsS localhost:8080/readyz >/dev/null
-for p in 8090 8091 8093; do curl -fsS "localhost:$p/healthz" >/dev/null; done
+for p in 8090 8093; do curl -fsS "localhost:$p/healthz" >/dev/null; done
 
 post() { # post <path> <idempotency-key> <json> [token]
   curl -sS -o /tmp/e2e.body -w '%{http_code}' -X POST "localhost:8080$1" -H "Idempotency-Key: $2" \
     -H 'Content-Type: application/json' ${4:+-H "Authorization: Bearer $4"} -d "$3"
 }
 dev='"device":{"fingerprint":"e2e-device","platform":"android"}'
+# Back-office sessions: the local staff realm stands in for Google/Apple sign-in; ada (the bootstrap admin) invites the
+# test staff first (ADR 0018).
+scripts/seed-staff.sh >/dev/null
+staff_token() { scripts/seed-staff.sh token "$1"; }
 creds="{\"msisdn\":\"0712345678\",\"password\":\"correct horse battery\",$dev}"
 
 [ "$(post /v1/auth/signup e2e-1 "$creds")" = 201 ] || { echo "signup failed"; cat /tmp/e2e.body; exit 1; }
@@ -26,12 +31,14 @@ bad="{\"msisdn\":\"0712345678\",\"password\":\"not the password\",$dev}"
 [ "$(post /v1/auth/login e2e-2b "$bad")" = 401 ] || { echo "a wrong password was not refused"; cat /tmp/e2e.body; exit 1; }
 [ "$(post /v1/kyc e2e-3 '{"national_id":"12345678","full_name":"Jane Wanjiru Kamau","date_of_birth":"1990-05-17"}' "$token")" = 202 ] \
   || { echo "kyc submit failed"; cat /tmp/e2e.body; exit 1; }
-for _ in $(seq 1 60); do
-  status=$(curl -fsS localhost:8080/v1/kyc -H "Authorization: Bearer $token" | jq -r .status)
-  [ "$status" = verified ] && break
-  sleep 0.5
-done
-[ "$status" = verified ] || { echo "KYC never verified (status: $status)"; docker compose logs api | tail -20; exit 1; }
+status=$(curl -fsS localhost:8080/v1/kyc -H "Authorization: Bearer $token" | jq -r .status)
+[ "$status" = manual_review ] || { echo "the identity does not wait for a reviewer (status: $status)"; exit 1; }
+# the reviewer is told it waits (counts only), opens it and approves it
+kim=$(staff_token kim)
+[ "$(curl -fsS localhost:8080/v1/staff/kyc/queue -H "Authorization: Bearer $kim" | jq -r .waiting)" = 1 ] || { echo "the review queue does not show it"; exit 1; }
+player=$(curl -fsS localhost:8080/v1/staff/kyc/pending -H "Authorization: Bearer $kim" | jq -r '.submissions[] | select(.msisdn == "254712345678") | .user_id')
+[ "$(post "/v1/staff/kyc/$player/approve" e2e-3b '{"reason":"e2e: details match the ID"}' "$kim")" = 200 ] || { echo "approval failed"; cat /tmp/e2e.body; exit 1; }
+[ "$(curl -fsS localhost:8080/v1/kyc -H "Authorization: Bearer $token" | jq -r .status)" = verified ] || { echo "KYC not verified after approval"; exit 1; }
 
 [ "$(post /v1/payments/topups e2e-4 '{"amount_kes":100}' "$token")" = 202 ] || { echo "top-up failed"; cat /tmp/e2e.body; exit 1; }
 payment=$(jq -r .id /tmp/e2e.body)
@@ -77,15 +84,15 @@ done
 # Device attestation: a single-use challenge is issued.
 [ "$(post /v1/auth/attestation/challenge e2e-7 '')" = 201 ] || { echo "attestation challenge failed"; cat /tmp/e2e.body; exit 1; }
 
-# The back office: staff tokens from the local staff realm (password grant on its local-only e2e client).
-staff_token() {
-  curl -fsS -d client_id=lottery-e2e -d grant_type=password -d "username=$1" -d password=local-dev-staff \
-    localhost:8081/realms/lottery-staff/protocol/openid-connect/token | jq -r .access_token
-}
+# The back office: roles are enforced.
 paula=$(staff_token paula)
 [ "$(curl -fsS localhost:8080/v1/staff/me -H "Authorization: Bearer $paula" | jq -r '.roles | index("payments_operator") != null')" = true ] \
   || { echo "staff roles not seen"; exit 1; }
 [ "$(post /v1/staff/payments/reconcile e2e-8 '' "$paula")" = 200 ] || { echo "staff reconciliation failed"; cat /tmp/e2e.body; exit 1; }
+# the financial dashboard sees this journey's money: the STK top-up and the paybill payment
+alice=$(staff_token alice)
+[ "$(curl -fsS localhost:8080/v1/staff/finance -H "Authorization: Bearer $alice" | jq -r '.totals.deposits_kes >= 300')" = true ] \
+  || { echo "finance does not show the deposits"; exit 1; }
 [ "$(curl -sS -o /dev/null -w '%{http_code}' localhost:8080/v1/staff/payouts -H "Authorization: Bearer $paula")" = 403 ] \
   || { echo "a payments operator could list payouts"; exit 1; }
 [ "$(curl -sS -o /dev/null -w '%{http_code}' localhost:8080/v1/staff/me -H "Authorization: Bearer $token")" = 401 ] \

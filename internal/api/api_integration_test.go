@@ -24,6 +24,7 @@ import (
 	"github.com/itsivali/lottery-platform/internal/api"
 	"github.com/itsivali/lottery-platform/internal/audit"
 	"github.com/itsivali/lottery-platform/internal/draws"
+	"github.com/itsivali/lottery-platform/internal/finance"
 	"github.com/itsivali/lottery-platform/internal/game"
 	"github.com/itsivali/lottery-platform/internal/identity"
 	"github.com/itsivali/lottery-platform/internal/kyc"
@@ -119,6 +120,7 @@ type env struct {
 	enq   *kycQueue
 	pay   *payQueue
 	staff *fakeStaff
+	deps  api.Deps
 	keys  int
 }
 
@@ -191,6 +193,8 @@ func setupWith(t *testing.T, mutate func(*apiDeps)) *env {
 		Draws:    draws.NewService(staffPool, clk, kr, drawBeacon{}, ls),
 		Payouts:  payouts.NewService(staffPool, clk, dc, payoutQueue{pay}, sIDs, wallet.NewService(ls), ls, aw, payouts.Config{}, wallet.ErrInsufficientFunds),
 		Game:     game.NewService(staffPool, clk, sIDs, sRG, wallet.NewService(ls), kr, wallet.ErrInsufficientFunds),
+		Members:  staff.NewService(staffPool, clk, staffIDTokens{}, aw),
+		Finance:  finance.NewService(staffPool, clk),
 	}
 	staffAuth := &fakeStaff{members: map[string]staff.Member{}}
 	deps := api.Deps{
@@ -218,7 +222,7 @@ func setupWith(t *testing.T, mutate func(*apiDeps)) *env {
 	enq.process = func(ctx context.Context, id string) error { return deps.KYC.Process(ctx, id) }
 	t.Cleanup(srv.Close)
 	t.Cleanup(live.Close) // before srv.Close (cleanups run last-in first-out), so open streams end
-	return &env{pool: pool, clk: clk, kyc: mock, vk: vk, srv: srv, live: live, enq: enq, pay: pay, staff: staffAuth}
+	return &env{pool: pool, clk: clk, kyc: mock, vk: vk, srv: srv, live: live, enq: enq, pay: pay, staff: staffAuth, deps: deps}
 }
 
 type resp struct {

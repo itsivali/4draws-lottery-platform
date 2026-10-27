@@ -32,6 +32,8 @@ export class ApiClient {
     private readonly baseUrl: string,
     private readonly token: () => Promise<string | null>,
     private readonly fetchFn: Fetch = (...a) => globalThis.fetch(...a),
+    /** called when the server no longer accepts the session (it ended, or the member was disabled) */
+    private readonly onUnauthenticated?: () => void,
   ) {}
 
   async get<T>(path: string, query?: Record<string, string>): Promise<T> {
@@ -71,6 +73,23 @@ export class ApiClient {
     return this.decode<T>(res)
   }
 
+  async put<T = unknown>(path: string, body: unknown = {}, key = newIdempotencyKey()): Promise<T> {
+    const res = await this.fetchFn(new URL(path, this.baseUrl).toString(), {
+      method: 'PUT',
+      headers: { ...(await this.headers()), 'Content-Type': 'application/json', 'Idempotency-Key': key },
+      body: JSON.stringify(body),
+    })
+    return this.decode<T>(res)
+  }
+
+  async delete(path: string): Promise<void> {
+    const res = await this.fetchFn(new URL(path, this.baseUrl).toString(), {
+      method: 'DELETE',
+      headers: { ...(await this.headers()), 'Idempotency-Key': newIdempotencyKey() },
+    })
+    await this.decode(res)
+  }
+
   private async headers(): Promise<Record<string, string>> {
     const t = await this.token()
     return { Accept: 'application/json, application/problem+json', ...(t ? { Authorization: `Bearer ${t}` } : {}) }
@@ -81,6 +100,7 @@ export class ApiClient {
     const text = await res.text()
     const body: unknown = text ? JSON.parse(text) : undefined
     if (res.ok) return body as T
+    if (res.status === 401) this.onUnauthenticated?.()
     const p = (body ?? {}) as { type?: string; title?: string; detail?: string }
     const slug = p.type?.split('/').pop() ?? `http-${res.status}`
     throw new ProblemError(res.status, slug, p.title ?? `Request failed (${res.status})`, p.detail)

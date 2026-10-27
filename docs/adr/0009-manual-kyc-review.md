@@ -17,7 +17,9 @@ not to pay for a registry: identities are checked by staff.
   shown is audited as `kyc.unmask`) and decide with `lotteryctl kyc approve|reject -user ID -reason TEXT -operator NAME`
   (the existing audited `Review`). Approval claims the national ID; a second account with the same ID cannot be approved.
 - The back office (phase 6) replaces the CLI with a review screen. The registry gateway code stays, unused, in case a
-  provider is chosen later (`KYC_API_URL`); the compose stack still uses its mock so that path stays tested.
+  provider is chosen later (`KYC_API_URL`); its Go tests keep that path tested. Since 2026-10-26 the compose stack has
+  no KYC mock either, so local submissions wait for a reviewer too, and the back office tells reviewers when one
+  arrives (`GET /v1/staff/kyc/queue`, counts only, polled every 30 s and on focus).
 - `KYC_API_URL` / `KYC_API_KEY` leave the Render Blueprint.
 
 ## Consequences

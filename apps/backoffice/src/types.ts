@@ -1,6 +1,8 @@
 // Shapes of the /v1/staff answers (api/openapi.yaml, back-office tag).
 
 export type Role =
+  | 'admin'
+  | 'finance'
   | 'kyc_reviewer'
   | 'payments_operator'
   | 'draw_official'
@@ -91,4 +93,49 @@ export interface Reconciliation {
   mismatches: Record<string, string[] | undefined> | null
   attention?: Record<string, string[] | undefined> | null
   totals: Record<string, number> | null
+}
+
+/** A back-office member as admins see them (GET /v1/staff/members). */
+export interface StaffMember {
+  id: string
+  email: string
+  name: string
+  roles: Role[]
+  active: boolean
+  invited_by: string
+  providers: string[]
+  last_sign_in: string | null
+  created_at: string
+}
+
+/** One day's, or a range's, money movements in whole KES (GET /v1/staff/finance). */
+export interface Figures {
+  deposits_kes: number
+  stakes_kes: number
+  prizes_awarded_kes: number
+  prizes_paid_kes: number
+  withdrawals_kes: number
+  reversals_kes: number
+  excise_kes: number
+  tax_withheld_kes: number
+  tax_remitted_kes: number
+  ggr_kes: number
+}
+
+export interface FinanceSummary {
+  from: string
+  to: string
+  totals: Figures
+  days: (Figures & { day: string })[]
+  balances: {
+    owed_to_players_kes: number
+    player_debt_kes: number
+    excise_owed_kes: number
+    tax_owed_kes: number
+    prize_pools_kes: number
+    suspense_kes: number
+    mpesa_clearing_kes: number
+    b2c_float_kes: number
+  }
+  activity: { signups: number; plays: number; players: number }
 }

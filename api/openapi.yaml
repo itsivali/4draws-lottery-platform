@@ -747,6 +747,186 @@ paths:
                 properties:
                   closure_requested_at: { type: string, format: date-time }
         "401": { $ref: "#/components/responses/Problem" }
+  /v1/staff/session:
+    post:
+      operationId: staffSignIn
+      tags: [back-office]
+      summary: Open a back-office session with a Google or Apple ID token of an invited member
+      description: |
+        The ID token must be from the back office's own Google or Apple client and carry the nonce given here (Apple:
+        its SHA-256). The first sign-in binds the provider identity to the member invited with the token's verified
+        email address; later ones use that binding. Sessions end 12 hours after sign-in or after 30 idle minutes.
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [provider, id_token, nonce]
+              properties:
+                provider: { type: string, enum: [google, apple] }
+                id_token: { type: string }
+                nonce: { type: string }
+      responses:
+        "201":
+          description: The session
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [token, expires_at, member]
+                properties:
+                  token: { type: string }
+                  expires_at: { type: string, format: date-time }
+                  member: { type: object }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    delete:
+      operationId: staffSignOut
+      tags: [back-office]
+      summary: End the current back-office session
+      security: [{ staffBearer: [] }]
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      responses:
+        "204": { description: Signed out }
+        "401": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+  /v1/staff/members:
+    get:
+      operationId: staffMembers
+      tags: [back-office]
+      summary: Every staff member, their roles and sign-ins
+      description: "Role: `admin`."
+      security: [{ staffBearer: [] }]
+      responses:
+        "200":
+          description: The members and the roles that exist
+          content:
+            application/json:
+              schema: { type: object }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    post:
+      operationId: staffInvite
+      tags: [back-office]
+      summary: Invite a member by the email address of their Google or Apple account
+      description: "Role: `admin`. Audited."
+      security: [{ staffBearer: [] }]
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, roles]
+              properties:
+                email: { type: string, format: email }
+                name: { type: string }
+                roles: { type: array, items: { type: string, enum: [admin, finance, kyc_reviewer, payments_operator, draw_official, payout_operator, tax_officer, alerts_operator, support, auditor] } }
+      responses:
+        "201":
+          description: The member
+          content:
+            application/json:
+              schema: { type: object }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+  /v1/staff/members/{id}/roles:
+    put:
+      operationId: staffSetRoles
+      tags: [back-office]
+      summary: Replace a member's roles (not one's own; the last admin keeps theirs)
+      description: "Role: `admin`. Audited; applies from the member's next request."
+      security: [{ staffBearer: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }, { $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [roles]
+              properties:
+                roles: { type: array, items: { type: string } }
+      responses:
+        "200":
+          description: The member
+          content:
+            application/json:
+              schema: { type: object }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+  /v1/staff/members/{id}/disable:
+    post:
+      operationId: staffDisable
+      tags: [back-office]
+      summary: Disable a member and end their sessions
+      description: "Role: `admin`. Audited."
+      security: [{ staffBearer: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }, { $ref: "#/components/parameters/IdempotencyKey" }]
+      responses:
+        "200":
+          description: The member
+          content:
+            application/json:
+              schema: { type: object }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+  /v1/staff/members/{id}/enable:
+    post:
+      operationId: staffEnable
+      tags: [back-office]
+      summary: Re-enable a disabled member
+      description: "Role: `admin`. Audited."
+      security: [{ staffBearer: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }, { $ref: "#/components/parameters/IdempotencyKey" }]
+      responses:
+        "200":
+          description: The member
+          content:
+            application/json:
+              schema: { type: object }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+  /v1/staff/finance:
+    get:
+      operationId: staffFinance
+      tags: [back-office]
+      summary: The financial dashboard over Nairobi days, read from the ledger
+      description: "Role: `finance` or `auditor`. Defaults to the last 30 days, today included; at most 366 days."
+      security: [{ staffBearer: [] }]
+      parameters:
+        - { name: from, in: query, schema: { type: string, format: date } }
+        - { name: to, in: query, schema: { type: string, format: date } }
+      responses:
+        "200":
+          description: Totals, days, balances now and activity
+          content:
+            application/json:
+              schema: { type: object }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
   /v1/staff/me:
     get:
       operationId: staffMe
@@ -765,6 +945,28 @@ paths:
         "403": { $ref: "#/components/responses/Problem" }
         "404": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+  /v1/staff/kyc/queue:
+    get:
+      operationId: staffKycQueue
+      tags: [back-office]
+      summary: How many identity submissions await review and since when (counts only; not audited)
+      description: "Role: `kyc_reviewer`. The back office polls it to notify reviewers."
+      security: [{ staffBearer: [] }]
+      responses:
+        "200":
+          description: Done
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [waiting, oldest_submitted_at]
+                properties:
+                  waiting: { type: integer, format: int64 }
+                  oldest_submitted_at: { type: [string, "null"], format: date-time }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
         "429": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
   /v1/staff/kyc/pending:
@@ -1814,8 +2016,7 @@ components:
     staffBearer:
       type: http
       scheme: bearer
-      bearerFormat: JWT
-      description: An access token from the staff realm (Keycloak), with the API as audience and back-office realm roles.
+      description: A back-office session token (`stf_…`) from `POST /v1/staff/session`, opened with a Google or Apple ID token of an invited member (ADR 0018). Roles are read from the member on every request.
   parameters:
     IdempotencyKey:
       name: Idempotency-Key

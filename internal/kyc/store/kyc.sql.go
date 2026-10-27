@@ -217,6 +217,30 @@ func (q *Queries) LockUserKYC(ctx context.Context, id string) (LockUserKYCRow, e
 	return i, err
 }
 
+const reviewQueue = `-- name: ReviewQueue :one
+SELECT count(*) OVER () AS waiting, c.created_at AS oldest
+FROM identity.users u
+JOIN LATERAL (SELECT k.created_at FROM kyc.kyc_checks k
+              WHERE k.user_id = u.id ORDER BY k.created_at DESC, k.id DESC LIMIT 1) c ON true
+WHERE u.kyc_status = 'manual_review'
+ORDER BY c.created_at
+LIMIT 1
+`
+
+type ReviewQueueRow struct {
+	Waiting int64
+	Oldest  time.Time
+}
+
+// How many accounts wait for a staff decision and when the oldest of their latest submissions arrived (no details).
+// No row when nobody waits.
+func (q *Queries) ReviewQueue(ctx context.Context) (ReviewQueueRow, error) {
+	row := q.db.QueryRow(ctx, reviewQueue)
+	var i ReviewQueueRow
+	err := row.Scan(&i.Waiting, &i.Oldest)
+	return i, err
+}
+
 const setUserKYC = `-- name: SetUserKYC :exec
 UPDATE identity.users
    SET kyc_status = $1, national_id_hash = $2, updated_at = $3
