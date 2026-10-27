@@ -13,6 +13,10 @@ ORDER BY t.plays;
 INSERT INTO tickets.player_days (user_id, play_date, updated_at) VALUES ($1, $2, $3)
 ON CONFLICT (user_id, play_date) DO NOTHING;
 
+-- name: RecordStart :exec
+-- the player's first play day, kept once: draw periods are counted from it (ADR 0017)
+INSERT INTO tickets.player_starts (user_id, first_play_date) VALUES ($1, $2) ON CONFLICT (user_id) DO NOTHING;
+
 -- name: LockPlayerDay :one
 SELECT paid_plays, lucky FROM tickets.player_days WHERE user_id = $1 AND play_date = $2 FOR UPDATE;
 

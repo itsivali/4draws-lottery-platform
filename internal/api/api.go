@@ -129,6 +129,7 @@ func Mount(d Deps) func(chi.Router) {
 				r.Get("/plays/today", h.playsToday)
 				r.Get("/fairness", h.fairness)
 				r.Post("/fairness/rotate", h.rotateSeed)
+				r.Get("/draws/periods", h.myDrawPeriods)
 				r.Get("/draws/{id}/entries/mine", h.myDrawEntries)
 				r.Post("/payouts/withdrawals", h.withdraw)
 				r.Get("/payouts", h.listPayouts)

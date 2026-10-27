@@ -94,7 +94,7 @@ func TestReconcile_CatchesEveryKindOfTampering(t *testing.T) {
 	ctx := context.Background()
 	e := setup(t, nairobi(2026, 10, 24, 12, 0))
 	d := e.approvedDraw(t)
-	weekly := e.draw(t, "weekly", "2026-10-19", "open")
+	weekly := e.openWeekly(t)
 
 	// money moved into a pool for a draw that has not been drawn
 	p, err := ledger.PrizePoolFunding(weekly.ID, "weekly", 50)
@@ -274,7 +274,7 @@ func TestViews_EntryListCertificateAndOwnEntries(t *testing.T) {
 	if err != nil || len(mine.Entries) == 0 || mine.Entries[0].EntryNo != 1 {
 		t.Fatalf("own entries %+v %v", mine, err)
 	}
-	weekly := e.draw(t, "weekly", "2026-10-19", "open")
+	weekly := e.openWeekly(t)
 	if _, _, err := e.svc.CertificateOf(ctx, weekly.ID); !errors.Is(err, draws.ErrState) {
 		t.Fatalf("certificate of an open draw: %v", err)
 	}

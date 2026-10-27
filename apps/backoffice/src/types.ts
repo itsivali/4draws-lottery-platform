@@ -26,6 +26,8 @@ export interface Draw {
   draw_type: 'daily' | 'weekly' | 'monthly' | 'quarterly'
   period_start: string
   period_end: string
+  /** personal: the players whose own period (counted from their first play) ends on period_end */
+  basis: 'calendar' | 'personal'
   status: 'open' | 'frozen' | 'signed' | 'conducted' | 'approved' | 'paid' | 'voided'
   freeze_at: string
   entries: number

@@ -85,19 +85,27 @@ func setup(t *testing.T, at time.Time) *env {
 
 var seq atomic.Int64
 
-// playerDay records a player's day as the game would: plays tickets of KES 100 and the day's tally.
+// playerDay records a new player's day as the game would: plays tickets of KES 100 and the day's tally. It is the
+// player's first play day unless an earlier one was recorded.
 func (e *env) playerDay(t *testing.T, date string, plays int, lucky bool) string {
 	t.Helper()
-	ctx := context.Background()
 	n := seq.Add(1)
 	var user string
-	if err := e.pool.QueryRow(ctx, `INSERT INTO identity.users (msisdn, kyc_status, national_id_hash, password_hash, msisdn_verified_at)
+	if err := e.pool.QueryRow(context.Background(), `INSERT INTO identity.users (msisdn, kyc_status, national_id_hash, password_hash, msisdn_verified_at)
 		VALUES ($1, 'verified', $2, 'x', now()) RETURNING id::text`, fmt.Sprintf("2547%08d", 50_000_000+n), []byte(fmt.Sprint("draw-id-", n))).Scan(&user); err != nil {
 		t.Fatal(err)
 	}
+	e.playOn(t, user, date, plays, lucky)
+	return user
+}
+
+// playOn records another day of plays for user, as the game would (the first play day is kept).
+func (e *env) playOn(t *testing.T, user, date string, plays int, lucky bool) {
+	t.Helper()
+	ctx := context.Background()
 	for i := 1; i <= plays; i++ {
 		if _, err := e.pool.Exec(ctx, `INSERT INTO tickets.tickets (user_id, play_date, seq, price_kes, idempotency_key) VALUES ($1, $2, $3, 100, $4)`,
-			user, date, i, fmt.Sprint("k", i)); err != nil {
+			user, date, i, fmt.Sprint(date, "-", i)); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -105,7 +113,10 @@ func (e *env) playerDay(t *testing.T, date string, plays int, lucky bool) string
 		user, date, plays, lucky); err != nil {
 		t.Fatal(err)
 	}
-	return user
+	if _, err := e.pool.Exec(ctx, `INSERT INTO tickets.player_starts (user_id, first_play_date) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+		user, date); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func (e *env) draw(t *testing.T, typ, start, status string) draws.Draw {
@@ -146,16 +157,15 @@ func TestDraw_FullLifecycleFromPlaysToAnApprovedFundedResult(t *testing.T) {
 	b := e.playerDay(t, "2026-10-24", 4, true)  // tier 5, lucky → 10 entries
 	c := e.playerDay(t, "2026-10-24", 1, false) // 1 entry
 
-	e.schedule(t) // the current periods are open
-	for _, typ := range draws.Types {
-		start, _, _ := draws.Period(typ, time.Date(2026, 10, 24, 0, 0, 0, 0, time.UTC))
-		e.draw(t, typ, start.Format(time.DateOnly), "open")
+	e.schedule(t) // today's daily draw is open; nobody's own week, month or quarter ends today (they started today)
+	e.draw(t, "daily", "2026-10-24", "open")
+	if n := e.count(t, `SELECT count(*) FROM draws.draws WHERE draw_type <> 'daily'`); n != 0 {
+		t.Fatalf("%d longer draws opened: periods are the players' own (ADR 0017)", n)
 	}
 
-	e.clk.Set(nairobi(2026, 10, 25, 0, 6)) // after 00:05: the day's draw freezes, the week (ends Sunday 25th) does not
+	e.clk.Set(nairobi(2026, 10, 25, 0, 6)) // after 00:05: the day's draw freezes
 	e.schedule(t)
 	d := e.draw(t, "daily", "2026-10-24", "frozen")
-	e.draw(t, "weekly", "2026-10-19", "open")
 	if d.Entries != 13 || len(d.SeedCommit) != 64 || d.RoundAt == nil {
 		t.Fatalf("frozen: %+v", d)
 	}
@@ -439,4 +449,153 @@ func TestDraw_StepsRefuseTheWrongStateAndUnknownDraws(t *testing.T) {
 	if _, err := e.svc.Approve(ctx, d.ID, "operator:a"); !errors.Is(err, draws.ErrAlreadySigned) {
 		t.Errorf("same official approving twice: %v", err)
 	}
+}
+
+func (e *env) count(t *testing.T, sql string, args ...any) int {
+	t.Helper()
+	var n int
+	if err := e.pool.QueryRow(context.Background(), sql, args...).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	return n
+}
+
+// entriesOf counts a draw's entries per player.
+func (e *env) entriesOf(t *testing.T, drawID string) map[string]int {
+	t.Helper()
+	rows, err := e.pool.Query(context.Background(), `SELECT user_id::text FROM draws.draw_entries WHERE draw_id = $1`, drawID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	out := map[string]int{}
+	for rows.Next() {
+		var u string
+		if err := rows.Scan(&u); err != nil {
+			t.Fatal(err)
+		}
+		out[u]++
+	}
+	return out
+}
+
+func TestPersonalDraws_AWeeklyDrawHoldsThePlayersWhoseOwnWeekEndsThatDay(t *testing.T) {
+	ctx := context.Background()
+	e := setup(t, nairobi(2026, 10, 27, 12, 0))
+	c := e.playerDay(t, "2026-10-27", 1, false) // C's first week: 27 Oct – 2 Nov
+	a := e.playerDay(t, "2026-10-28", 2, false) // A's first week: 28 Oct – 3 Nov
+	b := e.playerDay(t, "2026-10-29", 1, false) // B's first week: 29 Oct – 4 Nov
+	e.playOn(t, a, "2026-11-01", 1, false)
+	e.playOn(t, a, "2026-11-03", 1, false)
+	e.playOn(t, b, "2026-11-03", 1, false)
+	e.playOn(t, c, "2026-11-03", 1, false) // C's second week
+
+	e.clk.Set(nairobi(2026, 11, 3, 12, 0))
+	e.schedule(t) // A's week ends today: a weekly draw over 28 Oct – 3 Nov opens; no month or quarter ends
+	w := e.draw(t, "weekly", "2026-10-28", "open")
+	if w.PeriodEnd != "2026-11-03" || w.Basis != "personal" {
+		t.Fatalf("weekly draw %+v", w)
+	}
+	if n := e.count(t, `SELECT count(*) FROM draws.draws WHERE draw_type IN ('monthly','quarterly')`); n != 0 {
+		t.Fatalf("%d monthly/quarterly draws opened", n)
+	}
+
+	e.clk.Set(nairobi(2026, 11, 4, 0, 6))
+	e.schedule(t)
+	w = e.draw(t, "weekly", "2026-10-28", "frozen")
+	if got := e.entriesOf(t, w.ID); len(got) != 1 || got[a] != 4 { // A's days: 2 plays → 2 chances, then 1 and 1
+		t.Fatalf("weekly entries %v, want only A's 4", got)
+	}
+	if got := e.entriesOf(t, e.draw(t, "daily", "2026-11-03", "frozen").ID); len(got) != 3 {
+		t.Fatalf("the daily draw is everyone's: %v", got)
+	}
+
+	for _, o := range []string{"operator:alice", "operator:bob"} {
+		if _, err := e.svc.Sign(ctx, w.ID, o); err != nil {
+			t.Fatal(err)
+		}
+	}
+	e.clk.Set(nairobi(2026, 11, 4, 9, 1))
+	e.schedule(t)
+	w = e.draw(t, "weekly", "2026-10-28", "conducted")
+	var cert draws.Certificate
+	if err := json.Unmarshal(w.Certificate, &cert); err != nil {
+		t.Fatal(err)
+	}
+	// the pool is a share of the stakes of the play days in the draw: A's 4 tickets, not everyone's
+	if cert.Basis != "personal" || cert.StakesKES != 400 || cert.PoolKES != 40 || len(w.Results) != 1 || w.Results[0].UserID != a {
+		t.Fatalf("certificate %s results %+v", w.Certificate, w.Results)
+	}
+}
+
+func TestPersonalDraws_APlayDayAlreadyInAFrozenCalendarDrawIsNotEnteredAgain(t *testing.T) {
+	ctx := context.Background()
+	e := setup(t, nairobi(2026, 10, 28, 12, 0))
+	a := e.playerDay(t, "2026-10-28", 1, false)
+	e.playOn(t, a, "2026-11-03", 1, false)
+	// a calendar week from before the switch, frozen with A's 28 October in it
+	var old string
+	if err := e.pool.QueryRow(ctx, `INSERT INTO draws.draws (draw_type, period_start, period_end) VALUES ('weekly', '2026-10-26', '2026-11-01')
+		RETURNING id::text`).Scan(&old); err != nil {
+		t.Fatal(err)
+	}
+	e.clk.Set(nairobi(2026, 11, 2, 0, 6))
+	if _, err := e.svc.Freeze(ctx, old); err != nil {
+		t.Fatal(err)
+	}
+	e.clk.Set(nairobi(2026, 11, 3, 12, 0))
+	e.schedule(t)
+	e.clk.Set(nairobi(2026, 11, 4, 0, 6))
+	e.schedule(t)
+	w := e.draw(t, "weekly", "2026-10-28", "frozen")
+	if got := e.entriesOf(t, w.ID); got[a] != 1 {
+		t.Fatalf("entries %v: 28 October is already in the calendar draw, only 3 November enters", got)
+	}
+}
+
+func TestPersonalDraws_PlayersSeeTheirOwnPeriods(t *testing.T) {
+	ctx := context.Background()
+	e := setup(t, nairobi(2026, 10, 30, 12, 0))
+	a := e.playerDay(t, "2026-10-01", 1, false)
+	got, err := e.svc.PeriodsOf(ctx, a)
+	if err != nil || len(got) != 4 {
+		t.Fatalf("periods %+v %v", got, err)
+	}
+	want := map[string][2]string{"daily": {"2026-10-30", "2026-10-30"}, "weekly": {"2026-10-29", "2026-11-04"},
+		"monthly": {"2026-10-01", "2026-10-30"}, "quarterly": {"2026-10-01", "2026-12-29"}}
+	for _, p := range got {
+		if w := want[p.DrawType]; p.Start != w[0] || p.End != w[1] || p.DrawnOn != day(p.End).AddDate(0, 0, 1).Format(time.DateOnly) {
+			t.Errorf("%s: %+v, want %v", p.DrawType, p, w)
+		}
+	}
+	if got, err := e.svc.PeriodsOf(ctx, e.newUser(t)); err != nil || len(got) != 0 {
+		t.Fatalf("a player who has not played has no periods yet: %+v %v", got, err)
+	}
+}
+
+func (e *env) newUser(t *testing.T) string {
+	t.Helper()
+	n := seq.Add(1)
+	var user string
+	if err := e.pool.QueryRow(context.Background(), `INSERT INTO identity.users (msisdn, kyc_status, national_id_hash, password_hash)
+		VALUES ($1, 'verified', $2, 'x') RETURNING id::text`, fmt.Sprintf("2547%08d", 50_000_000+n), []byte(fmt.Sprint("draw-id-", n))).Scan(&user); err != nil {
+		t.Fatal(err)
+	}
+	return user
+}
+
+// openWeekly opens a personal weekly draw that has not been drawn (the scheduler opens one only when some player's
+// own week ends that day).
+func (e *env) openWeekly(t *testing.T) draws.Draw {
+	t.Helper()
+	var id string
+	if err := e.pool.QueryRow(context.Background(), `INSERT INTO draws.draws (draw_type, basis, period_start, period_end)
+		VALUES ('weekly', 'personal', '2026-10-19', '2026-10-25') RETURNING id::text`).Scan(&id); err != nil {
+		t.Fatal(err)
+	}
+	d, err := e.svc.Get(context.Background(), id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return d
 }

@@ -1,25 +1,34 @@
 -- name: EnsureOpenDraw :exec
 -- the current period's draw, so the schedule can be shown; nothing when a live draw for the period exists
-INSERT INTO draws.draws (draw_type, period_start, period_end, created_at, updated_at)
-VALUES (sqlc.arg(draw_type), sqlc.arg(period_start), sqlc.arg(period_end), sqlc.arg(at), sqlc.arg(at))
-ON CONFLICT (draw_type, period_start) WHERE status <> 'voided' DO NOTHING;
+INSERT INTO draws.draws (draw_type, basis, period_start, period_end, created_at, updated_at)
+VALUES (sqlc.arg(draw_type), sqlc.arg(basis), sqlc.arg(period_start), sqlc.arg(period_end), sqlc.arg(at), sqlc.arg(at))
+ON CONFLICT (draw_type, basis, period_start) WHERE status <> 'voided' DO NOTHING;
 
 -- name: InsertRerun :one
-INSERT INTO draws.draws (draw_type, period_start, period_end, rerun_of, created_at, updated_at)
-VALUES (sqlc.arg(draw_type), sqlc.arg(period_start), sqlc.arg(period_end), sqlc.arg(rerun_of), sqlc.arg(at), sqlc.arg(at))
+INSERT INTO draws.draws (draw_type, basis, period_start, period_end, rerun_of, created_at, updated_at)
+VALUES (sqlc.arg(draw_type), sqlc.arg(basis), sqlc.arg(period_start), sqlc.arg(period_end), sqlc.arg(rerun_of), sqlc.arg(at), sqlc.arg(at))
 RETURNING id;
+
+-- name: PeriodEndsOn :one
+-- whether any player's own period of sqlc.arg(days) days is exactly period_start..period_end (ADR 0017)
+SELECT EXISTS (SELECT 1 FROM tickets.player_starts s
+               WHERE s.first_play_date <= sqlc.arg(period_start)::date
+                 AND (sqlc.arg(period_end)::date - s.first_play_date + 1) % sqlc.arg(days)::int = 0);
+
+-- name: FirstPlay :one
+SELECT first_play_date FROM tickets.player_starts WHERE user_id = $1;
 
 -- name: DrawsInStatus :many
 SELECT id FROM draws.draws WHERE status = $1 ORDER BY period_end, draw_type;
 
 -- name: GetDraw :one
 SELECT id, draw_type, period_start, period_end, status, seed_commit, seed_enc, revealed_seed, beacon_round, beacon_value,
-       entry_list_hash, certificate_json, certificate_hash, frozen_at, voided_reason, rerun_of, created_at, updated_at
+       entry_list_hash, certificate_json, certificate_hash, frozen_at, voided_reason, rerun_of, created_at, updated_at, basis
 FROM draws.draws WHERE id = $1;
 
 -- name: LockDraw :one
 SELECT id, draw_type, period_start, period_end, status, seed_commit, seed_enc, revealed_seed, beacon_round, beacon_value,
-       entry_list_hash, certificate_json, certificate_hash, frozen_at, voided_reason, rerun_of, created_at, updated_at
+       entry_list_hash, certificate_json, certificate_hash, frozen_at, voided_reason, rerun_of, created_at, updated_at, basis
 FROM draws.draws WHERE id = $1 FOR UPDATE;
 
 -- name: ListDraws :many
@@ -31,6 +40,21 @@ SELECT d.user_id, d.play_date, d.paid_plays, d.lucky,
        (SELECT t.id FROM tickets.tickets t WHERE t.user_id = d.user_id AND t.play_date = d.play_date ORDER BY t.seq DESC LIMIT 1)::uuid AS ticket_id
 FROM tickets.player_days d
 WHERE d.play_date BETWEEN sqlc.arg(period_start) AND sqlc.arg(period_end) AND d.paid_plays > 0
+ORDER BY d.play_date, d.user_id;
+
+-- name: PersonalPlayerDaysIn :many
+-- the play days, in the window, of the players whose own period of sqlc.arg(days) days is the window, leaving out days
+-- already in a live draw of the same type (one draw of each type per play day), in entry order
+SELECT d.user_id, d.play_date, d.paid_plays, d.lucky,
+       (SELECT t.id FROM tickets.tickets t WHERE t.user_id = d.user_id AND t.play_date = d.play_date ORDER BY t.seq DESC LIMIT 1)::uuid AS ticket_id
+FROM tickets.player_days d
+JOIN tickets.player_starts s ON s.user_id = d.user_id
+WHERE d.play_date BETWEEN sqlc.arg(period_start) AND sqlc.arg(period_end) AND d.paid_plays > 0
+  AND s.first_play_date <= sqlc.arg(period_start)::date
+  AND (sqlc.arg(period_end)::date - s.first_play_date + 1) % sqlc.arg(days)::int = 0
+  AND NOT EXISTS (SELECT 1 FROM draws.draw_entries e JOIN draws.draws o ON o.id = e.draw_id
+                  WHERE e.user_id = d.user_id AND e.play_date = d.play_date
+                    AND o.draw_type = sqlc.arg(draw_type) AND o.status <> 'voided')
 ORDER BY d.play_date, d.user_id;
 
 -- name: TiersOn :many
@@ -80,6 +104,12 @@ ORDER BY effective_from DESC LIMIT 1;
 -- name: StakesIn :one
 SELECT coalesce(sum(price_kes), 0)::bigint FROM tickets.tickets
 WHERE status = 'paid' AND play_date BETWEEN sqlc.arg(period_start) AND sqlc.arg(period_end);
+
+-- name: StakesOfEntries :one
+-- the stakes of the play days entered in a draw (a personal draw's pool is a share of these)
+SELECT coalesce(sum(t.price_kes), 0)::bigint FROM tickets.tickets t
+WHERE t.status = 'paid'
+  AND EXISTS (SELECT 1 FROM draws.draw_entries e WHERE e.draw_id = $1 AND e.user_id = t.user_id AND e.play_date = t.play_date);
 
 -- name: InsertResult :exec
 INSERT INTO draws.draw_results (draw_id, entry_id, prize_rank, amount_kes, created_at) VALUES ($1, $2, $3, $4, $5);

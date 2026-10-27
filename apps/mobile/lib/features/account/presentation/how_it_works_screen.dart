@@ -43,7 +43,9 @@ class HowItWorksScreen extends ConsumerWidget {
           'The wheel itself never pays cash.',
         ]),
         section('Draws and prizes', [
-          'Each chance is one entry in every daily, weekly, monthly and quarterly draw whose period includes that day.',
+          "Each chance is one entry in the day's draw and in your own weekly, monthly and quarterly draws.",
+          'Your weekly, monthly and quarterly periods run 7, 30 and 90 days back to back from the day of your first '
+              'play; each is drawn the day after it ends, with the other players whose period ends that day.',
           'Winners are drawn from a seed committed in advance and a public randomness beacon, then approved by two officials.',
           'Prizes are paid to your M-Pesa number. Tax is withheld as the law requires.',
         ]),

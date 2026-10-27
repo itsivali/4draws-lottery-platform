@@ -562,14 +562,45 @@ paths:
               schema: { $ref: "#/components/schemas/Problem" }
         "429": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
+  /v1/draws/periods:
+    get:
+      operationId: myDrawPeriods
+      tags: [draws]
+      summary: The signed-in player's current draw periods, counted from their first play
+      description: |
+        Weekly, monthly and quarterly periods are 7, 30 and 90 days back to back from the player's first play day;
+        each is drawn the day after it ends, with the other players whose period ends that day (ADR 0017). Empty
+        before the first play.
+      responses:
+        "200":
+          description: One period per draw type
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [periods]
+                properties:
+                  periods:
+                    type: array
+                    items:
+                      type: object
+                      required: [draw_type, start, end, drawn_on]
+                      properties:
+                        draw_type: { type: string, enum: [daily, weekly, monthly, quarterly] }
+                        start: { type: string, format: date }
+                        end: { type: string, format: date }
+                        drawn_on: { type: string, format: date }
+        "401": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
   /v1/draws/{id}/entries/mine:
     get:
       operationId: myDrawEntries
       tags: [draws]
       summary: The signed-in player's entries in a draw and any prize
       description: |
-        Each chance a play day earned is one entry in every draw whose period contains the day. `user_id` is how the
-        player appears in the draw's certificate.
+        Each chance a play day earned is one entry in the day's draw and in the player's own weekly, monthly and
+        quarterly draws (ADR 0017). `user_id` is how the player appears in the draw's certificate.
       parameters: [{ $ref: "#/components/parameters/DrawId" }]
       responses:
         "200":
@@ -1883,6 +1914,7 @@ components:
         draw_type: { type: string, enum: [daily, weekly, monthly, quarterly] }
         period_start: { type: string, format: date }
         period_end: { type: string, format: date }
+        basis: { type: string, enum: [calendar, personal], description: "personal: the players whose own period ends on period_end (ADR 0017)" }
         status: { type: string, enum: [open, frozen, signed, conducted, approved, paid, voided] }
         freeze_at: { type: string, format: date-time }
         entries: { type: integer }

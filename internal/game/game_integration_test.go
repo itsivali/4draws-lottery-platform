@@ -188,6 +188,30 @@ func TestPlay_CostsOneShillingFromTheTestingPriceVersion(t *testing.T) {
 	}
 }
 
+func TestPlay_TheFirstPlayDayIsRecordedOnceForTheDrawPeriods(t *testing.T) {
+	e := setup(t)
+	ctx := context.Background()
+	u := e.player(t, 1000)
+	first := func() string {
+		var d time.Time
+		if err := e.pool.QueryRow(ctx, `SELECT first_play_date FROM tickets.player_starts WHERE user_id = $1`, u).Scan(&d); err != nil {
+			t.Fatal(err)
+		}
+		return d.Format(time.DateOnly)
+	}
+	if _, err := e.svc.Play(ctx, u, "k1"); err != nil {
+		t.Fatal(err)
+	}
+	want := first()
+	e.clk.Advance(48 * time.Hour)
+	if _, err := e.svc.Play(ctx, u, "k2"); err != nil {
+		t.Fatal(err)
+	}
+	if got := first(); got != want {
+		t.Fatalf("first play day moved from %s to %s", want, got)
+	}
+}
+
 func TestPlay_SameKeyChargesOnce(t *testing.T) {
 	e := setup(t)
 	u := e.player(t, 1000)

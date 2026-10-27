@@ -30,6 +30,31 @@ func TestPeriod_EveryDrawTypeContainsTheDay(t *testing.T) {
 	}
 }
 
+func TestPersonalPeriod_RunsBackToBackFromThePlayersFirstPlay(t *testing.T) {
+	// 1 October 2026 is a Thursday: periods ignore the calendar and start from the first play
+	for _, tc := range []struct{ typ, first, on, start, end string }{
+		{"daily", "2026-10-01", "2026-10-05", "2026-10-05", "2026-10-05"},
+		{"weekly", "2026-10-01", "2026-10-01", "2026-10-01", "2026-10-07"},
+		{"weekly", "2026-10-01", "2026-10-07", "2026-10-01", "2026-10-07"},
+		{"weekly", "2026-10-01", "2026-10-08", "2026-10-08", "2026-10-14"},
+		{"monthly", "2026-10-01", "2026-10-30", "2026-10-01", "2026-10-30"},
+		{"monthly", "2026-10-01", "2026-10-31", "2026-10-31", "2026-11-29"},
+		{"quarterly", "2026-10-01", "2026-12-29", "2026-10-01", "2026-12-29"},
+		{"quarterly", "2026-10-01", "2026-12-30", "2026-12-30", "2027-03-29"},
+	} {
+		s, e, err := draws.PersonalPeriod(tc.typ, day(tc.first), day(tc.on))
+		if err != nil || s.Format(time.DateOnly) != tc.start || e.Format(time.DateOnly) != tc.end {
+			t.Errorf("%s from %s on %s: %s..%s %v", tc.typ, tc.first, tc.on, s.Format(time.DateOnly), e.Format(time.DateOnly), err)
+		}
+	}
+	if _, _, err := draws.PersonalPeriod("weekly", day("2026-10-02"), day("2026-10-01")); err == nil {
+		t.Error("a day before the first play has no period")
+	}
+	if _, _, err := draws.PersonalPeriod("yearly", day("2026-10-01"), day("2026-10-01")); err == nil {
+		t.Error("unknown type accepted")
+	}
+}
+
 func TestFreezeTime_Is0005NairobiTheDayAfter(t *testing.T) {
 	if got := draws.FreezeTime(day("2026-10-24")); !got.Equal(time.Date(2026, 10, 24, 21, 5, 0, 0, time.UTC)) {
 		t.Fatalf("freeze %s", got)

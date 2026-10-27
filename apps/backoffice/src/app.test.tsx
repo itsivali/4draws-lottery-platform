@@ -55,7 +55,7 @@ describe('identity review', () => {
 })
 
 const frozen: Draw = {
-  id: 'd1', draw_type: 'daily', period_start: '2026-10-25', period_end: '2026-10-25', status: 'frozen', freeze_at: '2026-10-26T00:05:00+03:00',
+  id: 'd1', draw_type: 'daily', period_start: '2026-10-25', period_end: '2026-10-25', basis: 'calendar', status: 'frozen', freeze_at: '2026-10-26T00:05:00+03:00',
   entries: 42, drand_round_at: '2026-10-26T09:00:00+03:00', voided_reason: null, results: [],
   signoffs: [{ step: 'sign', attestation: 'a', signed_at: '2026-10-26T00:10:00Z' }],
 }
@@ -90,6 +90,16 @@ describe('draws', () => {
     expect(await screen.findByText('1 of 2 signatures')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Sign' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Void' })).not.toBeInTheDocument()
+  })
+
+  it("a personal draw says whose period it holds", async () => {
+    const personal: Draw = { ...frozen, id: 'd2', draw_type: 'weekly', period_start: '2026-10-28', period_end: '2026-11-03', basis: 'personal' }
+    renderSignedIn(<App />, {
+      roles: ['auditor'],
+      path: '/draws',
+      route: (_m, url) => (url.pathname === '/v1/staff/draws' ? { status: 200, body: { draws: [personal] } } : { status: 200, body: { overdue: [] } }),
+    })
+    expect(await screen.findByText('players whose own week ends 2026-11-03')).toBeInTheDocument()
   })
 })
 

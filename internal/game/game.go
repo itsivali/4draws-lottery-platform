@@ -185,6 +185,10 @@ func (s *Service) Play(ctx context.Context, userID, key string) (Result, error) 
 		if err != nil {
 			return err
 		}
+		// the first play day starts the player's draw periods (ADR 0017); later plays leave it
+		if err := q.RecordStart(ctx, store.RecordStartParams{UserID: userID, FirstPlayDate: day}); err != nil {
+			return err
+		}
 		posting, err := ledger.Stake(ticketID, userID, odds.PriceKes)
 		if err != nil {
 			return err

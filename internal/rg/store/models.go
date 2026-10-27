@@ -87,6 +87,7 @@ type DrawsDraw struct {
 	RerunOf         pgtype.UUID
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
+	Basis           string
 }
 
 type DrawsDrawEntry struct {
@@ -460,6 +461,12 @@ type TicketsPlayerDay struct {
 	PaidPlays int16
 	Lucky     bool
 	UpdatedAt time.Time
+}
+
+type TicketsPlayerStart struct {
+	UserID        string
+	FirstPlayDate pgtype.Date
+	CreatedAt     time.Time
 }
 
 type TicketsTicket struct {

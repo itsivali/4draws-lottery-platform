@@ -106,8 +106,21 @@ func TestAPI_DrawsArePublicAndPlayersSeeOnlyTheirOwnEntries(t *testing.T) {
 	id := e.conductDaily(t)
 
 	list := e.do(t, http.MethodGet, "/v1/draws", "", nil) // no token
-	if all, _ := list.Body["draws"].([]any); list.Code != http.StatusOK || len(all) < 5 {
+	// yesterday's daily draw and today's; the longer draws open only when a player's own period ends (ADR 0017)
+	if all, _ := list.Body["draws"].([]any); list.Code != http.StatusOK || len(all) < 2 || all[0].(map[string]any)["basis"] != "calendar" {
 		t.Fatalf("list: %d %s", list.Code, list.Raw)
+	}
+	// each player sees their own periods, counted from their first play; before playing there are none
+	if r := e.do(t, http.MethodGet, "/v1/draws/periods", a.access, nil); r.Code != http.StatusOK || len(r.Body["periods"].([]any)) != 4 {
+		t.Fatalf("periods: %d %s", r.Code, r.Raw)
+	} else if w := r.Body["periods"].([]any)[1].(map[string]any); w["draw_type"] != "weekly" || w["start"] == nil || w["drawn_on"] == nil {
+		t.Fatalf("weekly period: %v", w)
+	}
+	if r := e.do(t, http.MethodGet, "/v1/draws/periods", c.access, nil); r.Code != http.StatusOK || len(r.Body["periods"].([]any)) != 0 {
+		t.Fatalf("periods before playing: %d %s", r.Code, r.Raw)
+	}
+	if r := e.do(t, http.MethodGet, "/v1/draws/periods", "", nil); r.Code != http.StatusUnauthorized {
+		t.Fatalf("periods without a token: %d", r.Code)
 	}
 	if one := e.do(t, http.MethodGet, "/v1/draws?limit=1", "", nil); len(one.Body["draws"].([]any)) != 1 {
 		t.Fatalf("limit 1: %s", one.Raw)

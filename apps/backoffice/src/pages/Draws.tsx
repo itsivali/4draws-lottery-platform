@@ -55,7 +55,7 @@ export function DrawsPage() {
                   const [tone, label] = statusTone[d.status]
                   return (
                     <tr key={d.id}>
-                      <td><strong>{d.draw_type}</strong><br /><span className="muted">{d.period_start}{d.period_end !== d.period_start ? ` – ${d.period_end}` : ''}</span></td>
+                      <td><strong>{d.draw_type}</strong><br /><span className="muted">{d.period_start}{d.period_end !== d.period_start ? ` – ${d.period_end}` : ''}</span>{d.basis === 'personal' ? <><br /><span className="muted">players whose own {d.draw_type.replace('ly', '')} ends {d.period_end}</span></> : null}</td>
                       <td>
                         <Pill tone={tone}>{label}</Pill>
                         {d.status === 'frozen' ? <div className="muted">{count(d, 'sign')} of 2 signatures</div> : null}

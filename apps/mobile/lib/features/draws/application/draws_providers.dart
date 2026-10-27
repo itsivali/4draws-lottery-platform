@@ -13,3 +13,5 @@ final drawProvider = FutureProvider.family<Draw, String>((ref, id) => ref.watch(
 final myEntriesProvider = FutureProvider.family<MyDrawEntries, String>(
   (ref, id) => ref.watch(drawsRepositoryProvider).myEntries(id),
 );
+
+final myPeriodsProvider = FutureProvider<List<PlayerPeriod>>((ref) => ref.watch(drawsRepositoryProvider).myPeriods());

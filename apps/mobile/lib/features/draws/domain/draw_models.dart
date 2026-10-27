@@ -135,3 +135,21 @@ class MyDrawEntries {
   /// Prizes the player's own entries won, as the server reports them.
   final List<DrawPrize> prizes;
 }
+
+/// One of the player's own draw periods. Weekly, monthly and quarterly periods run 7, 30 and 90 days back to back from
+/// the player's first play; each is drawn the day after it ends (the server decides them).
+class PlayerPeriod {
+  const PlayerPeriod({required this.type, required this.start, required this.end, required this.drawnOn});
+
+  factory PlayerPeriod.fromJson(JsonObject j) => PlayerPeriod(
+    type: DrawType.values.byName(j.str('draw_type')),
+    start: j.date('start'),
+    end: j.date('end'),
+    drawnOn: j.date('drawn_on'),
+  );
+
+  final DrawType type;
+  final DateTime start;
+  final DateTime end;
+  final DateTime drawnOn;
+}

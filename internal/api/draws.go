@@ -31,6 +31,7 @@ type drawJSON struct {
 	Type            string          `json:"draw_type"`
 	PeriodStart     string          `json:"period_start"`
 	PeriodEnd       string          `json:"period_end"`
+	Basis           string          `json:"basis"`
 	Status          string          `json:"status"`
 	FreezeAt        time.Time       `json:"freeze_at"`
 	Entries         int             `json:"entries"`
@@ -55,7 +56,7 @@ func optStr(s string) *string {
 }
 
 func toDrawJSON(d draws.Draw) drawJSON {
-	out := drawJSON{ID: d.ID, Type: d.Type, PeriodStart: d.PeriodStart, PeriodEnd: d.PeriodEnd, Status: d.Status, FreezeAt: d.FreezeAt,
+	out := drawJSON{ID: d.ID, Type: d.Type, PeriodStart: d.PeriodStart, PeriodEnd: d.PeriodEnd, Basis: d.Basis, Status: d.Status, FreezeAt: d.FreezeAt,
 		Entries: d.Entries, EntryListHash: optStr(d.EntryListHash), SeedCommit: optStr(d.SeedCommit), DrandRoundAt: d.RoundAt,
 		RevealedSeed: optStr(d.RevealedSeed), Beacon: json.RawMessage("null"), CertificateHash: optStr(d.CertificateHash),
 		VoidedReason: optStr(d.VoidedReason), RerunOf: optStr(d.RerunOf), Signoffs: make([]signoffJSON, 0, len(d.Signoffs)),
@@ -175,4 +176,22 @@ func (h *handlers) myDrawEntries(w http.ResponseWriter, r *http.Request) {
 	default:
 		internalError(w, err)
 	}
+}
+
+// myDrawPeriods returns the player's current period of each draw type, counted from their first play (ADR 0017).
+func (h *handlers) myDrawPeriods(w http.ResponseWriter, r *http.Request) {
+	p, _ := principalFrom(r.Context())
+	if !h.limit(w, r, "draws:user:"+p.UserID, 120, time.Minute) {
+		return
+	}
+	if h.Draws == nil {
+		drawsUnavailable(w)
+		return
+	}
+	periods, err := h.Draws.PeriodsOf(r.Context(), p.UserID)
+	if err != nil {
+		internalError(w, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{"periods": periods})
 }

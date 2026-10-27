@@ -116,13 +116,14 @@ func (q *Queries) DrawsToReconcile(ctx context.Context) ([]string, error) {
 }
 
 const ensureOpenDraw = `-- name: EnsureOpenDraw :exec
-INSERT INTO draws.draws (draw_type, period_start, period_end, created_at, updated_at)
-VALUES ($1, $2, $3, $4, $4)
-ON CONFLICT (draw_type, period_start) WHERE status <> 'voided' DO NOTHING
+INSERT INTO draws.draws (draw_type, basis, period_start, period_end, created_at, updated_at)
+VALUES ($1, $2, $3, $4, $5, $5)
+ON CONFLICT (draw_type, basis, period_start) WHERE status <> 'voided' DO NOTHING
 `
 
 type EnsureOpenDrawParams struct {
 	DrawType    string
+	Basis       string
 	PeriodStart time.Time
 	PeriodEnd   time.Time
 	At          time.Time
@@ -132,6 +133,7 @@ type EnsureOpenDrawParams struct {
 func (q *Queries) EnsureOpenDraw(ctx context.Context, arg EnsureOpenDrawParams) error {
 	_, err := q.db.Exec(ctx, ensureOpenDraw,
 		arg.DrawType,
+		arg.Basis,
 		arg.PeriodStart,
 		arg.PeriodEnd,
 		arg.At,
@@ -230,6 +232,17 @@ func (q *Queries) EntryCount(ctx context.Context, drawID string) (int32, error) 
 	return column_1, err
 }
 
+const firstPlay = `-- name: FirstPlay :one
+SELECT first_play_date FROM tickets.player_starts WHERE user_id = $1
+`
+
+func (q *Queries) FirstPlay(ctx context.Context, userID string) (time.Time, error) {
+	row := q.db.QueryRow(ctx, firstPlay, userID)
+	var first_play_date time.Time
+	err := row.Scan(&first_play_date)
+	return first_play_date, err
+}
+
 const freeze = `-- name: Freeze :exec
 UPDATE draws.draws
    SET status = 'frozen', entry_list_hash = $1, seed_commit = $2,
@@ -296,7 +309,7 @@ func (q *Queries) FundingByDraw(ctx context.Context) ([]FundingByDrawRow, error)
 
 const getDraw = `-- name: GetDraw :one
 SELECT id, draw_type, period_start, period_end, status, seed_commit, seed_enc, revealed_seed, beacon_round, beacon_value,
-       entry_list_hash, certificate_json, certificate_hash, frozen_at, voided_reason, rerun_of, created_at, updated_at
+       entry_list_hash, certificate_json, certificate_hash, frozen_at, voided_reason, rerun_of, created_at, updated_at, basis
 FROM draws.draws WHERE id = $1
 `
 
@@ -322,6 +335,7 @@ func (q *Queries) GetDraw(ctx context.Context, id string) (DrawsDraw, error) {
 		&i.RerunOf,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Basis,
 	)
 	return i, err
 }
@@ -350,13 +364,14 @@ func (q *Queries) InsertReconciliationRun(ctx context.Context, arg InsertReconci
 }
 
 const insertRerun = `-- name: InsertRerun :one
-INSERT INTO draws.draws (draw_type, period_start, period_end, rerun_of, created_at, updated_at)
-VALUES ($1, $2, $3, $4, $5, $5)
+INSERT INTO draws.draws (draw_type, basis, period_start, period_end, rerun_of, created_at, updated_at)
+VALUES ($1, $2, $3, $4, $5, $6, $6)
 RETURNING id
 `
 
 type InsertRerunParams struct {
 	DrawType    string
+	Basis       string
 	PeriodStart time.Time
 	PeriodEnd   time.Time
 	RerunOf     *string
@@ -366,6 +381,7 @@ type InsertRerunParams struct {
 func (q *Queries) InsertRerun(ctx context.Context, arg InsertRerunParams) (string, error) {
 	row := q.db.QueryRow(ctx, insertRerun,
 		arg.DrawType,
+		arg.Basis,
 		arg.PeriodStart,
 		arg.PeriodEnd,
 		arg.RerunOf,
@@ -449,7 +465,7 @@ func (q *Queries) ListDraws(ctx context.Context, maxRows int32) ([]string, error
 
 const lockDraw = `-- name: LockDraw :one
 SELECT id, draw_type, period_start, period_end, status, seed_commit, seed_enc, revealed_seed, beacon_round, beacon_value,
-       entry_list_hash, certificate_json, certificate_hash, frozen_at, voided_reason, rerun_of, created_at, updated_at
+       entry_list_hash, certificate_json, certificate_hash, frozen_at, voided_reason, rerun_of, created_at, updated_at, basis
 FROM draws.draws WHERE id = $1 FOR UPDATE
 `
 
@@ -475,8 +491,91 @@ func (q *Queries) LockDraw(ctx context.Context, id string) (DrawsDraw, error) {
 		&i.RerunOf,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Basis,
 	)
 	return i, err
+}
+
+const periodEndsOn = `-- name: PeriodEndsOn :one
+SELECT EXISTS (SELECT 1 FROM tickets.player_starts s
+               WHERE s.first_play_date <= $1::date
+                 AND ($2::date - s.first_play_date + 1) % $3::int = 0)
+`
+
+type PeriodEndsOnParams struct {
+	PeriodStart time.Time
+	PeriodEnd   time.Time
+	Days        int32
+}
+
+// whether any player's own period of sqlc.arg(days) days is exactly period_start..period_end (ADR 0017)
+func (q *Queries) PeriodEndsOn(ctx context.Context, arg PeriodEndsOnParams) (bool, error) {
+	row := q.db.QueryRow(ctx, periodEndsOn, arg.PeriodStart, arg.PeriodEnd, arg.Days)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
+const personalPlayerDaysIn = `-- name: PersonalPlayerDaysIn :many
+SELECT d.user_id, d.play_date, d.paid_plays, d.lucky,
+       (SELECT t.id FROM tickets.tickets t WHERE t.user_id = d.user_id AND t.play_date = d.play_date ORDER BY t.seq DESC LIMIT 1)::uuid AS ticket_id
+FROM tickets.player_days d
+JOIN tickets.player_starts s ON s.user_id = d.user_id
+WHERE d.play_date BETWEEN $1 AND $2 AND d.paid_plays > 0
+  AND s.first_play_date <= $1::date
+  AND ($2::date - s.first_play_date + 1) % $3::int = 0
+  AND NOT EXISTS (SELECT 1 FROM draws.draw_entries e JOIN draws.draws o ON o.id = e.draw_id
+                  WHERE e.user_id = d.user_id AND e.play_date = d.play_date
+                    AND o.draw_type = $4 AND o.status <> 'voided')
+ORDER BY d.play_date, d.user_id
+`
+
+type PersonalPlayerDaysInParams struct {
+	PeriodStart time.Time
+	PeriodEnd   time.Time
+	Days        int32
+	DrawType    string
+}
+
+type PersonalPlayerDaysInRow struct {
+	UserID    string
+	PlayDate  time.Time
+	PaidPlays int16
+	Lucky     bool
+	TicketID  string
+}
+
+// the play days, in the window, of the players whose own period of sqlc.arg(days) days is the window, leaving out days
+// already in a live draw of the same type (one draw of each type per play day), in entry order
+func (q *Queries) PersonalPlayerDaysIn(ctx context.Context, arg PersonalPlayerDaysInParams) ([]PersonalPlayerDaysInRow, error) {
+	rows, err := q.db.Query(ctx, personalPlayerDaysIn,
+		arg.PeriodStart,
+		arg.PeriodEnd,
+		arg.Days,
+		arg.DrawType,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []PersonalPlayerDaysInRow
+	for rows.Next() {
+		var i PersonalPlayerDaysInRow
+		if err := rows.Scan(
+			&i.UserID,
+			&i.PlayDate,
+			&i.PaidPlays,
+			&i.Lucky,
+			&i.TicketID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const playerDaysIn = `-- name: PlayerDaysIn :many
@@ -745,6 +844,20 @@ type StakesInParams struct {
 
 func (q *Queries) StakesIn(ctx context.Context, arg StakesInParams) (int64, error) {
 	row := q.db.QueryRow(ctx, stakesIn, arg.PeriodStart, arg.PeriodEnd)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const stakesOfEntries = `-- name: StakesOfEntries :one
+SELECT coalesce(sum(t.price_kes), 0)::bigint FROM tickets.tickets t
+WHERE t.status = 'paid'
+  AND EXISTS (SELECT 1 FROM draws.draw_entries e WHERE e.draw_id = $1 AND e.user_id = t.user_id AND e.play_date = t.play_date)
+`
+
+// the stakes of the play days entered in a draw (a personal draw's pool is a share of these)
+func (q *Queries) StakesOfEntries(ctx context.Context, drawID string) (int64, error) {
+	row := q.db.QueryRow(ctx, stakesOfEntries, drawID)
 	var column_1 int64
 	err := row.Scan(&column_1)
 	return column_1, err

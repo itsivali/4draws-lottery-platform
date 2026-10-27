@@ -14,6 +14,9 @@ class DrawsRepository {
 
   Future<Draw> draw(String id) async => parse(await _api.get('/v1/draws/$id', authenticated: false), Draw.fromJson);
 
+  Future<List<PlayerPeriod>> myPeriods() async =>
+      parse(await _api.get('/v1/draws/periods'), (j) => j.list('periods', PlayerPeriod.fromJson));
+
   Future<MyDrawEntries> myEntries(String id) async =>
       parse(await _api.get('/v1/draws/$id/entries/mine'), MyDrawEntries.fromJson);
 }

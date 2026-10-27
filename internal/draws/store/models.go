@@ -87,6 +87,7 @@ type DrawsDraw struct {
 	RerunOf         *string
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
+	Basis           string
 }
 
 type DrawsDrawEntry struct {
@@ -460,6 +461,12 @@ type TicketsPlayerDay struct {
 	PaidPlays int16
 	Lucky     bool
 	UpdatedAt time.Time
+}
+
+type TicketsPlayerStart struct {
+	UserID        string
+	FirstPlayDate time.Time
+	CreatedAt     time.Time
 }
 
 type TicketsTicket struct {

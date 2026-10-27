@@ -446,6 +446,21 @@ func (q *Queries) RecordPlay(ctx context.Context, arg RecordPlayParams) error {
 	return err
 }
 
+const recordStart = `-- name: RecordStart :exec
+INSERT INTO tickets.player_starts (user_id, first_play_date) VALUES ($1, $2) ON CONFLICT (user_id) DO NOTHING
+`
+
+type RecordStartParams struct {
+	UserID        string
+	FirstPlayDate time.Time
+}
+
+// the player's first play day, kept once: draw periods are counted from it (ADR 0017)
+func (q *Queries) RecordStart(ctx context.Context, arg RecordStartParams) error {
+	_, err := q.db.Exec(ctx, recordStart, arg.UserID, arg.FirstPlayDate)
+	return err
+}
+
 const revealedSeedMismatch = `-- name: RevealedSeedMismatch :many
 SELECT id FROM game.seed_chains
 WHERE status = 'rotated' AND encode(sha256(decode(revealed_seed, 'hex')), 'hex') <> commitment

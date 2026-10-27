@@ -52,6 +52,8 @@ Read this first at the start of every session.
 - **KYC is reviewed by hand (owner, 2026-10-24, ADR 0009):** no registry provider; submissions wait in `manual_review`
   for `lotteryctl kyc approve|reject` (back office later). Google/Apple sign-in ids come with the web app; SSO is off.
 - Free-tier deployment: migrate on start (advisory lock), workers in-process, free Postgres + Key Value.
+- **Draws (owner, 2026-10-26, ADR 0017):** weekly, monthly and quarterly periods are each player's own, 7, 30 and 90
+  days back to back from their first play; a draw closes each day for the players whose period ends that day.
 - **Testing with real M-Pesa (owner, 2026-10-26):** top-ups from KES 1 (`TOP_UP_MIN_KES=1` on Render and in compose;
   the apps read the bounds from `GET /v1/wallet`) and plays at KES 1 from 2026-10-26 (migration 00028). Before launch:
   set `TOP_UP_MIN_KES` and add an odds/price version with the launch price from the launch date. The apps point at

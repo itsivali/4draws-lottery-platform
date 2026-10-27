@@ -27,13 +27,17 @@ class _DrawsScreenState extends ConsumerState<DrawsScreen> {
     final draws = ref.watch(drawsProvider);
     return PageScaffold(
       title: 'Draws',
-      onRefresh: () => ref.refresh(drawsProvider.future),
+      onRefresh: () {
+        ref.invalidate(myPeriodsProvider);
+        return ref.refresh(drawsProvider.future);
+      },
       children: [
         Text(
-          'Every chance your plays earn on a day is one entry in each draw whose period includes that day. Winners are '
-          'drawn with a public randomness beacon and approved by two officials.',
+          "Every chance your plays earn on a day is one entry in that day's draw and in your own weekly, monthly and "
+          'quarterly draws. Winners are drawn with a public randomness beacon and approved by two officials.',
           style: Theme.of(context).textTheme.bodyMedium,
         ),
+        const MyPeriodsCard(),
         Wrap(
           spacing: Space.sm,
           runSpacing: Space.sm,
@@ -147,6 +151,43 @@ class OpenDrawsCard extends ConsumerWidget {
                   trailing: const Icon(Icons.chevron_right_rounded),
                   onTap: () => context.go('/draws/${d.id}'),
                 ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// The player's own draw periods: they start on the day of their first play and run back to back.
+class MyPeriodsCard extends ConsumerWidget {
+  const MyPeriodsCard({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final t = Theme.of(context).textTheme;
+    return AppCard(
+      title: 'Your draw periods',
+      child: AsyncView(
+        value: ref.watch(myPeriodsProvider),
+        what: 'your draw periods',
+        onRetry: () => ref.invalidate(myPeriodsProvider),
+        data: (periods) {
+          if (periods.isEmpty) {
+            return Text(
+              'Your weekly, monthly and quarterly periods start on the day of your first play and run 7, 30 and 90 '
+              'days back to back.',
+              style: t.bodyMedium,
+            );
+          }
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              for (final p in periods) ...[
+                Text(drawTypeLabel(p.type), style: t.titleSmall),
+                Text('${formatPeriod(p.start, p.end)} · drawn ${formatDay(p.drawnOn)}', style: t.bodySmall),
+                const SizedBox(height: Space.sm),
+              ],
             ],
           );
         },

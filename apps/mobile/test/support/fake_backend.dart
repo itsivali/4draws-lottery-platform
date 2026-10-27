@@ -21,6 +21,9 @@ class FakeBackend {
   Map<String, Object?>? restriction;
   String? closureRequestedAt;
   int plays = 0;
+
+  /// The player's own draw periods (GET /v1/draws/periods); empty before the first play.
+  List<Map<String, Object?>> periods = [];
   bool lucky = false;
   final tickets = <Map<String, Object?>>[];
   final txs = <Map<String, Object?>>[];
@@ -84,7 +87,7 @@ class FakeBackend {
         path == '/v1/auth/login' ||
         path == '/v1/auth/signup' ||
         path == '/v1/auth/refresh' ||
-        (method == 'GET' && path.startsWith('/v1/draws') && !path.endsWith('/mine'));
+        (method == 'GET' && path.startsWith('/v1/draws') && !path.endsWith('/mine') && path != '/v1/draws/periods');
     if (!public && r.headers['Authorization'] != 'Bearer $access') {
       return _problem(401, 'unauthenticated', 'Authentication required');
     }
@@ -180,6 +183,8 @@ class FakeBackend {
         return _ok(payouts[id]!, 201);
       case ('GET', '/v1/draws'):
         return _ok({'draws': draws});
+      case ('GET', '/v1/draws/periods'):
+        return _ok({'periods': periods});
       case ('GET', '/v1/rg/limits'):
         return _ok({
           'limits': {

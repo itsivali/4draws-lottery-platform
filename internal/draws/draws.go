@@ -43,6 +43,15 @@ import (
 // Draw types.
 var Types = []string{"daily", "weekly", "monthly", "quarterly"}
 
+// PersonalTypes are the draws whose periods are each player's own, counted from their first play (ADR 0017).
+var PersonalTypes = []string{"weekly", "monthly", "quarterly"}
+
+// A draw's basis: the period is everyone's (calendar), or it is the window of the players whose own period it is.
+const (
+	Calendar = "calendar"
+	Personal = "personal"
+)
+
 // Officials needed for each sign-off step.
 const Officials = 2
 
@@ -120,6 +129,24 @@ func Period(drawType string, day time.Time) (time.Time, time.Time, error) {
 	return time.Time{}, time.Time{}, fmt.Errorf("draws: unknown draw type %q", drawType)
 }
 
+// PeriodDays is the length of each draw type's period counted from a player's first play (ADR 0017).
+var PeriodDays = map[string]int{"daily": 1, "weekly": 7, "monthly": 30, "quarterly": 90}
+
+// PersonalPeriod is the period of drawType containing day for a player whose first play was on first: back-to-back
+// blocks of PeriodDays from that day, whatever the calendar says.
+func PersonalPeriod(drawType string, first, day time.Time) (time.Time, time.Time, error) {
+	n, ok := PeriodDays[drawType]
+	if !ok {
+		return time.Time{}, time.Time{}, fmt.Errorf("draws: unknown draw type %q", drawType)
+	}
+	elapsed := int(day.Sub(first).Hours() / 24)
+	if elapsed < 0 {
+		return time.Time{}, time.Time{}, errors.New("draws: the day is before the player's first play")
+	}
+	start := first.AddDate(0, 0, elapsed/n*n)
+	return start, start.AddDate(0, 0, n-1), nil
+}
+
 // FreezeTime is when a period's entries freeze: 00:05 Nairobi the day after it ends.
 func FreezeTime(periodEnd time.Time) time.Time { return at(periodEnd.AddDate(0, 0, 1), freezeAt) }
 
@@ -145,9 +172,18 @@ func (s *Service) Schedule(ctx context.Context) error {
 	q := store.New(s.pool)
 	today := nairobiDate(now)
 	var errs []error
-	for _, t := range Types {
-		start, end, _ := Period(t, today)
-		if err := q.EnsureOpenDraw(ctx, store.EnsureOpenDrawParams{DrawType: t, PeriodStart: start, PeriodEnd: end, At: now}); err != nil {
+	if err := q.EnsureOpenDraw(ctx, store.EnsureOpenDrawParams{DrawType: "daily", Basis: Calendar, PeriodStart: today, PeriodEnd: today, At: now}); err != nil {
+		errs = append(errs, err)
+	}
+	// the longer draws close every day for the players whose own period ends that day (ADR 0017)
+	for _, t := range PersonalTypes {
+		n := PeriodDays[t]
+		start := today.AddDate(0, 0, 1-n)
+		ends, err := q.PeriodEndsOn(ctx, store.PeriodEndsOnParams{PeriodStart: start, PeriodEnd: today, Days: int32(n)}) //nolint:gosec // at most 90
+		if err == nil && ends {
+			err = q.EnsureOpenDraw(ctx, store.EnsureOpenDrawParams{DrawType: t, Basis: Personal, PeriodStart: start, PeriodEnd: today, At: now})
+		}
+		if err != nil {
 			errs = append(errs, err)
 		}
 	}
@@ -241,7 +277,7 @@ func (s *Service) Freeze(ctx context.Context, drawID string) (Draw, error) {
 
 func (s *Service) freezeTx(ctx context.Context, tx pgx.Tx, d store.DrawsDraw, now time.Time) error {
 	q := store.New(tx)
-	days, err := q.PlayerDaysIn(ctx, store.PlayerDaysInParams{PeriodStart: d.PeriodStart, PeriodEnd: d.PeriodEnd})
+	days, err := playerDaysOf(ctx, q, d)
 	if err != nil {
 		return err
 	}
@@ -289,6 +325,21 @@ func (s *Service) freezeTx(ctx context.Context, tx pgx.Tx, d store.DrawsDraw, no
 	round := int64(s.roundFor(d.PeriodEnd, now)) //nolint:gosec // drand rounds stay far below 2^63
 	return q.Freeze(ctx, store.FreezeParams{EntryListHash: strPtr(hex.EncodeToString(h.Sum(nil))), SeedCommit: strPtr(hex.EncodeToString(commit[:])),
 		SeedEnc: enc, BeaconRound: &round, At: &now, ID: d.ID})
+}
+
+// playerDaysOf lists the play days a draw holds: everyone's in a calendar period, or, in a personal draw, those of the
+// players whose own period is the draw's window and not already in a draw of the same type.
+func playerDaysOf(ctx context.Context, q *store.Queries, d store.DrawsDraw) ([]store.PlayerDaysInRow, error) {
+	if d.Basis != Personal {
+		return q.PlayerDaysIn(ctx, store.PlayerDaysInParams{PeriodStart: d.PeriodStart, PeriodEnd: d.PeriodEnd})
+	}
+	rows, err := q.PersonalPlayerDaysIn(ctx, store.PersonalPlayerDaysInParams{PeriodStart: d.PeriodStart, PeriodEnd: d.PeriodEnd,
+		Days: int32(PeriodDays[d.DrawType]), DrawType: d.DrawType}) //nolint:gosec // at most 90
+	out := make([]store.PlayerDaysInRow, len(rows))
+	for i, r := range rows {
+		out[i] = store.PlayerDaysInRow(r)
+	}
+	return out, err
 }
 
 func seedAAD(drawID string) []byte { return []byte("draws.seed:" + drawID) }
@@ -408,8 +459,8 @@ func (s *Service) voidAndRerun(ctx context.Context, drawID, official, reason str
 		if err := q.VoidDraw(ctx, store.VoidDrawParams{Reason: &reason, At: now, ID: d.ID}); err != nil {
 			return err
 		}
-		if rerun, err = q.InsertRerun(ctx, store.InsertRerunParams{DrawType: d.DrawType, PeriodStart: d.PeriodStart, PeriodEnd: d.PeriodEnd,
-			RerunOf: &d.ID, At: now}); err != nil {
+		if rerun, err = q.InsertRerun(ctx, store.InsertRerunParams{DrawType: d.DrawType, Basis: d.Basis, PeriodStart: d.PeriodStart,
+			PeriodEnd: d.PeriodEnd, RerunOf: &d.ID, At: now}); err != nil {
 			return err
 		}
 		r, err := q.LockDraw(ctx, rerun)
@@ -433,6 +484,7 @@ type Certificate struct {
 	DrawType      string         `json:"draw_type"`
 	PeriodStart   string         `json:"period_start"`
 	PeriodEnd     string         `json:"period_end"`
+	Basis         string         `json:"basis,omitempty"` // "personal": the entries of the players whose own period this is
 	Entries       int            `json:"entries"`
 	EntryListHash string         `json:"entry_list_hash"`
 	SeedCommit    string         `json:"seed_commit"`
@@ -597,7 +649,12 @@ func (s *Service) certify(ctx context.Context, q *store.Queries, d store.DrawsDr
 	} else if err != nil {
 		return Certificate{}, err
 	}
-	stakes, err := q.StakesIn(ctx, store.StakesInParams{PeriodStart: d.PeriodStart, PeriodEnd: d.PeriodEnd})
+	var stakes int64
+	if d.Basis == Personal { // the pool is a share of the stakes of the play days in the draw
+		stakes, err = q.StakesOfEntries(ctx, d.ID)
+	} else {
+		stakes, err = q.StakesIn(ctx, store.StakesInParams{PeriodStart: d.PeriodStart, PeriodEnd: d.PeriodEnd})
+	}
 	if err != nil {
 		return Certificate{}, err
 	}
@@ -622,6 +679,9 @@ func (s *Service) certify(ctx context.Context, q *store.Queries, d store.DrawsDr
 		Entries: len(entries), EntryListHash: deref(d.EntryListHash), SeedCommit: deref(d.SeedCommit), RevealedSeed: hex.EncodeToString(seed),
 		Beacon: b, ChainHash: s.beacon.Chain().Hash, StakesKES: stakes, PoolShare: ps.PoolShare, PoolKES: pool, Rounding: ps.Rounding,
 		Algorithm: Algorithm}
+	if d.Basis == Personal {
+		cert.Basis = Personal
+	}
 	users := make([]string, len(entries))
 	for i, e := range entries {
 		users[i] = e.UserID

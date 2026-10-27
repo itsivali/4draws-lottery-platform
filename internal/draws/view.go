@@ -18,6 +18,7 @@ type Draw struct {
 	Type            string          `json:"draw_type"`
 	PeriodStart     string          `json:"period_start"`
 	PeriodEnd       string          `json:"period_end"`
+	Basis           string          `json:"basis"` // calendar, or personal: the players whose own period ends on period_end
 	Status          string          `json:"status"`
 	FreezeAt        time.Time       `json:"freeze_at"`
 	EntryListHash   string          `json:"entry_list_hash,omitempty"`
@@ -61,7 +62,7 @@ func (s *Service) Get(ctx context.Context, id string) (Draw, error) {
 	if err != nil {
 		return Draw{}, err
 	}
-	out := Draw{ID: d.ID, Type: d.DrawType, PeriodStart: d.PeriodStart.Format(time.DateOnly), PeriodEnd: d.PeriodEnd.Format(time.DateOnly),
+	out := Draw{ID: d.ID, Type: d.DrawType, PeriodStart: d.PeriodStart.Format(time.DateOnly), PeriodEnd: d.PeriodEnd.Format(time.DateOnly), Basis: d.Basis,
 		Status: d.Status, FreezeAt: FreezeTime(d.PeriodEnd), EntryListHash: deref(d.EntryListHash), SeedCommit: deref(d.SeedCommit),
 		BeaconRound: derefInt(d.BeaconRound), RevealedSeed: deref(d.RevealedSeed), Certificate: d.CertificateJson,
 		CertificateHash: deref(d.CertificateHash), VoidedReason: deref(d.VoidedReason), RerunOf: deref(d.RerunOf),
@@ -204,6 +205,40 @@ func (s *Service) EntryList(ctx context.Context, drawID string) ([]ListEntry, er
 	out := make([]ListEntry, 0, len(rows))
 	for _, e := range rows {
 		out = append(out, ListEntry{EntryNo: int(e.EntryNo), UserID: e.UserID, PlayDate: e.PlayDate.Format(time.DateOnly), TicketID: e.TicketID})
+	}
+	return out, nil
+}
+
+// PlayerPeriod is one of a player's current draw periods and the day it is drawn.
+type PlayerPeriod struct {
+	DrawType string `json:"draw_type"`
+	Start    string `json:"start"`
+	End      string `json:"end"`
+	DrawnOn  string `json:"drawn_on"`
+}
+
+// PeriodsOf returns the player's current period of each draw type, counted from their first play (ADR 0017); none
+// before they have played.
+func (s *Service) PeriodsOf(ctx context.Context, userID string) ([]PlayerPeriod, error) {
+	now, err := s.clk.Now(ctx, s.pool)
+	if err != nil {
+		return nil, err
+	}
+	first, err := store.New(s.pool).FirstPlay(ctx, userID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return []PlayerPeriod{}, nil
+	} else if err != nil {
+		return nil, err
+	}
+	today := nairobiDate(now)
+	out := make([]PlayerPeriod, 0, len(Types))
+	for _, t := range Types {
+		start, end, err := PersonalPeriod(t, first, today)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, PlayerPeriod{DrawType: t, Start: start.Format(time.DateOnly), End: end.Format(time.DateOnly),
+			DrawnOn: end.AddDate(0, 0, 1).Format(time.DateOnly)})
 	}
 	return out, nil
 }

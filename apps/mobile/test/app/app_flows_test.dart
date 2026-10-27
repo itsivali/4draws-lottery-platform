@@ -176,6 +176,32 @@ void main() {
     expect(find.text('Enter KES 10 to KES 250,000.'), findsOneWidget);
   });
 
+  testWidgets("draws show the player's own periods, counted from their first play", (t) async {
+    final backend = FakeBackend()
+      ..periods = [
+        {'draw_type': 'daily', 'start': '2026-10-30', 'end': '2026-10-30', 'drawn_on': '2026-10-31'},
+        {'draw_type': 'weekly', 'start': '2026-10-29', 'end': '2026-11-04', 'drawn_on': '2026-11-05'},
+        {'draw_type': 'monthly', 'start': '2026-10-01', 'end': '2026-10-30', 'drawn_on': '2026-10-31'},
+        {'draw_type': 'quarterly', 'start': '2026-10-01', 'end': '2026-12-29', 'drawn_on': '2026-12-30'},
+      ];
+    await pumpApp(t, backend);
+    await t.tap(find.text('Draws').last);
+    await t.pumpAndSettle();
+    expect(find.text('Your draw periods'), findsOneWidget);
+    expect(find.text('29 Oct – 4 Nov 2026 · drawn Thu 5 Nov'), findsOneWidget);
+    expect(find.text('1 Oct – 29 Dec 2026 · drawn Wed 30 Dec'), findsOneWidget);
+  });
+
+  testWidgets('before the first play the draws say periods start with it', (t) async {
+    await pumpApp(t, FakeBackend());
+    await t.tap(find.text('Draws').last);
+    await t.pumpAndSettle();
+    expect(
+      find.textContaining('Your weekly, monthly and quarterly periods start on the day of your first play'),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('phones get a bottom bar; desktops an extended rail and a capped, two-column Play', (t) async {
     await pumpApp(t, FakeBackend());
     expect(find.byType(NavigationBar), findsOneWidget);
