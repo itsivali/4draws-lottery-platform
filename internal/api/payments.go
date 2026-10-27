@@ -58,7 +58,7 @@ func (h *handlers) startTopUp(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteJSON(w, http.StatusAccepted, toTopUpJSON(t))
 	case errors.Is(err, payments.ErrInvalidAmount):
 		httpx.WriteProblem(w, http.StatusBadRequest, "invalid-amount", "Invalid amount",
-			"top-ups are between KES "+strconv.FormatInt(payments.MinTopUpKES, 10)+" and KES "+strconv.Itoa(daraja.MaxSTKAmountKES))
+			"top-ups are between KES "+strconv.FormatInt(h.Payments.MinTopUpKES(), 10)+" and KES "+strconv.Itoa(daraja.MaxSTKAmountKES))
 	case errors.Is(err, payments.ErrUnavailable):
 		paymentsUnavailable(w)
 	case errors.As(err, &le):

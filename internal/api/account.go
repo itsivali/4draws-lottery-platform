@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/itsivali/lottery-platform/internal/payments/daraja"
 	"github.com/itsivali/lottery-platform/internal/platform/httpx"
 	"github.com/itsivali/lottery-platform/internal/wallet"
 )
@@ -61,7 +62,13 @@ func (h *handlers) getWallet(w http.ResponseWriter, r *http.Request) {
 	if st.NextBefore != "" {
 		next = &st.NextBefore
 	}
-	httpx.WriteJSON(w, http.StatusOK, map[string]any{"balance_kes": st.BalanceKES, "debt_kes": st.DebtKES, "transactions": txs, "next_before": next})
+	// the top-up bounds travel with the balance so the apps never hard-code them (null when top-ups are unavailable)
+	var topUp map[string]int64
+	if h.Payments != nil {
+		topUp = map[string]int64{"min_kes": h.Payments.MinTopUpKES(), "max_kes": daraja.MaxSTKAmountKES}
+	}
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{"balance_kes": st.BalanceKES, "debt_kes": st.DebtKES, "transactions": txs,
+		"next_before": next, "top_up": topUp})
 }
 
 type restrictionJSON struct {

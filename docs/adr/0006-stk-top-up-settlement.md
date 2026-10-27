@@ -28,7 +28,8 @@ proves a phone the player does not hold.
 - **The callback URL's secret segment is sha256(DARAJA_CALLBACK_TOKEN) in hex**, because a Render-generated base64 secret
   may contain `/`. The route lives outside `/v1` (no token, no Idempotency-Key) and compares in constant time.
 - **Limits count top-ups in flight**, under a per-player advisory lock, so parallel requests cannot pass a deposit limit.
-- Excise is deducted from the deposit (owner, 2026-10-22) at the rate version in force when the credit is posted.
+- Excise is computed at the rate version in force when the credit is posted. It was deducted from the deposit (owner,
+  2026-10-22); since 2026-10-26 the operator pays it and the player is credited in full (ADR 0016).
 
 ## Consequences
 - A lost callback delays a real payment until reconciliation (slice 4) supplies the receipt. Players see `pending`.

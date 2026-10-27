@@ -130,6 +130,8 @@ void main() {
     await t.tap(find.widgetWithText(FilledButton, 'Continue'));
     await t.pumpAndSettle();
     expect(find.textContaining('0712 345 678'), findsWidgets, reason: 'the prompt goes to the account number');
+    expect(find.textContaining('the full amount'), findsOneWidget, reason: 'top-ups are not taxed');
+    expect(find.textContaining('excise'), findsNothing);
     await t.tap(find.widgetWithText(FilledButton, 'Send M-Pesa prompt'));
     await t.pump();
     await t.pump();
@@ -140,7 +142,38 @@ void main() {
     expect(h.haptics.events.where((e) => e == HapticEvent.confirmed), hasLength(1));
     await t.tap(find.widgetWithText(FilledButton, 'Back to wallet'));
     await t.pumpAndSettle();
-    expect(find.text('KES 475'), findsWidgets);
+    expect(find.text('KES 500'), findsWidgets, reason: 'the whole top-up is credited');
+  });
+
+  testWidgets('the top-up minimum and its quick pick come from the server: KES 1 while testing', (t) async {
+    final backend = FakeBackend(balance: 0)
+      ..topUpMin = 1
+      ..topUpPendingPolls = 1;
+    await pumpApp(t, backend);
+    await t.tap(find.text('Wallet').last);
+    await t.pumpAndSettle();
+    await t.tap(find.widgetWithText(FilledButton, 'Top up'));
+    await t.pumpAndSettle();
+    expect(find.text('KES 1 to KES 250,000, whole shillings'), findsOneWidget);
+    await t.tap(find.widgetWithText(ActionChip, 'KES 1'));
+    await t.tap(find.widgetWithText(FilledButton, 'Continue'));
+    await t.pumpAndSettle();
+    await t.tap(find.widgetWithText(FilledButton, 'Send M-Pesa prompt'));
+    await pumpUntilFound(t, find.text('Credited'), step: const Duration(milliseconds: 500));
+    expect(backend.balance, 1);
+  });
+
+  testWidgets('below the server minimum the form refuses before sending', (t) async {
+    await pumpApp(t, FakeBackend());
+    await t.tap(find.text('Wallet').last);
+    await t.pumpAndSettle();
+    await t.tap(find.widgetWithText(FilledButton, 'Top up'));
+    await t.pumpAndSettle();
+    expect(find.widgetWithText(ActionChip, 'KES 1'), findsNothing, reason: 'no quick pick below the minimum');
+    await t.enterText(find.widgetWithText(TextFormField, 'Amount'), '1');
+    await t.tap(find.widgetWithText(FilledButton, 'Continue'));
+    await t.pumpAndSettle();
+    expect(find.text('Enter KES 10 to KES 250,000.'), findsOneWidget);
   });
 
   testWidgets('phones get a bottom bar; desktops an extended rail and a capped, two-column Play', (t) async {

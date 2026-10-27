@@ -45,8 +45,8 @@ class _TopUpScreenState extends ConsumerState<TopUpScreen> {
       title: 'Top up ${formatKes(amount)}?',
       facts: [('Amount', formatKes(amount)), ('M-Pesa prompt goes to', formatMsisdn(account.msisdn))],
       note:
-          'Approve the prompt on your phone with your M-Pesa PIN. Your wallet is credited only after M-Pesa '
-          "confirms the payment, less the government's excise duty on deposits.",
+          'Approve the prompt on your phone with your M-Pesa PIN. Your wallet is credited the full amount once '
+          'M-Pesa confirms the payment. Tax is only withheld from prizes.',
       confirmLabel: 'Send M-Pesa prompt',
     );
     if (!ok || !mounted) return;
@@ -58,6 +58,7 @@ class _TopUpScreenState extends ConsumerState<TopUpScreen> {
   Widget build(BuildContext context) {
     final account = ref.watch(accountProvider);
     final topUps = ref.watch(topUpsProvider);
+    final bounds = ref.watch(walletStatementProvider).value?.topUp ?? TopUpBounds.fallback;
     final m = ref.watch(topUpFlowProvider);
     final t = Theme.of(context).textTheme;
     return PageScaffold(
@@ -113,9 +114,9 @@ class _TopUpScreenState extends ConsumerState<TopUpScreen> {
                             const SizedBox(height: Space.lg),
                             AmountField(
                               controller: _amount,
-                              min: 10,
-                              max: 250000,
-                              quick: const [100, 200, 500, 1000],
+                              min: bounds.minKes,
+                              max: bounds.maxKes,
+                              quick: bounds.quickPicks,
                               label: 'Amount',
                               enabled: !started,
                             ),

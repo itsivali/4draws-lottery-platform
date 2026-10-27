@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"testing"
 	"time"
+
+	"github.com/itsivali/lottery-platform/internal/payments"
 )
 
 // sameInstant compares an RFC 3339 value from a response with want, whatever offset it was written in.
@@ -23,6 +25,11 @@ func TestAPI_WalletShowsTheConfirmedBalanceDebtAndHistoryNewestFirst(t *testing.
 	if r := e.do(t, http.MethodGet, "/v1/wallet", s.access, nil); r.Code != http.StatusOK || r.Body["balance_kes"] != float64(0) ||
 		r.Body["debt_kes"] != float64(0) || len(r.Body["transactions"].([]any)) != 0 {
 		t.Fatalf("new wallet: %d %s", r.Code, r.Raw)
+	}
+	// the apps take the top-up bounds from here, so the minimum changes without a store release
+	if r := e.do(t, http.MethodGet, "/v1/wallet", s.access, nil); r.Body["top_up"] == nil ||
+		r.Body["top_up"].(map[string]any)["min_kes"] != float64(payments.DefaultMinTopUpKES) || r.Body["top_up"].(map[string]any)["max_kes"] != float64(250000) {
+		t.Fatalf("top-up bounds: %s", r.Raw)
 	}
 	e.canPlay(t, s, 1000) // 950 after excise
 	if r := e.doKey(t, http.MethodPost, "/v1/plays", s.access, "play-1", nil); r.Code != http.StatusCreated {

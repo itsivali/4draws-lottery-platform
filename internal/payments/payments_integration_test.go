@@ -81,7 +81,7 @@ func setup(t *testing.T) *env {
 	return setupWith(t, true)
 }
 
-func setupWith(t *testing.T, withDaraja bool) *env {
+func setupWith(t *testing.T, withDaraja bool, cfg ...payments.Config) *env {
 	t.Helper()
 	pool := testpg.Pool(t, "app_api")
 	e := &env{pool: pool, clk: clock.NewManual(start), q: &queue{}}
@@ -132,7 +132,7 @@ func setupWith(t *testing.T, withDaraja bool) *env {
 		if err := c.RegisterC2BURLs(context.Background(), cb.URL+"/validate", cb.URL+"/confirm", daraja.C2BCancelOnTimeout); err != nil {
 			t.Fatal(err)
 		}
-		svc = payments.NewService(pool, e.clk, c, e.q, e.ids, e.rg, wallet.NewService(ls), ls, aw, payments.Config{}).
+		svc = payments.NewService(pool, e.clk, c, e.q, e.ids, e.rg, wallet.NewService(ls), ls, aw, append(cfg, payments.Config{})[0]).
 			WithC2B(c, payments.C2BConfig{ShortCode: "600982", MaxStatusRequests: 3})
 		e.svc = svc
 		return e
@@ -253,7 +253,7 @@ func (e *env) status(t *testing.T, id string) (status string, reason *string) {
 	return status, reason
 }
 
-func TestTopUp_ConfirmedPaymentIsCreditedNetOfExciseAndProvesThePhone(t *testing.T) {
+func TestTopUp_ConfirmedPaymentIsCreditedInFullAndProvesThePhone(t *testing.T) {
 	e := setup(t)
 	user, msisdn := e.player(t)
 	tu := e.topUp(t, user, 100)
@@ -270,8 +270,8 @@ func TestTopUp_ConfirmedPaymentIsCreditedNetOfExciseAndProvesThePhone(t *testing
 	if got.Status != payments.StatusCredited || got.AmountConfirmedKES == nil || *got.AmountConfirmedKES != 100 {
 		t.Fatalf("payment = %+v", got)
 	}
-	if b := e.balance(t, user); b != 95 { // 5% excise deducted from the deposit, owner decision 2026-10-22
-		t.Fatalf("balance = %d, want 95", b)
+	if b := e.balance(t, user); b != 100 { // the operator pays the excise, owner decision 2026-10-26
+		t.Fatalf("balance = %d, want 100", b)
 	}
 	rows, err := e.pool.Query(context.Background(), `SELECT kind, amount_kes FROM wallet.wallet_transactions WHERE user_id = $1 ORDER BY amount_kes DESC`, user)
 	if err != nil {
@@ -285,8 +285,11 @@ func TestTopUp_ConfirmedPaymentIsCreditedNetOfExciseAndProvesThePhone(t *testing
 		var w wtx
 		return w, r.Scan(&w.kind, &w.amt)
 	})
-	if err != nil || len(txs) != 2 || txs[0] != (wtx{"deposit", 100}) || txs[1] != (wtx{"deposit_excise", -5}) {
-		t.Fatalf("wallet transactions = %+v %v", txs, err)
+	if err != nil || len(txs) != 1 || txs[0] != (wtx{"deposit", 100}) {
+		t.Fatalf("wallet transactions = %+v %v (no excise line: the player is not charged it)", txs, err)
+	}
+	if exp, payable := e.account(t, ledger.ExciseExpense), e.account(t, ledger.ExcisePayable); exp != 5 || payable != 5 {
+		t.Fatalf("excise expense %d, payable %d: want 5 each (5%% of 100, owed to KRA by the operator)", exp, payable)
 	}
 	if !e.phoneVerified(t, user) {
 		t.Fatal("approving the prompt did not prove the phone")
@@ -298,7 +301,7 @@ func TestTopUp_IsRefusedUpFrontWhenTheAccountOrAmountDoesNotQualify(t *testing.T
 	ctx := context.Background()
 	user, _ := e.player(t)
 
-	for _, amt := range []int64{0, -1, payments.MinTopUpKES - 1, daraja.MaxSTKAmountKES + 1} {
+	for _, amt := range []int64{0, -1, payments.DefaultMinTopUpKES - 1, daraja.MaxSTKAmountKES + 1} {
 		if _, err := e.svc.StartTopUp(ctx, user, amt, fmt.Sprint("amt-", amt)); !errors.Is(err, payments.ErrInvalidAmount) {
 			t.Errorf("amount %d: err = %v", amt, err)
 		}
@@ -334,6 +337,25 @@ func TestTopUp_IsRefusedUpFrontWhenTheAccountOrAmountDoesNotQualify(t *testing.T
 
 	if n := len(e.q.take()); n != 1 {
 		t.Fatalf("%d jobs enqueued, want only the one accepted top-up's", n)
+	}
+}
+
+func TestTopUp_TheMinimumIsConfigurableDownToOneShilling(t *testing.T) {
+	if got := setup(t).svc.MinTopUpKES(); got != payments.DefaultMinTopUpKES {
+		t.Fatalf("default minimum = %d", got)
+	}
+	e := setupWith(t, true, payments.Config{MinTopUpKES: 1})
+	user, _ := e.player(t)
+	if _, err := e.svc.StartTopUp(context.Background(), user, 0, "zero"); !errors.Is(err, payments.ErrInvalidAmount) {
+		t.Fatalf("KES 0: %v", err)
+	}
+	tu := e.topUp(t, user, 1)
+	e.pushAndComplete(t)
+	if got := e.get(t, user, tu.ID); got.Status != payments.StatusCredited || e.balance(t, user) != 1 {
+		t.Fatalf("KES 1 top-up: %+v balance %d", got, e.balance(t, user))
+	}
+	if e.svc.MinTopUpKES() != 1 {
+		t.Fatalf("minimum = %d", e.svc.MinTopUpKES())
 	}
 }
 
@@ -404,8 +426,8 @@ func TestTopUp_DuplicateCallbacksAndRacingVerificationsCreditOnce(t *testing.T) 
 		}()
 	}
 	wg.Wait()
-	if b := e.balance(t, user); b != 190 {
-		t.Fatalf("balance = %d, want 190 (credited once)", b)
+	if b := e.balance(t, user); b != 200 {
+		t.Fatalf("balance = %d, want 200 (credited once)", b)
 	}
 }
 
@@ -461,7 +483,7 @@ func TestTopUp_TheAmountCreditedIsTheAmountPaidNotTheAmountRequested(t *testing.
 	tu := e.topUp(t, user, 100)
 	e.pushAndComplete(t)
 	got := e.get(t, user, tu.ID)
-	if got.AmountConfirmedKES == nil || *got.AmountConfirmedKES != 40 || e.balance(t, user) != 38 {
+	if got.AmountConfirmedKES == nil || *got.AmountConfirmedKES != 40 || e.balance(t, user) != 40 {
 		t.Fatalf("payment = %+v balance = %d", got, e.balance(t, user))
 	}
 }
@@ -472,7 +494,7 @@ func TestTopUp_AMaskedPayerNumberStillProvesThePushTarget(t *testing.T) {
 	e.mock.SetNextFault(darajamock.Fault{MaskPhone: true})
 	e.topUp(t, user, 100)
 	e.pushAndComplete(t)
-	if !e.phoneVerified(t, user) || e.balance(t, user) != 95 {
+	if !e.phoneVerified(t, user) || e.balance(t, user) != 100 {
 		t.Fatalf("verified=%v balance=%d", e.phoneVerified(t, user), e.balance(t, user))
 	}
 }
@@ -490,7 +512,7 @@ func TestTopUp_ANumberAnotherAccountAlreadyProvedIsCreditedButNotVerified(t *tes
 	}
 	e.topUp(t, squatter, 100)
 	e.pushAndComplete(t)
-	if e.balance(t, squatter) != 95 {
+	if e.balance(t, squatter) != 100 {
 		t.Fatalf("the money was paid and must be credited: balance %d", e.balance(t, squatter))
 	}
 	if e.phoneVerified(t, squatter) {
@@ -541,7 +563,7 @@ func TestTopUp_AReceiptAlreadyCreditedOnAnotherPaymentIsRefused(t *testing.T) {
 	if st, reason := e.status(t, second.ID); st != "unconfirmed" || reason == nil || *reason != "receipt_reused" {
 		t.Fatalf("status = %s %v", st, reason)
 	}
-	if b := e.balance(t, user); b != 95 {
+	if b := e.balance(t, user); b != 100 {
 		t.Fatalf("balance = %d, want only the first deposit", b)
 	}
 }
@@ -615,7 +637,7 @@ func TestTopUp_ACallbackThatBeatThePushBookkeepingIsStillUsed(t *testing.T) {
 	if d, err := e.svc.Verify(ctx, tu.ID); err != nil || d != 0 {
 		t.Fatalf("verify: retry %v err %v", d, err)
 	}
-	if got := e.get(t, user, tu.ID); got.Status != payments.StatusCredited || e.balance(t, user) != 95 {
+	if got := e.get(t, user, tu.ID); got.Status != payments.StatusCredited || e.balance(t, user) != 100 {
 		t.Fatalf("payment = %+v balance = %d", got, e.balance(t, user))
 	}
 }
@@ -636,7 +658,7 @@ func TestTopUp_APayerNumberThatDiffersFromThePushTargetIsCreditedButProvesNothin
 		t.Fatal(err)
 	}
 	e.run(t)
-	if got := e.get(t, user, tu.ID); got.Status != payments.StatusCredited || e.balance(t, user) != 95 {
+	if got := e.get(t, user, tu.ID); got.Status != payments.StatusCredited || e.balance(t, user) != 100 {
 		t.Fatalf("payment = %+v balance = %d", got, e.balance(t, user))
 	}
 	if e.phoneVerified(t, user) {
@@ -786,15 +808,15 @@ func TestReverse_TakesBackWhatThePlayerReceivedBooksTheRestAsDebtAndTheNextTopUp
 	ctx := context.Background()
 	user, _ := e.player(t)
 	first := e.topUp(t, user, 100)
-	e.pushAndComplete(t) // credited 95 (5 excise deducted)
-	e.spend(t, user, 60) // 35 left
+	e.pushAndComplete(t) // credited 100
+	e.spend(t, user, 60) // 40 left
 
 	res, err := e.svc.Reverse(ctx, e.receipt(t, first.ID), "customer dispute upheld by Safaricom", "operator:test")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.PaymentID != first.ID || res.UserID != user || res.TakenKES != 35 || res.DebtKES != 60 {
-		t.Fatalf("reversal = %+v, want 35 taken and 60 owed", res)
+	if res.PaymentID != first.ID || res.UserID != user || res.TakenKES != 40 || res.DebtKES != 60 {
+		t.Fatalf("reversal = %+v, want 40 taken and 60 owed", res)
 	}
 	if st, _ := e.status(t, first.ID); st != "reversed" || e.balance(t, user) != 0 || e.debt(t, user) != 60 {
 		t.Fatalf("after reversal: status %s balance %d debt %d", st, e.balance(t, user), e.debt(t, user))
@@ -803,10 +825,10 @@ func TestReverse_TakesBackWhatThePlayerReceivedBooksTheRestAsDebtAndTheNextTopUp
 		t.Fatalf("player sees %q", got.Status)
 	}
 
-	e.topUp(t, user, 100) // credited 95, of which 60 repays the debt
+	e.topUp(t, user, 100) // credited 100, of which 60 repays the debt
 	e.pushAndComplete(t)
-	if b, d := e.balance(t, user), e.debt(t, user); b != 35 || d != 0 {
-		t.Fatalf("after the next top-up: balance %d debt %d, want 35 and 0", b, d)
+	if b, d := e.balance(t, user), e.debt(t, user); b != 40 || d != 0 {
+		t.Fatalf("after the next top-up: balance %d debt %d, want 40 and 0", b, d)
 	}
 }
 
@@ -858,7 +880,7 @@ func TestResolveUnconfirmed_CreditsFromTheStatementReceiptExactlyOnce(t *testing
 	if err := e.svc.ResolveUnconfirmed(ctx, tu.ID, "STMT0001", 100, "operator:test"); err != nil {
 		t.Fatal(err)
 	}
-	if got := e.get(t, user, tu.ID); got.Status != payments.StatusCredited || e.balance(t, user) != 95 || !e.phoneVerified(t, user) {
+	if got := e.get(t, user, tu.ID); got.Status != payments.StatusCredited || e.balance(t, user) != 100 || !e.phoneVerified(t, user) {
 		t.Fatalf("payment %+v balance %d phone %v", got, e.balance(t, user), e.phoneVerified(t, user))
 	}
 	if err := e.svc.ResolveUnconfirmed(ctx, tu.ID, "STMT0001", 100, "operator:test"); !errors.Is(err, payments.ErrNotResolvable) {
@@ -982,4 +1004,20 @@ func TestPayments_DatabaseFailuresAreReportedNotSwallowed(t *testing.T) {
 			t.Errorf("%s: a failed database call was reported as success", name)
 		}
 	}
+}
+
+// account returns the total posted to a ledger account on the side that increases it (debits for an expense, credits
+// otherwise).
+func (e *env) account(t *testing.T, code string) int64 {
+	t.Helper()
+	side := "C"
+	if code == ledger.ExciseExpense {
+		side = "D"
+	}
+	var n int64
+	if err := e.pool.QueryRow(context.Background(), `SELECT COALESCE(sum(e.amount_kes), 0) FROM ledger.ledger_entries e
+		JOIN ledger.ledger_accounts a ON a.id = e.account_id WHERE a.code = $1 AND e.direction = $2`, code, side).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	return n
 }

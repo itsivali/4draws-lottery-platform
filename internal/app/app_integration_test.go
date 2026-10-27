@@ -158,7 +158,7 @@ func TestApp_FullJourneyThroughTheRealWiring(t *testing.T) {
 	if err := pool.QueryRow(ctx, `SELECT w.balance_kes, u.msisdn_verified_at IS NOT NULL FROM wallet.wallets w JOIN identity.users u ON u.id = w.user_id`).Scan(&balance, &proved); err != nil {
 		t.Fatal(err)
 	}
-	if balance != 95 || !proved {
+	if balance != 100 || !proved {
 		t.Fatalf("balance = %d, phone proved = %v", balance, proved)
 	}
 	if p := mock.Pushes(); len(p) != 1 || p[0].MSISDN != "254712345678" || p[0].CallbackURL != srv.URL+"/hooks/mpesa/stk/"+strings.Repeat("c", 64) {
@@ -166,7 +166,7 @@ func TestApp_FullJourneyThroughTheRealWiring(t *testing.T) {
 	}
 
 	// Paybill: the operator registers the hooks; someone pays into 600982 with the (now proved) phone as the account
-	// number; the confirmation hook, the c2b job, Transaction Status and its result hook credit 200 less excise.
+	// number; the confirmation hook, the c2b job, Transaction Status and its result hook credit 200.
 	client, err := app.NewDaraja(cfg.Payments)
 	if err != nil {
 		t.Fatal(err)
@@ -181,7 +181,7 @@ func TestApp_FullJourneyThroughTheRealWiring(t *testing.T) {
 		if err := pool.QueryRow(ctx, `SELECT balance_kes FROM wallet.wallets`).Scan(&balance); err != nil {
 			t.Fatal(err)
 		}
-		if balance == 95+190 {
+		if balance == 100+200 {
 			break
 		}
 		if time.Now().After(deadline.Add(40 * time.Second)) { //nolint:forbidigo // test polling deadline

@@ -52,8 +52,13 @@ Read this first at the start of every session.
 - **KYC is reviewed by hand (owner, 2026-10-24, ADR 0009):** no registry provider; submissions wait in `manual_review`
   for `lotteryctl kyc approve|reject` (back office later). Google/Apple sign-in ids come with the web app; SSO is off.
 - Free-tier deployment: migrate on start (advisory lock), workers in-process, free Postgres + Key Value.
-- **Deposit excise (owner, 2026-10-22): deducted from the deposit** (the wallet shows the deposit and a separate excise
-  line). Rate version to load: `deposit_excise` 5% `half_up` effective 2025-07-01 (owner's choice, based on the Finance
+- **Testing with real M-Pesa (owner, 2026-10-26):** top-ups from KES 1 (`TOP_UP_MIN_KES=1` on Render and in compose;
+  the apps read the bounds from `GET /v1/wallet`) and plays at KES 1 from 2026-10-26 (migration 00028). Before launch:
+  set `TOP_UP_MIN_KES` and add an odds/price version with the launch price from the launch date. The apps point at
+  `https://lottery-api-4u9g.onrender.com` (repo variable `MOBILE_API_BASE_URL`)
+  until the Cloudflare domain is set up.
+- **Deposit excise (owner, 2026-10-26, ADR 0016): paid by the operator**; the player is credited in full and taxed only
+  on winnings (from 2026-10-22 it was deducted from the deposit). Rate version to load: `deposit_excise` 5% `half_up` effective 2025-07-01 (owner's choice, based on the Finance
   Act 2025; to be confirmed with a tax adviser before production).
 - Daraja: **sandbox only** (shortcode 174379). The owner's sandbox consumer key/secret and passkey work: a live KES 1
   push to the owner's test phone went pending (result 4999) and then paid (2026-10-22). They go into Render as

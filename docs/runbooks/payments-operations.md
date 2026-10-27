@@ -36,7 +36,7 @@ logged: `ERROR payments reconciliation found mismatches` or `WARN ... items need
 go run ./cmd/lotteryctl payments resolve -payment <payment id> -receipt <M-Pesa receipt> -amount <KES on the statement> -operator <your staff id>
 ```
 
-Credits exactly like a confirmed callback (excise deducted, debt recovered, phone proved). Refused if the payment is
+Credits exactly like a confirmed callback (excise booked to the operator, debt recovered, phone proved). Refused if the payment is
 not `unconfirmed` or the receipt already credited another payment.
 
 ## Reverse a top-up M-Pesa took back
@@ -80,7 +80,7 @@ go run ./cmd/lotteryctl payments suspense-credit -receipt <M-Pesa receipt> -user
 ```
 
 Refused for players who may not receive it (KYC, suspended, time-out or self-exclusion, deposit limit): refund those.
-It credits like any deposit (excise deducted, debt recovered) and never proves a phone.
+It credits like any deposit (excise booked to the operator, debt recovered) and never proves a phone.
 
 ### Refund a suspense item
 

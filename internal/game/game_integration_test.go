@@ -172,6 +172,22 @@ func TestPlay_DebitsThePriceIssuesATicketAndSpinsFairly(t *testing.T) {
 	}
 }
 
+func TestPlay_CostsOneShillingFromTheTestingPriceVersion(t *testing.T) {
+	// owner, 2026-10-26: plays cost KES 1 while the apps are tested with real M-Pesa money (migration 00028); earlier
+	// play dates keep KES 100, and going live adds a version with the launch price
+	e := setup(t)
+	ctx := context.Background()
+	u := e.player(t, 1000) // credited 950
+	e.clk.Set(time.Date(2026, 10, 26, 9, 0, 0, 0, time.UTC))
+	res, err := e.svc.Play(ctx, u, "k1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Play.PriceKES != 1 || res.Today.PriceKES != 1 || res.BalanceKES != 949 {
+		t.Fatalf("play = %+v today price %d balance %d", res.Play, res.Today.PriceKES, res.BalanceKES)
+	}
+}
+
 func TestPlay_SameKeyChargesOnce(t *testing.T) {
 	e := setup(t)
 	u := e.player(t, 1000)

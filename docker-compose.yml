@@ -76,6 +76,7 @@ services:
       KYC_API_KEY: local
       WORKERS_IN_PROCESS: "true"
       DARAJA_BASE_URL: http://daraja-mock:8080
+      TOP_UP_MIN_KES: "1" # as on Render while the apps are tested
       DARAJA_CONSUMER_KEY: local
       DARAJA_CONSUMER_SECRET: local
       DARAJA_SHORTCODE: "174379"

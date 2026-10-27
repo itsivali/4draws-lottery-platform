@@ -28,15 +28,47 @@ class WalletTx {
   final DateTime createdAt;
 }
 
+/// The top-up range the server accepts. It is the server's to set (KES 1 while testing with real money), never the app's.
+class TopUpBounds {
+  const TopUpBounds({required this.minKes, required this.maxKes});
+
+  factory TopUpBounds.fromJson(JsonObject j) => TopUpBounds(minKes: j.integer('min_kes'), maxKes: j.integer('max_kes'));
+
+  /// Used until the wallet has loaded; the server checks every amount anyway.
+  static const fallback = TopUpBounds(minKes: 10, maxKes: 250000);
+
+  final int minKes;
+  final int maxKes;
+
+  /// The usual amounts, led by the minimum when it is below them.
+  List<int> get quickPicks => [
+    if (minKes < 100) minKes,
+    ...[100, 200, 500, 1000].where((q) => q >= minKes && q <= maxKes),
+  ];
+}
+
 class WalletStatement {
-  const WalletStatement({required this.balanceKes, required this.debtKes, required this.transactions, this.nextBefore});
+  const WalletStatement({
+    required this.balanceKes,
+    required this.debtKes,
+    required this.transactions,
+    this.nextBefore,
+    this.topUp,
+  });
 
   factory WalletStatement.fromJson(JsonObject j) => WalletStatement(
     balanceKes: j.integer('balance_kes'),
     debtKes: j.integer('debt_kes'),
     transactions: j.list('transactions', WalletTx.fromJson),
     nextBefore: j.strOrNull('next_before'),
+    topUp: switch (j.objectOrNull('top_up')) {
+      final b? => TopUpBounds.fromJson(b),
+      null => null,
+    },
   );
+
+  /// Null when the server cannot take top-ups right now.
+  final TopUpBounds? topUp;
 
   final int balanceKes;
 

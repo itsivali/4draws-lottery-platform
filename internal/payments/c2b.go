@@ -163,7 +163,7 @@ func (s *Service) matchC2B(ctx context.Context, tx pgx.Tx, billRef string, amoun
 	} else if err != nil {
 		return c2bMatch{}, err
 	}
-	if amount < MinTopUpKES || amount > daraja.MaxSTKAmountKES {
+	if amount < s.cfg.MinTopUpKES || amount > daraja.MaxSTKAmountKES {
 		m.reason = "bad_amount"
 		return m, nil
 	}

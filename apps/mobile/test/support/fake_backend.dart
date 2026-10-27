@@ -15,6 +15,9 @@ class FakeBackend {
   bool phoneVerified;
   int balance;
   int debt = 0;
+
+  /// The smallest top-up the "server" accepts (TOP_UP_MIN_KES; KES 1 while testing with real money).
+  int topUpMin = 10;
   Map<String, Object?>? restriction;
   String? closureRequestedAt;
   int plays = 0;
@@ -154,6 +157,7 @@ class FakeBackend {
           'debt_kes': debt,
           'transactions': txs.reversed.toList(),
           'next_before': null,
+          'top_up': {'min_kes': topUpMin, 'max_kes': 250000},
         });
       case ('GET', '/v1/payments'):
         return _ok({'payments': topUps.values.toList().reversed.toList()});
@@ -161,6 +165,7 @@ class FakeBackend {
         if (kyc != 'verified') return _problem(403, 'kyc-required', 'Identity verification required');
         final id = 'pay-${++_ids}';
         final amount = body['amount_kes']! as int;
+        if (amount < topUpMin) return _problem(400, 'invalid-amount', 'Invalid amount');
         topUps[id] = topUpJson(id: id, status: 'pending', amount: amount);
         _topUpPolls[id] = 0;
         return _ok(topUps[id]!, 202);
@@ -211,7 +216,7 @@ class FakeBackend {
       if (topUpPendingPolls != null && polls >= topUpPendingPolls! && t['status'] == 'pending') {
         final amount = t['amount_requested_kes']! as int;
         topUps[id] = topUpJson(id: id, status: 'credited', amount: amount, confirmed: amount);
-        balance += amount - (amount * 5 ~/ 100);
+        balance += amount; // the operator pays the deposit excise
         phoneVerified = true;
       }
       return _ok(topUps[id]!);

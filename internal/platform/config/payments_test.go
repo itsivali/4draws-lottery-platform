@@ -21,6 +21,7 @@ func fullPaymentsEnv(t *testing.T) {
 	t.Setenv("DARAJA_ALLOW_PRODUCTION", "")
 	t.Setenv("PUBLIC_BASE_URL", "")
 	t.Setenv("RENDER_EXTERNAL_URL", "https://lottery-api.onrender.com")
+	t.Setenv("TOP_UP_MIN_KES", "")
 	for _, k := range allInitiatorVars {
 		t.Setenv(k, "")
 	}
@@ -207,5 +208,23 @@ func TestPayments_B2CNeedsItsShortcodeAndTheInitiator(t *testing.T) {
 	t.Setenv("DARAJA_C2B_SHORTCODE", "600992")
 	if cfg, err := config.Load(); err != nil || !cfg.Payments.B2CEnabled() || !cfg.Payments.C2BEnabled() {
 		t.Fatalf("both: %v", err)
+	}
+}
+
+func TestPayments_TheTopUpMinimumIsSetByTheServerWithinWhatMPesaAccepts(t *testing.T) {
+	fullPaymentsEnv(t)
+	cfg, err := config.Load()
+	if err != nil || cfg.Payments.MinTopUpKES != 0 {
+		t.Fatalf("unset: %d %v (0 leaves the payments default)", cfg.Payments.MinTopUpKES, err)
+	}
+	t.Setenv("TOP_UP_MIN_KES", "1") // testing with real money, a shilling at a time
+	if cfg, err = config.Load(); err != nil || cfg.Payments.MinTopUpKES != 1 {
+		t.Fatalf("1: %d %v", cfg.Payments.MinTopUpKES, err)
+	}
+	for _, bad := range []string{"0", "-5", "ten", "250001"} {
+		t.Setenv("TOP_UP_MIN_KES", bad)
+		if _, err := config.Load(); err == nil || !strings.Contains(err.Error(), "TOP_UP_MIN_KES") {
+			t.Fatalf("%q accepted (%v)", bad, err)
+		}
 	}
 }

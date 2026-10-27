@@ -191,7 +191,8 @@ func buildServices(pool *pgxpool.Pool, sh shared) services {
 		dc = sh.daraja
 	}
 	ls := ledger.NewStore()
-	s.payments = payments.NewService(pool, sh.clk, dc, payments.NewRiverEnqueuer(sh.insertOnly), s.identity, s.rg, wallet.NewService(ls), ls, sh.aw, payments.Config{})
+	s.payments = payments.NewService(pool, sh.clk, dc, payments.NewRiverEnqueuer(sh.insertOnly), s.identity, s.rg, wallet.NewService(ls), ls, sh.aw,
+		payments.Config{MinTopUpKES: cfg.Payments.MinTopUpKES})
 	if p := cfg.Payments; p.C2BEnabled() {
 		s.payments.WithC2B(sh.daraja, payments.C2BConfig{ShortCode: p.C2BShortCode})
 	}

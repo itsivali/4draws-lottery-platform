@@ -74,6 +74,20 @@ void main() {
     expect(w.transactions.first.kind, 'stake');
     expect(w.transactions.first.amountKes, -100);
     expect(w.nextBefore, isNull);
+    expect(w.topUp, isNull, reason: 'no bounds when top-ups are unavailable');
+    final b = WalletStatement.fromJson(
+      JsonObject({
+        ...walletJson(),
+        'top_up': {'min_kes': 1, 'max_kes': 250000},
+      }),
+    ).topUp!;
+    expect((b.minKes, b.maxKes), (1, 250000));
+  });
+
+  test('top-up quick picks start at the server minimum', () {
+    expect(const TopUpBounds(minKes: 1, maxKes: 250000).quickPicks, [1, 100, 200, 500, 1000]);
+    expect(TopUpBounds.fallback.quickPicks, [10, 100, 200, 500, 1000]);
+    expect(const TopUpBounds(minKes: 300, maxKes: 250000).quickPicks, [500, 1000]);
   });
 
   test('top-ups and payouts', () {

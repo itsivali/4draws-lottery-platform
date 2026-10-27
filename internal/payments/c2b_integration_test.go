@@ -80,7 +80,7 @@ func (e *env) suspense(t *testing.T, receipt string) suspenseRow {
 // local writes a 2547XXXXXXXX number the way customers type it on the M-Pesa menu.
 func local(msisdn string) string { return "0" + msisdn[3:] }
 
-func TestC2B_APaymentToAProvedPhoneIsVerifiedThenCreditedNetOfExcise(t *testing.T) {
+func TestC2B_APaymentToAProvedPhoneIsVerifiedThenCreditedInFull(t *testing.T) {
 	e := setup(t)
 	user, msisdn := e.provedPlayer(t)
 	receipt := e.payBill(t, 150, local(msisdn))
@@ -92,8 +92,8 @@ func TestC2B_APaymentToAProvedPhoneIsVerifiedThenCreditedNetOfExcise(t *testing.
 	if row.status != "credited" || row.paymentID == nil {
 		t.Fatalf("confirmation = %+v", row)
 	}
-	if b := e.balance(t, user); b != 142 { // 150 less 5% excise (7.5, rounded half up to 8)
-		t.Fatalf("balance = %d, want 142", b)
+	if b := e.balance(t, user); b != 150 { // the operator pays the excise
+		t.Fatalf("balance = %d, want 150", b)
 	}
 	var channel, status, msisdnOnPayment string
 	var confirmed int64
@@ -149,7 +149,7 @@ func TestC2B_PaymentsThatCannotBeCreditedGoToSuspense(t *testing.T) {
 		{rMSISDN, 100, "restricted"},
 		{lMSISDN, 150, "over_deposit_limit"},
 		{uMSISDN, 100, "kyc_required"},
-		{lMSISDN, payments.MinTopUpKES - 1, "bad_amount"},
+		{lMSISDN, payments.DefaultMinTopUpKES - 1, "bad_amount"},
 	} {
 		receipt := e.payBill(t, tc.amount, tc.account)
 		if row := e.c2b(t, receipt); row.status != "suspense" || row.reason != tc.reason {
@@ -165,7 +165,7 @@ func TestC2B_PaymentsThatCannotBeCreditedGoToSuspense(t *testing.T) {
 		}
 	}
 	r := e.reconcile(t)
-	if !r.OK || r.Totals["suspense_kes"] != 100+100+100+150+100+payments.MinTopUpKES-1 || len(r.Attention["suspense_open"]) != 6 {
+	if !r.OK || r.Totals["suspense_kes"] != 100+100+100+150+100+payments.DefaultMinTopUpKES-1 || len(r.Attention["suspense_open"]) != 6 {
 		t.Fatalf("reconciliation = %+v", r)
 	}
 }
@@ -178,8 +178,8 @@ func TestC2B_DuplicateConfirmationsCreditOnce(t *testing.T) {
 	if row := e.c2b(t, receipt); row.status != "credited" {
 		t.Fatalf("confirmation = %+v", row)
 	}
-	if b := e.balance(t, user); b != 95 {
-		t.Fatalf("balance = %d, want 95", b)
+	if b := e.balance(t, user); b != 100 {
+		t.Fatalf("balance = %d, want 100", b)
 	}
 	if got := e.mock.StatusRequests(); len(got) != 1 {
 		t.Fatalf("status requests = %v", got)
@@ -301,7 +301,7 @@ func TestC2B_WhatDarajaReportsDecides(t *testing.T) {
 					t.Fatalf("suspense = %+v: the amount parked is what Daraja confirms", s)
 				}
 			}
-			if want := map[string]int64{"credited": 95}[tc.status]; e.balance(t, user) != want {
+			if want := map[string]int64{"credited": 100}[tc.status]; e.balance(t, user) != want {
 				t.Fatalf("balance = %d, want %d", e.balance(t, user), want)
 			}
 			if r := e.reconcile(t); !r.OK {
@@ -405,7 +405,7 @@ func TestValidateC2B_AcceptsOnlyWhatCouldBeCredited(t *testing.T) {
 		"unproved":       {confirmationBody("VALID00003", 100, unproved, payer), payments.C2BInvalidAccount},
 		"restricted":     {confirmationBody("VALID00004", 100, rMSISDN, payer), payments.C2BOtherError},
 		"over the limit": {confirmationBody("VALID00005", 100, lMSISDN, payer), payments.C2BOtherError},
-		"below minimum":  {confirmationBody("VALID00006", payments.MinTopUpKES-1, ok, payer), payments.C2BInvalidAmount},
+		"below minimum":  {confirmationBody("VALID00006", payments.DefaultMinTopUpKES-1, ok, payer), payments.C2BInvalidAmount},
 		"fractional": {func() map[string]string {
 			b := confirmationBody("VALID00007", 1, ok, payer)
 			b["TransAmount"] = "10.50"
@@ -457,8 +457,8 @@ func TestResolveSuspense_CreditsTheIdentifiedPlayerOnce(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if b := e.balance(t, user); b != 190 {
-		t.Fatalf("balance = %d, want 190", b)
+	if b := e.balance(t, user); b != 200 {
+		t.Fatalf("balance = %d, want 200", b)
 	}
 	if s := e.suspense(t, receipt); s.status != "resolved" {
 		t.Fatalf("suspense = %+v", s)

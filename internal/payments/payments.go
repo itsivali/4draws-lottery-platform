@@ -1,7 +1,7 @@
 // Package payments takes money in through M-Pesa. A top-up is an STK Push to the number the account claims: the
 // request path only records the intent and enqueues a job; the job sends the prompt; Daraja's callback is stored and
 // triggers verification; verification confirms the outcome with Daraja's status query and only then credits the
-// confirmed amount, net of deposit excise, and records that the player proved the phone (ADR 0005). No network call
+// confirmed amount in full (the operator pays the deposit excise), and records that the player proved the phone (ADR 0005). No network call
 // ever runs inside a database transaction, and nothing is credited on a callback alone.
 package payments
 
@@ -31,14 +31,16 @@ var (
 	ErrNotFound      = errors.New("payments: not found")
 )
 
-// Bounds and timings. MinTopUpKES is a placeholder (open question: minimum verification deposit, suggested KES 10).
+// Bounds and timings. DefaultMinTopUpKES applies unless Config.MinTopUpKES sets another (TOP_UP_MIN_KES: KES 1 while
+// the owner tests with real money).
 const (
-	MinTopUpKES        int64 = 10
+	DefaultMinTopUpKES int64 = 10
 	DefaultVerifyAfter       = 2 * time.Minute  // safety-net verification when no callback has arrived
 	DefaultExpiry            = 15 * time.Minute // after this a payment without a usable outcome is settled as unconfirmed/failed
 	exciseCode               = "deposit_excise"
-	// Excise is deducted from the deposit and shown as its own wallet line (owner decision, 2026-10-22).
-	deductExcise = true
+	// The operator pays the deposit excise: the player is credited the whole deposit and is taxed only on winnings
+	// (owner decision, 2026-10-26, ADR 0016; it replaces deducting it from the deposit, 2026-10-22).
+	deductExcise = false
 )
 
 // Player-facing states. The internal status set is richer (see the payments_status_check constraint).
@@ -140,6 +142,7 @@ type Ledger interface {
 type Config struct {
 	VerifyAfter time.Duration
 	Expiry      time.Duration
+	MinTopUpKES int64 // 0: DefaultMinTopUpKES
 }
 
 // Service runs top-ups.
@@ -165,13 +168,19 @@ func NewService(pool *pgxpool.Pool, clk clock.Clock, d Daraja, enq Enqueuer, ids
 	if cfg.Expiry <= 0 {
 		cfg.Expiry = DefaultExpiry
 	}
+	if cfg.MinTopUpKES <= 0 {
+		cfg.MinTopUpKES = DefaultMinTopUpKES
+	}
 	return &Service{pool: pool, clk: clk, daraja: d, enq: enq, ids: ids, rg: r, wallet: w, rules: rules, audit: a, cfg: cfg}
 }
+
+// MinTopUpKES is the smallest top-up accepted, by STK Push or paybill.
+func (s *Service) MinTopUpKES() int64 { return s.cfg.MinTopUpKES }
 
 // StartTopUp records a top-up and enqueues its STK push. key is the client's idempotency key: the same key returns
 // the same payment. The prompt always goes to the account's claimed number.
 func (s *Service) StartTopUp(ctx context.Context, userID string, amount int64, key string) (TopUp, error) {
-	if amount < MinTopUpKES || amount > daraja.MaxSTKAmountKES {
+	if amount < s.cfg.MinTopUpKES || amount > daraja.MaxSTKAmountKES {
 		return TopUp{}, ErrInvalidAmount
 	}
 	if s.daraja == nil {
@@ -485,7 +494,7 @@ type creditInput struct {
 	channel string
 }
 
-// creditPayment posts a confirmed top-up: the deposit net of excise, recovery of any debt the player owes, the payment
+// creditPayment posts a confirmed top-up: the deposit and the excise the operator owes on it, recovery of any debt the player owes, the payment
 // marked credited, the phone proof (STK only) and the audit record, all in the caller's transaction.
 func (s *Service) creditPayment(ctx context.Context, tx pgx.Tx, in creditInput) error {
 	q := store.New(tx)

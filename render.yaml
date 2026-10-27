@@ -69,6 +69,11 @@ services:
       # refused. The callback URL is RENDER_EXTERNAL_URL + /hooks/mpesa/stk/ + sha256(DARAJA_CALLBACK_TOKEN).
       - key: DARAJA_BASE_URL
         value: https://sandbox.safaricom.co.ke
+      # Smallest top-up, whole KES (default 10). KES 1 while the owner tests the apps with M-Pesa (owner, 2026-10-26);
+      # the apps read it from GET /v1/wallet, so raising it needs no store release. Plays cost KES 1 from 2026-10-26
+      # (migration 00028) until a launch price version is added.
+      - key: TOP_UP_MIN_KES
+        value: '1'
       - key: DARAJA_CALLBACK_TOKEN
         generateValue: true
       - key: DARAJA_CONSUMER_KEY

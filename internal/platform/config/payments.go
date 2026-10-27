@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 )
 
@@ -35,6 +36,8 @@ type Payments struct {
 	B2CShortCode       string // the account payouts leave from (in the sandbox the same test shortcode)
 	Initiator          string // the API initiator's user name
 	SecurityCredential string // the initiator's password encrypted with Safaricom's certificate, from the Daraja portal
+
+	MinTopUpKES int64 // TOP_UP_MIN_KES; 0 leaves the payments default
 }
 
 // C2BEnabled reports whether paybill payments are configured.
@@ -89,6 +92,9 @@ func partly(keys []string) (set, missing []string) {
 	return set, missing
 }
 
+// maxSTKKES is M-Pesa's ceiling for one STK Push (payments/daraja.MaxSTKAmountKES).
+const maxSTKKES = 250_000
+
 func loadPayments(api API) (Payments, error) {
 	set, missing := partly(darajaCredentials)
 	c2bSet, _ := partly(c2bSettings)
@@ -141,5 +147,12 @@ func loadPayments(api API) (Payments, error) {
 		return Payments{}, fmt.Errorf("config: %s set but neither DARAJA_C2B_SHORTCODE nor DARAJA_B2C_SHORTCODE", strings.Join(initSet, ", "))
 	}
 	p.Initiator, p.SecurityCredential = os.Getenv("DARAJA_INITIATOR_NAME"), os.Getenv("DARAJA_SECURITY_CREDENTIAL")
+	if v := os.Getenv("TOP_UP_MIN_KES"); v != "" {
+		n, err := strconv.ParseInt(v, 10, 64)
+		if err != nil || n < 1 || n > maxSTKKES {
+			return Payments{}, fmt.Errorf("config: TOP_UP_MIN_KES must be whole KES from 1 to %d", maxSTKKES)
+		}
+		p.MinTopUpKES = n
+	}
 	return p, nil
 }
