@@ -1,4 +1,4 @@
-import { StrictMode, useCallback, useMemo, useState } from 'react'
+import { StrictMode, useCallback, useEffect, useMemo, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import { ApiClient } from './api'
@@ -8,6 +8,7 @@ import { SessionContext, type Session } from './context'
 import { completeDevPopup } from './providers'
 import { SignIn, type StaffSession } from './SignIn'
 import { applyTheme, readTheme } from './theme'
+import type { Me } from './types'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import './index.css'
 
@@ -40,6 +41,43 @@ function Root({ config }: { config: Config }) {
       current ? () => { end('Your session ended. Sign in again.') } : undefined),
     [config.apiBaseUrl, current, end],
   )
+
+  // the session ends on time even with the tab open, not only when the next request meets a 401
+  useEffect(() => {
+    if (!current) return
+    const left = new Date(current.expires_at).getTime() - Date.now()
+    const timer = setTimeout(() => { end('Your session ended. Sign in again.') }, Math.max(0, Math.min(left, 2 ** 31 - 1)))
+    return () => { clearTimeout(timer) }
+  }, [current, end])
+
+  // roles can change while signed in (an admin edits them): the member is re-read on load and when the tab returns
+  useEffect(() => {
+    if (!current) return
+    let last = 0
+    const refresh = () => {
+      if (Date.now() - last < 60_000) return
+      last = Date.now()
+      api.get<Me>('/v1/staff/me').then(
+        (me) => {
+          setCurrent((c) => {
+            if (!c || c.token !== current.token || JSON.stringify(c.member) === JSON.stringify(me)) return c
+            const next = { ...c, member: me }
+            try { sessionStorage.setItem(KEY, JSON.stringify(next)) } catch { /* until reload */ }
+            return next
+          })
+        },
+        () => undefined, // a 401 already ended the session; anything else waits for the next look
+      )
+    }
+    refresh()
+    const onVisible = () => { if (document.visibilityState === 'visible') refresh() }
+    window.addEventListener('focus', refresh)
+    document.addEventListener('visibilitychange', onVisible)
+    return () => {
+      window.removeEventListener('focus', refresh)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
+  }, [api, current])
 
   const session: Session | null = useMemo(() => current && {
     me: current.member,

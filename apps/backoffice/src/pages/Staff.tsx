@@ -18,10 +18,12 @@ const roleFields = allRoles.map((r) => ({ name: r, label: roleLabels[r], type: '
 
 const checked = (v: Record<string, string>): Role[] => allRoles.filter((r) => v[r] === 'true')
 
+const atLeastOneRole = (v: Record<string, string>) => (checked(v).length === 0 ? 'Choose at least one role.' : null)
+
 /** Admins invite staff by the email of their Google or Apple account, assign roles and disable members (ADR 0018). */
 export function StaffPage() {
   const { api, me } = useSession()
-  const load = useLoad(() => api.get<{ members: StaffMember[] }>('/v1/staff/members'))
+  const load = useLoad((signal) => api.get<{ members: StaffMember[] }>('/v1/staff/members', undefined, { signal }))
   const { ask, busy, view } = useConfirmedAction(load.reload)
 
   const columns = useMemo<ColumnDef<StaffMember>[]>(() => [
@@ -63,6 +65,7 @@ export function StaffPage() {
                   body: <p>Choose what {m.name || m.email} may do.</p>,
                   fields: roleFields,
                   initial: Object.fromEntries(m.roles.map((r) => [r, 'true'])),
+                  validate: atLeastOneRole,
                   confirmLabel: 'Save roles',
                   success: `Roles of ${m.email} saved.`,
                   act: (v) => api.put(`/v1/staff/members/${m.id}/roles`, { roles: checked(v) }),
@@ -115,10 +118,11 @@ export function StaffPage() {
                 title: 'Invite a member',
                 body: <p>They can sign in once they use a Google or Apple account with this verified email address.</p>,
                 fields: [
-                  { name: 'email', label: 'Email address', required: true },
+                  { name: 'email', label: 'Email address', required: true, type: 'email' },
                   { name: 'name', label: 'Name' },
                   ...roleFields,
                 ],
+                validate: atLeastOneRole,
                 confirmLabel: 'Invite',
                 success: 'Invited.',
                 act: (v) => api.post('/v1/staff/members', { email: v.email, name: v.name ?? '', roles: checked(v) }),

@@ -30,8 +30,8 @@ function count(d: Draw, step: 'sign' | 'approve') {
 
 export function DrawsPage() {
   const { api, me } = useSession()
-  const draws = useLoad(() => api.get<{ draws: Draw[] }>('/v1/staff/draws', { limit: '40' }))
-  const overdue = useLoad(() => api.get<{ overdue: Late[] }>('/v1/staff/draws/overdue'))
+  const draws = useLoad((signal) => api.get<{ draws: Draw[] }>('/v1/staff/draws', { limit: '40' }, { signal }))
+  const overdue = useLoad((signal) => api.get<{ overdue: Late[] }>('/v1/staff/draws/overdue', undefined, { signal }))
   const reload = () => { draws.reload(); overdue.reload() }
   const { ask, busy, view } = useConfirmedAction(reload)
   const official = can(me.roles, 'draw_official')

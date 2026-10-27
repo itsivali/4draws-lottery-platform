@@ -41,9 +41,9 @@ const num = 'text-right tabular-nums'
 export function FinancePage() {
   const { api } = useSession()
   const [days, setDays] = useState<number>(30)
-  const load = useLoad(() => {
+  const load = useLoad((signal) => {
     const to = nairobiToday()
-    return api.get<FinanceSummary>('/v1/staff/finance', { from: minusDays(to, days - 1), to })
+    return api.get<FinanceSummary>('/v1/staff/finance', { from: minusDays(to, days - 1), to }, { signal })
   }, [days])
   return (
     <section>

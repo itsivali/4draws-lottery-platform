@@ -14,9 +14,10 @@ import { Button } from '@/components/ui/button'
 
 export function KycPage() {
   const { api } = useSession()
-  const load = useLoad(() => api.get<{ submissions: KycSubmission[] }>('/v1/staff/kyc/pending'))
-  const { ask, busy, view } = useConfirmedAction(load.reload)
-  const { queue, dismiss } = useReviewQueue()
+  const load = useLoad((signal) => api.get<{ submissions: KycSubmission[] }>('/v1/staff/kyc/pending', undefined, { signal }))
+  const { queue, dismiss, refresh } = useReviewQueue()
+  // after a decision the list and the count are re-read together, so they never disagree for a poll interval
+  const { ask, busy, view } = useConfirmedAction(() => { load.reload(); refresh() })
   useEffect(dismiss, [dismiss, queue])
   // the list is reloaded only when asked: every submission it shows is audited as unmasked
   const fresh = (queue?.waiting ?? 0) - (load.data?.submissions.length ?? Infinity)

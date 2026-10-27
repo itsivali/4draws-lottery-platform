@@ -19,6 +19,13 @@ export class UncertainError extends Error {
   }
 }
 
+/** A read that never reached the server (offline, DNS, or it took longer than the timeout). */
+export class NetworkError extends Error {
+  constructor(message = 'The server could not be reached') {
+    super(message)
+  }
+}
+
 export function newIdempotencyKey(): string {
   const b = new Uint8Array(16)
   crypto.getRandomValues(b)
@@ -26,6 +33,15 @@ export function newIdempotencyKey(): string {
 }
 
 type Fetch = typeof globalThis.fetch
+
+/** How long a read or a write may take before it counts as lost. Writes get longer: the server may be working. */
+export const READ_TIMEOUT_MS = 20_000
+export const WRITE_TIMEOUT_MS = 30_000
+
+export interface ReadOptions {
+  /** aborting it cancels the request (a page that unmounted, a filter that changed) */
+  signal?: AbortSignal | undefined
+}
 
 export class ApiClient {
   constructor(
@@ -36,58 +52,90 @@ export class ApiClient {
     private readonly onUnauthenticated?: () => void,
   ) {}
 
-  async get<T>(path: string, query?: Record<string, string>): Promise<T> {
+  async get<T>(path: string, query?: Record<string, string>, opts: ReadOptions = {}): Promise<T> {
     const url = new URL(path, this.baseUrl)
     for (const [k, v] of Object.entries(query ?? {})) url.searchParams.set(k, v)
-    const res = await this.fetchFn(url.toString(), { headers: await this.headers() })
+    const res = await this.read(url.toString(), { headers: await this.headers() }, opts.signal)
     return this.decode<T>(res)
   }
 
   /** The raw body of a download (e.g. a KRA batch file). */
-  async download(path: string): Promise<{ blob: Blob; sha256: string | null }> {
-    const res = await this.fetchFn(new URL(path, this.baseUrl).toString(), { headers: await this.headers() })
+  async download(path: string, opts: ReadOptions = {}): Promise<{ blob: Blob; sha256: string | null }> {
+    const res = await this.read(new URL(path, this.baseUrl).toString(), { headers: await this.headers() }, opts.signal)
     if (!res.ok) await this.decode(res)
     return { blob: await res.blob(), sha256: res.headers.get('X-File-SHA256') }
   }
 
-  async post<T = unknown>(path: string, body: unknown = {}, key = newIdempotencyKey()): Promise<T> {
+  post<T = unknown>(path: string, body: unknown = {}, key = newIdempotencyKey()): Promise<T> {
+    return this.write<T>('POST', path, body, key)
+  }
+
+  put<T = unknown>(path: string, body: unknown = {}, key = newIdempotencyKey()): Promise<T> {
+    return this.write<T>('PUT', path, body, key)
+  }
+
+  async delete(path: string, key = newIdempotencyKey()): Promise<void> {
+    await this.write('DELETE', path, undefined, key)
+  }
+
+  /**
+   * Every write, one way: the same idempotency key on a retry, so a request that did arrive is replayed and never
+   * repeated. A network failure is retried once; a second failure, a timeout, a 5xx or a request still in progress
+   * is reported as uncertain, with a retry that keeps the key.
+   */
+  private async write<T>(method: 'POST' | 'PUT' | 'DELETE', path: string, body: unknown, key: string): Promise<T> {
+    const retry = () => this.write<T>(method, path, body, key)
     const send = async (): Promise<Response> =>
-      this.fetchFn(new URL(path, this.baseUrl).toString(), {
-        method: 'POST',
-        headers: { ...(await this.headers()), 'Content-Type': 'application/json', 'Idempotency-Key': key },
-        body: JSON.stringify(body),
-      })
+      this.withTimeout(WRITE_TIMEOUT_MS, async (signal) =>
+        this.fetchFn(new URL(path, this.baseUrl).toString(), {
+          method,
+          headers: {
+            ...(await this.headers()),
+            ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
+            'Idempotency-Key': key,
+          },
+          ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+          signal,
+        }),
+      )
     let res: Response
     try {
       res = await send()
     } catch {
       try {
-        res = await send() // the same key: the API replays a request that did arrive, never repeats it
+        res = await send()
       } catch {
-        throw new UncertainError(() => this.post(path, body, key))
+        throw new UncertainError(retry)
       }
     }
-    if (res.status >= 500 || res.status === 409 && (await isInProgress(res.clone()))) {
-      throw new UncertainError(() => this.post(path, body, key))
+    if (res.status >= 500 || (res.status === 409 && (await isInProgress(res.clone())))) {
+      throw new UncertainError(retry)
     }
     return this.decode<T>(res)
   }
 
-  async put<T = unknown>(path: string, body: unknown = {}, key = newIdempotencyKey()): Promise<T> {
-    const res = await this.fetchFn(new URL(path, this.baseUrl).toString(), {
-      method: 'PUT',
-      headers: { ...(await this.headers()), 'Content-Type': 'application/json', 'Idempotency-Key': key },
-      body: JSON.stringify(body),
-    })
-    return this.decode<T>(res)
+  private async read(url: string, init: RequestInit, signal?: AbortSignal): Promise<Response> {
+    try {
+      return await this.withTimeout(READ_TIMEOUT_MS, (s) => this.fetchFn(url, { ...init, signal: s }), signal)
+    } catch (e) {
+      if (signal?.aborted) throw e // the caller cancelled it: not an error to show
+      throw new NetworkError()
+    }
   }
 
-  async delete(path: string): Promise<void> {
-    const res = await this.fetchFn(new URL(path, this.baseUrl).toString(), {
-      method: 'DELETE',
-      headers: { ...(await this.headers()), 'Idempotency-Key': newIdempotencyKey() },
-    })
-    await this.decode(res)
+  /** Runs fn with a signal that aborts after ms, or when the caller's own signal aborts. */
+  private async withTimeout<R>(ms: number, fn: (signal: AbortSignal) => Promise<R>, outer?: AbortSignal): Promise<R> {
+    const ac = new AbortController()
+    const timer = setTimeout(() => { ac.abort() }, ms)
+    const relay = () => { ac.abort() }
+    if (outer?.aborted) ac.abort()
+    outer?.addEventListener('abort', relay)
+    try {
+      return await fn(ac.signal)
+    } finally {
+      clearTimeout(timer)
+      outer?.removeEventListener('abort', relay)
+    }
   }
 
   private async headers(): Promise<Record<string, string>> {
@@ -98,7 +146,12 @@ export class ApiClient {
   private async decode<T>(res: Response): Promise<T> {
     if (res.status === 204) return undefined as T
     const text = await res.text()
-    const body: unknown = text ? JSON.parse(text) : undefined
+    let body: unknown
+    try {
+      body = text ? JSON.parse(text) : undefined
+    } catch {
+      body = undefined // a proxy's HTML page, or a truncated answer: still a problem with a status
+    }
     if (res.ok) return body as T
     if (res.status === 401) this.onUnauthenticated?.()
     const p = (body ?? {}) as { type?: string; title?: string; detail?: string }

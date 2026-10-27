@@ -150,7 +150,25 @@ export function ActionResult({ state, onCheckAgain }: { state: ActionState; onCh
   }
 }
 
-export interface ConfirmField { name: string; label: string; required?: boolean; type?: 'text' | 'number' | 'checkbox'; help?: string }
+export interface ConfirmField {
+  name: string
+  label: string
+  required?: boolean
+  /** number: whole shillings above zero; email: a plausible address */
+  type?: 'text' | 'number' | 'email' | 'checkbox'
+  help?: string
+}
+
+const emailRE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+/** Why a field's value cannot be sent, or null. Empty values are the `required` check's business. */
+export function fieldProblem(f: ConfirmField, value: string): string | null {
+  const v = value.trim()
+  if (!v) return null
+  if (f.type === 'number') return /^\d+$/.test(v) && Number(v) > 0 ? null : 'Enter a whole number of shillings above zero.'
+  if (f.type === 'email') return emailRE.test(v) ? null : 'Enter an email address.'
+  return null
+}
 
 /** Asks before an action: what it does, and the reason or reference the audit trail needs. */
 export function ConfirmDialog({
@@ -158,6 +176,7 @@ export function ConfirmDialog({
   title,
   body,
   fields = [],
+  validate,
   confirmLabel,
   danger = false,
   initial,
@@ -168,6 +187,8 @@ export function ConfirmDialog({
   title: string
   body: ReactNode
   fields?: ConfirmField[]
+  /** a check across fields; its message is shown and blocks the confirm button */
+  validate?: (values: Record<string, string>) => string | null
   /** values the fields start with (checkboxes: "true") */
   initial?: Record<string, string> | undefined
   confirmLabel: string
@@ -180,6 +201,9 @@ export function ConfirmDialog({
   const [values, setValues] = useState<Record<string, string>>(initial ?? {})
   const cancel = () => { setValues({}); onCancel() }
   const missing = fields.some((f) => f.required && f.type !== 'checkbox' && !(values[f.name] ?? '').trim())
+  const problems = Object.fromEntries(fields.map((f) => [f.name, fieldProblem(f, values[f.name] ?? '')]))
+  const crossProblem = validate?.(values) ?? null
+  const blocked = missing || Object.values(problems).some(Boolean) || crossProblem !== null
   const checks = fields.filter((f) => f.type === 'checkbox')
   const inputs = fields.filter((f) => f.type !== 'checkbox')
   return (
@@ -188,7 +212,7 @@ export function ConfirmDialog({
         <form
           onSubmit={(e) => {
             e.preventDefault()
-            if (missing) return
+            if (blocked) return
             const submitted = values
             setValues({})
             onConfirm(submitted)
@@ -204,13 +228,16 @@ export function ConfirmDialog({
               <Label htmlFor={`${id}-${f.name}`}>{f.label}{f.required ? ' (required)' : ''}</Label>
               <Input
                 id={`${id}-${f.name}`}
-                type={f.type ?? 'text'}
+                type={f.type === 'number' ? 'text' : (f.type ?? 'text')}
                 required={f.required}
-                inputMode={f.type === 'number' ? 'numeric' : undefined}
+                inputMode={f.type === 'number' ? 'numeric' : f.type === 'email' ? 'email' : undefined}
+                autoComplete={f.type === 'email' ? 'email' : 'off'}
+                aria-invalid={problems[f.name] ? true : undefined}
+                aria-describedby={problems[f.name] ? `${id}-${f.name}-p` : undefined}
                 value={values[f.name] ?? ''}
                 onChange={(e) => { setValues({ ...values, [f.name]: e.target.value }) }}
               />
-              {f.help ? <p className="text-xs text-muted-foreground">{f.help}</p> : null}
+              {problems[f.name] ? <p id={`${id}-${f.name}-p`} className="text-xs text-destructive">{problems[f.name]}</p> : f.help ? <p className="text-xs text-muted-foreground">{f.help}</p> : null}
             </div>
           ))}
           {checks.length > 0 ? (
@@ -223,9 +250,10 @@ export function ConfirmDialog({
               ))}
             </div>
           ) : null}
+          {crossProblem ? <p className="text-sm text-destructive" role="alert">{crossProblem}</p> : null}
           <DialogFooter className="mt-2">
             <Button type="button" variant="outline" onClick={cancel}>Cancel</Button>
-            <Button type="submit" variant={danger ? 'destructive' : 'default'} disabled={missing}>{confirmLabel}</Button>
+            <Button type="submit" variant={danger ? 'destructive' : 'default'} disabled={blocked}>{confirmLabel}</Button>
           </DialogFooter>
         </form>
       </DialogContent>

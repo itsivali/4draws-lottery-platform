@@ -30,21 +30,28 @@ export function SignIn({ config, api, onSignedIn, providers = realProviders, not
   const [busy, setBusy] = useState(false)
   const [problem, setProblem] = useState<{ title: string; detail?: string | undefined } | null>(null)
 
+  // one sign-in at a time: a second click (or Google's callback during an Apple popup) is ignored, not run alongside
+  const running = useRef(false)
   const exchange = async (provider: string, get: () => Promise<IDToken>) => {
-    setProblem(null)
-    let t: IDToken
-    try {
-      t = await get()
-    } catch (e) {
-      if (!cancelled(e)) setProblem({ title: `${provider === 'apple' ? 'Apple' : 'The sign-in window'} could not sign you in. Try again.` })
-      return
-    }
+    if (running.current) return
+    running.current = true
     setBusy(true)
+    setProblem(null)
     try {
-      onSignedIn(await api.post<StaffSession>('/v1/staff/session', { provider, id_token: t.idToken, nonce: t.nonce }))
-    } catch (e) {
-      setProblem(e instanceof ProblemError ? { title: e.title, detail: e.detail } : { title: 'The server could not be reached. Try again.' })
+      let t: IDToken
+      try {
+        t = await get()
+      } catch (e) {
+        if (!cancelled(e)) setProblem({ title: `${provider === 'apple' ? 'Apple' : 'The sign-in window'} could not sign you in. Try again.` })
+        return
+      }
+      try {
+        onSignedIn(await api.post<StaffSession>('/v1/staff/session', { provider, id_token: t.idToken, nonce: t.nonce }))
+      } catch (e) {
+        setProblem(e instanceof ProblemError ? { title: e.title, detail: e.detail } : { title: 'The server could not be reached. Try again.' })
+      }
     } finally {
+      running.current = false
       setBusy(false)
     }
   }

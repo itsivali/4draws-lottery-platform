@@ -25,7 +25,7 @@ const tone = (state: string): Tone => (state === 'succeeded' ? 'success' : state
 export function PayoutsPage() {
   const { api, me } = useSession()
   const [state, setState] = useState<string>('held')
-  const load = useLoad(() => api.get<{ payouts: Payout[] }>('/v1/staff/payouts', { state }), [state])
+  const load = useLoad((signal) => api.get<{ payouts: Payout[] }>('/v1/staff/payouts', { state }, { signal }), [state])
   const { ask, busy, view } = useConfirmedAction(load.reload)
   const operator = can(me.roles, 'payout_operator')
 

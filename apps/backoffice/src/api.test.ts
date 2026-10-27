@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { ApiClient, ProblemError, UncertainError } from './api'
+import { ApiClient, NetworkError, ProblemError, UncertainError } from './api'
 
 function respond(status: number, body: unknown, headers: Record<string, string> = {}) {
   return new Response(body === undefined ? null : JSON.stringify(body), {
@@ -64,5 +64,44 @@ describe('ApiClient', () => {
     const api = new ApiClient('https://api.test', () => Promise.resolve('tok'), fetch)
     const err = await api.get('/v1/staff/me').catch((e: unknown) => e)
     expect((err as ProblemError).status).toBe(401)
+  })
+
+  it('retries a lost PUT or DELETE once with the same key, then reports it as uncertain', async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>().mockRejectedValue(new TypeError('network'))
+    const api = new ApiClient('https://api.test', () => Promise.resolve('tok'), fetch)
+    await expect(api.put('/v1/staff/members/s2/roles', { roles: ['auditor'] })).rejects.toBeInstanceOf(UncertainError)
+    await expect(api.delete('/v1/staff/session')).rejects.toBeInstanceOf(UncertainError)
+    const keys = fetch.mock.calls.map(([, init]) => new Headers(init?.headers).get('Idempotency-Key'))
+    expect(keys).toHaveLength(4)
+    expect(new Set(keys).size).toBe(2)
+    expect(fetch.mock.calls.map(([, init]) => init?.method)).toEqual(['PUT', 'PUT', 'DELETE', 'DELETE'])
+  })
+
+  it('treats a 5xx on a PUT as uncertain and keeps the key for the retry', async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValueOnce(respond(503, undefined)).mockResolvedValueOnce(respond(200, { ok: true }))
+    const api = new ApiClient('https://api.test', () => Promise.resolve('tok'), fetch)
+    const err = await api.put('/v1/staff/members/s2/roles', {}).catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(UncertainError)
+    expect(await (err as UncertainError).retry()).toEqual({ ok: true })
+    const keys = fetch.mock.calls.map(([, init]) => new Headers(init?.headers).get('Idempotency-Key'))
+    expect(new Set(keys).size).toBe(1)
+  })
+
+  it('reports a non-JSON error page (a proxy) as a problem with the status, not as a parse error', async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(new Response('<html>Bad gateway</html>', { status: 502, headers: { 'content-type': 'text/html' } }))
+    const api = new ApiClient('https://api.test', () => Promise.resolve('tok'), fetch)
+    const err = await api.get('/v1/staff/alerts').catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(ProblemError)
+    expect((err as ProblemError).slug).toBe('http-502')
+  })
+
+  it('reports an unreachable server on a read as a network error, and a cancelled read as cancelled', async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>().mockRejectedValue(new TypeError('network'))
+    const api = new ApiClient('https://api.test', () => Promise.resolve('tok'), fetch)
+    await expect(api.get('/v1/staff/alerts')).rejects.toBeInstanceOf(NetworkError)
+    const ac = new AbortController()
+    ac.abort()
+    const err = await api.get('/v1/staff/alerts', undefined, { signal: ac.signal }).catch((e: unknown) => e)
+    expect(err).not.toBeInstanceOf(NetworkError)
   })
 })

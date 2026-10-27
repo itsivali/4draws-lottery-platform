@@ -7,6 +7,8 @@ export interface ActionSpec {
   body: ReactNode
   fields?: ConfirmField[]
   initial?: Record<string, string>
+  /** a check across fields (e.g. at least one role); its message blocks the confirm button */
+  validate?: (values: Record<string, string>) => string | null
   confirmLabel: string
   danger?: boolean
   success: string
@@ -26,6 +28,7 @@ export function useConfirmedAction(reload: () => void) {
         title={spec?.title ?? ''}
         body={spec?.body}
         {...(spec?.fields ? { fields: spec.fields } : {})}
+        {...(spec?.validate ? { validate: spec.validate } : {})}
         initial={spec?.initial}
         confirmLabel={spec?.confirmLabel ?? 'Confirm'}
         danger={spec?.danger ?? false}

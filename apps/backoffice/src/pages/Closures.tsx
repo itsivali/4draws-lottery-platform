@@ -13,7 +13,7 @@ import { Button } from '@/components/ui/button'
 
 export function ClosuresPage() {
   const { api, me } = useSession()
-  const load = useLoad(() => api.get<{ closures: Closure[] }>('/v1/staff/closures'))
+  const load = useLoad((signal) => api.get<{ closures: Closure[] }>('/v1/staff/closures', undefined, { signal }))
   const { ask, busy, view } = useConfirmedAction(load.reload)
   const support = can(me.roles, 'support')
 

@@ -15,7 +15,7 @@ import { Button } from '@/components/ui/button'
 
 export function TaxPage() {
   const { api, me } = useSession()
-  const load = useLoad(() => api.get<{ batches: Batch[] }>('/v1/staff/tax/batches'))
+  const load = useLoad((signal) => api.get<{ batches: Batch[] }>('/v1/staff/tax/batches', undefined, { signal }))
   const { ask, busy, view } = useConfirmedAction(load.reload)
   const officer = can(me.roles, 'tax_officer')
   const [downloading, setDownloading] = useState<number | null>(null)
@@ -24,7 +24,11 @@ export function TaxPage() {
     setDownloading(b.batch_no)
     setDownloadError(null)
     try {
-      const { blob } = await api.download(`/v1/staff/tax/batches/${b.batch_no}/file`)
+      const { blob, sha256 } = await api.download(`/v1/staff/tax/batches/${b.batch_no}/file`)
+      if (sha256 && sha256 !== b.file_sha256) {
+        setDownloadError(`The file of batch #${b.batch_no} did not match its recorded hash; it was not saved. Try again.`)
+        return
+      }
       const a = document.createElement('a')
       a.href = URL.createObjectURL(blob)
       a.download = `kra-batch-${b.batch_no}.csv`
@@ -56,7 +60,7 @@ export function TaxPage() {
             <Button type="button" size="sm" variant="outline" disabled={downloading === b.batch_no} onClick={() => void download(b)}>
               <Download aria-hidden="true" />{downloading === b.batch_no ? 'Downloading…' : 'Download file'}
             </Button>
-            {officer && !b.remitted_at ? (
+            {officer && !b.remitted_at && b.prepared_by !== me.id ? (
               <Button type="button" size="sm" disabled={busy} onClick={() => {
                 ask({ title: `Record remittance of batch #${b.batch_no}?`, body: <p>Must be recorded by someone other than who prepared it. The amount must equal the batch’s tax, {kes(b.tax_kes)}.</p>,
                   fields: [{ name: 'prn', label: 'KRA payment registration number', required: true }, { name: 'amount', label: 'Amount remitted (KES)', type: 'number', required: true }],
@@ -69,7 +73,7 @@ export function TaxPage() {
       },
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  ], [api, ask, busy, officer, downloading])
+  ], [api, ask, busy, officer, downloading, me.id])
 
   return (
     <section>

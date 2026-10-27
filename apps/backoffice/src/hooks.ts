@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useEffectEvent, useState } from 'react'
 import { ProblemError, UncertainError } from './api'
 
 export interface Load<T> {
@@ -8,21 +8,37 @@ export interface Load<T> {
   reload: () => void
 }
 
-/** Loads server data; reload() asks again. Never shows stale data as fresh: errors stay visible until it succeeds. */
-export function useLoad<T>(fn: () => Promise<T>, deps: unknown[] = []): Load<T> {
-  const [state, setState] = useState<{ data?: T; error?: unknown; loading: boolean }>({ loading: true })
+interface Answer<T> { id: string; key: string; data?: T; error?: unknown }
+
+/**
+ * Loads server data; reload() asks again. A reload keeps the last data up while it runs (and keeps it, with the error,
+ * if it fails). A change of deps is a different question: the old answer is dropped, so stale rows are never shown
+ * under new filters. The request in flight is cancelled when the question changes or the component unmounts.
+ */
+export function useLoad<T>(fn: (signal: AbortSignal) => Promise<T>, deps: unknown[] = []): Load<T> {
   const [tick, setTick] = useState(0)
+  const key = JSON.stringify(deps)
+  const id = `${tick}:${key}` // which question the answer below belongs to
+  const [answer, setAnswer] = useState<Answer<T> | null>(null)
+  const load = useEffectEvent((signal: AbortSignal) => fn(signal))
   useEffect(() => {
-    let live = true
-    setState((s) => ({ ...s, loading: true }))
-    fn().then(
-      (data) => { if (live) setState({ data, loading: false }) },
-      (error: unknown) => { if (live) setState((s) => ({ ...s, error, loading: false })) },
+    const ac = new AbortController()
+    load(ac.signal).then(
+      (data) => { if (!ac.signal.aborted) setAnswer({ id, key, data }) },
+      (error: unknown) => {
+        // a failed reload keeps the data it could not refresh; a failed new question has none
+        if (!ac.signal.aborted) setAnswer((a) => ({ id, key, error, ...(a?.key === key ? { data: a.data } : {}) }))
+      },
     )
-    return () => { live = false }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tick, ...deps])
-  return { data: state.data, error: state.error, loading: state.loading, reload: useCallback(() => { setTick((t) => t + 1) }, []) }
+    return () => { ac.abort() }
+  }, [id, key])
+  const current = answer?.key === key ? answer : null
+  return {
+    data: current?.data,
+    error: current?.error,
+    loading: answer?.id !== id,
+    reload: useCallback(() => { setTick((t) => t + 1) }, []),
+  }
 }
 
 export type ActionState =
