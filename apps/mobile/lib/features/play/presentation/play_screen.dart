@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../app/theme/tokens.dart';
 import '../../../core/formatting/money.dart';
+import '../../../core/formatting/phone.dart';
 import '../../../core/platform/preferences.dart';
 import '../../../core/widgets/announce.dart';
 import '../../../core/widgets/app_card.dart';
@@ -20,8 +21,11 @@ import '../../../core/widgets/skeleton.dart';
 import '../../../core/widgets/status_pill.dart';
 import '../../account/application/account_providers.dart';
 import '../../account/domain/account_models.dart';
+import '../../wallet/application/money_flows.dart';
 import '../../wallet/application/wallet_providers.dart';
 import '../../wallet/domain/wallet_models.dart';
+import '../../wallet/presentation/money_flow_view.dart';
+import '../application/pay_and_play.dart';
 import '../application/play_controller.dart';
 import '../application/play_providers.dart';
 import '../application/spin_haptics.dart';
@@ -54,6 +58,25 @@ class _PlayScreenState extends ConsumerState<PlayScreen> {
     ),
     PlayStage.refused || PlayStage.uncertain => WheelSpin(spinId: f.key, abort: true),
   };
+
+  /// The wallet cannot cover the price: the price is charged to the player's M-Pesa and the wheel spins once paid.
+  Future<void> _payAndPlay(Today today, Account account) async {
+    final ok = await confirmAction(
+      context,
+      title: 'Pay ${formatKes(today.priceKes)} with M-Pesa and spin?',
+      facts: [
+        ('Price', formatKes(today.priceKes)),
+        ('Charged to', formatMsisdn(account.msisdn)),
+        ('Plays left today after this', '${today.playsLeft - 1} of ${today.plays + today.playsLeft}'),
+        ('What you get', 'One spin. A lucky slot doubles today’s draw chances.'),
+      ],
+      note:
+          'An M-Pesa prompt comes to your phone; enter your PIN there. The wheel spins the moment M-Pesa confirms the '
+          'payment. No cash is paid from the wheel. Prizes come only from the draws.',
+      confirmLabel: 'Pay ${formatKes(today.priceKes)} and spin',
+    );
+    if (ok && mounted) ref.read(payAndPlayProvider.notifier).start(today.priceKes);
+  }
 
   Future<void> _play(Today today, WalletStatement wallet) async {
     final ok = await confirmAction(
@@ -111,6 +134,7 @@ class _PlayScreenState extends ConsumerState<PlayScreen> {
       account: account,
       wallet: wallet,
       onPlay: _play,
+      onPayAndPlay: _payAndPlay,
       onRetry: () {
         ref
           ..invalidate(todayProvider)
@@ -174,7 +198,8 @@ class _PlayScreenState extends ConsumerState<PlayScreen> {
   }
 }
 
-/// The wheel's stage: the app's second hero surface, deep emerald so the wheel's rim and lucky star read as metal.
+/// The wheel's stage: the app's second hero surface, the dusk end of the sunset, against which the segments, the rim
+/// and the lucky star all stand out.
 class _Stage extends StatelessWidget {
   const _Stage({required this.child});
 
@@ -182,7 +207,7 @@ class _Stage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) =>
-      HeroCard(ornament: false, radius: Radii.xxl, padding: const EdgeInsets.all(Space.lg), child: child);
+      HeroCard(ornament: false, stage: true, radius: Radii.xxl, padding: const EdgeInsets.all(Space.lg), child: child);
 }
 
 class _PlayPanel extends ConsumerWidget {
@@ -192,6 +217,7 @@ class _PlayPanel extends ConsumerWidget {
     required this.account,
     required this.wallet,
     required this.onPlay,
+    required this.onPayAndPlay,
     required this.onRetry,
   });
 
@@ -200,6 +226,7 @@ class _PlayPanel extends ConsumerWidget {
   final AsyncValue<Account> account;
   final AsyncValue<WalletStatement> wallet;
   final Future<void> Function(Today, WalletStatement) onPlay;
+  final Future<void> Function(Today, Account) onPayAndPlay;
   final VoidCallback onRetry;
 
   @override
@@ -233,6 +260,11 @@ class _PlayPanel extends ConsumerWidget {
       wallet: WalletStatement(balanceKes: balance, debtKes: w.debtKes, transactions: const []),
     );
     final text = Theme.of(context).textTheme;
+    // only the balance stands in the way: the price can be charged to the player's M-Pesa instead
+    final payInstead = block?.reason == PlayBlockReason.lowBalance;
+    final paying = ref.watch(payAndPlayProvider);
+    final topUp = ref.watch(topUpFlowProvider);
+    final busy = flow.busy || paying == PayAndPlayStage.paying;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -247,24 +279,58 @@ class _PlayPanel extends ConsumerWidget {
           onSetAside: ctl.setAside,
         ),
         if (flow.stage != PlayStage.idle) const SizedBox(height: Space.lg),
-        if (block != null && !flow.busy) ...[
+        if (paying != PayAndPlayStage.idle) ...[
+          AppCard(
+            child: SettlementStatusView<TopUp>(
+              flow: topUp.flow,
+              pendingText: 'Approve the M-Pesa prompt on your phone. The wheel spins once M-Pesa confirms it.',
+              describe: (t) => switch (t.status) {
+                TopUpStatus.credited => (StatusTone.success, 'Paid', 'M-Pesa confirmed it. Spinning.'),
+                TopUpStatus.failed => (StatusTone.error, 'Not paid', 'M-Pesa did not pay it. Nothing was played.'),
+                TopUpStatus.reversed => (StatusTone.error, 'Reversed', 'M-Pesa took it back. Nothing was played.'),
+                TopUpStatus.pending => (StatusTone.pending, 'Waiting', ''),
+              },
+              onDone: ref.read(payAndPlayProvider.notifier).dismiss,
+            ),
+          ),
+          const SizedBox(height: Space.lg),
+        ],
+        if (block != null && !busy && !payInstead) ...[
           _BlockNotice(block: block, priceKes: day.priceKes, dailyCap: cap),
           const SizedBox(height: Space.lg),
         ],
         PressScale(
-          enabled: block == null && !flow.busy,
+          enabled: (block == null || payInstead) && !busy,
           child: BusyButton(
-            label: 'Play for ${formatKes(day.priceKes)}',
-            icon: Icons.donut_large_rounded,
-            busy: flow.stage == PlayStage.submitting,
-            semanticsLabel: 'Play for ${formatKes(day.priceKes)}. ${day.playsLeft} of $cap plays left today.',
-            onPressed: block != null || flow.busy
+            label: payInstead
+                ? 'Pay ${formatKes(day.priceKes)} with M-Pesa and spin'
+                : 'Play for ${formatKes(day.priceKes)}',
+            icon: payInstead ? Icons.phone_iphone_rounded : Icons.donut_large_rounded,
+            busy: flow.stage == PlayStage.submitting || paying == PayAndPlayStage.paying,
+            semanticsLabel: payInstead
+                ? 'Pay ${formatKes(day.priceKes)} with M-Pesa and spin. ${day.playsLeft} of $cap plays left today.'
+                : 'Play for ${formatKes(day.priceKes)}. ${day.playsLeft} of $cap plays left today.',
+            onPressed: busy || (block != null && !payInstead)
                 ? null
+                : payInstead
+                ? () => onPayAndPlay(day, a)
                 : () => onPlay(day, WalletStatement(balanceKes: balance, debtKes: w.debtKes, transactions: const [])),
           ),
         ),
         const SizedBox(height: Space.sm),
-        Text('Balance ${formatKes(balance)}', style: text.bodySmall, textAlign: TextAlign.center),
+        Text(
+          payInstead
+              ? 'Balance ${formatKes(balance)} · the price is charged to your M-Pesa; your balance stays in your wallet'
+              : 'Balance ${formatKes(balance)}',
+          style: text.bodySmall,
+          textAlign: TextAlign.center,
+        ),
+        if (payInstead && !busy)
+          TextButton(
+            style: TextButton.styleFrom(foregroundColor: context.colors.inkMuted),
+            onPressed: () => context.go('/wallet/top-up'),
+            child: const Text('Top up a larger amount instead'),
+          ),
         const SizedBox(height: Space.xl),
         const _WhatAPlayDoes(),
         if (day.tickets.isNotEmpty) ...[

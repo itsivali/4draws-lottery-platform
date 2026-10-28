@@ -475,7 +475,7 @@ func TestWithdrawal_LargeAmountsWaitForAnOperator(t *testing.T) {
 	if st, _, reason := e.state(t, rejected.ID); st != "failed" || reason != "rejected: unusual activity" {
 		t.Fatalf("rejected: %s %s", st, reason)
 	}
-	held2, _ := e.svc.InState(ctx, "held", 10)
+	held2, _, _ := e.svc.InState(ctx, "held", 10, "")
 	if len(held2) != 0 {
 		t.Fatalf("still held %+v", held2)
 	}
@@ -491,7 +491,7 @@ func TestWithdrawal_OperatorSettlesAManualPayoutFromTheStatement(t *testing.T) {
 	if st := e.run(t, p.ID); st != "manual" {
 		t.Fatalf("state %s", st)
 	}
-	if list, _ := e.svc.InState(ctx, "manual", 10); len(list) != 1 || list[0].ID != p.ID {
+	if list, _, _ := e.svc.InState(ctx, "manual", 10, ""); len(list) != 1 || list[0].ID != p.ID {
 		t.Fatalf("manual list %+v", list)
 	}
 	if _, err := e.svc.Settle(ctx, p.ID, "operator:alice", true, "", ""); !errors.Is(err, payouts.ErrReceiptRequired) {

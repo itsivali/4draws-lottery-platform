@@ -9,6 +9,7 @@ import '../features/play/application/play_controller.dart';
 import '../features/play/application/play_providers.dart';
 import '../features/wallet/application/money_flows.dart';
 import '../features/wallet/application/wallet_providers.dart';
+import 'connectivity_strip.dart';
 import 'providers.dart';
 import 'router.dart';
 import 'theme/theme.dart';
@@ -61,12 +62,7 @@ class _LotteryAppState extends ConsumerState<LotteryApp> with WidgetsBindingObse
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state != AppLifecycleState.resumed || _session.status.value != SessionStatus.signedIn) return;
-    ref
-      ..invalidate(walletStatementProvider)
-      ..invalidate(topUpsProvider)
-      ..invalidate(payoutsProvider)
-      ..invalidate(accountProvider)
-      ..invalidate(todayProvider);
+    refreshAll(ref);
     if (ref.exists(topUpFlowProvider)) ref.read(topUpFlowProvider).flow.resume();
     if (ref.exists(withdrawFlowProvider)) ref.read(withdrawFlowProvider).flow.resume();
   }
@@ -82,8 +78,7 @@ class _LotteryAppState extends ConsumerState<LotteryApp> with WidgetsBindingObse
   Widget build(BuildContext context) => MaterialApp.router(
     title: 'Bahati',
     debugShowCheckedModeBanner: false,
-    theme: buildTheme(Brightness.light),
-    darkTheme: buildTheme(Brightness.dark),
+    theme: buildTheme(),
     routerConfig: ref.watch(routerProvider),
   );
 }
@@ -94,7 +89,7 @@ class ConfigErrorApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => MaterialApp(
-    theme: buildTheme(Brightness.light),
+    theme: buildTheme(),
     home: const Scaffold(
       body: Center(
         child: Padding(

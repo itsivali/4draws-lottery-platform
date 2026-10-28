@@ -46,7 +46,7 @@ class ListRow extends StatelessWidget {
                 width: 40,
                 height: 40,
                 decoration: BoxDecoration(
-                  color: (iconColor ?? c.primary).withValues(alpha: c.isDark ? 0.18 : 0.10),
+                  color: (iconColor ?? c.primary).withValues(alpha: 0.10),
                   shape: BoxShape.circle,
                 ),
                 child: Icon(icon, size: 20, color: iconColor ?? c.primary),

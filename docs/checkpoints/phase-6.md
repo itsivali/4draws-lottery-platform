@@ -125,4 +125,4 @@ The screens over slice 3, as CI already expects (`npm run lint`, `typecheck`, `t
 - **Privacy:** privacy policy, data-safety form (Play) and privacy labels (Apple); data retention for closed accounts.
 - **Web:** set `CORS_ALLOWED_ORIGINS` on Render to the web app's origin; host the web build (Render static site).
 - **Staff sign-in in production:** a Keycloak (or equivalent) for staff, with MFA, an administrator who grants roles,
-  and at least two `draw_official` and two `tax_officer` people. Not on Render's free plan today.
+  and at least two staff members for the draws and the tax batches (ADR 0019: two roles). Not on Render's free plan today.

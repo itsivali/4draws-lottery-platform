@@ -60,50 +60,55 @@ type staffRoute struct {
 }
 
 var staffRoutes = []staffRoute{
-	{http.MethodGet, "/v1/staff/kyc/pending", staff.KYCReviewer},
-	{http.MethodGet, "/v1/staff/kyc/queue", staff.KYCReviewer},
+	{http.MethodGet, "/v1/staff/kyc/pending", staff.Staff},
+	{http.MethodGet, "/v1/staff/kyc/queue", staff.Staff},
 	{http.MethodGet, "/v1/staff/members", staff.Admin},
 	{http.MethodPost, "/v1/staff/members", staff.Admin},
 	{http.MethodPut, "/v1/staff/members/0192f000-0000-7000-8000-000000000001/roles", staff.Admin},
 	{http.MethodPost, "/v1/staff/members/0192f000-0000-7000-8000-000000000001/disable", staff.Admin},
 	{http.MethodPost, "/v1/staff/members/0192f000-0000-7000-8000-000000000001/enable", staff.Admin},
-	{http.MethodGet, "/v1/staff/finance", staff.Finance},
-	{http.MethodPost, "/v1/staff/kyc/0192f000-0000-7000-8000-000000000001/approve", staff.KYCReviewer},
-	{http.MethodPost, "/v1/staff/kyc/0192f000-0000-7000-8000-000000000001/reject", staff.KYCReviewer},
-	{http.MethodPost, "/v1/staff/payments/reconcile", staff.PaymentsOperator},
-	{http.MethodPost, "/v1/staff/payments/reversals", staff.PaymentsOperator},
-	{http.MethodPost, "/v1/staff/payments/0192f000-0000-7000-8000-000000000001/resolve", staff.PaymentsOperator},
-	{http.MethodPost, "/v1/staff/suspense/RCPT1/credit", staff.PaymentsOperator},
-	{http.MethodPost, "/v1/staff/suspense/RCPT1/refund", staff.PaymentsOperator},
-	{http.MethodPost, "/v1/staff/paybill/RCPT1/recheck", staff.PaymentsOperator},
-	{http.MethodGet, "/v1/staff/draws", staff.DrawOfficial},
-	{http.MethodGet, "/v1/staff/draws/overdue", staff.DrawOfficial},
-	{http.MethodPost, "/v1/staff/draws/reconcile", staff.DrawOfficial},
-	{http.MethodPost, "/v1/staff/draws/0192f000-0000-7000-8000-000000000001/sign", staff.DrawOfficial},
-	{http.MethodPost, "/v1/staff/draws/0192f000-0000-7000-8000-000000000001/approve", staff.DrawOfficial},
-	{http.MethodPost, "/v1/staff/draws/0192f000-0000-7000-8000-000000000001/void", staff.DrawOfficial},
-	{http.MethodPost, "/v1/staff/game/reconcile", staff.Auditor},
-	{http.MethodGet, "/v1/staff/payouts", staff.PayoutOperator},
-	{http.MethodPost, "/v1/staff/payouts/reconcile", staff.PayoutOperator},
-	{http.MethodPost, "/v1/staff/payouts/0192f000-0000-7000-8000-000000000001/approve", staff.PayoutOperator},
-	{http.MethodPost, "/v1/staff/payouts/0192f000-0000-7000-8000-000000000001/reject", staff.PayoutOperator},
-	{http.MethodPost, "/v1/staff/payouts/0192f000-0000-7000-8000-000000000001/settle", staff.PayoutOperator},
-	{http.MethodPost, "/v1/staff/prizes/0192f000-0000-7000-8000-000000000001/retry", staff.PayoutOperator},
-	{http.MethodGet, "/v1/staff/tax/batches", staff.TaxOfficer},
-	{http.MethodPost, "/v1/staff/tax/batches", staff.TaxOfficer},
-	{http.MethodGet, "/v1/staff/tax/batches/1/file", staff.TaxOfficer},
-	{http.MethodPost, "/v1/staff/tax/batches/1/remit", staff.TaxOfficer},
-	{http.MethodGet, "/v1/staff/alerts", staff.AlertsOperator},
-	{http.MethodPost, "/v1/staff/alerts/0192f000-0000-7000-8000-000000000001/acknowledge", staff.AlertsOperator},
-	{http.MethodGet, "/v1/staff/closures", staff.Support},
-	{http.MethodPost, "/v1/staff/closures/0192f000-0000-7000-8000-000000000001/close", staff.Support},
+	{http.MethodPost, "/v1/staff/members/0192f000-0000-7000-8000-000000000001/password", staff.Admin},
+	{http.MethodGet, "/v1/staff/metrics", staff.Admin},
+	{http.MethodGet, "/v1/staff/finance", staff.Staff},
+	{http.MethodPost, "/v1/staff/kyc/0192f000-0000-7000-8000-000000000001/approve", staff.Staff},
+	{http.MethodPost, "/v1/staff/kyc/0192f000-0000-7000-8000-000000000001/reject", staff.Staff},
+	{http.MethodPost, "/v1/staff/payments/reconcile", staff.Staff},
+	{http.MethodPost, "/v1/staff/payments/reversals", staff.Staff},
+	{http.MethodPost, "/v1/staff/payments/0192f000-0000-7000-8000-000000000001/resolve", staff.Staff},
+	{http.MethodPost, "/v1/staff/suspense/RCPT1/credit", staff.Staff},
+	{http.MethodPost, "/v1/staff/suspense/RCPT1/refund", staff.Staff},
+	{http.MethodPost, "/v1/staff/paybill/RCPT1/recheck", staff.Staff},
+	{http.MethodGet, "/v1/staff/draws", staff.Staff},
+	{http.MethodGet, "/v1/staff/draws/overdue", staff.Staff},
+	{http.MethodPost, "/v1/staff/draws/reconcile", staff.Staff},
+	{http.MethodPost, "/v1/staff/draws/0192f000-0000-7000-8000-000000000001/sign", staff.Staff},
+	{http.MethodPost, "/v1/staff/draws/0192f000-0000-7000-8000-000000000001/approve", staff.Staff},
+	{http.MethodPost, "/v1/staff/draws/0192f000-0000-7000-8000-000000000001/void", staff.Staff},
+	{http.MethodPost, "/v1/staff/game/reconcile", staff.Staff},
+	{http.MethodGet, "/v1/staff/payouts", staff.Staff},
+	{http.MethodPost, "/v1/staff/payouts/reconcile", staff.Staff},
+	{http.MethodPost, "/v1/staff/payouts/0192f000-0000-7000-8000-000000000001/approve", staff.Staff},
+	{http.MethodPost, "/v1/staff/payouts/0192f000-0000-7000-8000-000000000001/reject", staff.Staff},
+	{http.MethodPost, "/v1/staff/payouts/0192f000-0000-7000-8000-000000000001/settle", staff.Staff},
+	{http.MethodPost, "/v1/staff/prizes/0192f000-0000-7000-8000-000000000001/retry", staff.Staff},
+	{http.MethodGet, "/v1/staff/tax/batches", staff.Staff},
+	{http.MethodPost, "/v1/staff/tax/batches", staff.Staff},
+	{http.MethodGet, "/v1/staff/tax/batches/1/file", staff.Staff},
+	{http.MethodPost, "/v1/staff/tax/batches/1/remit", staff.Staff},
+	{http.MethodGet, "/v1/staff/alerts", staff.Staff},
+	{http.MethodPost, "/v1/staff/alerts/0192f000-0000-7000-8000-000000000001/acknowledge", staff.Staff},
+	{http.MethodGet, "/v1/staff/closures", staff.Staff},
+	{http.MethodPost, "/v1/staff/closures/0192f000-0000-7000-8000-000000000001/close", staff.Staff},
+	{http.MethodGet, "/v1/staff/players", staff.Staff},
+	{http.MethodPost, "/v1/staff/players/0192f000-0000-7000-8000-000000000001/suspend", staff.Staff},
+	{http.MethodPost, "/v1/staff/players/0192f000-0000-7000-8000-000000000001/reinstate", staff.Staff},
 }
 
 func TestStaffAPI_EveryRouteNeedsAStaffTokenWithTheRightRole(t *testing.T) {
 	e := setup(t)
 	player := e.signIn(t)
 	noRole := e.member()
-	wrong := e.member(staff.Support)
+	staffOnly := e.member(staff.Staff)
 	for _, rt := range staffRoutes {
 		for name, tok := range map[string]string{"no token": "", "player token": player.access, "garbage": "x"} {
 			if r := e.do(t, rt.method, rt.path, tok, `{}`); r.Code != http.StatusUnauthorized {
@@ -113,13 +118,16 @@ func TestStaffAPI_EveryRouteNeedsAStaffTokenWithTheRightRole(t *testing.T) {
 		if r := e.do(t, rt.method, rt.path, noRole, `{}`); r.Code != http.StatusForbidden {
 			t.Errorf("%s %s without a role = %d, want 403", rt.method, rt.path, r.Code)
 		}
-		if rt.role != staff.Support {
-			if r := e.do(t, rt.method, rt.path, wrong, `{}`); r.Code != http.StatusForbidden || !hasType(r, "forbidden") {
-				t.Errorf("%s %s with the wrong role = %d, want 403", rt.method, rt.path, r.Code)
+		if rt.role == staff.Admin {
+			if r := e.do(t, rt.method, rt.path, staffOnly, `{}`); r.Code != http.StatusForbidden || !hasType(r, "forbidden") {
+				t.Errorf("%s %s as staff = %d, want 403 (admins only)", rt.method, rt.path, r.Code)
 			}
 		}
-		if r := e.do(t, rt.method, rt.path, e.member(rt.role), `{}`); r.Code == http.StatusUnauthorized || r.Code == http.StatusForbidden {
-			t.Errorf("%s %s refused its own role: %d %s", rt.method, rt.path, r.Code, r.Raw)
+		// the role itself, and an admin (who may do everything staff do)
+		for name, tok := range map[string]string{"its role": e.member(rt.role), "an admin": e.member(staff.Admin)} {
+			if r := e.do(t, rt.method, rt.path, tok, `{}`); r.Code == http.StatusUnauthorized || r.Code == http.StatusForbidden {
+				t.Errorf("%s %s refused %s: %d %s", rt.method, rt.path, name, r.Code, r.Raw)
+			}
 		}
 		if rt.method != http.MethodGet {
 			if r := e.doKey(t, rt.method, rt.path, e.member(rt.role), "", `{}`); r.Code != http.StatusBadRequest {
@@ -128,22 +136,22 @@ func TestStaffAPI_EveryRouteNeedsAStaffTokenWithTheRightRole(t *testing.T) {
 		}
 	}
 	// staff tokens never work on player routes
-	if r := e.do(t, http.MethodGet, "/v1/account", e.member(staff.Auditor), nil); r.Code != http.StatusUnauthorized {
+	if r := e.do(t, http.MethodGet, "/v1/account", e.member(staff.Staff), nil); r.Code != http.StatusUnauthorized {
 		t.Fatalf("staff token on a player route: %d", r.Code)
 	}
 }
 
 func TestStaffAPI_MeShowsRoles(t *testing.T) {
 	e := setup(t)
-	r := e.do(t, http.MethodGet, "/v1/staff/me", e.member(staff.KYCReviewer, staff.Auditor), nil)
-	if r.Code != http.StatusOK || len(r.Body["roles"].([]any)) != 2 {
+	r := e.do(t, http.MethodGet, "/v1/staff/me", e.member(staff.Staff), nil)
+	if r.Code != http.StatusOK || len(r.Body["roles"].([]any)) != 1 || r.Body["roles"].([]any)[0] != "staff" || r.Body["must_change_password"] != false {
 		t.Fatalf("me: %d %s", r.Code, r.Raw)
 	}
 }
 
 func TestStaffAPI_KYCQueueCountsWaitingSubmissionsWithoutUnmaskingThem(t *testing.T) {
 	e := setup(t)
-	reviewer := e.member(staff.KYCReviewer)
+	reviewer := e.member(staff.Staff)
 	if r := e.do(t, http.MethodGet, "/v1/staff/kyc/queue", reviewer, nil); r.Code != http.StatusOK || r.Body["waiting"] != float64(0) ||
 		r.Body["oldest_submitted_at"] != nil {
 		t.Fatalf("empty queue: %d %s", r.Code, r.Raw)
@@ -176,7 +184,7 @@ func TestStaffAPI_KYCReviewShowsTheSubmissionAndRecordsTheDecision(t *testing.T)
 		t.Fatalf("submit: %d %s", r.Code, r.Raw)
 	}
 	e.drainKYC(t)
-	reviewer := e.member(staff.KYCReviewer)
+	reviewer := e.member(staff.Staff)
 	r := e.do(t, http.MethodGet, "/v1/staff/kyc/pending", reviewer, nil)
 	subs, _ := r.Body["submissions"].([]any)
 	if r.Code != http.StatusOK || len(subs) != 1 || subs[0].(map[string]any)["full_name"] != "Amina Otieno" {
@@ -261,7 +269,7 @@ func TestStaffAPI_ADrawIsSignedOnlyByTwoDifferentOfficials(t *testing.T) {
 	}
 	id := e.freezeDaily(t)
 	e.clk.Set(time.Date(2026, 10, 22, 0, 30, 0, 0, clock.Nairobi).UTC())
-	alice, bob := e.member(staff.DrawOfficial), e.member(staff.DrawOfficial)
+	alice, bob := e.member(staff.Staff), e.member(staff.Staff)
 	r := e.do(t, http.MethodPost, "/v1/staff/draws/"+id+"/sign", alice, map[string]any{})
 	if r.Code != http.StatusOK || r.Body["status"] != "frozen" {
 		t.Fatalf("first signature: %d %s", r.Code, r.Raw)
@@ -281,7 +289,7 @@ func TestStaffAPI_AnAccountClosesOnlyOnceItsMoneyIsOut(t *testing.T) {
 	e := setup(t)
 	s := e.signIn(t)
 	user := e.userID(t, s)
-	support := e.member(staff.Support)
+	support := e.member(staff.Staff)
 	if r := e.do(t, http.MethodPost, "/v1/staff/closures/"+user+"/close", support, map[string]any{}); r.Code != http.StatusNotFound {
 		t.Fatalf("close without a request: %d %s", r.Code, r.Raw)
 	}
@@ -312,7 +320,7 @@ func TestStaffAPI_AnAccountClosesOnlyOnceItsMoneyIsOut(t *testing.T) {
 	for _, st := range []string{"sending", "sent", "manual"} {
 		e.ownerExec(t, `UPDATE payouts.payouts SET status = $2 WHERE id = $1`, payout, st)
 	}
-	op := e.member(staff.PayoutOperator)
+	op := e.member(staff.Staff)
 	if r := e.do(t, http.MethodPost, "/v1/staff/payouts/"+payout+"/settle", op, map[string]any{"paid": true, "receipt": "SGH0000001"}); r.Code != http.StatusOK || r.Body["status"] != "succeeded" && r.Body["status"] != "paid" {
 		t.Fatalf("settle: %d %s", r.Code, r.Raw)
 	}
@@ -352,11 +360,11 @@ func TestStaffAPI_AnAccountWithAStakeInADrawIsNotClosedUntilTheDrawIsSettled(t *
 	for _, st := range []string{"sending", "sent", "manual"} {
 		e.ownerExec(t, `UPDATE payouts.payouts SET status = $2 WHERE id = $1`, w.Body["id"], st)
 	}
-	if r := e.do(t, http.MethodPost, "/v1/staff/payouts/"+w.Body["id"].(string)+"/settle", e.member(staff.PayoutOperator), map[string]any{"paid": true, "receipt": "SGH0000002"}); r.Code != http.StatusOK {
+	if r := e.do(t, http.MethodPost, "/v1/staff/payouts/"+w.Body["id"].(string)+"/settle", e.member(staff.Staff), map[string]any{"paid": true, "receipt": "SGH0000002"}); r.Code != http.StatusOK {
 		t.Fatalf("settle: %d %s", r.Code, r.Raw)
 	}
 	e.do(t, http.MethodPost, "/v1/account/closure", s.access, nil)
-	r := e.do(t, http.MethodPost, "/v1/staff/closures/"+user+"/close", e.member(staff.Support), map[string]any{})
+	r := e.do(t, http.MethodPost, "/v1/staff/closures/"+user+"/close", e.member(staff.Staff), map[string]any{})
 	if r.Code != http.StatusConflict || !hasType(r, "closure-blocked") || !strings.Contains(r.Raw, "draw") {
 		t.Fatalf("closed with chances still in draws: %d %s", r.Code, r.Raw)
 	}
@@ -368,7 +376,7 @@ func TestStaffAPI_AnAccountThatOwesMoneyIsNotClosedSilently(t *testing.T) {
 	user := e.userID(t, s)
 	e.do(t, http.MethodPost, "/v1/account/closure", s.access, nil)
 	e.debtFor(t, user, 300)
-	r := e.do(t, http.MethodPost, "/v1/staff/closures/"+user+"/close", e.member(staff.Support), map[string]any{})
+	r := e.do(t, http.MethodPost, "/v1/staff/closures/"+user+"/close", e.member(staff.Staff), map[string]any{})
 	if r.Code != http.StatusConflict || !strings.Contains(r.Raw, "owes") {
 		t.Fatalf("closed an account in debt: %d %s", r.Code, r.Raw)
 	}
@@ -393,5 +401,117 @@ func (e *env) debtFor(t *testing.T, user string, gross int64) {
 	})
 	if err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestStaffAPI_PayoutsPageOldestFirstWithACursor(t *testing.T) {
+	e := setup(t)
+	s := e.signIn(t)
+	e.canPlay(t, s, 1000) // 950 in the wallet, phone proved, ID verified
+	var ids []string
+	for i := range 3 { // the day's three withdrawals, all waiting for M-Pesa
+		r := e.doKey(t, http.MethodPost, "/v1/payouts/withdrawals", s.access, fmt.Sprintf("w-%d", i), map[string]any{"amount_kes": 100})
+		if r.Code != http.StatusCreated {
+			t.Fatalf("withdraw %d: %d %s", i, r.Code, r.Raw)
+		}
+		ids = append(ids, r.Body["id"].(string))
+	}
+	op := e.member(staff.Staff)
+	first := e.do(t, http.MethodGet, "/v1/staff/payouts?state=pending&limit=2", op, nil)
+	got := func(r resp) []string {
+		var out []string
+		for _, p := range r.Body["payouts"].([]any) {
+			out = append(out, p.(map[string]any)["id"].(string))
+		}
+		return out
+	}
+	if first.Code != http.StatusOK || fmt.Sprint(got(first)) != fmt.Sprint(ids[:2]) || first.Body["next_after"] != ids[1] {
+		t.Fatalf("first page: %d %s, want %v", first.Code, first.Raw, ids[:2])
+	}
+	second := e.do(t, http.MethodGet, "/v1/staff/payouts?state=pending&limit=2&after="+ids[1], op, nil)
+	if second.Code != http.StatusOK || fmt.Sprint(got(second)) != fmt.Sprint(ids[2:]) || second.Body["next_after"] != nil {
+		t.Fatalf("second page: %d %s, want %v", second.Code, second.Raw, ids[2:])
+	}
+	if r := e.do(t, http.MethodGet, "/v1/staff/payouts?state=pending", op, nil); r.Code != http.StatusOK || len(r.Body["payouts"].([]any)) != 3 || r.Body["next_after"] != nil {
+		t.Fatalf("one page: %d %s", r.Code, r.Raw)
+	}
+	for _, q := range []string{"after=not-a-uuid", "limit=0"} {
+		if r := e.do(t, http.MethodGet, "/v1/staff/payouts?"+q, op, nil); r.Code != http.StatusBadRequest {
+			t.Fatalf("%s: %d %s", q, r.Code, r.Raw)
+		}
+	}
+}
+
+func TestStaffAPI_PlayersAreListedSearchedAndSuspended(t *testing.T) {
+	e := setup(t)
+	a, b := e.signIn(t), e.signIn(t)
+	if r := e.do(t, http.MethodPost, "/v1/kyc", a.access, map[string]any{"national_id": "12345678", "full_name": "Amina Otieno", "date_of_birth": "1992-03-04"}); r.Code != http.StatusAccepted {
+		t.Fatalf("submit identity: %d %s", r.Code, r.Raw)
+	}
+	e.canPlay(t, a, 1000)
+	if r := e.doKey(t, http.MethodPost, "/v1/plays", a.access, "pl-1", nil); r.Code != http.StatusCreated {
+		t.Fatalf("play: %d %s", r.Code, r.Raw)
+	}
+	op := e.member(staff.Staff)
+	list := e.do(t, http.MethodGet, "/v1/staff/players?limit=1", op, nil)
+	players, _ := list.Body["players"].([]any)
+	if list.Code != http.StatusOK || len(players) != 1 || list.Body["next_before"] == nil {
+		t.Fatalf("first page: %d %s", list.Code, list.Raw)
+	}
+	newest := players[0].(map[string]any)
+	if newest["msisdn"] != b.msisdn || newest["status"] != "active" || newest["plays"] != float64(0) {
+		t.Fatalf("newest first: %v", newest)
+	}
+	second := e.do(t, http.MethodGet, "/v1/staff/players?limit=1&before="+list.Body["next_before"].(string), op, nil)
+	older := second.Body["players"].([]any)[0].(map[string]any)
+	if older["msisdn"] != a.msisdn || older["plays"] != float64(1) || older["balance_kes"] != float64(850) || older["kyc_status"] != "verified" || older["phone_verified"] != true {
+		t.Fatalf("second page: %v", older)
+	}
+	if older["full_name"] != "Amina Otieno" || older["national_id"] != "12345678" || newest["full_name"] != "" || newest["national_id"] != "" {
+		t.Fatalf("names and ids follow the identity submission: %v / %v", older, newest)
+	}
+	// a fragment of the number, as a player would read it out, and the local form of it
+	for _, q := range []string{a.msisdn[len(a.msisdn)-6:], "0" + a.msisdn[3:]} {
+		r := e.do(t, http.MethodGet, "/v1/staff/players?q="+q, op, nil)
+		if ps := r.Body["players"].([]any); r.Code != http.StatusOK || len(ps) != 1 || ps[0].(map[string]any)["user_id"] != older["user_id"] {
+			t.Fatalf("search %s: %d %s", q, r.Code, r.Raw)
+		}
+	}
+	if r := e.do(t, http.MethodGet, "/v1/staff/players?status=suspended", op, nil); len(r.Body["players"].([]any)) != 0 {
+		t.Fatalf("suspended before any suspension: %s", r.Raw)
+	}
+	for _, bad := range []string{"status=banned", "before=nope", "limit=0"} {
+		if r := e.do(t, http.MethodGet, "/v1/staff/players?"+bad, op, nil); r.Code != http.StatusBadRequest {
+			t.Fatalf("%s: %d %s", bad, r.Code, r.Raw)
+		}
+	}
+	user := older["user_id"].(string)
+	if r := e.do(t, http.MethodPost, "/v1/staff/players/"+user+"/suspend", op, map[string]any{"reason": "  "}); r.Code != http.StatusBadRequest || !hasType(r, "reason-required") {
+		t.Fatalf("no reason: %d %s", r.Code, r.Raw)
+	}
+	if r := e.do(t, http.MethodPost, "/v1/staff/players/"+user+"/suspend", op, map[string]any{"reason": "chargeback dispute"}); r.Code != http.StatusOK || r.Body["status"] != "suspended" {
+		t.Fatalf("suspend: %d %s", r.Code, r.Raw)
+	}
+	if r := e.do(t, http.MethodGet, "/v1/account", a.access, nil); r.Code != http.StatusUnauthorized {
+		t.Fatalf("the suspended player's session still works: %d", r.Code)
+	}
+	if r := e.do(t, http.MethodPost, "/v1/auth/login", "", map[string]any{"msisdn": a.msisdn, "password": strongPassword, "device": map[string]any{"fingerprint": a.fp, "platform": "android"}}); r.Code != http.StatusForbidden {
+		t.Fatalf("suspended sign-in: %d %s", r.Code, r.Raw)
+	}
+	if r := e.do(t, http.MethodPost, "/v1/staff/players/"+user+"/suspend", op, map[string]any{"reason": "again"}); r.Code != http.StatusConflict {
+		t.Fatalf("suspend twice: %d %s", r.Code, r.Raw)
+	}
+	if r := e.do(t, http.MethodGet, "/v1/staff/players?status=suspended", op, nil); len(r.Body["players"].([]any)) != 1 {
+		t.Fatalf("suspended list: %s", r.Raw)
+	}
+	if r := e.do(t, http.MethodPost, "/v1/staff/players/"+user+"/reinstate", op, map[string]any{"reason": "dispute resolved"}); r.Code != http.StatusOK || r.Body["status"] != "active" {
+		t.Fatalf("reinstate: %d %s", r.Code, r.Raw)
+	}
+	if r := e.do(t, http.MethodPost, "/v1/staff/players/"+user+"/reinstate", op, map[string]any{"reason": "again"}); r.Code != http.StatusConflict {
+		t.Fatalf("reinstate twice: %d %s", r.Code, r.Raw)
+	}
+	var audited int
+	if err := e.pool.QueryRow(context.Background(), `SELECT count(*) FROM audit.audit_log WHERE action IN ('identity.players_viewed','identity.account_suspended','identity.account_reinstated')`).Scan(&audited); err != nil || audited < 6 {
+		t.Fatalf("audited %d (%v)", audited, err)
 	}
 }

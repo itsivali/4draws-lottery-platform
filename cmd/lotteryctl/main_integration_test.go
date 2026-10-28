@@ -6,8 +6,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 
+	"github.com/itsivali/lottery-platform/internal/platform/config"
 	"github.com/itsivali/lottery-platform/internal/platform/testpg"
 )
 
@@ -46,5 +48,46 @@ func TestRun_GameReconcilePrintsACleanReportOnAFreshDatabase(t *testing.T) {
 	}
 	if err := json.Unmarshal(out.Bytes(), &r); err != nil || !r.OK {
 		t.Fatalf("report = %s (%v)", out.String(), err)
+	}
+}
+
+func TestRun_StaffPasswordLetsALockedOutOwnerBackIn(t *testing.T) {
+	t.Setenv("DATABASE_URL", testpg.Migrated(t))
+	t.Setenv("AUTH_KEY", "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=")
+	t.Setenv("TOKEN_SEED", "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=")
+	t.Setenv("DATA_KEYS", "1:MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=")
+	t.Setenv("IDENTITY_KEY", "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=")
+	t.Setenv("VALKEY_ADDR", "valkey:6379")
+	t.Setenv("TRUSTED_PROXY_HEADER", "none")
+	for _, k := range []string{"DATA_KEY", "DARAJA_CONSUMER_KEY", "STAFF_BOOTSTRAP_ADMIN", "STAFF_BOOTSTRAP_PASSWORD"} {
+		t.Setenv(k, "")
+	}
+	var out bytes.Buffer
+	// nobody exists yet: without -admin there is nobody to give a password to
+	if err := run(context.Background(), command{name: "staff password", email: "owner@example.com", password: "a long temporary phrase"}, &out); err == nil {
+		t.Fatal("an unknown member got a password")
+	}
+	if err := run(context.Background(), command{name: "staff password", email: "owner@example.com", password: "short", admin: true}, &out); err == nil {
+		t.Fatal("a short password was accepted")
+	}
+	out.Reset()
+	if err := run(context.Background(), command{name: "staff password", email: "Owner@Example.com", password: "a long temporary phrase", admin: true}, &out); err != nil {
+		t.Fatalf("staff password: %v\n%s", err, out.String())
+	}
+	if !bytes.Contains(out.Bytes(), []byte("owner@example.com has a temporary password")) || !bytes.Contains(out.Bytes(), []byte("[admin]")) {
+		t.Fatalf("output: %s", out.String())
+	}
+	// the password is read from stdin when not given, and the member is only updated the second time
+	out.Reset()
+	cmd := command{name: "staff password", email: "owner@example.com"}
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := staffPassword(context.Background(), cfg, cmd, strings.NewReader("typed on the terminal\n"), &out); err != nil {
+		t.Fatalf("stdin password: %v\n%s", err, out.String())
+	}
+	if !bytes.Contains(out.Bytes(), []byte("Temporary password")) || !bytes.Contains(out.Bytes(), []byte("has a temporary password")) {
+		t.Fatalf("output: %s", out.String())
 	}
 }

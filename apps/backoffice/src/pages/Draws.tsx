@@ -6,7 +6,7 @@ import { Actions, DataTable, Stack } from '../components/DataTable'
 import { useConfirmedAction } from '../components/useConfirmedAction'
 import { Empty, Loaded, PageHeader, Pill, type Tone } from '../components/ui'
 import { eat, kes } from '../format'
-import { useLoad } from '../hooks'
+import { useLoad, usePages } from '../hooks'
 import { can } from '../roles'
 import type { Draw, Late } from '../types'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -30,11 +30,14 @@ function count(d: Draw, step: 'sign' | 'approve') {
 
 export function DrawsPage() {
   const { api, me } = useSession()
-  const draws = useLoad((signal) => api.get<{ draws: Draw[] }>('/v1/staff/draws', { limit: '40' }, { signal }))
+  // newest period first, 50 a page; "Load more" follows the server's cursor back in time
+  const draws = usePages((before, signal) =>
+    api.get<{ draws: Draw[]; next_before: string | null }>('/v1/staff/draws', { limit: '50', ...(before === null ? {} : { before }) }, { signal })
+      .then((r) => ({ rows: r.draws, next: r.next_before })))
   const overdue = useLoad((signal) => api.get<{ overdue: Late[] }>('/v1/staff/draws/overdue', undefined, { signal }))
   const reload = () => { draws.reload(); overdue.reload() }
   const { ask, busy, view } = useConfirmedAction(reload)
-  const official = can(me.roles, 'draw_official')
+  const official = can(me.roles, 'staff')
 
   const columns = useMemo<ColumnDef<Draw>[]>(() => [
     {
@@ -146,9 +149,10 @@ export function DrawsPage() {
         }
       </Loaded>
       <Loaded load={draws} what="draws">
-        {({ draws: list }) =>
+        {(list) =>
           list.length === 0 ? <Empty icon={Ticket}>No draws yet.</Empty> : (
-            <DataTable columns={columns} data={list} rowId={(d) => d.id} caption="Draws, newest first" filter="Search draws" />
+            <DataTable columns={columns} data={list} rowId={(d) => d.id} caption="Draws, newest first" filter="Search draws"
+              more={{ has: draws.more, loading: draws.loadingMore, load: draws.loadMore }} />
           )
         }
       </Loaded>

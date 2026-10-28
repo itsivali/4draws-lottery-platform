@@ -3,9 +3,11 @@ package identity
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/itsivali/lottery-platform/internal/audit"
 	"github.com/itsivali/lottery-platform/internal/identity/store"
@@ -122,4 +124,130 @@ func (s *Service) CloseAccount(ctx context.Context, userID, staffID, staff strin
 			EntityType: "user", EntityID: userID})
 	})
 	return at, err
+}
+
+// Player is a registered account as the back office lists it.
+type Player struct {
+	UserID             string     `json:"user_id"`
+	MSISDN             string     `json:"msisdn"`
+	KYCStatus          string     `json:"kyc_status"`
+	Status             string     `json:"status"`
+	PhoneVerified      bool       `json:"phone_verified"`
+	BalanceKES         int64      `json:"balance_kes"`
+	Plays              int64      `json:"plays"`
+	CreatedAt          time.Time  `json:"created_at"`
+	LastSignInAt       *time.Time `json:"last_sign_in_at"`
+	ClosureRequestedAt *time.Time `json:"closure_requested_at"`
+	// FullName and NationalID come from the latest identity submission (the KYC service fills them in); empty when
+	// the player never submitted one.
+	FullName   string `json:"full_name"`
+	NationalID string `json:"national_id"`
+}
+
+// PlayerFilter narrows the list: a fragment of the phone number (or a user id), and a status.
+type PlayerFilter struct {
+	Query  string
+	Status string
+}
+
+// PlayerPage is one page of players, newest first; NextBefore continues it (pass it as before), empty on the last.
+type PlayerPage struct {
+	Players    []Player
+	NextBefore string
+}
+
+// Players lists registered accounts, newest first, with their balance, plays and last sign-in (ADR 0019). The viewing
+// is audited as viewer, since it shows phone numbers.
+func (s *Service) Players(ctx context.Context, f PlayerFilter, limit int, before, viewer string) (PlayerPage, error) {
+	var q, status, cursor *string
+	if v := strings.TrimSpace(f.Query); v != "" {
+		if n, err := NormalizeMSISDN(v); err == nil {
+			v = n
+		}
+		q = &v
+	}
+	if f.Status != "" {
+		status = &f.Status
+	}
+	if before != "" {
+		cursor = &before
+	}
+	var page PlayerPage
+	err := s.withTx(ctx, func(tx pgx.Tx, st *store.Queries, _ time.Time) error {
+		rows, err := st.ListPlayers(ctx, store.ListPlayersParams{Q: q, Status: status, Before: cursor, Lim: int32(limit) + 1}) //nolint:gosec // small limits
+		if err != nil {
+			return err
+		}
+		more := len(rows) > limit
+		if more {
+			rows = rows[:limit]
+		}
+		page.Players = make([]Player, 0, len(rows))
+		for _, r := range rows {
+			page.Players = append(page.Players, Player{UserID: r.ID, MSISDN: r.Msisdn, KYCStatus: r.KycStatus, Status: r.Status,
+				PhoneVerified: r.PhoneVerified, BalanceKES: r.BalanceKes, Plays: r.Plays, CreatedAt: r.CreatedAt,
+				LastSignInAt: timePtr(r.LastSignInAt), ClosureRequestedAt: r.ClosureRequestedAt})
+		}
+		if more {
+			page.NextBefore = rows[len(rows)-1].ID
+		}
+		return s.audit.Record(ctx, tx, audit.Event{ActorType: audit.Staff, ActorID: viewer, Action: "identity.players_viewed",
+			EntityType: "users", EntityID: "list", Details: map[string]any{"shown": len(page.Players), "query": f.Query != "", "status": f.Status}})
+	})
+	var pe *pgconn.PgError
+	if errors.As(err, &pe) && pe.Code == "22P02" { // not a uuid
+		return PlayerPage{}, ErrBadCursor
+	}
+	return page, err
+}
+
+// ErrBadCursor is a page cursor that is not a user id.
+var ErrBadCursor = errors.New("identity: bad cursor")
+
+// ErrNotSuspendable is a status change that does not apply: suspending a closed or already suspended account, or
+// reinstating one that is not suspended.
+var ErrNotSuspendable = errors.New("identity: the account is not in a state that allows this")
+
+// Suspend stops an account (no sign-in, play, top-up or withdrawal) and ends its sessions; Reinstate lifts it. Both
+// are audited with the staff member's reason. Closed accounts are left alone.
+func (s *Service) Suspend(ctx context.Context, userID, staff, reason string, suspend bool) error {
+	reason = strings.TrimSpace(reason)
+	if reason == "" {
+		return ErrReasonRequired
+	}
+	from, to, action := "active", "suspended", "identity.account_suspended"
+	if !suspend {
+		from, to, action = "suspended", "active", "identity.account_reinstated"
+	}
+	return s.withTx(ctx, func(tx pgx.Tx, q *store.Queries, now time.Time) error {
+		n, err := q.SetUserSuspended(ctx, store.SetUserSuspendedParams{Status: to, At: now, ID: userID, FromStatus: from})
+		var pe *pgconn.PgError
+		if errors.As(err, &pe) && pe.Code == "22P02" {
+			return ErrNotSuspendable
+		}
+		if err != nil {
+			return err
+		}
+		if n == 0 {
+			return ErrNotSuspendable
+		}
+		if suspend {
+			if err := q.RevokeAllSessions(ctx, store.RevokeAllSessionsParams{UserID: userID, At: &now}); err != nil {
+				return err
+			}
+		}
+		return s.audit.Record(ctx, tx, audit.Event{ActorType: audit.Staff, ActorID: staff, Action: action,
+			EntityType: "user", EntityID: userID, Details: map[string]any{"reason": reason}})
+	})
+}
+
+// ErrReasonRequired: a suspension or reinstatement needs a reason for the audit log.
+var ErrReasonRequired = errors.New("identity: a reason is required")
+
+// timePtr reads an optional timestamp the store could not type (an aggregate in a sub-select): nil when NULL.
+func timePtr(v any) *time.Time {
+	if t, ok := v.(time.Time); ok {
+		return &t
+	}
+	return nil
 }

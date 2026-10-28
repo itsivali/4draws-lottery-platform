@@ -169,6 +169,47 @@ func (q *Queries) InsertKYCCheck(ctx context.Context, arg InsertKYCCheckParams) 
 	return id, err
 }
 
+const latestChecksFor = `-- name: LatestChecksFor :many
+SELECT u.id AS user_id, c.status, c.id_number_enc, c.full_name_enc
+FROM identity.users u
+JOIN LATERAL (SELECT k.status, k.id_number_enc, k.full_name_enc FROM kyc.kyc_checks k
+              WHERE k.user_id = u.id ORDER BY k.created_at DESC, k.id DESC LIMIT 1) c ON true
+WHERE u.id = ANY($1::uuid[])
+`
+
+type LatestChecksForRow struct {
+	UserID      string
+	Status      string
+	IDNumberEnc []byte
+	FullNameEnc []byte
+}
+
+// The latest submission of each of the given accounts (for the back office's player list; decrypted by the service).
+func (q *Queries) LatestChecksFor(ctx context.Context, userIds []string) ([]LatestChecksForRow, error) {
+	rows, err := q.db.Query(ctx, latestChecksFor, userIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LatestChecksForRow
+	for rows.Next() {
+		var i LatestChecksForRow
+		if err := rows.Scan(
+			&i.UserID,
+			&i.Status,
+			&i.IDNumberEnc,
+			&i.FullNameEnc,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const latestKYCCheck = `-- name: LatestKYCCheck :one
 SELECT id, status, id_number_enc, id_number_hash, full_name_enc, date_of_birth_enc, provider, created_at FROM kyc.kyc_checks
 WHERE user_id = $1 ORDER BY created_at DESC, id DESC LIMIT 1

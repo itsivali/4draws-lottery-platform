@@ -79,6 +79,14 @@ class _WithdrawScreenState extends ConsumerState<WithdrawScreen> {
             what: 'your wallet',
             onRetry: () => ref.invalidate(walletStatementProvider),
             data: (w) {
+              final bounds = w.withdraw;
+              if (bounds == null) {
+                return const InlineBanner(
+                  tone: StatusTone.warning,
+                  title: 'Withdrawals are not available right now',
+                  message: 'The M-Pesa payout service is not switched on. Your balance is safe; try again later.',
+                );
+              }
               final (blocked, action, route) = a.kycStatus != KycStatus.verified
                   ? (
                       'Withdrawals need a verified national ID.',
@@ -156,9 +164,9 @@ class _WithdrawScreenState extends ConsumerState<WithdrawScreen> {
                               Divider(height: Space.xxl, color: c.border),
                               AmountField(
                                 controller: _amount,
-                                min: 50,
-                                max: 150000,
-                                quick: const [100, 500, 1000],
+                                min: bounds.minKes,
+                                max: bounds.maxKes,
+                                quick: bounds.quickPicks,
                                 label: 'Amount',
                                 enabled: !started,
                                 extraValidator: (n) => n > w.balanceKes ? 'That is more than your balance.' : null,

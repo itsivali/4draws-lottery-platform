@@ -28,23 +28,45 @@ class WalletTx {
   final DateTime createdAt;
 }
 
-/// The top-up range the server accepts. It is the server's to set (KES 1 while testing with real money), never the app's.
-class TopUpBounds {
-  const TopUpBounds({required this.minKes, required this.maxKes});
+/// A money range the server accepts (whole KES). It is the server's to set, never the app's.
+class MoneyBounds {
+  const MoneyBounds({required this.minKes, required this.maxKes});
+
+  factory MoneyBounds.fromJson(JsonObject j) => MoneyBounds(minKes: j.integer('min_kes'), maxKes: j.integer('max_kes'));
+
+  final int minKes;
+  final int maxKes;
+
+  /// The usual amounts that fall inside the range, led by the minimum when it is below them.
+  List<int> picks(List<int> usual) => [
+    if (minKes < usual.first) minKes,
+    ...usual.where((q) => q >= minKes && q <= maxKes),
+  ];
+}
+
+/// The top-up range (KES 1 while testing with real money).
+class TopUpBounds extends MoneyBounds {
+  const TopUpBounds({required super.minKes, required super.maxKes});
 
   factory TopUpBounds.fromJson(JsonObject j) => TopUpBounds(minKes: j.integer('min_kes'), maxKes: j.integer('max_kes'));
 
   /// Used until the wallet has loaded; the server checks every amount anyway.
   static const fallback = TopUpBounds(minKes: 10, maxKes: 250000);
 
-  final int minKes;
-  final int maxKes;
+  List<int> get quickPicks => picks(const [100, 200, 500, 1000]);
+}
 
-  /// The usual amounts, led by the minimum when it is below them.
-  List<int> get quickPicks => [
-    if (minKes < 100) minKes,
-    ...[100, 200, 500, 1000].where((q) => q >= minKes && q <= maxKes),
-  ];
+/// The withdrawal range.
+class WithdrawBounds extends MoneyBounds {
+  const WithdrawBounds({required super.minKes, required super.maxKes});
+
+  factory WithdrawBounds.fromJson(JsonObject j) =>
+      WithdrawBounds(minKes: j.integer('min_kes'), maxKes: j.integer('max_kes'));
+
+  /// Used until the wallet has loaded; the server checks every amount anyway.
+  static const fallback = WithdrawBounds(minKes: 50, maxKes: 150000);
+
+  List<int> get quickPicks => picks(const [100, 500, 1000]);
 }
 
 class WalletStatement {
@@ -54,6 +76,7 @@ class WalletStatement {
     required this.transactions,
     this.nextBefore,
     this.topUp,
+    this.withdraw,
   });
 
   factory WalletStatement.fromJson(JsonObject j) => WalletStatement(
@@ -65,10 +88,17 @@ class WalletStatement {
       final b? => TopUpBounds.fromJson(b),
       null => null,
     },
+    withdraw: switch (j.objectOrNull('withdraw')) {
+      final b? => WithdrawBounds.fromJson(b),
+      null => null,
+    },
   );
 
   /// Null when the server cannot take top-ups right now.
   final TopUpBounds? topUp;
+
+  /// Null when the server cannot pay withdrawals right now (M-Pesa B2C not configured).
+  final WithdrawBounds? withdraw;
 
   final int balanceKes;
 

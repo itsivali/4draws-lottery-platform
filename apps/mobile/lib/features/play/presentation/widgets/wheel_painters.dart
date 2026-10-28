@@ -13,6 +13,12 @@ const _studRadius = 0.86;
 const _labelRadius = 0.70;
 const _hubRadius = 0.24;
 
+// Each segment is two-tone (owner, 2026-10-28): a solid outer band carries the number; from the hub's fading circle out
+// to _checkerOuter the segment is a checker of white and its own colour.
+const _checkerInner = _hubRadius + 0.01;
+const _checkerOuter = 0.52;
+const _checkerCellsAcross = 3;
+
 Offset _polar(Offset c, double r, double wheelAngle) =>
     c + Offset(cos(wheelAngle - pi / 2), sin(wheelAngle - pi / 2)) * r;
 
@@ -37,13 +43,14 @@ class WheelDiscPainter extends CustomPainter {
 
     for (var i = 0; i < g.slots; i++) {
       final lucky = labelled && g.isLucky(i);
-      final base = lucky ? colors.wheelLucky : (i.isEven ? colors.wheelSegmentA : colors.wheelSegmentB);
+      final base = lucky ? colors.wheelLucky : colors.wheelSegments[i % colors.wheelSegments.length];
       final paint = Paint()
         ..shader = RadialGradient(
           colors: [Color.lerp(base, Colors.white, 0.10)!, base, Color.lerp(base, Colors.black, 0.18)!],
           stops: const [0.0, 0.62, 1.0],
         ).createShader(face);
       canvas.drawArc(face, g.segmentStart(i) - pi / 2, g.sweep, true, paint);
+      _paintChecker(canvas, c, r, g.segmentStart(i), g.sweep);
     }
 
     // hairline separators
@@ -68,6 +75,31 @@ class WheelDiscPainter extends CustomPainter {
     }
 
     if (labelled) _paintLabels(canvas, c, r);
+  }
+
+  /// White squares over the inner band of one segment: cells near-square, alternating with the segment's own colour,
+  /// which shows through where nothing is drawn.
+  void _paintChecker(Canvas canvas, Offset c, double r, double start, double sweep) {
+    final inner = r * _checkerInner, outer = r * _checkerOuter;
+    final cellAngle = sweep / _checkerCellsAcross;
+    final cellArc = (inner + outer) / 2 * cellAngle;
+    final rings = max(2, ((outer - inner) / cellArc).round());
+    final ringDepth = (outer - inner) / rings;
+    final white = Paint()..color = colors.wheelChecker;
+    for (var j = 0; j < rings; j++) {
+      for (var k = 0; k < _checkerCellsAcross; k++) {
+        if ((j + k).isOdd) continue;
+        final r0 = inner + j * ringDepth, r1 = r0 + ringDepth;
+        final a0 = start + k * cellAngle - pi / 2, a1 = a0 + cellAngle;
+        final cell = Path()
+          ..moveTo(c.dx + cos(a0) * r0, c.dy + sin(a0) * r0)
+          ..arcTo(Rect.fromCircle(center: c, radius: r0), a0, cellAngle, false)
+          ..lineTo(c.dx + cos(a1) * r1, c.dy + sin(a1) * r1)
+          ..arcTo(Rect.fromCircle(center: c, radius: r1), a1, -cellAngle, false)
+          ..close();
+        canvas.drawPath(cell, white);
+      }
+    }
   }
 
   void _paintLabels(Canvas canvas, Offset c, double r) {
@@ -103,7 +135,7 @@ class WheelDiscPainter extends CustomPainter {
       canvas.rotate(angle); // upright along the radius, reading from the centre outwards
       canvas.translate(0, -r * _labelRadius);
       tp.paint(canvas, Offset(-tp.width / 2, -tp.height / 2));
-      if (lucky) _star(canvas, Offset(0, tp.height / 2 + fontSize * 0.5), fontSize * 0.42, colors.wheelRimLight);
+      if (lucky) _star(canvas, Offset(0, tp.height / 2 + fontSize * 0.5), fontSize * 0.42, colors.wheelStar);
       canvas.restore();
     }
   }
@@ -240,7 +272,10 @@ class WheelFramePainter extends CustomPainter {
       Paint()
         ..shader = RadialGradient(
           center: const Alignment(-0.3, -0.35),
-          colors: [Color.lerp(colors.wheelSegmentA, Colors.white, 0.12)!, colors.wheelSegmentB],
+          colors: [
+            Color.lerp(colors.wheelSegments.first, Colors.white, 0.12)!,
+            colors.wheelSegments[colors.wheelSegments.length ~/ 2],
+          ],
         ).createShader(hub),
     );
 

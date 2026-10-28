@@ -58,7 +58,11 @@ func (s *Service) startSession(ctx context.Context, q *store.Queries, userID str
 	if err != nil {
 		return Tokens{}, err
 	}
-	sid, err := q.InsertSession(ctx, store.InsertSessionParams{UserID: userID, DeviceID: deviceID, CreatedAt: now})
+	var platform *string
+	if dev.Platform != "" {
+		platform = &dev.Platform
+	}
+	sid, err := q.InsertSession(ctx, store.InsertSessionParams{UserID: userID, DeviceID: deviceID, CreatedAt: now, Platform: platform})
 	if err != nil {
 		return Tokens{}, err
 	}

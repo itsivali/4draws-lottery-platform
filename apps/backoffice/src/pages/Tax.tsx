@@ -17,7 +17,7 @@ export function TaxPage() {
   const { api, me } = useSession()
   const load = useLoad((signal) => api.get<{ batches: Batch[] }>('/v1/staff/tax/batches', undefined, { signal }))
   const { ask, busy, view } = useConfirmedAction(load.reload)
-  const officer = can(me.roles, 'tax_officer')
+  const officer = can(me.roles, 'staff')
   const [downloading, setDownloading] = useState<number | null>(null)
   const [downloadError, setDownloadError] = useState<string | null>(null)
   const download = async (b: Batch) => {

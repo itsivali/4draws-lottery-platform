@@ -14,7 +14,7 @@ double contrast(Color a, Color b) {
 }
 
 void main() {
-  for (final (name, c) in [('light', AppColors.light), ('dark', AppColors.dark)]) {
+  for (final (name, c) in [('light', AppColors.light)]) {
     group('$name theme (WCAG 2.2 AA)', () {
       final surfaces = {'background': c.background, 'surface': c.surface, 'surfaceMuted': c.surfaceMuted};
       final texts = {
@@ -45,8 +45,22 @@ void main() {
         expect(contrast(c.primary, c.background), greaterThanOrEqualTo(3));
       });
       test('wheel labels are readable on every segment colour', () {
-        for (final seg in [c.wheelSegmentA, c.wheelSegmentB, c.wheelLucky]) {
+        expect(c.wheelSegments.length, greaterThanOrEqualTo(2));
+        for (final seg in [...c.wheelSegments, c.wheelLucky]) {
           expect(contrast(c.wheelLabel, seg), greaterThanOrEqualTo(4.5));
+        }
+        expect(c.wheelSegments.toSet().length, c.wheelSegments.length, reason: 'each hue is used once per turn');
+        expect(
+          contrast(c.wheelStar, c.wheelLucky),
+          greaterThanOrEqualTo(3),
+          reason: 'the star is a symbol on the lucky slot',
+        );
+        for (final seg in c.wheelSegments) {
+          expect(
+            contrast(c.wheelChecker, seg),
+            greaterThanOrEqualTo(1.4),
+            reason: 'the checker must be visible on every hue',
+          );
         }
       });
       test('the pointer and rim stand out from the page (non-text, 3:1)', () {
@@ -55,8 +69,14 @@ void main() {
     });
   }
 
-  test('pending never borrows the success colour', () {
+  test('pending never borrows the success colour, and gold is not the primary', () {
     expect(AppColors.light.pending, isNot(AppColors.light.success));
-    expect(AppColors.dark.pending, isNot(AppColors.dark.success));
+    expect(AppColors.light.gold, isNot(AppColors.light.primary));
+  });
+  test('the hero surfaces keep their text readable at both ends of the sunset', () {
+    final c = AppColors.light;
+    expect(contrast(c.onHero, c.heroStart), greaterThanOrEqualTo(4.5));
+    expect(contrast(c.onHero, c.heroEnd), greaterThanOrEqualTo(4.5));
+    expect(contrast(c.onHeroMuted, c.heroStart), greaterThanOrEqualTo(3));
   });
 }

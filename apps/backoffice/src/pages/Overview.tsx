@@ -1,20 +1,22 @@
-import { ArrowRight, Banknote, Bell, IdCard, Landmark, Receipt, Ticket, UserX, Users, Wallet, type LucideIcon } from 'lucide-react'
+import { ArrowRight, Banknote, Bell, ChartSpline, IdCard, Landmark, Receipt, Ticket, UserRound, UserX, Users, Wallet, type LucideIcon } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useSession } from '../context'
 import { ReconcileCard } from '../components/Reconcile'
 import { PageHeader, SectionTitle } from '../components/ui'
 import { eat } from '../format'
 import { submissions, useReviewQueue } from '../reviewQueue'
-import { can, roleLabels, visibleSections } from '../roles'
+import { roleLabels, visibleSections } from '../roles'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 
 const icons: Record<string, LucideIcon> = {
-  '/finance': Landmark, '/kyc': IdCard, '/draws': Ticket, '/payouts': Banknote, '/payments': Wallet, '/tax': Receipt, '/alerts': Bell, '/closures': UserX, '/staff': Users,
+  '/finance': Landmark, '/metrics': ChartSpline, '/players': UserRound, '/kyc': IdCard, '/draws': Ticket, '/payouts': Banknote, '/payments': Wallet, '/tax': Receipt, '/alerts': Bell, '/closures': UserX, '/staff': Users,
 }
 
 const blurbs: Record<string, string> = {
   '/finance': 'Money in and out, what the platform earned and owes.',
+  '/metrics': 'How the web and mobile apps are used, per platform.',
+  '/players': 'Look any player up; suspend or reinstate an account.',
   '/kyc': 'Compare submissions with the national ID and decide.',
   '/draws': 'Sign frozen draws and approve conducted ones.',
   '/payouts': 'Approve large withdrawals; settle unclear ones.',
@@ -22,7 +24,7 @@ const blurbs: Record<string, string> = {
   '/tax': 'Prepare KRA batches and record remittances.',
   '/alerts': 'Acknowledge what went wrong and lift freezes.',
   '/closures': 'Close accounts whose holders asked.',
-  '/staff': 'Invite members and set their roles.',
+  '/staff': 'Invite members, set roles and passwords.',
 }
 
 export function OverviewPage() {
@@ -66,15 +68,11 @@ export function OverviewPage() {
           )
         })}
       </ul>
-      {can(me.roles, 'auditor', 'draw_official') || can(me.roles, 'auditor', 'payout_operator') ? (
-        <>
-          <SectionTitle>Reconciliations</SectionTitle>
-          <div className="grid gap-4 lg:grid-cols-2">
-            {can(me.roles, 'auditor', 'draw_official') ? <ReconcileCard path="/v1/staff/draws/reconcile" title="Draws reconciliation" description="Entries, seeds and prize pools against the ledger." /> : null}
-            {can(me.roles, 'auditor', 'payout_operator') ? <ReconcileCard path="/v1/staff/payouts/reconcile" title="Payouts reconciliation" description="Payouts against M-Pesa and the ledger." /> : null}
-          </div>
-        </>
-      ) : null}
+      <SectionTitle>Reconciliations</SectionTitle>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <ReconcileCard path="/v1/staff/draws/reconcile" title="Draws reconciliation" description="Entries, seeds and prize pools against the ledger." />
+        <ReconcileCard path="/v1/staff/payouts/reconcile" title="Payouts reconciliation" description="Payouts against M-Pesa and the ledger." />
+      </div>
     </section>
   )
 }

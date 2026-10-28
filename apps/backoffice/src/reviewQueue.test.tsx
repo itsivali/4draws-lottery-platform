@@ -25,7 +25,7 @@ afterEach(() => { document.title = 'Back office' })
 
 describe('identity review notifications', () => {
   it('a reviewer sees how many submissions wait, in the navigation and the tab title', async () => {
-    renderSignedIn(<App />, { roles: ['kyc_reviewer'], route: server({ subs: [sub('u1'), sub('u2')] }) })
+    renderSignedIn(<App />, { roles: ['staff'], route: server({ subs: [sub('u1'), sub('u2')] }) })
     const nav = screen.getByRole('navigation', { name: 'Back office' })
     expect(await within(nav).findByRole('link', { name: 'Identity review, 2 waiting' })).toBeInTheDocument()
     await waitFor(() => { expect(document.title).toBe('(2) Back office') })
@@ -34,7 +34,7 @@ describe('identity review notifications', () => {
 
   it('a new submission raises a notice that leads to the review', async () => {
     const queue = { subs: [sub('u1')] }
-    renderSignedIn(<App />, { roles: ['kyc_reviewer'], route: server(queue) })
+    renderSignedIn(<App />, { roles: ['staff'], route: server(queue) })
     await screen.findByRole('link', { name: 'Identity review, 1 waiting' })
     expect(screen.queryByText(/new identity submission/i)).not.toBeInTheDocument()
 
@@ -51,7 +51,7 @@ describe('identity review notifications', () => {
 
   it('the review list offers newly arrived submissions instead of unmasking them unasked', async () => {
     const queue = { subs: [sub('u1')] }
-    const { fetch } = renderSignedIn(<App />, { roles: ['kyc_reviewer'], route: server(queue), path: '/kyc' })
+    const { fetch } = renderSignedIn(<App />, { roles: ['staff'], route: server(queue), path: '/kyc' })
     expect(await screen.findByText('Player u1')).toBeInTheDocument()
     const listed = () => fetch.mock.calls.filter(([u]) => (u as string).endsWith('/v1/staff/kyc/pending')).length
     expect(listed()).toBe(1)
@@ -64,11 +64,11 @@ describe('identity review notifications', () => {
     expect(listed()).toBe(2)
   })
 
-  it('nobody else polls the identity queue', async () => {
-    const { fetch } = renderSignedIn(<App />, { roles: ['auditor'], route: () => ({ status: 200, body: { ok: true, totals: {}, attention: {} } }) })
+  it('an administrator reviews identities too, so the queue is polled for them as well', async () => {
+    const { fetch } = renderSignedIn(<App />, { roles: ['admin'], route: () => ({ status: 200, body: { waiting: 0, oldest_submitted_at: null } }) })
     expect(await screen.findByRole('heading', { name: /Signed in as Alice/ })).toBeInTheDocument()
     poll()
-    expect(fetch.mock.calls.some(([u]) => (u as string).includes('/kyc/'))).toBe(false)
+    await waitFor(() => { expect(fetch.mock.calls.some(([u]) => (u as string).includes('/kyc/queue'))).toBe(true) })
     expect(document.title).toBe('Back office')
   })
 })

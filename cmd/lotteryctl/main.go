@@ -1,11 +1,12 @@
 // Command lotteryctl is the admin CLI: migrations and the payments operator actions (reverse a top-up M-Pesa took
 // back, resolve an unconfirmed top-up from the statement, credit or refund a paybill payment held in suspense, check an
-// unverified paybill payment again, run the internal reconciliation) and manual KYC review. It needs DATABASE_URL; operator actions are
+// unverified paybill payment again, run the internal reconciliation), manual KYC review and the emergency staff password. It needs DATABASE_URL; operator actions are
 // audited as staff "operator:<name>". Registering the paybill URLs and simulating a sandbox payment need the api's
 // Daraja configuration.
 package main
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -15,6 +16,7 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/riverqueue/river"
@@ -37,6 +39,7 @@ import (
 	"github.com/itsivali/lottery-platform/internal/platform/crypto"
 	"github.com/itsivali/lottery-platform/internal/platform/db"
 	"github.com/itsivali/lottery-platform/internal/rg"
+	"github.com/itsivali/lottery-platform/internal/staff"
 	"github.com/itsivali/lottery-platform/internal/wallet"
 )
 
@@ -74,7 +77,10 @@ const usage = `usage:
   lotteryctl tax batches
   lotteryctl alerts list [-all]
   lotteryctl alerts ack -alert ID -note TEXT -operator NAME   (stops reminders; closes a payout freeze)
-  lotteryctl alerts watch                                (run the checks and send what is due now)`
+  lotteryctl alerts watch                                (run the checks and send what is due now)
+  lotteryctl staff password -email E [-password P] [-admin]   (emergency: a temporary back-office password for E, read
+                                                              from stdin without -password; -admin also makes E an
+                                                              administrator, creating them if needed)`
 
 type command struct {
 	name                               string
@@ -82,7 +88,8 @@ type command struct {
 	user, refundRef, msisdn, account   string
 	draw, payout, state, result        string
 	prn, alert, note                   string
-	all                                bool
+	email, password                    string
+	all, admin                         bool
 	batch                              int64
 	amount                             int64
 	days, slots, lucky                 int
@@ -125,12 +132,14 @@ var flagsOf = map[string][]string{
 	"alerts list":              nil,
 	"alerts ack":               {"alert", "note", "operator"},
 	"alerts watch":             nil,
+	"staff password":           {"email"},
 }
 
 // optionalOf lists, per command, the flags it may take; the rest of a command's flags are as in flagsOf.
 var optionalOf = map[string][]string{
-	"game simulate": {"days", "slots", "lucky", "price"},
-	"alerts list":   {"all"},
+	"game simulate":  {"days", "slots", "lucky", "price"},
+	"alerts list":    {"all"},
+	"staff password": {"password", "admin"},
 }
 
 func parse(args []string) (command, error) {
@@ -163,6 +172,9 @@ func parse(args []string) (command, error) {
 	fs.StringVar(&c.alert, "alert", "", "alert id")
 	fs.StringVar(&c.note, "note", "", "what was found and done (audited)")
 	fs.BoolVar(&c.all, "all", false, "include resolved alerts")
+	fs.StringVar(&c.email, "email", "", "a staff member's email address")
+	fs.StringVar(&c.password, "password", "", "the temporary password (omit it to type it on stdin, so it stays out of the shell history)")
+	fs.BoolVar(&c.admin, "admin", false, "also make the member an administrator (creating them if needed)")
 	fs.IntVar(&c.days, "days", 0, "simulated player-days per number of plays")
 	fs.IntVar(&c.slots, "slots", 0, "slot count")
 	fs.IntVar(&c.lucky, "lucky", 0, "lucky slots")
@@ -240,6 +252,8 @@ func run(ctx context.Context, cmd command, out io.Writer) error {
 		return payoutsCmd(ctx, cfg, cmd, out)
 	case "alerts list", "alerts ack", "alerts watch":
 		return alertsCmd(ctx, cfg, cmd, out)
+	case "staff password":
+		return staffPassword(ctx, cfg, cmd, os.Stdin, out)
 	}
 
 	pool, err := db.Open(ctx, cfg.DatabaseURL)
@@ -364,6 +378,36 @@ func kycReview(ctx context.Context, cfg config.Config, cmd command, out io.Write
 	return err
 }
 
+// staffPassword is the way back into the back office when every administrator is locked out (ADR 0019): it gives a
+// member a temporary password (changed at their next sign-in), re-enables them and ends their sessions. It needs the
+// api's AUTH_KEY (the password pepper) and the database; the password is read from stdin unless -password is given.
+func staffPassword(ctx context.Context, cfg config.Config, cmd command, in io.Reader, out io.Writer) error {
+	if !cfg.API.Enabled || len(cfg.API.AuthKey) == 0 {
+		return errors.New("staff passwords are peppered with the api's AUTH_KEY: set the api's configuration")
+	}
+	pw := cmd.password
+	if pw == "" {
+		_, _ = fmt.Fprint(out, "Temporary password (12 characters or more): ")
+		line, err := bufio.NewReader(in).ReadString('\n')
+		if err != nil && line == "" {
+			return fmt.Errorf("reading the password: %w", err)
+		}
+		pw = strings.TrimRight(line, "\r\n")
+	}
+	pool, err := db.Open(ctx, cfg.DatabaseURL)
+	if err != nil {
+		return err
+	}
+	defer pool.Close()
+	svc := staff.NewService(pool, clock.Postgres{}, nil, audit.NewWriter(), crypto.MAC(cfg.API.AuthKey, "staff-password-pepper"))
+	rec, err := svc.EmergencyPassword(ctx, cmd.email, pw, cmd.admin)
+	if err != nil {
+		return err
+	}
+	_, err = fmt.Fprintf(out, "%s has a temporary password and must change it at the next sign-in (roles: %v, active: %v, sessions ended)\n", rec.Email, rec.Roles, rec.Active)
+	return err
+}
+
 // gameReconcile runs the game reconciliation (stakes, tickets, spins, seed chains); it needs only the database.
 func gameReconcile(ctx context.Context, cfg config.Config, out io.Writer) error {
 	pool, err := db.Open(ctx, cfg.DatabaseURL)
@@ -432,7 +476,9 @@ func drawsCmd(ctx context.Context, cfg config.Config, cmd command, out io.Writer
 	var res any
 	switch cmd.name {
 	case "draws list":
-		res, err = svc.List(ctx, 40)
+		var page draws.Page
+		page, err = svc.List(ctx, 40, "")
+		res = page.Draws
 	case "draws show":
 		res, err = svc.Get(ctx, cmd.draw)
 	case "draws sign":
@@ -498,7 +544,7 @@ func payoutsCmd(ctx context.Context, cfg config.Config, cmd command, out io.Writ
 	var res any
 	switch cmd.name {
 	case "payouts list":
-		res, err = svc.InState(ctx, cmd.state, 100)
+		res, _, err = svc.InState(ctx, cmd.state, 100, "")
 	case "payouts approve":
 		res, err = svc.Approve(ctx, cmd.payout, cmd.operator)
 	case "payouts reject":

@@ -33,6 +33,9 @@ func TestParse(t *testing.T) {
 		{[]string{"payments", "resolve", "-payment", "p", "-receipt", "R", "-operator", opID}, command{}, true},                   // no amount
 		{[]string{"payments", "resolve", "-payment", "p", "-receipt", "R", "-amount", "abc", "-operator", opID}, command{}, true}, // bad amount
 		{[]string{"payments", "refund"}, command{}, true},
+		{[]string{"staff", "password", "-email", "Owner@Example.com", "-admin"}, command{name: "staff password", email: "Owner@Example.com", admin: true}, false},
+		{[]string{"staff", "password", "-email", "o@example.com", "-password", "a long temporary one"}, command{name: "staff password", email: "o@example.com", password: "a long temporary one"}, false},
+		{[]string{"staff", "password", "-password", "a long temporary one"}, command{}, true}, // no email
 		{[]string{"payments", "suspense-credit", "-receipt", "MCC0000001", "-user", "u-1", "-operator", opID},
 			command{name: "payments suspense-credit", receipt: "MCC0000001", user: "u-1", operator: "staff:" + opID}, false},
 		{[]string{"payments", "suspense-credit", "-receipt", "R", "-operator", opID}, command{}, true}, // no user

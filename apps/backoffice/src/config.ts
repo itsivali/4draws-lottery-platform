@@ -1,5 +1,5 @@
-/** Build-time configuration (Vite env). Staff sign in with Google or Apple (ADR 0018); the local staff realm stands in
- *  for them in development. Missing values stop the app instead of guessing a server. */
+/** Build-time configuration (Vite env). Staff sign in with email and password (ADR 0019); Google, Apple and, in
+ *  development, the local staff realm are offered when configured. A missing or insecure server stops the app. */
 export interface Config {
   apiBaseUrl: string
   google?: { clientId: string }
@@ -28,5 +28,5 @@ export function loadConfig(env: Record<string, string | undefined> = import.meta
     if (!secure(env.VITE_DEV_OIDC_AUTHORITY)) return null
     c.dev = { authority: env.VITE_DEV_OIDC_AUTHORITY, clientId: env.VITE_DEV_OIDC_CLIENT_ID }
   }
-  return c.google || c.apple || c.dev ? c : null
+  return c
 }

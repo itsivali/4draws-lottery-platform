@@ -81,13 +81,15 @@ services:
       DARAJA_SECURITY_CREDENTIAL: bG9jYWwtZGV2LW9ubHk=
       PUBLIC_BASE_URL: http://api:8080
       CORS_ALLOWED_ORIGINS: http://localhost:5173,http://localhost:8088
-      # Staff sign in with Google or Apple (ADR 0018); locally the staff realm stands in for them ("dev"), and ada is
-      # the first admin (scripts/seed-staff.sh invites the rest). Set STAFF_GOOGLE_CLIENT_ID in your shell to try
-      # Google locally (its OAuth client must allow http://localhost:5173).
+      # Staff sign in with email and password (ADR 0019); Google or Apple are optional, and locally the staff realm
+      # stands in for them ("dev"). ada is the first admin with the temporary password below (scripts/seed-staff.sh
+      # invites the rest, each with the password local-dev-staff-2026). Set STAFF_GOOGLE_CLIENT_ID in your shell to
+      # try Google locally (its OAuth client must allow http://localhost:5173).
       STAFF_DEV_OIDC_ISSUER: http://localhost:8081/realms/lottery-staff
       STAFF_DEV_OIDC_CLIENT_IDS: lottery-backoffice,lottery-e2e
       STAFF_DEV_OIDC_JWKS_URL: http://keycloak:8080/realms/lottery-staff/protocol/openid-connect/certs
       STAFF_BOOTSTRAP_ADMIN: ada@staff.local
+      STAFF_BOOTSTRAP_PASSWORD: local-dev-staff-2026 # local only; a real deployment's is a secret and changed at once
       STAFF_GOOGLE_CLIENT_ID: ${STAFF_GOOGLE_CLIENT_ID:-}
     ports: ["8080:8080"]
     depends_on:

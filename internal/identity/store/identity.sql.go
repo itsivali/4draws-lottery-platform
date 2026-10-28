@@ -254,20 +254,100 @@ func (q *Queries) InsertRefreshToken(ctx context.Context, arg InsertRefreshToken
 }
 
 const insertSession = `-- name: InsertSession :one
-INSERT INTO identity.sessions (user_id, device_id, created_at) VALUES ($1, $2, $3) RETURNING id
+INSERT INTO identity.sessions (user_id, device_id, created_at, platform) VALUES ($1, $2, $3, $4) RETURNING id
 `
 
 type InsertSessionParams struct {
 	UserID    string
 	DeviceID  *string
 	CreatedAt time.Time
+	Platform  *string
 }
 
 func (q *Queries) InsertSession(ctx context.Context, arg InsertSessionParams) (string, error) {
-	row := q.db.QueryRow(ctx, insertSession, arg.UserID, arg.DeviceID, arg.CreatedAt)
+	row := q.db.QueryRow(ctx, insertSession,
+		arg.UserID,
+		arg.DeviceID,
+		arg.CreatedAt,
+		arg.Platform,
+	)
 	var id string
 	err := row.Scan(&id)
 	return id, err
+}
+
+const listPlayers = `-- name: ListPlayers :many
+SELECT u.id, u.msisdn, u.kyc_status, u.status, (u.msisdn_verified_at IS NOT NULL)::boolean AS phone_verified, u.created_at,
+       coalesce(w.balance_kes, 0)::bigint AS balance_kes,
+       (SELECT count(*) FROM tickets.tickets t WHERE t.user_id = u.id AND t.status = 'paid')::bigint AS plays,
+       (SELECT max(s.created_at) FROM identity.sessions s WHERE s.user_id = u.id) AS last_sign_in_at,
+       c.requested_at AS closure_requested_at
+FROM identity.users u
+LEFT JOIN wallet.wallets w ON w.user_id = u.id
+LEFT JOIN identity.closure_requests c ON c.user_id = u.id AND c.closed_at IS NULL
+WHERE ($1::text IS NULL OR u.msisdn LIKE '%' || $1::text || '%' OR u.id::text = $1::text)
+  AND ($2::text IS NULL OR u.status = $2::text)
+  AND ($3::uuid IS NULL OR u.id < $3::uuid)
+ORDER BY u.id DESC
+LIMIT $4
+`
+
+type ListPlayersParams struct {
+	Q      *string
+	Status *string
+	Before *string
+	Lim    int32
+}
+
+type ListPlayersRow struct {
+	ID                 string
+	Msisdn             string
+	KycStatus          string
+	Status             string
+	PhoneVerified      bool
+	CreatedAt          time.Time
+	BalanceKes         int64
+	Plays              int64
+	LastSignInAt       interface{}
+	ClosureRequestedAt *time.Time
+}
+
+// the back office's player list (ADR 0019): newest first (ids are uuid v7), narrowed by a phone-number fragment and a
+// status; before (a user id) continues a page. Shows each player's balance, plays and last sign-in.
+func (q *Queries) ListPlayers(ctx context.Context, arg ListPlayersParams) ([]ListPlayersRow, error) {
+	rows, err := q.db.Query(ctx, listPlayers,
+		arg.Q,
+		arg.Status,
+		arg.Before,
+		arg.Lim,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPlayersRow
+	for rows.Next() {
+		var i ListPlayersRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Msisdn,
+			&i.KycStatus,
+			&i.Status,
+			&i.PhoneVerified,
+			&i.CreatedAt,
+			&i.BalanceKes,
+			&i.Plays,
+			&i.LastSignInAt,
+			&i.ClosureRequestedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const lockOpenClosure = `-- name: LockOpenClosure :one
@@ -556,6 +636,32 @@ type SetUserClosedParams struct {
 func (q *Queries) SetUserClosed(ctx context.Context, arg SetUserClosedParams) error {
 	_, err := q.db.Exec(ctx, setUserClosed, arg.At, arg.ID)
 	return err
+}
+
+const setUserSuspended = `-- name: SetUserSuspended :execrows
+UPDATE identity.users SET status = $1, updated_at = $2
+WHERE id = $3 AND status = $4
+`
+
+type SetUserSuspendedParams struct {
+	Status     string
+	At         time.Time
+	ID         string
+	FromStatus string
+}
+
+// suspend an active account or reinstate a suspended one; closed accounts are left alone
+func (q *Queries) SetUserSuspended(ctx context.Context, arg SetUserSuspendedParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setUserSuspended,
+		arg.Status,
+		arg.At,
+		arg.ID,
+		arg.FromStatus,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const upsertDevice = `-- name: UpsertDevice :one

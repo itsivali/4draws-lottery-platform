@@ -39,7 +39,7 @@ type Deps struct {
 	Draws *draws.Service
 	// Payouts sends withdrawals through M-Pesa B2C; nil answers 503.
 	Payouts *payouts.Service
-	// Staff authenticates back-office sessions (opened with Google or Apple, ADR 0018); nil closes the /v1/staff routes (503).
+	// Staff authenticates back-office sessions (opened with a password, Google or Apple; ADR 0018, 0019); nil closes the /v1/staff routes (503).
 	Staff staff.Authenticator
 	// StaffServices are what the back office acts through (on the staff database pool).
 	StaffServices StaffServices

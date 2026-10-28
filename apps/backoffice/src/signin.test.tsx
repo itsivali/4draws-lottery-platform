@@ -6,9 +6,9 @@ import { loadConfig } from './config'
 import { SignIn, type Providers } from './SignIn'
 
 describe('config', () => {
-  it('needs a server and at least one way to sign in, over https except on localhost', () => {
+  it('needs a server over https (http on localhost); Google, Apple and the dev realm are optional', () => {
     expect(loadConfig({})).toBeNull()
-    expect(loadConfig({ VITE_API_BASE_URL: 'https://api.example.com' })).toBeNull()
+    expect(loadConfig({ VITE_API_BASE_URL: 'https://api.example.com' })).toEqual({ apiBaseUrl: 'https://api.example.com' })
     expect(loadConfig({ VITE_API_BASE_URL: 'http://api.example.com', VITE_GOOGLE_CLIENT_ID: 'g' })).toBeNull()
     const c = loadConfig({ VITE_API_BASE_URL: 'https://api.example.com', VITE_GOOGLE_CLIENT_ID: 'g', VITE_APPLE_CLIENT_ID: 'ke.bahati.backoffice' }, 'https://bo.example.com')
     expect(c).toEqual({ apiBaseUrl: 'https://api.example.com', google: { clientId: 'g' }, apple: { clientId: 'ke.bahati.backoffice', redirectUri: 'https://bo.example.com/' } })
@@ -38,8 +38,35 @@ function setup(route: (body: unknown) => { status: number; body?: unknown }, pro
 }
 
 describe('sign in', () => {
+  it('signs in with an email address and password, and says so in the server’s words when refused', async () => {
+    const session = { token: 'stf_x', expires_at: '2026-10-26T21:00:00Z', member: { id: 'm1', name: 'Owner', email: 'owner@example.com', roles: ['admin'], must_change_password: true } }
+    let attempts = 0
+    const { fetch, onSignedIn } = setup((body) => {
+      attempts++
+      const b = body as { provider: string; email: string; password: string }
+      if (b.provider !== 'password') return { status: 400 }
+      return b.password === 'the right one here'
+        ? { status: 201, body: session }
+        : { status: 401, body: { type: 'https://lottery.example/problems/invalid-credentials', title: 'Wrong email address or password', status: 401 } }
+    })
+    const user = userEvent.setup()
+    expect(screen.getByRole('button', { name: 'Sign in' })).toBeDisabled()
+    await user.type(screen.getByLabelText('Email address'), ' Owner@Example.com ')
+    await user.type(screen.getByLabelText('Password'), 'not it')
+    await user.click(screen.getByRole('button', { name: 'Sign in' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Wrong email address or password')
+    expect(onSignedIn).not.toHaveBeenCalled()
+    await user.clear(screen.getByLabelText('Password'))
+    await user.type(screen.getByLabelText('Password'), 'the right one here')
+    await user.click(screen.getByRole('button', { name: 'Sign in' }))
+    expect(onSignedIn).toHaveBeenCalledWith(session)
+    expect(attempts).toBe(2)
+    const [, init] = fetch.mock.calls[1] ?? []
+    expect(JSON.parse(init?.body as string)).toEqual({ provider: 'password', email: 'Owner@Example.com', password: 'the right one here' })
+  })
+
   it('offers Google and Apple and exchanges the ID token for a back-office session', async () => {
-    const session = { token: 'stf_x', expires_at: '2026-10-26T21:00:00Z', member: { id: 'm1', name: 'Owner', email: 'owner@example.com', roles: ['admin'] } }
+    const session = { token: 'stf_x', expires_at: '2026-10-26T21:00:00Z', member: { id: 'm1', name: 'Owner', email: 'owner@example.com', roles: ['admin'], must_change_password: false } }
     const { fetch, onSignedIn, all } = setup(() => ({ status: 201, body: session }))
     expect(all.google).toHaveBeenCalled() // Google renders its own button into the page
     await userEvent.setup().click(screen.getByRole('button', { name: 'Sign in with Apple' }))

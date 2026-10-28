@@ -230,6 +230,7 @@ type IdentitySession struct {
 	CreatedAt     time.Time
 	RevokedAt     pgtype.Timestamptz
 	RevokedReason pgtype.Text
+	Platform      pgtype.Text
 }
 
 type IdentityUser struct {
@@ -463,14 +464,17 @@ type StaffIdentity struct {
 }
 
 type StaffMember struct {
-	ID        string
-	Email     string
-	Name      string
-	Roles     []string
-	Active    bool
-	InvitedBy string
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	ID                 string
+	Email              string
+	Name               string
+	Roles              []string
+	Active             bool
+	InvitedBy          string
+	CreatedAt          time.Time
+	UpdatedAt          time.Time
+	PasswordHash       pgtype.Text
+	PasswordChangedAt  pgtype.Timestamptz
+	MustChangePassword bool
 }
 
 type StaffSession struct {

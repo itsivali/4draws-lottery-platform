@@ -54,11 +54,21 @@ Read this first at the start of every session.
 - Free-tier deployment: migrate on start (advisory lock), workers in-process, free Postgres + Key Value.
 - **Draws (owner, 2026-10-26, ADR 0017):** weekly, monthly and quarterly periods are each player's own, 7, 30 and 90
   days back to back from their first play; a draw closes each day for the players whose period ends that day.
-- **Staff (owner, 2026-10-26, ADR 0018):** the back office signs staff in with Google or Apple; members and roles
-  (with new `admin` and `finance` roles) are managed on its Staff page; itsivali@gmail.com is the bootstrap admin.
-  The back office has a Finance dashboard read from the ledger and deploys as the `lottery-backoffice` static site.
+- **Plays (owner, 2026-10-28):** a spin costs **KES 100** again from 2026-10-28 (migration 00033), up to four a day, and
+  is paid from the player's own M-Pesa number through the Daraja sandbox: when the wallet cannot cover the price the
+  app charges exactly the price as a top-up and spins the moment it is credited ("Pay KES 100 with M-Pesa and spin");
+  a wallet that can cover it still pays from the wallet.
+- **Look (owner, 2026-10-28):** colourful, premium and light only, on a white background, in the player apps and the
+  back office: the "Sunset" palette (coral primary, violet accents, gold decorative; `design-system/lottery-platform/
+  MASTER.md` v2.1). Dark mode is gone. The web app links to the back office (`BACKOFFICE_URL` dart-define; Render
+  `lottery-web` points at `https://lottery-backoffice.onrender.com`, to confirm once the back office site exists).
+- **Staff (owner, 2026-10-28, ADR 0019; was ADR 0018):** two roles, `admin` (everything, staff management, app
+  metrics) and `staff` (every operational queue and the finance dashboard). Staff sign in with email and password
+  (temporary ones set by admins, changed at the first sign-in); Google and Apple are optional. itsivali@gmail.com is
+  the bootstrap admin; `STAFF_BOOTSTRAP_PASSWORD` (Render secret, to set) is their first temporary password. The back
+  office has Finance and App metrics dashboards and deploys as the `lottery-backoffice` static site.
 - **Testing with real M-Pesa (owner, 2026-10-26):** top-ups from KES 1 (`TOP_UP_MIN_KES=1` on Render and in compose;
-  the apps read the bounds from `GET /v1/wallet`) and plays at KES 1 from 2026-10-26 (migration 00028). Before launch:
+  the apps read the top-up and withdrawal bounds from `GET /v1/wallet`) and plays at KES 1 from 2026-10-26 (migration 00028). Before launch:
   set `TOP_UP_MIN_KES` and add an odds/price version with the launch price from the launch date. The apps point at
   `https://lottery-api-4u9g.onrender.com` (repo variable `MOBILE_API_BASE_URL`; Render static site `lottery-web`)
   until the Cloudflare domain is set up.

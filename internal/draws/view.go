@@ -93,21 +93,46 @@ func (s *Service) Get(ctx context.Context, id string) (Draw, error) {
 	return out, nil
 }
 
-// List returns the most recent draws, newest period first.
-func (s *Service) List(ctx context.Context, limit int) ([]Draw, error) {
-	ids, err := store.New(s.pool).ListDraws(ctx, int32(limit)) //nolint:gosec // callers pass small limits
-	if err != nil {
-		return nil, err
+// ErrBadCursor is returned for a page cursor that is not a draw id.
+var ErrBadCursor = errors.New("draws: bad cursor")
+
+// Page is one page of the draw list. NextBefore continues it (pass it as before); empty on the last page.
+type Page struct {
+	Draws      []Draw
+	NextBefore string
+}
+
+// List returns draws, newest period first and the latest draw first within a period. before is the id of the last
+// draw of the previous page, or "". A cursor that is no draw's id gives an empty page.
+func (s *Service) List(ctx context.Context, limit int, before string) (Page, error) {
+	var cursor *string
+	if before != "" {
+		cursor = &before
 	}
-	out := make([]Draw, 0, len(ids))
+	// one extra row tells whether another page exists
+	ids, err := store.New(s.pool).ListDraws(ctx, store.ListDrawsParams{Before: cursor, MaxRows: int32(limit) + 1}) //nolint:gosec // callers pass small limits
+	if pe := (*pgconn.PgError)(nil); errors.As(err, &pe) && pe.Code == "22P02" {                                   // not a uuid
+		return Page{}, ErrBadCursor
+	}
+	if err != nil {
+		return Page{}, err
+	}
+	more := len(ids) > limit
+	if more {
+		ids = ids[:limit]
+	}
+	page := Page{Draws: make([]Draw, 0, len(ids))}
 	for _, id := range ids {
 		d, err := s.Get(ctx, id)
 		if err != nil {
-			return nil, err
+			return Page{}, err
 		}
-		out = append(out, d)
+		page.Draws = append(page.Draws, d)
 	}
-	return out, nil
+	if more {
+		page.NextBefore = ids[len(ids)-1]
+	}
+	return page, nil
 }
 
 // CertificateOf returns a conducted draw's certificate exactly as it was hashed, with its hash (ErrWithheld for one

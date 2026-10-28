@@ -154,19 +154,27 @@ export interface ConfirmField {
   name: string
   label: string
   required?: boolean
-  /** number: whole shillings above zero; email: a plausible address */
-  type?: 'text' | 'number' | 'email' | 'checkbox'
+  /** number: whole shillings above zero; email: a plausible address; password: 12 characters or more; radio: one of options */
+  type?: 'text' | 'number' | 'email' | 'checkbox' | 'password' | 'radio'
+  options?: { value: string; label: string; description?: string }[]
   help?: string
 }
 
 const emailRE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
+/** The staff password rules the server applies (ADR 0019), checked here first so the form says so before sending. */
+export const MIN_PASSWORD = 12
+
+/** How many characters (code points, as the server counts them) a password has. */
+export const characters = (s: string): number => Array.from(s).length
+
 /** Why a field's value cannot be sent, or null. Empty values are the `required` check's business. */
 export function fieldProblem(f: ConfirmField, value: string): string | null {
-  const v = value.trim()
+  const v = f.type === 'password' ? value : value.trim()
   if (!v) return null
   if (f.type === 'number') return /^\d+$/.test(v) && Number(v) > 0 ? null : 'Enter a whole number of shillings above zero.'
   if (f.type === 'email') return emailRE.test(v) ? null : 'Enter an email address.'
+  if (f.type === 'password') return characters(v) >= MIN_PASSWORD ? null : `Use at least ${MIN_PASSWORD} characters (a short sentence is fine).`
   return null
 }
 
@@ -205,7 +213,8 @@ export function ConfirmDialog({
   const crossProblem = validate?.(values) ?? null
   const blocked = missing || Object.values(problems).some(Boolean) || crossProblem !== null
   const checks = fields.filter((f) => f.type === 'checkbox')
-  const inputs = fields.filter((f) => f.type !== 'checkbox')
+  const radios = fields.filter((f) => f.type === 'radio')
+  const inputs = fields.filter((f) => f.type !== 'checkbox' && f.type !== 'radio')
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) cancel() }}>
       <DialogContent showCloseButton={false} aria-describedby={undefined} className="sm:max-w-[520px]">
@@ -231,7 +240,7 @@ export function ConfirmDialog({
                 type={f.type === 'number' ? 'text' : (f.type ?? 'text')}
                 required={f.required}
                 inputMode={f.type === 'number' ? 'numeric' : f.type === 'email' ? 'email' : undefined}
-                autoComplete={f.type === 'email' ? 'email' : 'off'}
+                autoComplete={f.type === 'email' ? 'email' : f.type === 'password' ? 'new-password' : 'off'}
                 aria-invalid={problems[f.name] ? true : undefined}
                 aria-describedby={problems[f.name] ? `${id}-${f.name}-p` : undefined}
                 value={values[f.name] ?? ''}
@@ -239,6 +248,18 @@ export function ConfirmDialog({
               />
               {problems[f.name] ? <p id={`${id}-${f.name}-p`} className="text-xs text-destructive">{problems[f.name]}</p> : f.help ? <p className="text-xs text-muted-foreground">{f.help}</p> : null}
             </div>
+          ))}
+          {radios.map((f) => (
+            <fieldset key={f.name} className="grid gap-2 rounded-lg border bg-muted/40 p-3">
+              <legend className="px-1 text-sm font-medium">{f.label}</legend>
+              {(f.options ?? []).map((o) => (
+                <label key={o.value} className="flex cursor-pointer items-start gap-2.5 rounded-md p-1.5 has-[:checked]:bg-primary-container/60">
+                  <input type="radio" name={`${id}-${f.name}`} value={o.value} className="mt-1 size-4 accent-primary" checked={(values[f.name] ?? '') === o.value}
+                    onChange={() => { setValues({ ...values, [f.name]: o.value }) }} />
+                  <span className="grid gap-0.5 text-sm"><span className="font-medium">{o.label}</span>{o.description ? <span className="text-muted-foreground">{o.description}</span> : null}</span>
+                </label>
+              ))}
+            </fieldset>
           ))}
           {checks.length > 0 ? (
             <div className="grid gap-2.5 rounded-lg border bg-muted/40 p-3 sm:grid-cols-2">

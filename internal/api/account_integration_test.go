@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/itsivali/lottery-platform/internal/payments"
+	"github.com/itsivali/lottery-platform/internal/payouts"
 )
 
 // sameInstant compares an RFC 3339 value from a response with want, whatever offset it was written in.
@@ -26,10 +27,12 @@ func TestAPI_WalletShowsTheConfirmedBalanceDebtAndHistoryNewestFirst(t *testing.
 		r.Body["debt_kes"] != float64(0) || len(r.Body["transactions"].([]any)) != 0 {
 		t.Fatalf("new wallet: %d %s", r.Code, r.Raw)
 	}
-	// the apps take the top-up bounds from here, so the minimum changes without a store release
+	// the apps take the top-up and withdrawal bounds from here, so a minimum changes without a store release
 	if r := e.do(t, http.MethodGet, "/v1/wallet", s.access, nil); r.Body["top_up"] == nil ||
-		r.Body["top_up"].(map[string]any)["min_kes"] != float64(payments.DefaultMinTopUpKES) || r.Body["top_up"].(map[string]any)["max_kes"] != float64(250000) {
-		t.Fatalf("top-up bounds: %s", r.Raw)
+		r.Body["top_up"].(map[string]any)["min_kes"] != float64(payments.DefaultMinTopUpKES) || r.Body["top_up"].(map[string]any)["max_kes"] != float64(250000) ||
+		r.Body["withdraw"] == nil || r.Body["withdraw"].(map[string]any)["min_kes"] != float64(payouts.DefaultMinWithdrawalKES) ||
+		r.Body["withdraw"].(map[string]any)["max_kes"] != float64(payouts.DefaultMaxWithdrawalKES) {
+		t.Fatalf("bounds: %s", r.Raw)
 	}
 	e.canPlay(t, s, 1000) // 950 after excise
 	if r := e.doKey(t, http.MethodPost, "/v1/plays", s.access, "play-1", nil); r.Code != http.StatusCreated {

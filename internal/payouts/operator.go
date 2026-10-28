@@ -2,9 +2,11 @@ package payouts
 
 import (
 	"context"
+	"errors"
 	"strings"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/itsivali/lottery-platform/internal/audit"
 	"github.com/itsivali/lottery-platform/internal/payouts/store"
@@ -100,15 +102,28 @@ func (s *Service) Settle(ctx context.Context, id, operator string, paid bool, re
 	})
 }
 
-// InState lists payouts in an internal state, oldest first (for operators).
-func (s *Service) InState(ctx context.Context, state string, limit int) ([]Payout, error) {
-	rows, err := store.New(s.pool).PayoutsInStatus(ctx, store.PayoutsInStatusParams{Status: state, MaxRows: int32(limit)}) //nolint:gosec // small limits
+// InState returns up to limit payouts in a state, oldest first (the operator's queue). after is the id of the last
+// payout of the previous page, or ""; next continues the list (pass it as after) and is empty on the last page.
+func (s *Service) InState(ctx context.Context, state string, limit int, after string) (list []Payout, next string, err error) {
+	var cursor *string
+	if after != "" {
+		cursor = &after
+	}
+	// one extra row tells whether another page exists
+	rows, err := store.New(s.pool).PayoutsInStatus(ctx, store.PayoutsInStatusParams{Status: state, After: cursor, MaxRows: int32(limit) + 1}) //nolint:gosec // small limits
+	if pe := (*pgconn.PgError)(nil); errors.As(err, &pe) && pe.Code == "22P02" {                                                              // not a uuid
+		return nil, "", ErrBadCursor
+	}
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
-	out := make([]Payout, 0, len(rows))
+	if len(rows) > limit {
+		rows = rows[:limit]
+		next = rows[len(rows)-1].ID
+	}
+	list = make([]Payout, 0, len(rows))
 	for _, p := range rows {
-		out = append(out, view(p))
+		list = append(list, view(p))
 	}
-	return out, nil
+	return list, next, nil
 }

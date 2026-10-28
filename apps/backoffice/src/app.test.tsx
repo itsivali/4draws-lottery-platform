@@ -10,16 +10,18 @@ const submission = { user_id: 'u1', msisdn: '254712345678', national_id: '123456
 
 describe('roles', () => {
   it('a member sees only the sections their roles open', () => {
-    expect(visibleSections(['kyc_reviewer']).map((s) => s.path)).toEqual(['/kyc'])
-    expect(visibleSections(['auditor']).map((s) => s.path)).toEqual(['/finance', '/draws', '/payouts', '/payments', '/tax', '/alerts', '/closures'])
+    expect(visibleSections(['staff']).map((s) => s.path)).toEqual(['/finance', '/players', '/kyc', '/draws', '/payouts', '/payments', '/tax', '/alerts', '/closures'])
+    expect(visibleSections(['admin']).map((s) => s.path)).toEqual(['/finance', '/metrics', '/players', '/kyc', '/draws', '/payouts', '/payments', '/tax', '/alerts', '/closures', '/staff'])
   })
 
   it('the navigation and the routes follow the roles', async () => {
-    renderSignedIn(<App />, { roles: ['kyc_reviewer'], route: () => ({ status: 200, body: { submissions: [] } }), path: '/payouts' })
+    renderSignedIn(<App />, { roles: ['staff'], route: () => ({ status: 200, body: { submissions: [] } }), path: '/staff' })
     const nav = screen.getByRole('navigation', { name: 'Back office' })
     expect(within(nav).getByRole('link', { name: 'Identity review' })).toBeInTheDocument()
-    expect(within(nav).queryByRole('link', { name: 'Payouts' })).not.toBeInTheDocument()
-    // a forbidden address goes back to the overview
+    expect(within(nav).getByRole('link', { name: 'Payouts' })).toBeInTheDocument()
+    expect(within(nav).queryByRole('link', { name: 'Staff' })).not.toBeInTheDocument()
+    expect(within(nav).queryByRole('link', { name: 'App metrics' })).not.toBeInTheDocument()
+    // a forbidden address (the admin-only Staff page) goes back to the overview
     expect(await screen.findByRole('heading', { name: /Signed in as Alice/ })).toBeInTheDocument()
   })
 })
@@ -28,7 +30,7 @@ describe('identity review', () => {
   it('approving needs a reason, sends it, and reloads the queue', async () => {
     let pending = [submission]
     const { fetch } = renderSignedIn(<App />, {
-      roles: ['kyc_reviewer'],
+      roles: ['staff'],
       path: '/kyc',
       route: (method, url) => {
         if (method === 'GET' && url.pathname === '/v1/staff/kyc/pending') return { status: 200, body: { submissions: pending } }
@@ -62,7 +64,7 @@ const frozen: Draw = {
 describe('draws', () => {
   it('shows how many officials have signed, and the two-person refusal in the server’s words', async () => {
     renderSignedIn(<App />, {
-      roles: ['draw_official'],
+      roles: ['staff'],
       path: '/draws',
       route: (method, url) => {
         if (url.pathname === '/v1/staff/draws') return { status: 200, body: { draws: [frozen] } }
@@ -80,21 +82,10 @@ describe('draws', () => {
     expect(alert).toHaveTextContent('Nothing was changed.')
   })
 
-  it('an auditor sees draws but no buttons that change them', async () => {
-    renderSignedIn(<App />, {
-      roles: ['auditor'],
-      path: '/draws',
-      route: (_m, url) => (url.pathname === '/v1/staff/draws' ? { status: 200, body: { draws: [frozen] } } : { status: 200, body: { overdue: [] } }),
-    })
-    expect(await screen.findByText('1 of 2 signatures')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Sign' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Void' })).not.toBeInTheDocument()
-  })
-
   it("a personal draw says whose period it holds", async () => {
     const personal: Draw = { ...frozen, id: 'd2', draw_type: 'weekly', period_start: '2026-10-28', period_end: '2026-11-03', basis: 'personal' }
     renderSignedIn(<App />, {
-      roles: ['auditor'],
+      roles: ['staff'],
       path: '/draws',
       route: (_m, url) => (url.pathname === '/v1/staff/draws' ? { status: 200, body: { draws: [personal] } } : { status: 200, body: { overdue: [] } }),
     })
@@ -107,7 +98,7 @@ describe('payouts', () => {
     let calls = 0
     const held = { id: 'p1', user_id: 'u', kind: 'withdrawal', status: 'processing', state: 'held', gross_kes: 120000, tax_kes: 0, net_kes: 120000, debt_repaid_kes: 0, created_at: '2026-10-26T09:00:00Z' }
     const { fetch } = renderSignedIn(<App />, {
-      roles: ['payout_operator'],
+      roles: ['staff'],
       path: '/payouts',
       route: (method) => {
         if (method === 'GET') return { status: 200, body: { payouts: [held] } }
@@ -131,7 +122,7 @@ describe('payouts', () => {
 describe('closures', () => {
   it('a refused closure explains why (money still in the account)', async () => {
     renderSignedIn(<App />, {
-      roles: ['support'],
+      roles: ['staff'],
       path: '/closures',
       route: (method) =>
         method === 'GET'

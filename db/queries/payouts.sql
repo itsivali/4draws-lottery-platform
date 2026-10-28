@@ -32,7 +32,13 @@ WHERE user_id = $1 AND kind = 'withdrawal' AND created_at >= sqlc.arg(since) AND
 SELECT * FROM payouts.payouts WHERE user_id = $1 ORDER BY created_at DESC LIMIT sqlc.arg(max_rows);
 
 -- name: PayoutsInStatus :many
-SELECT * FROM payouts.payouts WHERE status = $1 ORDER BY created_at LIMIT sqlc.arg(max_rows);
+-- Oldest first (the operator's queue); after (a payout id) continues a page from the payout after it.
+SELECT p.* FROM payouts.payouts p
+WHERE p.status = sqlc.arg(status)
+  AND (sqlc.narg(after)::uuid IS NULL
+       OR (p.created_at, p.id) > (SELECT a.created_at, a.id FROM payouts.payouts a WHERE a.id = sqlc.narg(after)::uuid))
+ORDER BY p.created_at, p.id
+LIMIT sqlc.arg(max_rows);
 
 -- name: StalePayouts :many
 -- payouts the worker should look at again: still open and untouched for a while

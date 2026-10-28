@@ -1,7 +1,9 @@
 import {
-  Banknote, Bell, ChevronsUpDown, IdCard, Landmark, LayoutDashboard, LogOut, Monitor, Moon, Receipt, Search, Sun, Ticket, UserX, Users, Wallet,
+  Banknote, Bell, ChartSpline, ChevronsUpDown, IdCard, KeyRound, Landmark, LayoutDashboard, LogOut, Receipt, Search, Ticket, UserRound, UserX, Users, Wallet,
 } from 'lucide-react'
 import { useEffect, useState, type ComponentType } from 'react'
+import { PasswordDialog } from './components/PasswordDialog'
+import { MetricsPage } from './pages/Metrics'
 import { Link, NavLink, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { useSession } from './context'
 import { AlertsPage } from './pages/Alerts'
@@ -12,16 +14,16 @@ import { KycPage } from './pages/Kyc'
 import { OverviewPage } from './pages/Overview'
 import { PaymentsPage } from './pages/Payments'
 import { PayoutsPage } from './pages/Payouts'
+import { PlayersPage } from './pages/Players'
 import { StaffPage } from './pages/Staff'
 import { TaxPage } from './pages/Tax'
 import { ReviewQueueProvider, useReviewQueue } from './reviewQueue'
 import { roleLabels, visibleSections, type Section } from './roles'
-import { applyTheme, readTheme, type ThemeMode } from './theme'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from '@/components/ui/breadcrumb'
 import { Button } from '@/components/ui/button'
 import { CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator } from '@/components/ui/command'
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Separator } from '@/components/ui/separator'
 import {
   Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarHeader, SidebarInset, SidebarMenu, SidebarMenuBadge,
@@ -30,7 +32,9 @@ import {
 
 const pages: Record<string, () => React.JSX.Element> = {
   '/finance': FinancePage,
+  '/metrics': MetricsPage,
   '/staff': StaffPage,
+  '/players': PlayersPage,
   '/kyc': KycPage,
   '/draws': DrawsPage,
   '/payouts': PayoutsPage,
@@ -42,6 +46,8 @@ const pages: Record<string, () => React.JSX.Element> = {
 
 const icons: Record<string, ComponentType<{ className?: string }>> = {
   '/finance': Landmark,
+  '/metrics': ChartSpline,
+  '/players': UserRound,
   '/kyc': IdCard,
   '/draws': Ticket,
   '/payouts': Banknote,
@@ -55,7 +61,8 @@ const icons: Record<string, ComponentType<{ className?: string }>> = {
 /** The navigation's groups, in order; a section appears under the first group that lists it. */
 const groups: { label: string; paths: string[] }[] = [
   { label: 'Money', paths: ['/finance', '/payments', '/payouts', '/tax'] },
-  { label: 'Players', paths: ['/kyc', '/closures'] },
+  { label: 'Apps', paths: ['/metrics'] },
+  { label: 'Players', paths: ['/players', '/kyc', '/closures'] },
   { label: 'Operations', paths: ['/draws', '/alerts'] },
   { label: 'Administration', paths: ['/staff'] },
 ]
@@ -100,7 +107,6 @@ function Layout() {
           </Breadcrumb>
           <div className="ml-auto flex items-center gap-1">
             <CommandMenu sections={sections} />
-            <ThemeMenu />
           </div>
         </header>
         <div className="mx-auto w-full max-w-[1200px] px-4 py-6 md:px-8 md:py-8">
@@ -136,6 +142,7 @@ function AppSidebar({ sections }: { sections: Section[] }) {
   const close = () => { if (isMobile) setOpenMobile(false) }
   const waiting = queue && queue.waiting > 0 ? queue.waiting : 0
   const initials = (me.name || me.email).split(/[\s@.]+/).filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase() ?? '').join('')
+  const [changing, setChanging] = useState(false)
   return (
     <Sidebar collapsible="icon" variant="inset">
       <SidebarHeader>
@@ -221,9 +228,11 @@ function AppSidebar({ sections }: { sections: Section[] }) {
                   <span className="block truncate text-xs text-muted-foreground">{me.roles.map((r) => roleLabels[r]).join(', ') || 'No role'}</span>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
+                <DropdownMenuItem onSelect={() => { setChanging(true) }}><KeyRound /> Change password</DropdownMenuItem>
                 <DropdownMenuItem onSelect={signOut}><LogOut /> Sign out</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
+            <PasswordDialog open={changing} onClose={() => { setChanging(false) }} />
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarFooter>
@@ -232,7 +241,7 @@ function AppSidebar({ sections }: { sections: Section[] }) {
   )
 }
 
-/** The brand's disc: an emerald circle with a gold pointer notch (the player app's BrandMark, in one glyph). */
+/** The brand's disc: a coral circle with a gold pointer notch (the player app's BrandMark, in one glyph). */
 function BrandGlyph() {
   return (
     <svg viewBox="0 0 24 24" className="size-5" aria-hidden="true">
@@ -282,25 +291,5 @@ function CommandMenu({ sections }: { sections: Section[] }) {
         </CommandList>
       </CommandDialog>
     </>
-  )
-}
-
-function ThemeMenu() {
-  const [mode, setMode] = useState<ThemeMode>(readTheme)
-  useEffect(() => { applyTheme(mode) }, [mode])
-  const Icon = mode === 'dark' ? Moon : mode === 'light' ? Sun : Monitor
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button type="button" variant="ghost" size="icon-sm" aria-label="Appearance"><Icon /></Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        <DropdownMenuRadioGroup value={mode} onValueChange={(v) => { setMode(v as ThemeMode) }}>
-          <DropdownMenuRadioItem value="system"><Monitor /> System</DropdownMenuRadioItem>
-          <DropdownMenuRadioItem value="light"><Sun /> Light</DropdownMenuRadioItem>
-          <DropdownMenuRadioItem value="dark"><Moon /> Dark</DropdownMenuRadioItem>
-        </DropdownMenuRadioGroup>
-      </DropdownMenuContent>
-    </DropdownMenu>
   )
 }

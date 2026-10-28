@@ -107,16 +107,33 @@ func (h *handlers) listDraws(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	list, err := h.Draws.List(r.Context(), limit)
-	if err != nil {
+	page, err := h.Draws.List(r.Context(), limit, r.URL.Query().Get("before"))
+	switch {
+	case errors.Is(err, draws.ErrBadCursor):
+		httpx.WriteProblem(w, http.StatusBadRequest, "invalid-cursor", "Invalid cursor", "use next_before from the previous page")
+		return
+	case err != nil:
 		internalError(w, err)
 		return
 	}
-	out := make([]drawJSON, 0, len(list))
-	for _, d := range list {
+	httpx.WriteJSON(w, http.StatusOK, drawPageJSON(page))
+}
+
+// drawPageJSON is a page of draws with the cursor of the next page (null on the last).
+func drawPageJSON(page draws.Page) map[string]any {
+	out := make([]drawJSON, 0, len(page.Draws))
+	for _, d := range page.Draws {
 		out = append(out, toDrawJSON(d))
 	}
-	httpx.WriteJSON(w, http.StatusOK, map[string]any{"draws": out})
+	return map[string]any{"draws": out, "next_before": nullable(page.NextBefore)}
+}
+
+// nullable is a cursor as JSON: the string, or null when there is no next page.
+func nullable(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
 }
 
 func (h *handlers) getDraw(w http.ResponseWriter, r *http.Request) {

@@ -6,13 +6,13 @@ import { renderSignedIn } from './test/render'
 import type { StaffMember } from './types'
 
 const members: StaffMember[] = [
-  { id: 's1', email: 'alice@staff.local', name: 'Alice', roles: ['admin'], active: true, invited_by: 'bootstrap', providers: ['google'], last_sign_in: '2026-10-26T09:00:00Z', created_at: '2026-10-26T08:00:00Z' },
+  { id: 's1', email: 'alice@staff.local', name: 'Alice', roles: ['admin'], active: true, invited_by: 'bootstrap', providers: ['google'], last_sign_in: '2026-10-26T09:00:00Z', created_at: '2026-10-26T08:00:00Z', has_password: true, must_change_password: false },
 ]
 
 const submission = { user_id: 'u1', msisdn: '254712345678', national_id: '12345678', full_name: 'Amina Otieno', date_of_birth: '1992-03-04', submitted_at: '2026-10-26T09:00:00Z' }
 
 describe('forms refuse what the server would refuse', () => {
-  it('an invite needs a plausible email and at least one role', async () => {
+  it('an invite needs a plausible email, and a temporary password of 12 characters or more when given', async () => {
     renderSignedIn(<App />, { roles: ['admin'], path: '/staff', route: () => ({ status: 200, body: { members } }) })
     const user = userEvent.setup()
     await user.click(await screen.findByRole('button', { name: 'Invite a member' }))
@@ -23,14 +23,17 @@ describe('forms refuse what the server would refuse', () => {
     expect(invite).toBeDisabled()
     await user.clear(within(dialog).getByLabelText(/^Email address/))
     await user.type(within(dialog).getByLabelText(/^Email address/), 'tara@staff.local')
-    expect(within(dialog).getByText('Choose at least one role.')).toBeInTheDocument()
+    expect(within(dialog).getByRole('radio', { name: /^Staff/ })).toBeChecked() // the usual role, chosen by default
+    expect(invite).toBeEnabled() // a password is optional: Google or Apple may be their way in
+    await user.type(within(dialog).getByLabelText(/^Temporary password/), 'short1')
+    expect(within(dialog).getByText(/Use at least 12 characters/)).toBeInTheDocument()
     expect(invite).toBeDisabled()
-    await user.click(within(dialog).getByRole('checkbox', { name: 'Tax officer' }))
+    await user.type(within(dialog).getByLabelText(/^Temporary password/), '-but-now-long-enough')
     expect(invite).toBeEnabled()
   })
 
   it('an amount must be whole shillings above zero', async () => {
-    renderSignedIn(<App />, { roles: ['payments_operator'], path: '/payments', route: () => ({ status: 200, body: {} }) })
+    renderSignedIn(<App />, { roles: ['staff'], path: '/payments', route: () => ({ status: 200, body: {} }) })
     const user = userEvent.setup()
     await user.click(await screen.findByRole('button', { name: 'Resolve an unconfirmed top-up' }))
     const dialog = await screen.findByRole('dialog', { name: 'Resolve an unconfirmed top-up' })
@@ -49,7 +52,7 @@ describe('the identity queue stays honest', () => {
   it('a decision re-reads the count with the list, so no false arrival is raised', async () => {
     let pending = [submission]
     const { fetch } = renderSignedIn(<App />, {
-      roles: ['kyc_reviewer'],
+      roles: ['staff'],
       path: '/kyc',
       route: (method, url) => {
         if (url.pathname === '/v1/staff/kyc/queue') return { status: 200, body: { waiting: pending.length, oldest_submitted_at: null } }

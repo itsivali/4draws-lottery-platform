@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 // `Elevation`, `Gradients`, `Space`, `Radii` and `Motion`.
 
 /// Semantic colours (MASTER.md §2). Gold is decorative only and never marks an ordinary success. The hero colours
-/// exist for two surfaces only: the balance card and the wheel's stage.
+/// exist for two surfaces only: the balance card and the wheel's stage. There is one theme, light, on white.
 @immutable
 class AppColors {
   const AppColors({
@@ -33,81 +33,60 @@ class AppColors {
     required this.heroGlow,
     required this.onHero,
     required this.onHeroMuted,
-    required this.wheelSegmentA,
-    required this.wheelSegmentB,
+    required this.wheelSegments,
     required this.wheelLucky,
     required this.wheelLabel,
+    required this.wheelStar,
+    required this.wheelChecker,
     required this.wheelRimDark,
     required this.wheelRimLight,
     required this.shadow,
   });
 
+  /// "Sunset" (MASTER.md §2, owner 2026-10-28): one light theme on a white page. Coral leads, violet accents, gold
+  /// stays decorative; status colours all clear 4.5:1 on the page, on cards and on muted panels (tokens_test).
   static const light = AppColors(
-    background: Color(0xFFF7F4EC),
-    surface: Color(0xFFFFFDF8),
-    surfaceRaised: Color(0xFFFFFFFF),
-    surfaceMuted: Color(0xFFEFEADF),
-    ink: Color(0xFF13201B),
-    inkMuted: Color(0xFF56625C),
-    primary: Color(0xFF0B5D45),
+    background: Color(0xFFFFFFFF),
+    surface: Color(0xFFFFFFFF),
+    surfaceRaised: Color(0xFFFFFAF7),
+    surfaceMuted: Color(0xFFFBEEE7),
+    ink: Color(0xFF2A1A2E),
+    inkMuted: Color(0xFF6B5A62),
+    primary: Color(0xFFC23412),
     onPrimary: Color(0xFFFFFFFF),
-    primaryContainer: Color(0xFFD3EBDF),
-    onPrimaryContainer: Color(0xFF053B2B),
-    accent: Color(0xFF0F6B66),
-    gold: Color(0xFF9C7A2E),
-    goldText: Color(0xFF7A5B17),
-    success: Color(0xFF1B7344),
-    warning: Color(0xFF8A5300),
-    error: Color(0xFFB3261E),
-    pending: Color(0xFF33528F),
-    border: Color(0xFFD9D2C2),
-    outline: Color(0xFF7C8580),
-    heroStart: Color(0xFF0E6A4F),
-    heroEnd: Color(0xFF063A2C),
-    heroGlow: Color(0xFF3FB58A),
+    primaryContainer: Color(0xFFFFE3D8),
+    onPrimaryContainer: Color(0xFF7A1F06),
+    accent: Color(0xFF6D3FC7),
+    gold: Color(0xFFA8781C),
+    goldText: Color(0xFF7A5612),
+    success: Color(0xFF1B7A43),
+    warning: Color(0xFFA05A00),
+    error: Color(0xFFC62828),
+    pending: Color(0xFF3B5BB5),
+    border: Color(0xFFF0DDD5),
+    outline: Color(0xFF8A7A80),
+    heroStart: Color(0xFFC9381A),
+    heroEnd: Color(0xFF3E2585),
+    heroGlow: Color(0xFFFF9B6A),
     onHero: Color(0xFFFFFFFF),
-    onHeroMuted: Color(0xFFCFE6DB),
-    wheelSegmentA: Color(0xFF0B5D45),
-    wheelSegmentB: Color(0xFF0E4A3A),
-    wheelLucky: Color(0xFF6E5520),
-    wheelLabel: Color(0xFFF7F4EC),
-    wheelRimDark: Color(0xFF6B5320),
-    wheelRimLight: Color(0xFFE2C98A),
-    shadow: Color(0xFF13201B),
-  );
-
-  static const dark = AppColors(
-    background: Color(0xFF0A1310),
-    surface: Color(0xFF121E1A),
-    surfaceRaised: Color(0xFF182822),
-    surfaceMuted: Color(0xFF1C2B26),
-    ink: Color(0xFFECF1ED),
-    inkMuted: Color(0xFFA3AFA9),
-    primary: Color(0xFF62C9A0),
-    onPrimary: Color(0xFF00291C),
-    primaryContainer: Color(0xFF123D30),
-    onPrimaryContainer: Color(0xFFC6EBDB),
-    accent: Color(0xFF5CC4BA),
-    gold: Color(0xFFD4B36A),
-    goldText: Color(0xFFD4B36A),
-    success: Color(0xFF72D39C),
-    warning: Color(0xFFF0B45B),
-    error: Color(0xFFFF8A80),
-    pending: Color(0xFF9DB6F2),
-    border: Color(0xFF2B3B35),
-    outline: Color(0xFF7F8C86),
-    heroStart: Color(0xFF145640),
-    heroEnd: Color(0xFF0B2E24),
-    heroGlow: Color(0xFF62C9A0),
-    onHero: Color(0xFFF2F7F3),
-    onHeroMuted: Color(0xFFB8D8C8),
-    wheelSegmentA: Color(0xFF0E5A43),
-    wheelSegmentB: Color(0xFF0A3F31),
-    wheelLucky: Color(0xFF6E5520),
-    wheelLabel: Color(0xFFF2EEE3),
-    wheelRimDark: Color(0xFF7A6130),
-    wheelRimLight: Color(0xFFEBD49A),
-    shadow: Color(0xFF000000),
+    onHeroMuted: Color(0xFFFFE1D2),
+    // the wheel is the one place colour runs free (owner, 2026-10-28): six bright hues in turn, a bright gold lucky
+    // slot, dark labels on all of them (every pair clears 4.5:1, tokens_test)
+    wheelSegments: [
+      Color(0xFFFF7A1A), // tangerine
+      Color(0xFFFFC53D), // sunflower
+      Color(0xFF2DD4BF), // turquoise
+      Color(0xFF4CC9FF), // sky
+      Color(0xFFB794FF), // lilac
+      Color(0xFFFF6FB5), // pink
+    ],
+    wheelLucky: Color(0xFFFFE066),
+    wheelLabel: Color(0xFF2A1A2E),
+    wheelStar: Color(0xFF000000),
+    wheelChecker: Color(0xFFFFFFFF),
+    wheelRimDark: Color(0xFF9A6B10),
+    wheelRimLight: Color(0xFFFFE08A),
+    shadow: Color(0xFF3C1428),
   );
 
   final Color background;
@@ -138,15 +117,18 @@ class AppColors {
   final Color heroGlow;
   final Color onHero;
   final Color onHeroMuted;
-  final Color wheelSegmentA;
-  final Color wheelSegmentB;
+
+  /// The segments' colours, used in turn around the wheel (the lucky slots take [wheelLucky]).
+  final List<Color> wheelSegments;
   final Color wheelLucky;
   final Color wheelLabel;
+
+  /// The lucky slot's star (black, owner 2026-10-28) and the light squares of each segment's inner checker.
+  final Color wheelStar;
+  final Color wheelChecker;
   final Color wheelRimDark;
   final Color wheelRimLight;
   final Color shadow;
-
-  bool get isDark => background.computeLuminance() < 0.2;
 }
 
 /// Type faces and the few sizes the theme does not own (MASTER.md §3).
@@ -182,34 +164,29 @@ abstract final class Radii {
 
 /// Depth in three steps (MASTER.md §5): a card's soft lift, a floating sheet, and the hero surfaces' deep shadow.
 abstract final class Elevation {
-  static List<BoxShadow> card(AppColors c) => c.isDark
-      ? [BoxShadow(color: c.shadow.withValues(alpha: 0.35), blurRadius: 24, offset: const Offset(0, 8))]
-      : [
-          BoxShadow(color: c.shadow.withValues(alpha: 0.04), blurRadius: 2, offset: const Offset(0, 1)),
-          BoxShadow(color: c.shadow.withValues(alpha: 0.06), blurRadius: 24, offset: const Offset(0, 8)),
-        ];
+  static List<BoxShadow> card(AppColors c) => [
+    BoxShadow(color: c.shadow.withValues(alpha: 0.04), blurRadius: 2, offset: const Offset(0, 1)),
+    BoxShadow(color: c.shadow.withValues(alpha: 0.06), blurRadius: 24, offset: const Offset(0, 8)),
+  ];
 
   static List<BoxShadow> float(AppColors c) => [
-    BoxShadow(
-      color: c.shadow.withValues(alpha: c.isDark ? 0.55 : 0.14),
-      blurRadius: 40,
-      offset: const Offset(0, 12),
-    ),
+    BoxShadow(color: c.shadow.withValues(alpha: 0.14), blurRadius: 40, offset: const Offset(0, 12)),
   ];
 
   static List<BoxShadow> hero(AppColors c) => [
-    BoxShadow(
-      color: c.heroEnd.withValues(alpha: c.isDark ? 0.6 : 0.35),
-      blurRadius: 40,
-      offset: const Offset(0, 16),
-    ),
+    BoxShadow(color: c.heroEnd.withValues(alpha: 0.35), blurRadius: 40, offset: const Offset(0, 16)),
   ];
 }
 
-/// The hero surfaces' gradient: deep emerald, lit from the top left (MASTER.md §5).
+/// The hero surfaces' gradient: the sunset, coral into violet, lit from the top left (MASTER.md §5).
 abstract final class Gradients {
   static LinearGradient hero(AppColors c) =>
       LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [c.heroStart, c.heroEnd]);
+
+  /// The wheel's stage: the dusk end of the sunset, violet into plum, so both segment colours and the gold rim stand
+  /// out from it.
+  static LinearGradient stage(AppColors c) =>
+      LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [c.heroEnd, c.shadow]);
 
   static RadialGradient heroGlow(AppColors c) => RadialGradient(
     center: const Alignment(-0.8, -1.2),

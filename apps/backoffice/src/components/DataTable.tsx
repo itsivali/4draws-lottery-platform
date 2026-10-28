@@ -29,6 +29,7 @@ export function DataTable<T>({
   pageSize = 25,
   initialSort = [],
   empty,
+  more,
 }: {
   columns: ColumnDef<T>[]
   data: T[]
@@ -40,6 +41,8 @@ export function DataTable<T>({
   pageSize?: number
   initialSort?: SortingState
   empty?: ReactNode
+  /** the server has rows after these: a "Load more" control asks for them (omitted: every row is here) */
+  more?: { has: boolean; loading: boolean; load: () => void }
 }) {
   const [sorting, setSorting] = useState<SortingState>(initialSort)
   const [globalFilter, setGlobalFilter] = useState('')
@@ -120,12 +123,23 @@ export function DataTable<T>({
           </TableBody>
         </Table>
       </div>
-      {pages > 1 ? (
-        <nav aria-label={`${caption}: pages`} className="flex items-center justify-between gap-3 text-sm text-muted-foreground">
-          <span>{total.toLocaleString('en-KE')} rows · page {table.getState().pagination.pageIndex + 1} of {pages}</span>
-          <div className="flex gap-1">
-            <Button type="button" variant="outline" size="sm" onClick={() => { table.previousPage() }} disabled={!table.getCanPreviousPage()}><ChevronLeft aria-hidden="true" /> Previous</Button>
-            <Button type="button" variant="outline" size="sm" onClick={() => { table.nextPage() }} disabled={!table.getCanNextPage()}>Next <ChevronRight aria-hidden="true" /></Button>
+      {pages > 1 || more?.has || more?.loading ? (
+        <nav aria-label={`${caption}: pages`} className="flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">
+          <span aria-live="polite">
+            {total.toLocaleString('en-KE')} rows{more?.has ? ' loaded' : ''}{pages > 1 ? ` · page ${table.getState().pagination.pageIndex + 1} of ${pages}` : ''}
+          </span>
+          <div className="flex flex-wrap gap-1">
+            {more?.has || more?.loading ? (
+              <Button type="button" variant="outline" size="sm" onClick={more.load} disabled={more.loading} aria-busy={more.loading}>
+                {more.loading ? 'Loading…' : 'Load more'}
+              </Button>
+            ) : null}
+            {pages > 1 ? (
+              <>
+                <Button type="button" variant="outline" size="sm" onClick={() => { table.previousPage() }} disabled={!table.getCanPreviousPage()}><ChevronLeft aria-hidden="true" /> Previous</Button>
+                <Button type="button" variant="outline" size="sm" onClick={() => { table.nextPage() }} disabled={!table.getCanNextPage()}>Next <ChevronRight aria-hidden="true" /></Button>
+              </>
+            ) : null}
           </div>
         </nav>
       ) : null}

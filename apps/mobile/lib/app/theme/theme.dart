@@ -39,11 +39,12 @@ TextTheme _textTheme(AppColors c) {
   );
 }
 
-ThemeData buildTheme(Brightness brightness) {
-  final c = brightness == Brightness.light ? AppColors.light : AppColors.dark;
+/// The app's one theme: light, on white (MASTER.md §12).
+ThemeData buildTheme() {
+  const c = AppColors.light;
   final text = _textTheme(c);
   final scheme = ColorScheme(
-    brightness: brightness,
+    brightness: Brightness.light,
     primary: c.primary,
     onPrimary: c.onPrimary,
     primaryContainer: c.primaryContainer,
@@ -77,7 +78,7 @@ ThemeData buildTheme(Brightness brightness) {
 
   return ThemeData(
     useMaterial3: true,
-    brightness: brightness,
+    brightness: Brightness.light,
     colorScheme: scheme,
     fontFamily: AppType.body,
     textTheme: text,
@@ -86,7 +87,7 @@ ThemeData buildTheme(Brightness brightness) {
     dividerColor: c.border,
     focusColor: c.primary.withValues(alpha: 0.16),
     splashFactory: InkSparkle.constantTurbulenceSeedSplashFactory,
-    extensions: [AppTokens(c)],
+    extensions: const [AppTokens(c)],
     visualDensity: VisualDensity.standard,
     materialTapTargetSize: MaterialTapTargetSize.padded,
     appBarTheme: AppBarTheme(

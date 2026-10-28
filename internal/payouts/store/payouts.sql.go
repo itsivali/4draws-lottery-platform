@@ -711,16 +711,23 @@ func (q *Queries) PayoutsFrozen(ctx context.Context) (bool, error) {
 }
 
 const payoutsInStatus = `-- name: PayoutsInStatus :many
-SELECT id, user_id, kind, route, status, gross_kes, tax_kes, net_kes, msisdn, draw_result_id, originator_conversation_id, conversation_id, mpesa_receipt, idempotency_key, created_at, updated_at, tax_code, tax_rate, tax_rounding, status_requests, status_requested_at, status_originator, reason, approved_by, settled_by, settled_at, debt_offset_kes FROM payouts.payouts WHERE status = $1 ORDER BY created_at LIMIT $2
+SELECT p.id, p.user_id, p.kind, p.route, p.status, p.gross_kes, p.tax_kes, p.net_kes, p.msisdn, p.draw_result_id, p.originator_conversation_id, p.conversation_id, p.mpesa_receipt, p.idempotency_key, p.created_at, p.updated_at, p.tax_code, p.tax_rate, p.tax_rounding, p.status_requests, p.status_requested_at, p.status_originator, p.reason, p.approved_by, p.settled_by, p.settled_at, p.debt_offset_kes FROM payouts.payouts p
+WHERE p.status = $1
+  AND ($2::uuid IS NULL
+       OR (p.created_at, p.id) > (SELECT a.created_at, a.id FROM payouts.payouts a WHERE a.id = $2::uuid))
+ORDER BY p.created_at, p.id
+LIMIT $3
 `
 
 type PayoutsInStatusParams struct {
 	Status  string
+	After   *string
 	MaxRows int32
 }
 
+// Oldest first (the operator's queue); after (a payout id) continues a page from the payout after it.
 func (q *Queries) PayoutsInStatus(ctx context.Context, arg PayoutsInStatusParams) ([]PayoutsPayout, error) {
-	rows, err := q.db.Query(ctx, payoutsInStatus, arg.Status, arg.MaxRows)
+	rows, err := q.db.Query(ctx, payoutsInStatus, arg.Status, arg.After, arg.MaxRows)
 	if err != nil {
 		return nil, err
 	}

@@ -388,8 +388,8 @@ func TestDraw_TheDatabaseRefusesSkippedOrBackwardTransitions(t *testing.T) {
 	if _, err := e.svc.Sign(ctx, "0192f000-0000-7000-8000-000000000000", "operator:a"); !errors.Is(err, draws.ErrNotFound) {
 		t.Fatalf("sign unknown: %v", err)
 	}
-	if list, err := e.svc.List(ctx, 10); err != nil || len(list) == 0 {
-		t.Fatalf("list: %v %v", len(list), err)
+	if page, err := e.svc.List(ctx, 10, ""); err != nil || len(page.Draws) == 0 {
+		t.Fatalf("list: %+v %v", page, err)
 	}
 }
 

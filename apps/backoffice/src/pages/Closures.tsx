@@ -15,7 +15,7 @@ export function ClosuresPage() {
   const { api, me } = useSession()
   const load = useLoad((signal) => api.get<{ closures: Closure[] }>('/v1/staff/closures', undefined, { signal }))
   const { ask, busy, view } = useConfirmedAction(load.reload)
-  const support = can(me.roles, 'support')
+  const support = can(me.roles, 'staff')
 
   const columns = useMemo<ColumnDef<Closure>[]>(() => [
     { id: 'phone', header: 'Phone', accessorFn: (c) => `${msisdn(c.msisdn)} ${c.user_id}`, cell: ({ row }) => <Stack primary={<span className="tabular-nums">{msisdn(row.original.msisdn)}</span>} secondary={<Mono>{row.original.user_id}</Mono>} /> },

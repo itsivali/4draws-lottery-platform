@@ -29,6 +29,7 @@ import (
 	"github.com/itsivali/lottery-platform/internal/identity"
 	"github.com/itsivali/lottery-platform/internal/kyc"
 	"github.com/itsivali/lottery-platform/internal/ledger"
+	"github.com/itsivali/lottery-platform/internal/metrics"
 	"github.com/itsivali/lottery-platform/internal/payments"
 	"github.com/itsivali/lottery-platform/internal/payments/daraja"
 	"github.com/itsivali/lottery-platform/internal/payments/darajamock"
@@ -193,7 +194,8 @@ func setupWith(t *testing.T, mutate func(*apiDeps)) *env {
 		Draws:    draws.NewService(staffPool, clk, kr, drawBeacon{}, ls),
 		Payouts:  payouts.NewService(staffPool, clk, dc, payoutQueue{pay}, sIDs, wallet.NewService(ls), ls, aw, payouts.Config{}, wallet.ErrInsufficientFunds),
 		Game:     game.NewService(staffPool, clk, sIDs, sRG, wallet.NewService(ls), kr, wallet.ErrInsufficientFunds),
-		Members:  staff.NewService(staffPool, clk, staffIDTokens{}, aw),
+		Members:  staff.NewService(staffPool, clk, staffIDTokens{}, aw, []byte("staff-pepper")),
+		Metrics:  metrics.NewService(staffPool, clk),
 		Finance:  finance.NewService(staffPool, clk),
 	}
 	staffAuth := &fakeStaff{members: map[string]staff.Member{}}

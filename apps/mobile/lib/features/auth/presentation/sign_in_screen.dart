@@ -8,6 +8,7 @@ import '../../../core/api/api_failure.dart';
 import '../../../core/api/idempotency.dart';
 import '../../../core/auth/session_manager.dart';
 import '../../../core/formatting/phone.dart';
+import '../../../core/widgets/back_office_link.dart';
 import '../../../core/widgets/brand_mark.dart';
 import '../../../core/widgets/busy_button.dart';
 import '../../../core/widgets/content_frame.dart';
@@ -111,7 +112,17 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                     child: Center(
                       child: SingleChildScrollView(
                         padding: const EdgeInsets.all(Space.xxl),
-                        child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 420), child: form),
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 420),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              form,
+                              const SizedBox(height: Space.lg),
+                              const BackOfficeLink(),
+                            ],
+                          ),
+                        ),
                       ),
                     ),
                   ),
@@ -128,6 +139,8 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                         const Align(alignment: Alignment.centerLeft, child: BrandMark(height: 36)),
                         const SizedBox(height: Space.xxl),
                         form,
+                        const SizedBox(height: Space.lg),
+                        const BackOfficeLink(),
                       ],
                     ),
                   ),
@@ -156,10 +169,13 @@ class _Panel extends StatelessWidget {
           children: [
             Text(BrandMark.name, style: t.titleLarge?.copyWith(color: c.onHero)),
             const Spacer(),
-            Text('One spin a day.\nEvery draw on the record.', style: t.displaySmall?.copyWith(color: c.onHero)),
+            Text(
+              'KES 100 a spin, up to four a day.\nEvery draw on the record.',
+              style: t.displaySmall?.copyWith(color: c.onHero),
+            ),
             const SizedBox(height: Space.lg),
             Text(
-              'Plays cost what they say, draws use a public randomness beacon, and every prize is paid to your M-Pesa.',
+              'Each spin is paid from your M-Pesa, draws use a public randomness beacon, and every prize is paid back to it.',
               style: t.bodyLarge?.copyWith(color: c.onHeroMuted),
             ),
             const Spacer(),

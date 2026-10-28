@@ -90,6 +90,20 @@ void main() {
     expect(const TopUpBounds(minKes: 300, maxKes: 250000).quickPicks, [500, 1000]);
   });
 
+  test('withdrawal bounds come from the wallet too, and are null while withdrawals are unavailable', () {
+    final w = WalletStatement.fromJson(JsonObject({...walletJson(), 'withdraw': null}));
+    expect(w.withdraw, isNull);
+    final b = WalletStatement.fromJson(
+      JsonObject({
+        ...walletJson(),
+        'withdraw': {'min_kes': 20, 'max_kes': 70000},
+      }),
+    ).withdraw!;
+    expect((b.minKes, b.maxKes), (20, 70000));
+    expect(b.quickPicks, [20, 100, 500, 1000]);
+    expect(WithdrawBounds.fallback.quickPicks, [50, 100, 500, 1000]);
+  });
+
   test('top-ups and payouts', () {
     final t = TopUp.fromJson(JsonObject(topUpJson(status: 'pending')));
     expect(t.status, TopUpStatus.pending);

@@ -9,6 +9,7 @@ import '../../../core/formatting/phone.dart';
 import '../../../core/platform/preferences.dart';
 import '../../../core/widgets/app_card.dart';
 import '../../../core/widgets/async_view.dart';
+import '../../../core/widgets/back_office_link.dart';
 import '../../../core/widgets/confirm_sheet.dart';
 import '../../../core/widgets/content_frame.dart';
 import '../../../core/widgets/list_row.dart';
@@ -161,6 +162,8 @@ class AccountScreen extends ConsumerWidget {
               onPressed: () => context.go('/account/close'),
               child: const Text('Close my account'),
             ),
+            const SizedBox(height: Space.sm),
+            const BackOfficeLink(),
           ],
         ),
       ],

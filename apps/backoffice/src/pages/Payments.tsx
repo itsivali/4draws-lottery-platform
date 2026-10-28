@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 export function PaymentsPage() {
   const { api, me } = useSession()
   const { ask, busy, view } = useConfirmedAction(() => undefined)
-  const operator = can(me.roles, 'payments_operator')
+  const operator = can(me.roles, 'staff')
   const actions: (ActionSpec & { button: string; help: string })[] = [
     {
       button: 'Record a reversal', help: 'M-Pesa took back a credited top-up (statement or Safaricom report).',

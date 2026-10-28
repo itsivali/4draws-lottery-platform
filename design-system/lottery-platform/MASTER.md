@@ -1,4 +1,4 @@
-# Lottery Platform — Design System (Master, v2)
+# Lottery Platform — Design System (Master, v2.1 “Sunset”)
 
 The single source of truth for how the player app (`apps/mobile`, Flutter: iOS, Android, web) looks, moves and feels.
 Page files in `pages/` record only deviations from this file; when a page file exists its rules win for that page.
@@ -21,42 +21,50 @@ depth, metal and motion (the *hero surfaces*, §5), and even there they only eve
   "You're due".
 - No manufactured urgency: no countdown pressure, no scarcity, no near-miss staging, no confetti for ordinary plays.
 
-**Wordmark:** "Bahati" set in the heading face, semibold, with a small emerald disc carrying a gold pointer notch
+**Wordmark:** "Bahati" set in the heading face, semibold, with a small coral disc carrying a gold pointer notch
 (`BrandMark` widget). It is a placeholder: swap `BrandMark` for the final logo without touching layouts (it sizes to
 its parent height).
 
 ## 2. Colour
 
-Semantic roles only. Gold is **decorative** (the wheel rim, the lucky-slot star, the pointer). Gold is never the colour
-of an ordinary success, a button or a balance: it must not suggest that money was won.
+**One theme: light, on a white page** (owner, 2026-10-28). The palette is “Sunset”: coral leads, violet accents,
+peach and lavender tints, warm gold kept for metal. Semantic roles only. Gold is **decorative** (the wheel rim, the
+lucky-slot star, the pointer). Gold is never the colour of an ordinary success, a button or a balance: it must not
+suggest that money was won.
 
-| Role | Light | Dark | Use |
-|---|---|---|---|
-| `background` | `#F7F4EC` warm ivory | `#0B1411` | Page background |
-| `surface` | `#FFFDF8` | `#121E1A` | Cards, sheets, bars |
-| `surfaceMuted` | `#EFEADF` | `#1A2823` | Inset panels, skeletons, chips |
-| `ink` | `#13201B` | `#ECF1ED` | Primary text |
-| `inkMuted` | `#56625C` | `#A3AFA9` | Secondary text, captions |
-| `primary` | `#0B5D45` forest emerald | `#62C9A0` | Primary action, selected nav, focus ring |
-| `onPrimary` | `#FFFFFF` | `#00291C` | Text/icons on primary |
-| `primaryContainer` | `#D3EBDF` | `#123D30` | Selected chips, nav indicator, info highlights |
-| `onPrimaryContainer` | `#053B2B` | `#C6EBDB` | Text on primaryContainer |
-| `accent` | `#0F6B66` restrained teal | `#5CC4BA` | Links, secondary emphasis (sparingly) |
-| `gold` | `#9C7A2E` | `#D4B36A` | Decorative metal only (rim, pointer, lucky star) |
-| `goldText` | `#7A5B17` | `#D4B36A` | The word "Lucky" next to the star |
-| `success` | `#1B7344` | `#72D39C` | Confirmed by the server (credited, paid, recorded) |
-| `warning` | `#8A5300` | `#F0B45B` | Needs attention (limit reached, KYC in review) |
-| `error` | `#B3261E` | `#FF8A80` | Refused or failed |
-| `pending` | `#33528F` | `#9DB6F2` | Waiting on M-Pesa / the server — never green |
-| `border` | `#D9D2C2` | `#2B3B35` | Hairlines and dividers (decorative) |
-| `outline` | `#7C8580` | `#7F8C86` | Input and control boundaries (≥ 3:1) |
-| `surfaceRaised` | `#FFFFFF` | `#182822` | Inputs and panels that sit on `surface` |
-| `heroStart` → `heroEnd` | `#0E6A4F` → `#063A2C` | `#145640` → `#0B2E24` | The hero surfaces' gradient, lit from the top left by `heroGlow` |
-| `onHero` / `onHeroMuted` | `#FFFFFF` / `#CFE6DB` | `#F2F7F3` / `#B8D8C8` | Text on a hero surface |
+| Role | Value | Use |
+|---|---|---|
+| `background` | `#FFFFFF` white | Page background |
+| `surface` | `#FFFFFF` | Cards, sheets, bars (a hairline border and a soft lift set them off the page) |
+| `surfaceRaised` | `#FFFAF7` | Inputs and panels that sit on `surface` |
+| `surfaceMuted` | `#FBEEE7` peach | Inset panels, skeletons, chips |
+| `ink` | `#2A1A2E` plum ink | Primary text |
+| `inkMuted` | `#6B5A62` | Secondary text, captions |
+| `primary` | `#C23412` sunset coral | Primary action, selected nav, focus ring |
+| `onPrimary` | `#FFFFFF` | Text/icons on primary |
+| `primaryContainer` | `#FFE3D8` | Selected chips, nav indicator, info highlights |
+| `onPrimaryContainer` | `#7A1F06` | Text on primaryContainer |
+| `accent` | `#6D3FC7` violet | Links, secondary emphasis |
+| `gold` | `#A8781C` | Decorative metal only (rim, pointer, lucky star) |
+| `goldText` | `#7A5612` | The word "Lucky" next to the star |
+| `success` | `#1B7A43` | Confirmed by the server (credited, paid, recorded) |
+| `warning` | `#A05A00` | Needs attention (limit reached, KYC in review) |
+| `error` | `#C62828` | Refused or failed |
+| `pending` | `#3B5BB5` | Waiting on M-Pesa / the server — never green |
+| `border` | `#F0DDD5` | Hairlines and dividers (decorative) |
+| `outline` | `#8A7A80` | Input and control boundaries (≥ 3:1) |
+| `wheelSegments` | `#FF7A1A` `#FFC53D` `#2DD4BF` `#4CC9FF` `#B794FF` `#FF6FB5` | The wheel's six segment colours, used in turn; the lucky slot is `wheelLucky` `#FFE066`; labels `wheelLabel` `#2A1A2E` on all of them; each segment is two-tone: solid where its number sits, a white-and-colour checker (`wheelChecker` `#FFFFFF`) from the hub out to half the radius; the lucky star is `wheelStar` `#000000` (owner, 2026-10-28: the wheel is bright, the one place colour runs free) |
+| `heroStart` → `heroEnd` | `#C9381A` → `#3E2585` | The hero surfaces' sunset gradient, lit from the top left by `heroGlow` `#FF9B6A` |
+| `onHero` / `onHeroMuted` | `#FFFFFF` / `#FFE1D2` | Text on a hero surface |
 
-Every status colour is paired with an icon and a word (`StatusPill`): colour is never the only signal.
+Every text colour clears 4.5:1 on the page, on cards and on muted panels; outlines and the pointer clear 3:1
+(`tokens_test.dart`). Every status colour is paired with an icon and a word (`StatusPill`): colour is never the only
+signal.
 
 **Pending is blue, not green.** A pending top-up or payout must not look like a success.
+
+The staff back office (`apps/backoffice`) maps the same roles onto its own tokens (`src/index.css`), with the same
+coral, violet and gold, five labelled chart hues, and a peach-tinted sidebar.
 
 ## 3. Typography
 
@@ -99,12 +107,13 @@ Touch targets ≥ 48×48 dp, ≥ 8 dp apart. Safe areas respected; the bottom ba
 ## 5. Surfaces, elevation, radius
 
 - Cards are `surface` with a 1 dp `border` hairline and a **soft lift** (`Elevation.card`: `0 1 2 / 4%` + `0 8 24 / 6%`
-  ink in light; `0 8 24 / 35%` black in dark). `flat` cards (inside sheets, nested lists) keep the border and drop the
+  plum ink). `flat` cards (inside sheets, nested lists) keep the border and drop the
   lift; `tinted` cards sit on `primaryContainer` for quiet emphasis.
 - Elevation exists in three steps: `card` (above), `float` (sheets, dialogs, tooltips: `0 12 40 / 14%`) and `hero`
   (`0 16 40 / 35% heroEnd`). The wheel has its own lighting (see `pages/play.md`).
-- **Hero surfaces** (`HeroCard`): the deep-emerald gradient `heroStart → heroEnd` with a radial `heroGlow` from the
-  top left, faint concentric rings in a corner, `hero` elevation and `xl` corners. Exactly two uses: the balance
+- **Hero surfaces** (`HeroCard`): the sunset gradient `heroStart → heroEnd` (coral into violet) with a radial
+  `heroGlow` from the top left; the wheel's stage takes the dusk end only (`heroEnd → shadow`, `Gradients.stage`) so
+  the coral and violet segments and the gold rim stand out from it, faint concentric rings in a corner, `hero` elevation and `xl` corners. Exactly two uses: the balance
   (Home, Wallet) and the wheel's stage (Play). On wide screens the sign-in page's brand panel borrows it for words,
   never for money. Nothing else is a hero.
 - Radii: `sm 8` (chips), `md 12` (buttons, inputs), `lg 16` (cards), `xl 24` (hero cards, dialogs), `xxl 28` (sheets'
@@ -123,7 +132,7 @@ success = `check_circle_rounded`; error = `error_rounded`; warning = `warning_ro
 
 ## 7. Components
 
-- **Buttons:** one primary (`FilledButton`, emerald) per screen; secondary `OutlinedButton`; tertiary `TextButton`.
+- **Buttons:** one primary (`FilledButton`, coral) per screen; secondary `OutlinedButton`; tertiary `TextButton`.
   Height 52, radius `md`, label style. Busy state replaces the label with a 20 dp progress ring and keeps the width;
   the button is disabled while busy. Destructive actions (self-exclusion, sign out) use `error` and sit apart from
   other actions.
@@ -140,7 +149,7 @@ success = `check_circle_rounded`; error = `error_rounded`; warning = `warning_ro
 - **Sheets:** confirmation of anything that moves money is a bottom sheet (compact) or dialog (medium+): what it costs,
   what you get, what happens next, then *Confirm* (primary) and *Cancel*. Focus starts on the title.
 - **Navigation:** 5 destinations — Home, Play, Draws, Wallet, Account. Icon + label always. Play's selected icon is the
-  only filled-emerald circle in the bar; nothing else about it is louder.
+  only filled-coral circle in the bar; nothing else about it is louder.
 - **Lists:** `ListTile`-based rows, 56–72 dp, trailing amount in `amount` style.
 
 ## 8. Motion
@@ -206,11 +215,10 @@ Every data view implements all five, with `AsyncView`:
 Uncertain outcomes (a play or payment whose answer was lost) get their own state: "We're checking whether your play went
 through" — never shown as failed, never shown as succeeded.
 
-## 12. Light and dark
+## 12. Light only
 
-Both are first-class and designed together (tokens above). The app follows the system setting. Dark mode desaturates
-and lightens the emerald rather than inverting; the wheel uses the same structure with darker segment fills and a
-brighter rim.
+There is one theme, light, on a white page (owner, 2026-10-28); the app does not follow the system's dark setting,
+so a balance or a status never changes colour between devices. Reduced motion is still honoured (§8).
 
 ## 13. Consistency rules (review checklist)
 
@@ -233,6 +241,6 @@ brighter rim.
   anti-patterns (playful design, unclear fees, purple/pink gradients); the pre-delivery checklist; the Flutter stack
   rules (Semantics, `TextScaler`, slivers).
 - Changed: the generated palette (amber primary `#F59E0B`, purple accent `#8B5CF6`, navy background) was replaced by the
-  emerald/ivory/ink palette above. A gold primary would make every ordinary action look like a prize, which conflicts
+  coral/white/ink palette above (emerald/ivory in v2). A gold primary would make every ordinary action look like a prize, which conflicts
   with the product's honesty rules; purple-on-navy is the "AI gradient" look the same output lists as an anti-pattern.
   The skill's banking palette (navy + muted gold accent) informed keeping gold muted and decorative.

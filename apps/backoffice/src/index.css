@@ -1,157 +1,66 @@
-/* The design system's tokens (design-system/lottery-platform/MASTER.md) mapped onto shadcn/ui's variables, for the
-   staff back office. Light and dark follow the system; adding .dark or .light to <html> forces one. */
+/* The design system's tokens (design-system/lottery-platform/MASTER.md, "Sunset", 2026-10-28) mapped onto shadcn/ui's
+   variables, for the staff back office. One light theme on a white background: coral primary, violet accents, gold
+   kept decorative (never a success or a balance), pending blue, status always with an icon and a word. */
 @import "tailwindcss";
-
-@custom-variant dark (&:where(.dark, .dark *));
 
 :root {
   --radius: 0.75rem;
 
-  --background: #f7f4ec;
-  --foreground: #13201b;
-  --card: #fffdf8;
-  --card-foreground: #13201b;
-  --popover: #fffdf8;
-  --popover-foreground: #13201b;
-  --primary: #0b5d45;
+  --background: #ffffff;
+  --foreground: #2a1a2e;
+  --card: #ffffff;
+  --card-foreground: #2a1a2e;
+  --popover: #ffffff;
+  --popover-foreground: #2a1a2e;
+  --primary: #c23412;
   --primary-foreground: #ffffff;
-  --primary-container: #d3ebdf;
-  --primary-container-foreground: #053b2b;
-  --secondary: #efeadf;
-  --secondary-foreground: #13201b;
-  --muted: #efeadf;
-  --muted-foreground: #56625c;
-  --accent: #e9f3ee;
-  --accent-foreground: #053b2b;
-  --destructive: #b3261e;
+  --primary-container: #ffe3d8;
+  --primary-container-foreground: #7a1f06;
+  --secondary: #fbeee7;
+  --secondary-foreground: #2a1a2e;
+  --muted: #fbf1ec;
+  --muted-foreground: #6b5a62;
+  --accent: #f4eefc;
+  --accent-foreground: #3e2585;
+  --violet: #6d3fc7;
+  --violet-container: #efe8ff;
+  --violet-container-foreground: #3e2585;
+  --destructive: #c62828;
   --destructive-foreground: #ffffff;
-  --success: #1b7344;
+  --success: #1b7a43;
   --success-foreground: #ffffff;
-  --warning: #8a5300;
+  --warning: #a05a00;
   --warning-foreground: #ffffff;
-  --pending: #33528f;
+  --pending: #3b5bb5;
   --pending-foreground: #ffffff;
-  --gold: #9c7a2e;
-  --border: #d9d2c2;
-  --input: #7c8580;
-  --ring: #0b5d45;
+  --gold: #a8781c;
+  --border: #f0ddd5;
+  --input: #8a7a80;
+  --ring: #c23412;
 
-  /* chart series (validated against this surface: docs on the Finance page) */
-  --chart-1: #2a78d6;
-  --chart-2: #eb6834;
-  --chart-3: #1baf7a;
-  --chart-4: #eda100;
-  --chart-5: #7c5cbf;
+  /* chart series: distinct hues on white, each paired with a label; web, android, ios in the metrics */
+  --chart-1: #e0532a;
+  --chart-2: #6d3fc7;
+  --chart-3: #0e8c86;
+  --chart-4: #c98a00;
+  --chart-5: #c2185b;
 
-  --sidebar: #fffdf8;
-  --sidebar-foreground: #13201b;
-  --sidebar-primary: #0b5d45;
+  --sidebar: #fff6f1;
+  --sidebar-foreground: #2a1a2e;
+  --sidebar-primary: #c23412;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #e9f3ee;
-  --sidebar-accent-foreground: #053b2b;
-  --sidebar-border: #d9d2c2;
-  --sidebar-ring: #0b5d45;
+  --sidebar-accent: #ffe3d8;
+  --sidebar-accent-foreground: #7a1f06;
+  --sidebar-border: #f0ddd5;
+  --sidebar-ring: #c23412;
 
-  --shadow-card: 0 1px 2px rgb(19 32 27 / 0.04), 0 8px 24px rgb(19 32 27 / 0.06);
-  --shadow-float: 0 12px 40px rgb(19 32 27 / 0.14);
+  /* the sunset: the sign-in panel's only gradient (MASTER.md §5: hero surfaces, nothing else) */
+  --hero: linear-gradient(135deg, #ff8a4c 0%, #e8542f 38%, #9b3fb3 76%, #4b2a8c 100%);
+
+  --shadow-card: 0 1px 2px rgb(60 20 40 / 0.05), 0 8px 24px rgb(60 20 40 / 0.07);
+  --shadow-float: 0 12px 40px rgb(60 20 40 / 0.16);
 
   color-scheme: light;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root:not(.light) {
-    --background: #0b1411;
-    --foreground: #ecf1ed;
-    --card: #121e1a;
-    --card-foreground: #ecf1ed;
-    --popover: #152420;
-    --popover-foreground: #ecf1ed;
-    --primary: #62c9a0;
-    --primary-foreground: #00291c;
-    --primary-container: #123d30;
-    --primary-container-foreground: #c6ebdb;
-    --secondary: #1a2823;
-    --secondary-foreground: #ecf1ed;
-    --muted: #1a2823;
-    --muted-foreground: #a3afa9;
-    --accent: #16302a;
-    --accent-foreground: #c6ebdb;
-    --destructive: #ff8a80;
-    --destructive-foreground: #3b0a07;
-    --success: #72d39c;
-    --success-foreground: #00291c;
-    --warning: #f0b45b;
-    --warning-foreground: #2e1a00;
-    --pending: #9db6f2;
-    --pending-foreground: #0b1a3d;
-    --gold: #d4b36a;
-    --border: #2b3b35;
-    --input: #7f8c86;
-    --ring: #62c9a0;
-    --chart-1: #3987e5;
-    --chart-2: #d95926;
-    --chart-3: #199e70;
-    --chart-4: #c98500;
-    --chart-5: #9d85d6;
-    --sidebar: #0e1915;
-    --sidebar-foreground: #ecf1ed;
-    --sidebar-primary: #62c9a0;
-    --sidebar-primary-foreground: #00291c;
-    --sidebar-accent: #16302a;
-    --sidebar-accent-foreground: #c6ebdb;
-    --sidebar-border: #2b3b35;
-    --sidebar-ring: #62c9a0;
-    --shadow-card: 0 1px 0 rgb(255 255 255 / 0.03) inset, 0 8px 24px rgb(0 0 0 / 0.35);
-    --shadow-float: 0 16px 48px rgb(0 0 0 / 0.55);
-    color-scheme: dark;
-  }
-}
-
-.dark {
-  --background: #0b1411;
-  --foreground: #ecf1ed;
-  --card: #121e1a;
-  --card-foreground: #ecf1ed;
-  --popover: #152420;
-  --popover-foreground: #ecf1ed;
-  --primary: #62c9a0;
-  --primary-foreground: #00291c;
-  --primary-container: #123d30;
-  --primary-container-foreground: #c6ebdb;
-  --secondary: #1a2823;
-  --secondary-foreground: #ecf1ed;
-  --muted: #1a2823;
-  --muted-foreground: #a3afa9;
-  --accent: #16302a;
-  --accent-foreground: #c6ebdb;
-  --destructive: #ff8a80;
-  --destructive-foreground: #3b0a07;
-  --success: #72d39c;
-  --success-foreground: #00291c;
-  --warning: #f0b45b;
-  --warning-foreground: #2e1a00;
-  --pending: #9db6f2;
-  --pending-foreground: #0b1a3d;
-  --gold: #d4b36a;
-  --border: #2b3b35;
-  --input: #7f8c86;
-  --ring: #62c9a0;
-  --chart-1: #3987e5;
-  --chart-2: #d95926;
-  --chart-3: #199e70;
-  --chart-4: #c98500;
-  --chart-5: #9d85d6;
-  --sidebar: #0e1915;
-  --sidebar-foreground: #ecf1ed;
-  --sidebar-primary: #62c9a0;
-  --sidebar-primary-foreground: #00291c;
-  --sidebar-accent: #16302a;
-  --sidebar-accent-foreground: #c6ebdb;
-  --sidebar-border: #2b3b35;
-  --sidebar-ring: #62c9a0;
-  --shadow-card: 0 1px 0 rgb(255 255 255 / 0.03) inset, 0 8px 24px rgb(0 0 0 / 0.35);
-  --shadow-float: 0 16px 48px rgb(0 0 0 / 0.55);
-  color-scheme: dark;
 }
 
 @theme inline {
@@ -190,6 +99,9 @@
   --color-pending: var(--pending);
   --color-pending-foreground: var(--pending-foreground);
   --color-gold: var(--gold);
+  --color-violet: var(--violet);
+  --color-violet-container: var(--violet-container);
+  --color-violet-container-foreground: var(--violet-container-foreground);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
@@ -209,6 +121,10 @@
 
   --shadow-card: var(--shadow-card);
   --shadow-float: var(--shadow-float);
+}
+
+@utility bg-hero {
+  background-image: var(--hero);
 }
 
 @layer base {

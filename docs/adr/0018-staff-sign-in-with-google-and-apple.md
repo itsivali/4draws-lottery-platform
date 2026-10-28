@@ -1,6 +1,6 @@
 # 0018. Staff sign in with Google or Apple; members and roles are kept by the platform
 
-Status: accepted (supersedes the identity part of ADR 0013)
+Status: accepted (supersedes the identity part of ADR 0013); roles and the sign-in providers superseded by 0019 (two roles; email and password, Google and Apple optional)
 Date: 2026-10-26
 
 ## Context

@@ -51,11 +51,10 @@ void main() {
     await shot(t, 'play_phone_confirm');
   });
 
-  testWidgets('play blocked (ID not verified), dark', (t) async {
-    t.platformDispatcher.platformBrightnessTestValue = Brightness.dark;
+  testWidgets('play blocked (ID not verified)', (t) async {
     await pumpApp(t, FakeBackend(kyc: 'none'));
     await t.tap(find.text('Play').last);
-    await shot(t, 'play_phone_blocked_dark');
+    await shot(t, 'play_phone_blocked');
   });
 
   testWidgets('wallet', (t) async {

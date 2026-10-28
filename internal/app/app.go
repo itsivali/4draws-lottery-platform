@@ -31,6 +31,7 @@ import (
 	"github.com/itsivali/lottery-platform/internal/identity/attest"
 	"github.com/itsivali/lottery-platform/internal/kyc"
 	"github.com/itsivali/lottery-platform/internal/ledger"
+	"github.com/itsivali/lottery-platform/internal/metrics"
 	"github.com/itsivali/lottery-platform/internal/payments"
 	"github.com/itsivali/lottery-platform/internal/payments/daraja"
 	"github.com/itsivali/lottery-platform/internal/payouts"
@@ -228,15 +229,19 @@ func (a *App) staff(ctx context.Context, sh shared, base services) (staff.Authen
 		}
 		a.staffPool, pool, svc = p, p, buildServices(p, sh)
 	}
-	members := staff.NewService(pool, sh.clk, identity.NewOIDCVerifier(clock.Wall{}, sh.hc, staffProviders(c)), sh.aw)
+	var ids staff.IDTokenVerifier // Google and Apple only when a client id is configured; passwords always work
+	if providers := staffProviders(c); len(providers) > 0 {
+		ids = identity.NewOIDCVerifier(clock.Wall{}, sh.hc, providers)
+	}
+	members := staff.NewService(pool, sh.clk, ids, sh.aw, crypto.MAC(sh.cfg.API.AuthKey, "staff-password-pepper"))
 	if c.BootstrapAdmin != "" {
-		if err := members.Bootstrap(ctx, c.BootstrapAdmin); err != nil {
+		if err := members.Bootstrap(ctx, c.BootstrapAdmin, c.BootstrapPassword); err != nil {
 			return nil, api.StaffServices{}, fmt.Errorf("app: staff bootstrap admin: %w", err)
 		}
 	}
 	return members, api.StaffServices{
 		Identity: svc.identity, KYC: svc.kyc, Payments: svc.payments, Draws: svc.draws, Payouts: svc.payouts, Game: svc.game,
-		Alerts: a.alertsOn(pool, svc.draws), Members: members, Finance: finance.NewService(pool, sh.clk),
+		Alerts: a.alertsOn(pool, svc.draws), Members: members, Finance: finance.NewService(pool, sh.clk), Metrics: metrics.NewService(pool, sh.clk),
 	}, nil
 }
 

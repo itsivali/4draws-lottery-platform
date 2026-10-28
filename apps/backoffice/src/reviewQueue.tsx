@@ -28,7 +28,7 @@ export const useReviewQueue = () => useContext(ReviewQueueContext)
  */
 export function ReviewQueueProvider({ children }: { children: ReactNode }) {
   const { me, api } = useSession()
-  const reviewer = can(me.roles, 'kyc_reviewer')
+  const reviewer = can(me.roles, 'staff')
   const [queue, setQueue] = useState<ReviewQueue | null>(null)
   const [arrived, setArrived] = useState(0)
   const last = useRef<number | null>(null)

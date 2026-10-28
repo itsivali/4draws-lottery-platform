@@ -86,15 +86,27 @@ done
 
 # The back office: roles are enforced.
 paula=$(staff_token paula)
-[ "$(curl -fsS localhost:8080/v1/staff/me -H "Authorization: Bearer $paula" | jq -r '.roles | index("payments_operator") != null')" = true ] \
+[ "$(curl -fsS localhost:8080/v1/staff/me -H "Authorization: Bearer $paula" | jq -r '.roles | index("staff") != null')" = true ] \
   || { echo "staff roles not seen"; exit 1; }
 [ "$(post /v1/staff/payments/reconcile e2e-8 '' "$paula")" = 200 ] || { echo "staff reconciliation failed"; cat /tmp/e2e.body; exit 1; }
 # the financial dashboard sees this journey's money: the STK top-up and the paybill payment
 alice=$(staff_token alice)
 [ "$(curl -fsS localhost:8080/v1/staff/finance -H "Authorization: Bearer $alice" | jq -r '.totals.deposits_kes >= 300')" = true ] \
   || { echo "finance does not show the deposits"; exit 1; }
-[ "$(curl -sS -o /dev/null -w '%{http_code}' localhost:8080/v1/staff/payouts -H "Authorization: Bearer $paula")" = 403 ] \
-  || { echo "a payments operator could list payouts"; exit 1; }
+[ "$(curl -sS -o /dev/null -w '%{http_code}' localhost:8080/v1/staff/members -H "Authorization: Bearer $paula")" = 403 ] \
+  || { echo "a staff member could open the admin-only Staff page"; exit 1; }
+# email and password sign-in (ADR 0019): the seeded temporary password opens a session that may only change it
+pw_session=$(curl -fsS -X POST localhost:8080/v1/staff/session -H 'Content-Type: application/json' -H "Idempotency-Key: e2e-pw-$(date +%s%N)" \
+  -d '{"provider":"password","email":"otis@staff.local","password":"local-dev-staff-2026"}')
+[ "$(echo "$pw_session" | jq -r .member.must_change_password)" = true ] || { echo "password sign-in did not open a temporary session"; exit 1; }
+otis=$(echo "$pw_session" | jq -r .token)
+[ "$(curl -sS -o /dev/null -w '%{http_code}' localhost:8080/v1/staff/payouts -H "Authorization: Bearer $otis")" = 403 ] \
+  || { echo "a temporary password opened more than the password change"; exit 1; }
+[ "$(curl -sS -o /dev/null -w '%{http_code}' -X PUT localhost:8080/v1/staff/password -H "Authorization: Bearer $otis" -H 'Content-Type: application/json' \
+  -H "Idempotency-Key: e2e-pw-change-$(date +%s%N)" -d '{"current_password":"local-dev-staff-2026","new_password":"a long phrase for the payout queue"}')" = 204 ] \
+  || { echo "the password change failed"; exit 1; }
+[ "$(curl -sS -o /dev/null -w '%{http_code}' localhost:8080/v1/staff/payouts -H "Authorization: Bearer $otis")" = 200 ] \
+  || { echo "the queue is still closed after the password change"; exit 1; }
 [ "$(curl -sS -o /dev/null -w '%{http_code}' localhost:8080/v1/staff/me -H "Authorization: Bearer $token")" = 401 ] \
   || { echo "a player token reached the back office"; exit 1; }
 echo "e2e smoke ok"

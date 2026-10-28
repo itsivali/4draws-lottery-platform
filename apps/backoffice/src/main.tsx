@@ -4,11 +4,12 @@ import { BrowserRouter } from 'react-router-dom'
 import { ApiClient } from './api'
 import { App } from './App'
 import { loadConfig, type Config } from './config'
-import { SessionContext, type Session } from './context'
+import { SessionContext, useSession, type Session } from './context'
 import { completeDevPopup } from './providers'
+import { PasswordForm } from './components/PasswordDialog'
 import { SignIn, type StaffSession } from './SignIn'
-import { applyTheme, readTheme } from './theme'
 import type { Me } from './types'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import './index.css'
 
@@ -96,12 +97,39 @@ function Root({ config }: { config: Config }) {
   }
   return (
     <SessionContext.Provider value={session}>
-      <App />
+      {session.me.must_change_password ? (
+        <FirstPassword onDone={() => {
+          setCurrent((c) => {
+            if (!c) return c
+            const next = { ...c, member: { ...c.member, must_change_password: false } }
+            try { sessionStorage.setItem(KEY, JSON.stringify(next)) } catch { /* until reload */ }
+            return next
+          })
+        }} />
+      ) : <App />}
     </SessionContext.Provider>
   )
 }
 
-applyTheme(readTheme())
+/** A member signed in with a temporary password sets their own before anything else (ADR 0019). */
+function FirstPassword({ onDone }: { onDone: () => void }) {
+  const { me, signOut } = useSession()
+  return (
+    <main id="main" className="grid min-h-svh place-items-center bg-background p-6">
+      <Card className="w-full max-w-[460px] shadow-float">
+        <CardHeader>
+          <CardTitle className="text-xl">Choose your password</CardTitle>
+          <CardDescription>You signed in as {me.email} with a temporary password. Set your own to continue.</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-4">
+          <PasswordForm forced onDone={onDone} />
+          <button type="button" className="justify-self-start text-sm text-muted-foreground underline-offset-4 hover:underline" onClick={signOut}>Sign out instead</button>
+        </CardContent>
+      </Card>
+    </main>
+  )
+}
+
 const config = loadConfig()
 const root = document.getElementById('root')
 if (config?.dev && location.pathname === '/callback') {
@@ -114,7 +142,7 @@ if (config?.dev && location.pathname === '/callback') {
           <BrowserRouter><Root config={config} /></BrowserRouter>
         ) : (
           <div className="grid min-h-svh place-items-center p-6 text-center">
-            <p role="alert" className="max-w-md text-muted-foreground">This build has no server or sign-in configured (VITE_API_BASE_URL, and VITE_GOOGLE_CLIENT_ID or VITE_APPLE_CLIENT_ID).</p>
+            <p role="alert" className="max-w-md text-muted-foreground">This build has no server configured (VITE_API_BASE_URL must be an https address, or http on localhost).</p>
           </div>
         )}
       </TooltipProvider>

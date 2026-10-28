@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 
 import '../core/api/api_client.dart';
+import '../core/api/reachability.dart';
 import '../core/auth/session_manager.dart';
 import '../core/auth/token_store.dart';
 import 'config.dart';
@@ -32,10 +33,18 @@ final sessionManagerProvider = Provider<SessionManager>((ref) {
   return s;
 });
 
+/// Whether the server could be reached by the last request (the shell's connectivity strip watches it).
+final reachabilityProvider = Provider<Reachability>((ref) {
+  final r = Reachability();
+  ref.onDispose(r.dispose);
+  return r;
+});
+
 final apiClientProvider = Provider<ApiClient>(
   (ref) => ApiClient(
     baseUrl: ref.watch(appConfigProvider).apiBaseUrl,
     http: ref.watch(httpClientProvider),
     tokens: ref.watch(sessionManagerProvider),
+    onReachability: ref.watch(reachabilityProvider).report,
   ),
 );

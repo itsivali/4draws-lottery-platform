@@ -18,6 +18,9 @@ class FakeBackend {
 
   /// The smallest top-up the "server" accepts (TOP_UP_MIN_KES; KES 1 while testing with real money).
   int topUpMin = 10;
+
+  /// The withdrawal range, or null while the "server" has no M-Pesa B2C (withdrawals unavailable).
+  Map<String, Object?>? withdrawBounds = {'min_kes': 50, 'max_kes': 150000};
   Map<String, Object?>? restriction;
   String? closureRequestedAt;
   int plays = 0;
@@ -161,6 +164,7 @@ class FakeBackend {
           'transactions': txs.reversed.toList(),
           'next_before': null,
           'top_up': {'min_kes': topUpMin, 'max_kes': 250000},
+          'withdraw': withdrawBounds,
         });
       case ('GET', '/v1/payments'):
         return _ok({'payments': topUps.values.toList().reversed.toList()});

@@ -38,17 +38,19 @@ func (q *Queries) BindIdentity(ctx context.Context, arg BindIdentityParams) erro
 }
 
 const insertMember = `-- name: InsertMember :one
-INSERT INTO staff.members (email, name, roles, invited_by, created_at, updated_at)
-VALUES ($1, $2, $3, $4, $5, $5)
+INSERT INTO staff.members (email, name, roles, invited_by, created_at, updated_at, password_hash, password_changed_at, must_change_password)
+VALUES ($1, $2, $3, $4, $5, $5,
+        $6, CASE WHEN $6::text IS NULL THEN NULL ELSE $5::timestamptz END, $6::text IS NOT NULL)
 RETURNING id
 `
 
 type InsertMemberParams struct {
-	Email     string
-	Name      string
-	Roles     []string
-	InvitedBy string
-	At        time.Time
+	Email        string
+	Name         string
+	Roles        []string
+	InvitedBy    string
+	At           time.Time
+	PasswordHash *string
 }
 
 func (q *Queries) InsertMember(ctx context.Context, arg InsertMemberParams) (string, error) {
@@ -58,6 +60,7 @@ func (q *Queries) InsertMember(ctx context.Context, arg InsertMemberParams) (str
 		arg.Roles,
 		arg.InvitedBy,
 		arg.At,
+		arg.PasswordHash,
 	)
 	var id string
 	err := row.Scan(&id)
@@ -119,21 +122,24 @@ func (q *Queries) LastSignIns(ctx context.Context) ([]LastSignInsRow, error) {
 
 const listMembers = `-- name: ListMembers :many
 SELECT m.id, m.email, m.name, m.roles, m.active, m.invited_by, m.created_at, m.updated_at,
+       (m.password_hash IS NOT NULL)::boolean AS has_password, m.must_change_password,
        coalesce((SELECT array_agg(DISTINCT i.provider ORDER BY i.provider) FROM staff.identities i WHERE i.member_id = m.id), '{}')::text[] AS providers
 FROM staff.members m
 ORDER BY m.active DESC, m.email
 `
 
 type ListMembersRow struct {
-	ID        string
-	Email     string
-	Name      string
-	Roles     []string
-	Active    bool
-	InvitedBy string
-	CreatedAt time.Time
-	UpdatedAt time.Time
-	Providers []string
+	ID                 string
+	Email              string
+	Name               string
+	Roles              []string
+	Active             bool
+	InvitedBy          string
+	CreatedAt          time.Time
+	UpdatedAt          time.Time
+	HasPassword        bool
+	MustChangePassword bool
+	Providers          []string
 }
 
 func (q *Queries) ListMembers(ctx context.Context) ([]ListMembersRow, error) {
@@ -154,6 +160,8 @@ func (q *Queries) ListMembers(ctx context.Context) ([]ListMembersRow, error) {
 			&i.InvitedBy,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.HasPassword,
+			&i.MustChangePassword,
 			&i.Providers,
 		); err != nil {
 			return nil, err
@@ -167,15 +175,16 @@ func (q *Queries) ListMembers(ctx context.Context) ([]ListMembersRow, error) {
 }
 
 const lockMember = `-- name: LockMember :one
-SELECT id, email, name, roles, active FROM staff.members WHERE id = $1 FOR UPDATE
+SELECT id, email, name, roles, active, password_hash FROM staff.members WHERE id = $1 FOR UPDATE
 `
 
 type LockMemberRow struct {
-	ID     string
-	Email  string
-	Name   string
-	Roles  []string
-	Active bool
+	ID           string
+	Email        string
+	Name         string
+	Roles        []string
+	Active       bool
+	PasswordHash *string
 }
 
 func (q *Queries) LockMember(ctx context.Context, id string) (LockMemberRow, error) {
@@ -187,6 +196,7 @@ func (q *Queries) LockMember(ctx context.Context, id string) (LockMemberRow, err
 		&i.Name,
 		&i.Roles,
 		&i.Active,
+		&i.PasswordHash,
 	)
 	return i, err
 }
@@ -247,6 +257,36 @@ func (q *Queries) MemberByIdentity(ctx context.Context, arg MemberByIdentityPara
 	return i, err
 }
 
+const memberCredentials = `-- name: MemberCredentials :one
+SELECT id, email, name, roles, active, password_hash, must_change_password FROM staff.members WHERE email = $1
+`
+
+type MemberCredentialsRow struct {
+	ID                 string
+	Email              string
+	Name               string
+	Roles              []string
+	Active             bool
+	PasswordHash       *string
+	MustChangePassword bool
+}
+
+// what a password sign-in needs (the hash is compared in constant time by the service)
+func (q *Queries) MemberCredentials(ctx context.Context, email string) (MemberCredentialsRow, error) {
+	row := q.db.QueryRow(ctx, memberCredentials, email)
+	var i MemberCredentialsRow
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.Name,
+		&i.Roles,
+		&i.Active,
+		&i.PasswordHash,
+		&i.MustChangePassword,
+	)
+	return i, err
+}
+
 const revokeMemberSessions = `-- name: RevokeMemberSessions :exec
 UPDATE staff.sessions SET revoked_at = $1 WHERE member_id = $2 AND revoked_at IS NULL
 `
@@ -258,6 +298,23 @@ type RevokeMemberSessionsParams struct {
 
 func (q *Queries) RevokeMemberSessions(ctx context.Context, arg RevokeMemberSessionsParams) error {
 	_, err := q.db.Exec(ctx, revokeMemberSessions, arg.At, arg.MemberID)
+	return err
+}
+
+const revokeOtherSessions = `-- name: RevokeOtherSessions :exec
+UPDATE staff.sessions SET revoked_at = $1
+WHERE member_id = $2 AND token_hash <> $3 AND revoked_at IS NULL
+`
+
+type RevokeOtherSessionsParams struct {
+	At            *time.Time
+	MemberID      string
+	KeepTokenHash []byte
+}
+
+// after a password change: every other session of the member ends, the one that changed it goes on
+func (q *Queries) RevokeOtherSessions(ctx context.Context, arg RevokeOtherSessionsParams) error {
+	_, err := q.db.Exec(ctx, revokeOtherSessions, arg.At, arg.MemberID, arg.KeepTokenHash)
 	return err
 }
 
@@ -276,7 +333,7 @@ func (q *Queries) RevokeSession(ctx context.Context, arg RevokeSessionParams) er
 }
 
 const sessionMember = `-- name: SessionMember :one
-SELECT s.id AS session_id, s.last_seen_at, m.id, m.email, m.name, m.roles, m.active
+SELECT s.id AS session_id, s.last_seen_at, s.provider, m.id, m.email, m.name, m.roles, m.active, m.must_change_password
 FROM staff.sessions s JOIN staff.members m ON m.id = s.member_id
 WHERE s.token_hash = $1 AND s.revoked_at IS NULL AND s.expires_at > $2
   AND s.last_seen_at > $3
@@ -289,13 +346,15 @@ type SessionMemberParams struct {
 }
 
 type SessionMemberRow struct {
-	SessionID  string
-	LastSeenAt time.Time
-	ID         string
-	Email      string
-	Name       string
-	Roles      []string
-	Active     bool
+	SessionID          string
+	LastSeenAt         time.Time
+	Provider           string
+	ID                 string
+	Email              string
+	Name               string
+	Roles              []string
+	Active             bool
+	MustChangePassword bool
 }
 
 // a live session and its member as they are now (roles and active state are read on every request)
@@ -305,13 +364,38 @@ func (q *Queries) SessionMember(ctx context.Context, arg SessionMemberParams) (S
 	err := row.Scan(
 		&i.SessionID,
 		&i.LastSeenAt,
+		&i.Provider,
 		&i.ID,
 		&i.Email,
 		&i.Name,
 		&i.Roles,
 		&i.Active,
+		&i.MustChangePassword,
 	)
 	return i, err
+}
+
+const setPassword = `-- name: SetPassword :exec
+UPDATE staff.members SET password_hash = $1, password_changed_at = $2,
+       must_change_password = $3, updated_at = $2
+WHERE id = $4
+`
+
+type SetPasswordParams struct {
+	PasswordHash *string
+	At           *time.Time
+	MustChange   bool
+	ID           string
+}
+
+func (q *Queries) SetPassword(ctx context.Context, arg SetPasswordParams) error {
+	_, err := q.db.Exec(ctx, setPassword,
+		arg.PasswordHash,
+		arg.At,
+		arg.MustChange,
+		arg.ID,
+	)
+	return err
 }
 
 const touchSession = `-- name: TouchSession :exec

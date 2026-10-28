@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:lottery_mobile/app/router.dart';
 import 'package:lottery_mobile/core/platform/haptics.dart';
+import 'package:lottery_mobile/features/wallet/application/wallet_providers.dart';
 
 import '../support/app_harness.dart';
 import '../support/fake_backend.dart';
@@ -281,5 +283,79 @@ void main() {
     await t.tap(find.text('Wallet').last);
     await t.pumpAndSettle();
     expect(find.text('Your session ended. Sign in again to continue.'), findsOneWidget);
+  });
+
+  testWidgets('the withdrawal range comes from the server: a KES 20 minimum shows as a quick pick', (t) async {
+    final b = FakeBackend(balance: 5000)..withdrawBounds = {'min_kes': 20, 'max_kes': 70000};
+    final h = await pumpApp(t, b);
+    h.container.read(routerProvider).go('/wallet/withdraw');
+    await t.pumpAndSettle();
+    expect(find.text('KES 20'), findsOneWidget);
+    expect(find.text('KES 100'), findsOneWidget);
+  });
+
+  testWidgets('while the server has no M-Pesa payouts the withdraw screen says so instead of a form', (t) async {
+    final b = FakeBackend(balance: 5000)..withdrawBounds = null;
+    final h = await pumpApp(t, b);
+    h.container.read(routerProvider).go('/wallet/withdraw');
+    await t.pumpAndSettle();
+    expect(find.text('Withdrawals are not available right now'), findsOneWidget);
+    expect(find.text('Continue'), findsNothing);
+  });
+
+  testWidgets('a strip says when the server cannot be reached, and Retry clears it once it can', (t) async {
+    final b = FakeBackend(balance: 1250);
+    final h = await pumpApp(t, b);
+    expect(find.text("Can't reach the server. What you see may be out of date."), findsNothing);
+    b.offline = true;
+    h.container.invalidate(walletStatementProvider);
+    await t.pumpAndSettle();
+    expect(find.text("Can't reach the server. What you see may be out of date."), findsOneWidget);
+    b.offline = false;
+    await t.tap(find.text('Retry'));
+    await t.pumpAndSettle();
+    expect(find.text("Can't reach the server. What you see may be out of date."), findsNothing);
+    expect(find.text('KES 1,250'), findsWidgets);
+  });
+
+  testWidgets(
+    'with too little in the wallet, a play is paid from M-Pesa: the prompt is confirmed, then the wheel spins',
+    (t) async {
+      final b = FakeBackend(balance: 40)..spins.add(3);
+      await pumpApp(t, b);
+      await t.tap(find.text('Play').last);
+      await t.pumpAndSettle();
+      expect(find.text('Pay KES 100 with M-Pesa and spin'), findsOneWidget);
+      expect(find.text('Play for KES 100'), findsNothing);
+      await t.tap(find.text('Pay KES 100 with M-Pesa and spin'));
+      await t.pumpAndSettle();
+      expect(find.text('Charged to'), findsOneWidget);
+      await t.tap(find.widgetWithText(FilledButton, 'Pay KES 100 and spin'));
+      await t.pump();
+      expect(find.textContaining('Approve the M-Pesa prompt'), findsOneWidget);
+      await pumpUntilFound(t, find.text('Play recorded'));
+      final topUps = b.requests.where((r) => r.method == 'POST' && r.url.path == '/v1/payments/topups').toList();
+      expect(topUps, hasLength(1));
+      expect(topUps.single.body, contains('"amount_kes":100'));
+      expect(b.requests.where((r) => r.method == 'POST' && r.url.path == '/v1/plays'), hasLength(1));
+      expect(b.balance, 40, reason: 'the KES 100 came from the phone and went into the play; the wallet is as it was');
+      await t.pumpAndSettle();
+    },
+  );
+
+  testWidgets('when M-Pesa does not pay, nothing is played and the player is told', (t) async {
+    final b = FakeBackend(balance: 0)..topUpPendingPolls = null;
+    await pumpApp(t, b);
+    await t.tap(find.text('Play').last);
+    await t.pumpAndSettle();
+    await t.tap(find.text('Pay KES 100 with M-Pesa and spin'));
+    await t.pumpAndSettle();
+    await t.tap(find.widgetWithText(FilledButton, 'Pay KES 100 and spin'));
+    await t.pump();
+    final id = b.topUps.keys.single;
+    b.topUps[id] = {...b.topUps[id]!, 'status': 'failed'};
+    await pumpUntilFound(t, find.textContaining('Nothing was played'), max: 200);
+    expect(b.requests.where((r) => r.method == 'POST' && r.url.path == '/v1/plays'), isEmpty);
+    await t.pumpAndSettle();
   });
 }

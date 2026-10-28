@@ -259,6 +259,49 @@ func (s *Service) AwaitingReview(ctx context.Context, reviewer string) ([]Pendin
 	return out, err
 }
 
+// Identity is what a player's latest submission says they are: the name and ID number as submitted, and the
+// submission's state. Empty for an account that never submitted.
+type Identity struct {
+	FullName string
+	IDNumber string
+	Status   string
+}
+
+// Identities decrypts the latest submission of each of the given accounts, for the back office's player list. Every
+// account shown is audited as unmasked by viewer, who must be named.
+func (s *Service) Identities(ctx context.Context, userIDs []string, viewer string) (map[string]Identity, error) {
+	if strings.TrimSpace(viewer) == "" {
+		return nil, errors.New("kyc: a named viewer is required")
+	}
+	out := map[string]Identity{}
+	if len(userIDs) == 0 {
+		return out, nil
+	}
+	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+		rows, err := store.New(tx).LatestChecksFor(ctx, userIDs)
+		if err != nil {
+			return err
+		}
+		for _, r := range rows {
+			id, err := s.kr.Decrypt(r.IDNumberEnc, []byte("kyc.id_number"))
+			if err != nil {
+				return err
+			}
+			nm, err := s.kr.Decrypt(r.FullNameEnc, []byte("kyc.full_name"))
+			if err != nil {
+				return err
+			}
+			out[r.UserID] = Identity{FullName: string(nm), IDNumber: string(id), Status: r.Status}
+			if err := s.audit.Record(ctx, tx, audit.Event{ActorType: audit.Staff, ActorID: viewer, Action: "kyc.unmask",
+				EntityType: "user", EntityID: r.UserID, Details: map[string]any{"purpose": "player list"}}); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	return out, err
+}
+
 // pendingCheck loads a check and reports whether it is still the live pending submission of its user.
 func (s *Service) pendingCheck(ctx context.Context, q *store.Queries, checkID string) (store.GetKYCCheckRow, bool, error) {
 	chk, err := q.GetKYCCheck(ctx, checkID)

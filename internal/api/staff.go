@@ -18,6 +18,7 @@ import (
 	"github.com/itsivali/lottery-platform/internal/game"
 	"github.com/itsivali/lottery-platform/internal/identity"
 	"github.com/itsivali/lottery-platform/internal/kyc"
+	"github.com/itsivali/lottery-platform/internal/metrics"
 	"github.com/itsivali/lottery-platform/internal/payments"
 	"github.com/itsivali/lottery-platform/internal/payouts"
 	"github.com/itsivali/lottery-platform/internal/platform/httpx"
@@ -40,8 +41,9 @@ type StaffServices struct {
 	Payouts  *payouts.Service
 	Alerts   *alerts.Service
 	Game     *game.Service
-	Members  *staff.Service   // sign-in, sessions and members (ADR 0018)
+	Members  *staff.Service   // sign-in, sessions and members (ADR 0018, 0019)
 	Finance  *finance.Service // the financial dashboard
+	Metrics  *metrics.Service // the app metrics (admins)
 }
 
 type staffKey struct{}
@@ -86,8 +88,24 @@ func (h *handlers) staffAuth(next http.Handler) http.Handler {
 		if !h.limit(w, r, "staff:"+m.ID, 600, time.Minute) {
 			return
 		}
+		// a temporary password opens the door only to changing it (and to seeing who one is, and leaving)
+		if m.MustChangePassword && !allowedBeforePasswordChange(r) {
+			httpx.WriteProblem(w, http.StatusForbidden, "password-change-required", "Change your temporary password first",
+				"set your own password (PUT /v1/staff/password) before anything else")
+			return
+		}
 		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), staffKey{}, m)))
 	})
+}
+
+func allowedBeforePasswordChange(r *http.Request) bool {
+	switch {
+	case r.URL.Path == staffPrefix+"me" && r.Method == http.MethodGet,
+		r.URL.Path == staffPrefix+"password" && r.Method == http.MethodPut,
+		r.URL.Path == staffSession && r.Method == http.MethodDelete:
+		return true
+	}
+	return false
 }
 
 // requireRole lets the request through only for members holding one of roles.
@@ -112,53 +130,61 @@ func requireRole(roles ...staff.Role) func(http.Handler) http.Handler {
 
 func (h *handlers) mountStaff(r chi.Router) {
 	signIn := h.StaffServices.Members != nil
+	admin, anyStaff := requireRole(staff.Admin), requireRole(staff.Staff) // admins pass anyStaff too (staff.Member.Has)
 	r.Post("/session", h.needs(signIn, "Staff sign-in", h.staffSignIn))
 	r.Delete("/session", h.needs(signIn, "Staff sign-in", h.staffSignOut))
 	r.Get("/me", h.staffMe)
-	r.With(requireRole(staff.Admin)).Get("/members", h.needs(signIn, "Staff members", h.staffMembers))
-	r.With(requireRole(staff.Admin)).Post("/members", h.needs(signIn, "Staff members", h.staffInvite))
-	r.With(requireRole(staff.Admin)).Put("/members/{id}/roles", h.needs(signIn, "Staff members", h.staffSetRoles))
-	r.With(requireRole(staff.Admin)).Post("/members/{id}/disable", h.needs(signIn, "Staff members", h.staffSetActive(false)))
-	r.With(requireRole(staff.Admin)).Post("/members/{id}/enable", h.needs(signIn, "Staff members", h.staffSetActive(true)))
-	r.With(requireRole(staff.Finance, staff.Auditor)).Get("/finance", h.needs(h.StaffServices.Finance != nil, "Finance", h.staffFinance))
+	r.Put("/password", h.needs(signIn, "Staff sign-in", h.staffChangePassword))
+	r.With(admin).Get("/members", h.needs(signIn, "Staff members", h.staffMembers))
+	r.With(admin).Post("/members", h.needs(signIn, "Staff members", h.staffInvite))
+	r.With(admin).Put("/members/{id}/roles", h.needs(signIn, "Staff members", h.staffSetRoles))
+	r.With(admin).Post("/members/{id}/disable", h.needs(signIn, "Staff members", h.staffSetActive(false)))
+	r.With(admin).Post("/members/{id}/enable", h.needs(signIn, "Staff members", h.staffSetActive(true)))
+	r.With(admin).Post("/members/{id}/password", h.needs(signIn, "Staff members", h.staffResetPassword))
+	r.With(admin).Get("/metrics", h.needs(h.StaffServices.Metrics != nil, "App metrics", h.staffMetrics))
+	r.With(anyStaff).Get("/finance", h.needs(h.StaffServices.Finance != nil, "Finance", h.staffFinance))
 
-	r.With(requireRole(staff.KYCReviewer)).Get("/kyc/queue", h.needs(h.StaffServices.KYC != nil, "KYC review", h.staffKYCQueue))
-	r.With(requireRole(staff.KYCReviewer)).Get("/kyc/pending", h.needs(h.StaffServices.KYC != nil, "KYC review", h.staffKYCPending))
-	r.With(requireRole(staff.KYCReviewer)).Post("/kyc/{user}/approve", h.needs(h.StaffServices.KYC != nil, "KYC review", h.staffKYCReview(true)))
-	r.With(requireRole(staff.KYCReviewer)).Post("/kyc/{user}/reject", h.needs(h.StaffServices.KYC != nil, "KYC review", h.staffKYCReview(false)))
+	r.With(anyStaff).Get("/kyc/queue", h.needs(h.StaffServices.KYC != nil, "KYC review", h.staffKYCQueue))
+	r.With(anyStaff).Get("/kyc/pending", h.needs(h.StaffServices.KYC != nil, "KYC review", h.staffKYCPending))
+	r.With(anyStaff).Post("/kyc/{user}/approve", h.needs(h.StaffServices.KYC != nil, "KYC review", h.staffKYCReview(true)))
+	r.With(anyStaff).Post("/kyc/{user}/reject", h.needs(h.StaffServices.KYC != nil, "KYC review", h.staffKYCReview(false)))
 
-	r.With(requireRole(staff.PaymentsOperator, staff.Auditor)).Post("/payments/reconcile", h.staffReconcile(func(ctx context.Context) (any, error) { return h.StaffServices.Payments.Reconcile(ctx) }, h.StaffServices.Payments != nil))
-	r.With(requireRole(staff.PaymentsOperator)).Post("/payments/reversals", h.staffReverse)
-	r.With(requireRole(staff.PaymentsOperator)).Post("/payments/{id}/resolve", h.staffResolve)
-	r.With(requireRole(staff.PaymentsOperator)).Post("/suspense/{receipt}/credit", h.staffSuspenseCredit)
-	r.With(requireRole(staff.PaymentsOperator)).Post("/suspense/{receipt}/refund", h.staffSuspenseRefund)
-	r.With(requireRole(staff.PaymentsOperator)).Post("/paybill/{receipt}/recheck", h.staffRecheck)
+	r.With(anyStaff).Post("/payments/reconcile", h.staffReconcile(func(ctx context.Context) (any, error) { return h.StaffServices.Payments.Reconcile(ctx) }, h.StaffServices.Payments != nil))
+	r.With(anyStaff).Post("/payments/reversals", h.staffReverse)
+	r.With(anyStaff).Post("/payments/{id}/resolve", h.staffResolve)
+	r.With(anyStaff).Post("/suspense/{receipt}/credit", h.staffSuspenseCredit)
+	r.With(anyStaff).Post("/suspense/{receipt}/refund", h.staffSuspenseRefund)
+	r.With(anyStaff).Post("/paybill/{receipt}/recheck", h.staffRecheck)
 
-	r.With(requireRole(staff.DrawOfficial, staff.Auditor)).Get("/draws", h.staffDraws)
-	r.With(requireRole(staff.DrawOfficial, staff.Auditor)).Get("/draws/overdue", h.staffOverdue)
-	r.With(requireRole(staff.DrawOfficial, staff.Auditor)).Post("/draws/reconcile", h.staffReconcile(func(ctx context.Context) (any, error) { return h.StaffServices.Draws.Reconcile(ctx) }, h.StaffServices.Draws != nil))
-	r.With(requireRole(staff.DrawOfficial)).Post("/draws/{id}/sign", h.staffDrawStep("sign"))
-	r.With(requireRole(staff.DrawOfficial)).Post("/draws/{id}/approve", h.staffDrawStep("approve"))
-	r.With(requireRole(staff.DrawOfficial)).Post("/draws/{id}/void", h.staffDrawStep("void"))
-	r.With(requireRole(staff.Auditor, staff.PaymentsOperator)).Post("/game/reconcile", h.staffReconcile(func(ctx context.Context) (any, error) { return h.StaffServices.Game.Reconcile(ctx) }, h.StaffServices.Game != nil))
+	r.With(anyStaff).Get("/draws", h.staffDraws)
+	r.With(anyStaff).Get("/draws/overdue", h.staffOverdue)
+	r.With(anyStaff).Post("/draws/reconcile", h.staffReconcile(func(ctx context.Context) (any, error) { return h.StaffServices.Draws.Reconcile(ctx) }, h.StaffServices.Draws != nil))
+	r.With(anyStaff).Post("/draws/{id}/sign", h.staffDrawStep("sign"))
+	r.With(anyStaff).Post("/draws/{id}/approve", h.staffDrawStep("approve"))
+	r.With(anyStaff).Post("/draws/{id}/void", h.staffDrawStep("void"))
+	r.With(anyStaff).Post("/game/reconcile", h.staffReconcile(func(ctx context.Context) (any, error) { return h.StaffServices.Game.Reconcile(ctx) }, h.StaffServices.Game != nil))
 
-	r.With(requireRole(staff.PayoutOperator, staff.Auditor)).Get("/payouts", h.staffPayouts)
-	r.With(requireRole(staff.PayoutOperator, staff.Auditor)).Post("/payouts/reconcile", h.staffReconcile(func(ctx context.Context) (any, error) { return h.StaffServices.Payouts.Reconcile(ctx) }, h.StaffServices.Payouts != nil))
-	r.With(requireRole(staff.PayoutOperator)).Post("/payouts/{id}/approve", h.staffPayoutAction("approve"))
-	r.With(requireRole(staff.PayoutOperator)).Post("/payouts/{id}/reject", h.staffPayoutAction("reject"))
-	r.With(requireRole(staff.PayoutOperator)).Post("/payouts/{id}/settle", h.staffPayoutAction("settle"))
-	r.With(requireRole(staff.PayoutOperator)).Post("/prizes/{result}/retry", h.staffRetryPrize)
+	r.With(anyStaff).Get("/payouts", h.staffPayouts)
+	r.With(anyStaff).Post("/payouts/reconcile", h.staffReconcile(func(ctx context.Context) (any, error) { return h.StaffServices.Payouts.Reconcile(ctx) }, h.StaffServices.Payouts != nil))
+	r.With(anyStaff).Post("/payouts/{id}/approve", h.staffPayoutAction("approve"))
+	r.With(anyStaff).Post("/payouts/{id}/reject", h.staffPayoutAction("reject"))
+	r.With(anyStaff).Post("/payouts/{id}/settle", h.staffPayoutAction("settle"))
+	r.With(anyStaff).Post("/prizes/{result}/retry", h.staffRetryPrize)
 
-	r.With(requireRole(staff.TaxOfficer, staff.Auditor)).Get("/tax/batches", h.staffTaxBatches)
-	r.With(requireRole(staff.TaxOfficer)).Post("/tax/batches", h.staffTaxPrepare)
-	r.With(requireRole(staff.TaxOfficer, staff.Auditor)).Get("/tax/batches/{no}/file", h.staffTaxFile)
-	r.With(requireRole(staff.TaxOfficer)).Post("/tax/batches/{no}/remit", h.staffTaxRemit)
+	r.With(anyStaff).Get("/tax/batches", h.staffTaxBatches)
+	r.With(anyStaff).Post("/tax/batches", h.staffTaxPrepare)
+	r.With(anyStaff).Get("/tax/batches/{no}/file", h.staffTaxFile)
+	r.With(anyStaff).Post("/tax/batches/{no}/remit", h.staffTaxRemit)
 
-	r.With(requireRole(staff.AlertsOperator, staff.Auditor)).Get("/alerts", h.staffAlerts)
-	r.With(requireRole(staff.AlertsOperator)).Post("/alerts/{id}/acknowledge", h.staffAlertAck)
+	r.With(anyStaff).Get("/alerts", h.staffAlerts)
+	r.With(anyStaff).Post("/alerts/{id}/acknowledge", h.staffAlertAck)
 
-	r.With(requireRole(staff.Support, staff.Auditor)).Get("/closures", h.staffClosures)
-	r.With(requireRole(staff.Support)).Post("/closures/{user}/close", h.staffClose)
+	r.With(anyStaff).Get("/closures", h.staffClosures)
+	r.With(anyStaff).Post("/closures/{user}/close", h.staffClose)
+
+	r.With(anyStaff).Get("/players", h.staffPlayers)
+	r.With(anyStaff).Post("/players/{user}/suspend", h.staffSuspend(true))
+	r.With(anyStaff).Post("/players/{user}/reinstate", h.staffSuspend(false))
 }
 
 // needs answers 503 when the service behind a route is not configured.
@@ -180,6 +206,10 @@ func unavailable(w http.ResponseWriter, what string) {
 
 // staffError maps the services' refusals to problems. Anything unknown is a 500.
 func staffError(w http.ResponseWriter, err error) {
+	if errors.Is(err, staff.ErrWeakPassword) {
+		httpx.WriteProblem(w, http.StatusBadRequest, "weak-password", "Password too weak", strings.TrimPrefix(err.Error(), "password: too weak: "))
+		return
+	}
 	type m struct {
 		status      int
 		slug, title string
@@ -194,6 +224,8 @@ func staffError(w http.ResponseWriter, err error) {
 		{staff.ErrNotFound, m{http.StatusNotFound, "not-found", "No such member"}},
 		{staff.ErrSelf, m{http.StatusConflict, "self", "You cannot change your own roles or disable yourself"}},
 		{staff.ErrLastAdmin, m{http.StatusConflict, "last-admin", "The last admin cannot be removed"}},
+		{staff.ErrWrongPassword, m{http.StatusForbidden, "wrong-password", "Current password is incorrect"}},
+		{metrics.ErrRange, m{http.StatusBadRequest, "invalid-range", "The range must run forward and cover at most 366 days"}},
 		{finance.ErrRange, m{http.StatusBadRequest, "invalid-range", "The range must run forward and cover at most 366 days"}},
 		{payments.ErrNotFound, m{http.StatusNotFound, "not-found", "Not found"}},
 		{payments.ErrNotReversible, m{http.StatusConflict, "state", "Only a credited payment can be reversed"}},
@@ -205,6 +237,11 @@ func staffError(w http.ResponseWriter, err error) {
 		{payments.ErrRefundRefNeeded, m{http.StatusBadRequest, "refund-ref-required", "The M-Pesa reference of the refund is required"}},
 		{payments.ErrInvalidAmount, m{http.StatusBadRequest, "invalid-amount", "Invalid amount"}},
 		{draws.ErrNotFound, m{http.StatusNotFound, "not-found", "No such draw"}},
+		{draws.ErrBadCursor, m{http.StatusBadRequest, "invalid-cursor", "Invalid cursor"}},
+		{payouts.ErrBadCursor, m{http.StatusBadRequest, "invalid-cursor", "Invalid cursor"}},
+		{identity.ErrBadCursor, m{http.StatusBadRequest, "invalid-cursor", "Invalid cursor"}},
+		{identity.ErrNotSuspendable, m{http.StatusConflict, "state", "The account is not in a state that allows this"}},
+		{identity.ErrReasonRequired, m{http.StatusBadRequest, "reason-required", "A reason is required"}},
 		{draws.ErrState, m{http.StatusConflict, "state", "The draw is not in a state that allows this"}},
 		{draws.ErrTooLate, m{http.StatusConflict, "too-late", "The drand round is published; the outcome is public"}},
 		{draws.ErrAlreadySigned, m{http.StatusConflict, "already-signed", "You have already signed this step; a second official must"}},
@@ -241,12 +278,7 @@ func staffError(w http.ResponseWriter, err error) {
 }
 
 func (h *handlers) staffMe(w http.ResponseWriter, r *http.Request) {
-	m := member(r)
-	roles := make([]string, 0, len(m.Roles))
-	for _, role := range m.Roles {
-		roles = append(roles, string(role))
-	}
-	httpx.WriteJSON(w, http.StatusOK, map[string]any{"id": m.ID, "name": m.Name, "email": m.Email, "roles": roles})
+	httpx.WriteJSON(w, http.StatusOK, memberJSON(member(r)))
 }
 
 // staffKYCQueue is what the back office polls to tell reviewers that submissions wait: counts only, not audited.
@@ -406,16 +438,12 @@ func (h *handlers) staffDraws(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	list, err := h.StaffServices.Draws.List(r.Context(), limit)
+	page, err := h.StaffServices.Draws.List(r.Context(), limit, r.URL.Query().Get("before"))
 	if err != nil {
 		staffError(w, err)
 		return
 	}
-	out := make([]drawJSON, 0, len(list))
-	for _, d := range list {
-		out = append(out, toDrawJSON(d))
-	}
-	httpx.WriteJSON(w, http.StatusOK, map[string]any{"draws": out})
+	httpx.WriteJSON(w, http.StatusOK, drawPageJSON(page))
 }
 
 func (h *handlers) staffOverdue(w http.ResponseWriter, r *http.Request) {
@@ -478,7 +506,11 @@ func (h *handlers) staffPayouts(w http.ResponseWriter, r *http.Request) {
 	if state == "" {
 		state = "held"
 	}
-	list, err := h.StaffServices.Payouts.InState(r.Context(), state, 100)
+	limit, ok := pageLimit(w, r)
+	if !ok {
+		return
+	}
+	list, next, err := h.StaffServices.Payouts.InState(r.Context(), state, limit, r.URL.Query().Get("after"))
 	if err != nil {
 		staffError(w, err)
 		return
@@ -486,7 +518,7 @@ func (h *handlers) staffPayouts(w http.ResponseWriter, r *http.Request) {
 	if list == nil {
 		list = []payouts.Payout{}
 	}
-	httpx.WriteJSON(w, http.StatusOK, map[string]any{"payouts": list})
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{"payouts": list, "next_after": nullable(next)})
 }
 
 func (h *handlers) staffPayoutAction(action string) http.HandlerFunc {
@@ -685,6 +717,78 @@ func (h *handlers) staffClosures(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusOK, map[string]any{"closures": out})
 }
 
+// staffPlayers lists registered players, newest first, narrowed by a phone-number fragment and a status (ADR 0019).
+func (h *handlers) staffPlayers(w http.ResponseWriter, r *http.Request) {
+	if h.StaffServices.Identity == nil {
+		unavailable(w, "Players")
+		return
+	}
+	limit, ok := pageLimit(w, r)
+	if !ok {
+		return
+	}
+	qs := r.URL.Query()
+	if st := qs.Get("status"); st != "" && st != "active" && st != "suspended" && st != "closed" {
+		httpx.WriteProblem(w, http.StatusBadRequest, "invalid-status", "Invalid status", "use active, suspended or closed")
+		return
+	}
+	page, err := h.StaffServices.Identity.Players(r.Context(), identity.PlayerFilter{Query: qs.Get("q"), Status: qs.Get("status")}, limit, qs.Get("before"), member(r).Operator())
+	if err != nil {
+		staffError(w, err)
+		return
+	}
+	if page.Players == nil {
+		page.Players = []identity.Player{}
+	}
+	// names and ID numbers come from the latest identity submission (decrypted and audited as unmasked)
+	if h.StaffServices.KYC != nil && len(page.Players) > 0 {
+		ids := make([]string, 0, len(page.Players))
+		for _, p := range page.Players {
+			ids = append(ids, p.UserID)
+		}
+		who, err := h.StaffServices.KYC.Identities(r.Context(), ids, member(r).Operator())
+		if err != nil {
+			staffError(w, err)
+			return
+		}
+		for i := range page.Players {
+			if id, ok := who[page.Players[i].UserID]; ok {
+				page.Players[i].FullName, page.Players[i].NationalID = id.FullName, id.IDNumber
+			}
+		}
+	}
+	var next *string
+	if page.NextBefore != "" {
+		next = &page.NextBefore
+	}
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{"players": page.Players, "next_before": next})
+}
+
+// staffSuspend suspends or reinstates a player's account, with a reason for the audit log.
+func (h *handlers) staffSuspend(suspend bool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if h.StaffServices.Identity == nil {
+			unavailable(w, "Players")
+			return
+		}
+		var in struct {
+			Reason string `json:"reason"`
+		}
+		if !httpx.DecodeJSON(w, r, &in) {
+			return
+		}
+		if err := h.StaffServices.Identity.Suspend(r.Context(), chi.URLParam(r, "user"), member(r).Operator(), in.Reason, suspend); err != nil {
+			staffError(w, err)
+			return
+		}
+		status := "active"
+		if suspend {
+			status = "suspended"
+		}
+		httpx.WriteJSON(w, http.StatusOK, map[string]any{"user_id": chi.URLParam(r, "user"), "status": status})
+	}
+}
+
 func (h *handlers) staffClose(w http.ResponseWriter, r *http.Request) {
 	if h.StaffServices.Identity == nil || h.StaffServices.Payments == nil || h.StaffServices.Payouts == nil {
 		unavailable(w, "Account closure")
@@ -739,20 +843,39 @@ func (h *handlers) closureGuard(ctx context.Context, tx pgx.Tx, userID string) e
 	return nil
 }
 
-// staffSignIn exchanges a Google or Apple ID token of an invited member for a back-office session (ADR 0018).
+// staffSignIn opens a back-office session: with the member's email address and password (provider "password",
+// ADR 0019), or with a Google or Apple ID token of an invited member (ADR 0018).
 func (h *handlers) staffSignIn(w http.ResponseWriter, r *http.Request) {
 	var in struct {
 		Provider string `json:"provider"`
 		IDToken  string `json:"id_token"`
 		Nonce    string `json:"nonce"`
+		Email    string `json:"email"`
+		Password string `json:"password"`
 	}
 	if !httpx.DecodeJSON(w, r, &in) || !h.limit(w, r, "staff-sign-in:ip:"+h.clientIP(r), 30, time.Hour) {
 		return
 	}
-	s, err := h.StaffServices.Members.SignIn(r.Context(), in.Provider, in.IDToken, in.Nonce)
+	var s staff.Session
+	var err error
+	if in.Provider == "password" {
+		email := strings.ToLower(strings.TrimSpace(in.Email))
+		if email == "" || in.Password == "" {
+			httpx.WriteProblem(w, http.StatusBadRequest, "invalid-request", "Email address and password are required", "")
+			return
+		}
+		if !h.limit(w, r, "staff-sign-in:email:"+email, 10, time.Hour) {
+			return
+		}
+		s, err = h.StaffServices.Members.SignInWithPassword(r.Context(), email, in.Password)
+	} else {
+		s, err = h.StaffServices.Members.SignIn(r.Context(), in.Provider, in.IDToken, in.Nonce)
+	}
 	switch {
 	case err == nil:
 		httpx.WriteJSON(w, http.StatusCreated, map[string]any{"token": s.Token, "expires_at": s.ExpiresAt, "member": memberJSON(s.Member)})
+	case errors.Is(err, staff.ErrUnavailable):
+		httpx.WriteProblemRetry(w, http.StatusServiceUnavailable, "staff-unavailable", "Google and Apple sign-in are not configured", "sign in with your email address and password", 60)
 	case errors.Is(err, staff.ErrNotInvited):
 		httpx.WriteProblem(w, http.StatusForbidden, "not-invited", "This account is not a staff member",
 			"ask an admin to invite the email address of the Google or Apple account you used")
@@ -762,10 +885,79 @@ func (h *handlers) staffSignIn(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteProblem(w, http.StatusForbidden, "forbidden", "No back-office role", "ask an admin for a role")
 	case errors.Is(err, staff.ErrUnauthenticated):
 		w.Header().Set("WWW-Authenticate", "Bearer")
-		httpx.WriteProblem(w, http.StatusUnauthorized, "unauthenticated", "The sign-in could not be verified", "sign in again")
+		if in.Provider == "password" {
+			httpx.WriteProblem(w, http.StatusUnauthorized, "invalid-credentials", "Wrong email address or password", "")
+		} else {
+			httpx.WriteProblem(w, http.StatusUnauthorized, "unauthenticated", "The sign-in could not be verified", "sign in again")
+		}
 	default:
 		internalError(w, err)
 	}
+}
+
+// staffChangePassword sets the signed-in member's own password; a temporary one must be changed through here first.
+func (h *handlers) staffChangePassword(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Current string `json:"current_password"`
+		New     string `json:"new_password"`
+	}
+	if !httpx.DecodeJSON(w, r, &in) {
+		return
+	}
+	m := member(r)
+	if !h.limit(w, r, "staff-pwchange:"+m.ID, 10, time.Hour) {
+		return
+	}
+	tok, _ := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
+	if err := h.StaffServices.Members.ChangePassword(r.Context(), m, tok, in.Current, in.New); err != nil {
+		staffError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// staffResetPassword is an admin giving a member a temporary password.
+func (h *handlers) staffResetPassword(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Password string `json:"password"`
+	}
+	if !httpx.DecodeJSON(w, r, &in) {
+		return
+	}
+	if err := h.StaffServices.Members.ResetPassword(r.Context(), member(r), chi.URLParam(r, "id"), in.Password); err != nil {
+		staffError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// staffMetrics is the app metrics page over Nairobi days from..to (default: the last 30 days, today included).
+func (h *handlers) staffMetrics(w http.ResponseWriter, r *http.Request) {
+	from, to, ok := dateRange(w, r)
+	if !ok {
+		return
+	}
+	sum, err := h.StaffServices.Metrics.Summary(r.Context(), from, to)
+	if err != nil {
+		staffError(w, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, sum)
+}
+
+// dateRange reads optional from and to (YYYY-MM-DD) query parameters.
+func dateRange(w http.ResponseWriter, r *http.Request) (from, to time.Time, ok bool) {
+	for name, into := range map[string]*time.Time{"from": &from, "to": &to} {
+		if v := r.URL.Query().Get(name); v != "" {
+			t, err := time.Parse(time.DateOnly, v)
+			if err != nil {
+				httpx.WriteProblem(w, http.StatusBadRequest, "invalid-range", "Invalid date", name+" must be YYYY-MM-DD")
+				return from, to, false
+			}
+			*into = t
+		}
+	}
+	return from, to, true
 }
 
 func (h *handlers) staffSignOut(w http.ResponseWriter, r *http.Request) {
@@ -782,7 +974,7 @@ func memberJSON(m staff.Member) map[string]any {
 	for _, role := range m.Roles {
 		roles = append(roles, string(role))
 	}
-	return map[string]any{"id": m.ID, "name": m.Name, "email": m.Email, "roles": roles}
+	return map[string]any{"id": m.ID, "name": m.Name, "email": m.Email, "roles": roles, "must_change_password": m.MustChangePassword}
 }
 
 func (h *handlers) staffMembers(w http.ResponseWriter, r *http.Request) {
@@ -796,9 +988,10 @@ func (h *handlers) staffMembers(w http.ResponseWriter, r *http.Request) {
 
 func (h *handlers) staffInvite(w http.ResponseWriter, r *http.Request) {
 	var in struct {
-		Email string   `json:"email"`
-		Name  string   `json:"name"`
-		Roles []string `json:"roles"`
+		Email    string   `json:"email"`
+		Name     string   `json:"name"`
+		Roles    []string `json:"roles"`
+		Password string   `json:"password"` // a temporary password, told to the member out of band; optional
 	}
 	if !httpx.DecodeJSON(w, r, &in) {
 		return
@@ -806,7 +999,7 @@ func (h *handlers) staffInvite(w http.ResponseWriter, r *http.Request) {
 	roles, err := staff.ParseRoles(in.Roles)
 	if err == nil {
 		var rec staff.Record
-		if rec, err = h.StaffServices.Members.Invite(r.Context(), member(r), in.Email, in.Name, roles); err == nil {
+		if rec, err = h.StaffServices.Members.Invite(r.Context(), member(r), in.Email, in.Name, roles, in.Password); err == nil {
 			httpx.WriteJSON(w, http.StatusCreated, rec)
 			return
 		}
@@ -845,16 +1038,9 @@ func (h *handlers) staffSetActive(active bool) http.HandlerFunc {
 
 // staffFinance is the financial dashboard over Nairobi days from..to (default: the last 30 days, today included).
 func (h *handlers) staffFinance(w http.ResponseWriter, r *http.Request) {
-	var from, to time.Time
-	for name, into := range map[string]*time.Time{"from": &from, "to": &to} {
-		if v := r.URL.Query().Get(name); v != "" {
-			t, err := time.Parse(time.DateOnly, v)
-			if err != nil {
-				httpx.WriteProblem(w, http.StatusBadRequest, "invalid-range", "Invalid date", name+" must be YYYY-MM-DD")
-				return
-			}
-			*into = t
-		}
+	from, to, ok := dateRange(w, r)
+	if !ok {
+		return
 	}
 	sum, err := h.StaffServices.Finance.Summary(r.Context(), from, to)
 	if err != nil {

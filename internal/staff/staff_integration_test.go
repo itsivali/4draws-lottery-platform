@@ -41,14 +41,14 @@ var start = time.Date(2026, 10, 26, 9, 0, 0, 0, time.UTC)
 func setup(t *testing.T) *env {
 	t.Helper()
 	e := &env{pool: testpg.Pool(t, "app_worker"), clk: clock.NewManual(start), ids: idTokens{}}
-	e.svc = staff.NewService(e.pool, e.clk, e.ids, audit.NewWriter())
+	e.svc = staff.NewService(e.pool, e.clk, e.ids, audit.NewWriter(), []byte("test-pepper"))
 	return e
 }
 
 // admin bootstraps the first admin and signs them in.
 func (e *env) admin(t *testing.T) staff.Member {
 	t.Helper()
-	if err := e.svc.Bootstrap(context.Background(), "Owner@Example.com"); err != nil {
+	if err := e.svc.Bootstrap(context.Background(), "Owner@Example.com", ""); err != nil {
 		t.Fatal(err)
 	}
 	e.ids["google:owner"] = jwt.MapClaims{"sub": "g-owner", "email": "owner@example.com", "email_verified": true, "name": "Owner"}
@@ -75,7 +75,7 @@ func TestStaff_AnInvitedMemberSignsInWithGoogleOrAppleAndKeepsTheirRoles(t *test
 	if !admin.Has(staff.Admin) || admin.Email != "owner@example.com" {
 		t.Fatalf("bootstrapped admin %+v", admin)
 	}
-	if _, err := e.svc.Invite(ctx, admin, "Wanjiru@Example.com", "Wanjiru", []staff.Role{staff.KYCReviewer, staff.Finance}); err != nil {
+	if _, err := e.svc.Invite(ctx, admin, "Wanjiru@Example.com", "Wanjiru", []staff.Role{staff.Staff}, ""); err != nil {
 		t.Fatal(err)
 	}
 	// Apple sends email_verified as a string
@@ -85,7 +85,7 @@ func TestStaff_AnInvitedMemberSignsInWithGoogleOrAppleAndKeepsTheirRoles(t *test
 		t.Fatal(err)
 	}
 	m, err := e.svc.Authenticate(ctx, s.Token)
-	if err != nil || m.Email != "wanjiru@example.com" || !m.Has(staff.KYCReviewer) || !m.Has(staff.Finance) || m.Has(staff.Admin) {
+	if err != nil || m.Email != "wanjiru@example.com" || !m.Has(staff.Staff) || m.Has(staff.Admin) {
 		t.Fatalf("member %+v %v", m, err)
 	}
 	if !s.ExpiresAt.Equal(start.Add(staff.SessionMaxAge)) {
@@ -110,7 +110,7 @@ func TestStaff_SignInIsRefusedUnlessInvitedVerifiedAndActive(t *testing.T) {
 	if _, err := e.svc.SignIn(ctx, "google", "stranger", "n"); !errors.Is(err, staff.ErrNotInvited) {
 		t.Fatalf("not invited: %v", err)
 	}
-	if _, err := e.svc.Invite(ctx, admin, "otieno@example.com", "Otieno", []staff.Role{staff.Support}); err != nil {
+	if _, err := e.svc.Invite(ctx, admin, "otieno@example.com", "Otieno", []staff.Role{staff.Staff}, ""); err != nil {
 		t.Fatal(err)
 	}
 	e.ids["google:unverified"] = jwt.MapClaims{"sub": "g-o", "email": "otieno@example.com", "email_verified": false}
@@ -164,37 +164,37 @@ func TestStaff_AdminsManageRolesButNeverLockThemselvesOrEveryoneOut(t *testing.T
 	ctx := context.Background()
 	e := setup(t)
 	admin := e.admin(t)
-	if _, err := e.svc.Invite(ctx, admin, "owner@example.com", "Again", nil); !errors.Is(err, staff.ErrExists) {
+	if _, err := e.svc.Invite(ctx, admin, "owner@example.com", "Again", []staff.Role{staff.Staff}, ""); !errors.Is(err, staff.ErrExists) {
 		t.Fatalf("duplicate invite: %v", err)
 	}
-	if _, err := e.svc.Invite(ctx, admin, "not an email", "", nil); !errors.Is(err, staff.ErrInvalid) {
+	if _, err := e.svc.Invite(ctx, admin, "not an email", "", nil, ""); !errors.Is(err, staff.ErrInvalid) {
 		t.Fatalf("bad email: %v", err)
 	}
-	if _, err := e.svc.Invite(ctx, admin, "x@example.com", "", []staff.Role{"superuser"}); !errors.Is(err, staff.ErrInvalid) {
+	if _, err := e.svc.Invite(ctx, admin, "x@example.com", "", []staff.Role{"superuser"}, ""); !errors.Is(err, staff.ErrInvalid) {
 		t.Fatalf("unknown role: %v", err)
 	}
-	if _, err := e.svc.SetRoles(ctx, admin, admin.ID, []staff.Role{staff.Auditor}); !errors.Is(err, staff.ErrSelf) {
+	if _, err := e.svc.SetRoles(ctx, admin, admin.ID, []staff.Role{staff.Staff}); !errors.Is(err, staff.ErrSelf) {
 		t.Fatalf("own roles: %v", err)
 	}
 	if _, err := e.svc.SetActive(ctx, admin, admin.ID, false); !errors.Is(err, staff.ErrSelf) {
 		t.Fatalf("disable self: %v", err)
 	}
-	rec, err := e.svc.Invite(ctx, admin, "amina@example.com", "Amina", []staff.Role{staff.Auditor})
+	rec, err := e.svc.Invite(ctx, admin, "amina@example.com", "Amina", []staff.Role{staff.Staff}, "")
 	if err != nil {
 		t.Fatal(err)
 	}
 	e.ids["google:amina"] = jwt.MapClaims{"sub": "g-a", "email": "amina@example.com", "email_verified": true}
 	s, _ := e.svc.SignIn(ctx, "google", "amina", "n")
 	// a role change applies to the next request of an open session
-	if _, err := e.svc.SetRoles(ctx, admin, rec.ID, []staff.Role{staff.Admin, staff.Finance}); err != nil {
+	if _, err := e.svc.SetRoles(ctx, admin, rec.ID, []staff.Role{staff.Admin}); err != nil {
 		t.Fatal(err)
 	}
-	if m, err := e.svc.Authenticate(ctx, s.Token); err != nil || !m.Has(staff.Admin) || m.Has(staff.Auditor) {
-		t.Fatalf("after the change: %+v %v", m, err)
+	if m, err := e.svc.Authenticate(ctx, s.Token); err != nil || !m.Has(staff.Admin) || !m.Has(staff.Staff) {
+		t.Fatalf("after the change (an admin may act as staff): %+v %v", m, err)
 	}
 	amina, _ := e.svc.Authenticate(ctx, s.Token)
 	// with two admins, one may remove the other's admin role; the last one left cannot lose it
-	if _, err := e.svc.SetRoles(ctx, amina, admin.ID, []staff.Role{staff.Finance}); err != nil {
+	if _, err := e.svc.SetRoles(ctx, amina, admin.ID, []staff.Role{staff.Staff}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := e.svc.SetRoles(ctx, amina, admin.ID, []staff.Role{staff.Admin}); err != nil {
@@ -221,7 +221,7 @@ func TestStaff_TheLastAdminCannotBeRemoved(t *testing.T) {
 	ctx := context.Background()
 	e := setup(t)
 	admin := e.admin(t)
-	rec, err := e.svc.Invite(ctx, admin, "deputy@example.com", "", []staff.Role{staff.Admin})
+	rec, err := e.svc.Invite(ctx, admin, "deputy@example.com", "", []staff.Role{staff.Admin}, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -234,7 +234,7 @@ func TestStaff_TheLastAdminCannotBeRemoved(t *testing.T) {
 	if _, err := e.svc.SetActive(ctx, admin, rec.ID, true); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := e.svc.SetRoles(ctx, admin, rec.ID, nil); err != nil {
+	if _, err := e.svc.SetRoles(ctx, admin, rec.ID, []staff.Role{staff.Staff}); err != nil {
 		t.Fatal(err)
 	}
 	// the owner is now the only admin; nobody can take it away (they cannot change themselves either)
@@ -246,15 +246,102 @@ func TestStaff_TheLastAdminCannotBeRemoved(t *testing.T) {
 func TestStaff_BootstrapMakesTheFirstAdminOnlyWhenThereIsNone(t *testing.T) {
 	ctx := context.Background()
 	e := setup(t)
-	if err := e.svc.Bootstrap(ctx, "owner@example.com"); err != nil {
+	if err := e.svc.Bootstrap(ctx, "owner@example.com", ""); err != nil {
 		t.Fatal(err)
 	}
-	if err := e.svc.Bootstrap(ctx, "someone-else@example.com"); err != nil {
+	if err := e.svc.Bootstrap(ctx, "someone-else@example.com", ""); err != nil {
 		t.Fatal(err)
 	}
 	list, err := e.svc.Members(ctx)
-	if err != nil || len(list) != 1 || list[0].Email != "owner@example.com" || !slices.Contains(list[0].Roles, staff.Admin) {
+	if err != nil || len(list) != 1 || list[0].Email != "owner@example.com" || !slices.Contains(list[0].Roles, staff.Admin) || list[0].HasPassword {
 		t.Fatalf("members %+v %v", list, err)
+	}
+	// with a bootstrap password, the existing admin gets it as a temporary one while they have none; never again after
+	if err := e.svc.Bootstrap(ctx, "owner@example.com", "bootstrap temporary phrase"); err != nil {
+		t.Fatal(err)
+	}
+	s, err := e.svc.SignInWithPassword(ctx, "owner@example.com", "bootstrap temporary phrase")
+	if err != nil || !s.Member.MustChangePassword {
+		t.Fatalf("bootstrap password: %+v %v", s.Member, err)
+	}
+	if err := e.svc.ChangePassword(ctx, s.Member, s.Token, "bootstrap temporary phrase", "my very own long password"); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.svc.Bootstrap(ctx, "owner@example.com", "bootstrap temporary phrase"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.svc.SignInWithPassword(ctx, "owner@example.com", "bootstrap temporary phrase"); !errors.Is(err, staff.ErrUnauthenticated) {
+		t.Fatalf("the bootstrap password overwrote the owner's: %v", err)
+	}
+	if err := e.svc.Bootstrap(ctx, "owner@example.com", "short"); !errors.Is(err, staff.ErrWeakPassword) {
+		t.Fatalf("weak bootstrap password: %v", err)
+	}
+}
+
+func TestStaff_PasswordsAreTemporaryUntilChangedAndResetsEndSessions(t *testing.T) {
+	ctx := context.Background()
+	e := setup(t)
+	admin := e.admin(t)
+	if _, err := e.svc.Invite(ctx, admin, "amina@example.com", "Amina", []staff.Role{staff.Staff}, "amina@example.com-extra"); !errors.Is(err, staff.ErrWeakPassword) {
+		t.Fatalf("password built on the email: %v", err)
+	}
+	rec, err := e.svc.Invite(ctx, admin, "amina@example.com", "Amina", []staff.Role{staff.Staff}, "temporary nairobi welcome")
+	if err != nil || !rec.HasPassword || !rec.MustChangePassword {
+		t.Fatalf("invite: %+v %v", rec, err)
+	}
+	// unknown address, wrong password and a member without a password are refused alike
+	if _, err := e.svc.Invite(ctx, admin, "nopw@example.com", "", []staff.Role{staff.Staff}, ""); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range [][2]string{{"amina@example.com", "wrong password here"}, {"nobody@example.com", "temporary nairobi welcome"}, {"nopw@example.com", "temporary nairobi welcome"}} {
+		if _, err := e.svc.SignInWithPassword(ctx, c[0], c[1]); !errors.Is(err, staff.ErrUnauthenticated) {
+			t.Fatalf("%s: %v", c[0], err)
+		}
+	}
+	s, err := e.svc.SignInWithPassword(ctx, " Amina@Example.com ", "temporary nairobi welcome")
+	if err != nil || !s.Member.MustChangePassword || !s.Member.Has(staff.Staff) {
+		t.Fatalf("sign in: %+v %v", s.Member, err)
+	}
+	if m, err := e.svc.Authenticate(ctx, s.Token); err != nil || !m.MustChangePassword {
+		t.Fatalf("authenticate: %+v %v", m, err)
+	}
+	second, _ := e.svc.SignInWithPassword(ctx, "amina@example.com", "temporary nairobi welcome")
+	if err := e.svc.ChangePassword(ctx, s.Member, s.Token, "wrong", "a brand new long password"); !errors.Is(err, staff.ErrWrongPassword) {
+		t.Fatalf("wrong current: %v", err)
+	}
+	if err := e.svc.ChangePassword(ctx, s.Member, s.Token, "temporary nairobi welcome", "temporary nairobi welcome"); !errors.Is(err, staff.ErrWeakPassword) {
+		t.Fatalf("same password: %v", err)
+	}
+	if err := e.svc.ChangePassword(ctx, s.Member, s.Token, "temporary nairobi welcome", "a brand new long password"); err != nil {
+		t.Fatal(err)
+	}
+	if m, err := e.svc.Authenticate(ctx, s.Token); err != nil || m.MustChangePassword {
+		t.Fatalf("after the change: %+v %v", m, err)
+	}
+	if _, err := e.svc.Authenticate(ctx, second.Token); !errors.Is(err, staff.ErrUnauthenticated) {
+		t.Fatalf("the other session survived: %v", err)
+	}
+	// an admin resets it: every session ends and the next sign-in is temporary again
+	if err := e.svc.ResetPassword(ctx, admin, admin.ID, "resetting my own one"); !errors.Is(err, staff.ErrSelf) {
+		t.Fatalf("self reset: %v", err)
+	}
+	if err := e.svc.ResetPassword(ctx, admin, rec.ID, "reset temporary welcome"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.svc.Authenticate(ctx, s.Token); !errors.Is(err, staff.ErrUnauthenticated) {
+		t.Fatalf("session survived the reset: %v", err)
+	}
+	if s, err := e.svc.SignInWithPassword(ctx, "amina@example.com", "reset temporary welcome"); err != nil || !s.Member.MustChangePassword {
+		t.Fatalf("after the reset: %+v %v", s.Member, err)
+	}
+	var audited int
+	if err := e.pool.QueryRow(ctx, `SELECT count(*) FROM audit.audit_log WHERE action IN ('staff.password_changed','staff.password_reset')`).Scan(&audited); err != nil || audited != 2 {
+		t.Fatalf("audited: %d %v", audited, err)
+	}
+	if _, err := e.svc.SetActive(ctx, admin, rec.ID, false); err == nil {
+		if _, err := e.svc.SignInWithPassword(ctx, "amina@example.com", "reset temporary welcome"); !errors.Is(err, staff.ErrDisabled) {
+			t.Fatalf("disabled: %v", err)
+		}
 	}
 }
 

@@ -34,7 +34,7 @@ class StatusPill extends StatelessWidget {
           ? const EdgeInsets.symmetric(horizontal: Space.sm, vertical: Space.xxs)
           : const EdgeInsets.symmetric(horizontal: Space.sm + Space.xxs, vertical: Space.xs),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: c.isDark ? 0.16 : 0.10),
+        color: color.withValues(alpha: 0.10),
         borderRadius: BorderRadius.circular(Radii.full),
         border: Border.all(color: color.withValues(alpha: 0.45)),
       ),

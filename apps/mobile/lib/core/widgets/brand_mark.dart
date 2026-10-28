@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../app/theme/tokens.dart';
 
-/// A placeholder brand: an emerald disc with a gold pointer notch, and the wordmark. Replace this widget with the final
+/// A placeholder brand: a coral disc with a gold pointer notch, and the wordmark. Replace this widget with the final
 /// logo; layouts only give it a height.
 class BrandMark extends StatelessWidget {
   const BrandMark({super.key, this.height = 28, this.showWordmark = true});

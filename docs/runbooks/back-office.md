@@ -6,29 +6,38 @@ emergencies (`-operator <your staff id>`, audited as `staff:<id>` like the back 
 
 ## Sign-in and roles
 
-Staff sign in with **Google or Apple** (ADR 0018). Nobody can sign in uninvited: an admin invites each person on the
-*Staff* page by the email address of their Google or Apple account and gives them only the roles their job needs.
-The first sign-in binds that account to the member; roles and disabling apply from the next request.
+Staff sign in with their **email address and password** (ADR 0019); **Google or Apple** are offered as well when the
+owner has set them up (ADR 0018). Nobody can sign in uninvited: an admin adds each person on the *Staff* page by
+email address, gives them one of the two roles, and may set a **temporary password** which they tell the person out
+of band (never in a chat that keeps history). The person must change it at their first sign-in before they can do
+anything else. An admin can set a new temporary password at any time (*Reset password*), which also signs the person
+out everywhere. A person without a password signs in with the Google or Apple account of that address.
 
 | Role | Can |
 |---|---|
-| `admin` | invite staff, assign roles, disable and re-enable members (never their own) |
-| `finance` | read the *Finance* dashboard: deposits, stakes, prizes, withdrawals, revenue, what is owed to players and KRA |
-| `kyc_reviewer` | see submitted identity details (every view is audited as unmasked), approve or reject them with a reason |
-| `payments_operator` | run the payments and game reconciliations, record reversals, resolve unconfirmed top-ups, credit or refund suspense payments, re-check paybill payments |
-| `draw_official` | sign frozen draws, approve conducted draws, void a draw before its round (with a reason) |
-| `payout_operator` | approve or reject held payouts, settle manual payouts from the statement, retry failed prizes |
-| `tax_officer` | prepare KRA batches, download batch files, record remittances |
-| `alerts_operator` | acknowledge alerts (lifts a payout freeze caused by a failed reconciliation) |
-| `support` | close accounts whose holders asked |
-| `auditor` | read every list (Finance included) and run reconciliations; changes nothing |
+| `staff` | every operational queue: identity review (each view audited as unmasked; approve or reject with a reason), payments (reconciliations, reversals, unconfirmed top-ups, suspense, paybill re-checks), draws (sign, approve, void with a reason), payouts (approve, reject, settle from the statement, retry prizes), KRA tax (prepare batches, download files, record remittances), alerts (acknowledge), account closures; and the *Finance* dashboard |
+| `admin` | everything staff can, and the *Staff* page (invite, roles, disable and re-enable, reset passwords; never their own) and the *App metrics* page |
 
-**Two-person rules hold in the back office as in `lotteryctl`:** two different officials sign, and two approve, each
-draw; the person who records a KRA remittance must not be the one who prepared the batch. Give `draw_official` and
-`tax_officer` to at least two people each, and keep two admins so one can always restore the other.
+**Two-person rules hold in the back office as in `lotteryctl`:** two different people sign, and two approve, each
+draw; the person who records a KRA remittance must not be the one who prepared the batch. Keep at least two staff
+members for the draws and the tax batches, and two admins so one can always restore the other.
 
-Staff accounts should have 2-step verification on (the platform cannot require it of Google or Apple). Apple's
-"Hide My Email" gives a relay address: invite that address, or ask the member to share their real email with Apple.
+Passwords: 12 characters or more (a sentence is fine), nothing common, never your email address. Google or Apple
+accounts should have 2-step verification on; the platform cannot require a second factor for password sign-in, so
+prefer Google or Apple where they are set up. A lost password is reset by an admin; a lost admin password by another
+admin, or, for the bootstrap admin with no password yet, by `STAFF_BOOTSTRAP_PASSWORD` (below).
+
+**Every administrator locked out** (passwords lost, Google and Apple not configured): from a shell with the api's
+environment (`DATABASE_URL` and `AUTH_KEY` at least; on Render, the api service's shell):
+
+```
+lotteryctl staff password -email you@example.com -admin
+Temporary password (12 characters or more): ‹typed, not echoed into history›
+```
+
+It gives that member a temporary password, re-enables them, ends their sessions and, with `-admin`, makes them an
+administrator (creating the member if none exists). The next sign-in must change the password. The action is audited
+as `staff.emergency_password` by `lotteryctl`. `-password P` is accepted for scripts but lands in the shell history.
 
 ## Setting up Google and Apple (once, by the owner)
 
@@ -48,9 +57,10 @@ Services ID goes into `STAFF_APPLE_CLIENT_ID` (api) and `VITE_APPLE_CLIENT_ID` (
 API (`render.yaml`, `lottery-api`):
 
 ```
-STAFF_GOOGLE_CLIENT_ID=<google web client id>         # either or both
-STAFF_APPLE_CLIENT_ID=<apple services id>
 STAFF_BOOTSTRAP_ADMIN=itsivali@gmail.com              # made an admin while there is none
+STAFF_BOOTSTRAP_PASSWORD=<a long temporary password>   # their temporary password while they have none; change it at the first sign-in
+STAFF_GOOGLE_CLIENT_ID=<google web client id>         # optional, either or both
+STAFF_APPLE_CLIENT_ID=<apple services id>
 STAFF_DATABASE_URL=postgres://<worker login>@…        # the worker's role; omit only in single-role mode
 CORS_ALLOWED_ORIGINS=https://<back-office origin>,https://<player web origin>
 ```

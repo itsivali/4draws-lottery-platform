@@ -83,10 +83,7 @@ class _Line extends StatelessWidget {
     liveRegion: true,
     child: Container(
       padding: const EdgeInsets.symmetric(horizontal: Space.lg, vertical: Space.md),
-      decoration: BoxDecoration(
-        color: tone.withValues(alpha: context.colors.isDark ? 0.12 : 0.07),
-        borderRadius: BorderRadius.circular(Radii.lg),
-      ),
+      decoration: BoxDecoration(color: tone.withValues(alpha: 0.07), borderRadius: BorderRadius.circular(Radii.lg)),
       child: Row(
         children: [
           if (busy)

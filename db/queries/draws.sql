@@ -32,7 +32,13 @@ SELECT id, draw_type, period_start, period_end, status, seed_commit, seed_enc, r
 FROM draws.draws WHERE id = $1 FOR UPDATE;
 
 -- name: ListDraws :many
-SELECT id FROM draws.draws ORDER BY period_end DESC, draw_type, created_at DESC LIMIT sqlc.arg(max_rows);
+-- Newest period first, the latest draw first within it (ids are uuid v7, so ordered by creation); before (a draw id)
+-- continues a page from the draw after it.
+SELECT id FROM draws.draws
+WHERE sqlc.narg(before)::uuid IS NULL
+   OR (period_end, id) < (SELECT b.period_end, b.id FROM draws.draws b WHERE b.id = sqlc.narg(before)::uuid)
+ORDER BY period_end DESC, id DESC
+LIMIT sqlc.arg(max_rows);
 
 -- name: PlayerDaysIn :many
 -- every player day with plays in the period, with the ticket of its last play, in entry order

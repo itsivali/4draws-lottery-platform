@@ -34,12 +34,16 @@ class ApiClient {
     required this._http,
     required this._tokens,
     this.timeout = const Duration(seconds: 20),
+    this.onReachability,
   });
 
   final Uri baseUrl;
   final http.Client _http;
   final AccessTokenSource _tokens;
   final Duration timeout;
+
+  /// Told after every attempt whether the server answered at all (the connectivity strip listens).
+  final void Function({required bool reached})? onReachability;
 
   Future<ApiResponse> get(String path, {Map<String, String>? query, bool authenticated = true}) =>
       _send('GET', path, query: query, authenticated: authenticated);
@@ -90,10 +94,14 @@ class ApiClient {
     }
     try {
       final streamed = await _http.send(req).timeout(timeout);
-      return await http.Response.fromStream(streamed).timeout(timeout);
+      final res = await http.Response.fromStream(streamed).timeout(timeout);
+      onReachability?.call(reached: true);
+      return res;
     } on TimeoutException catch (e) {
+      onReachability?.call(reached: false);
       throw NetworkFailure(timedOut: true, cause: e);
     } on http.ClientException catch (e) {
+      onReachability?.call(reached: false);
       throw NetworkFailure(cause: e);
     }
   }

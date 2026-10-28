@@ -6,7 +6,7 @@ import { Actions, DataTable, Stack } from '../components/DataTable'
 import { useConfirmedAction } from '../components/useConfirmedAction'
 import { Empty, Loaded, Mono, PageHeader, Pill, type Tone } from '../components/ui'
 import { eat, kes } from '../format'
-import { useLoad } from '../hooks'
+import { usePages } from '../hooks'
 import { can } from '../roles'
 import type { Payout } from '../types'
 import { Button } from '@/components/ui/button'
@@ -25,9 +25,12 @@ const tone = (state: string): Tone => (state === 'succeeded' ? 'success' : state
 export function PayoutsPage() {
   const { api, me } = useSession()
   const [state, setState] = useState<string>('held')
-  const load = useLoad((signal) => api.get<{ payouts: Payout[] }>('/v1/staff/payouts', { state }, { signal }), [state])
+  // the operator's queue, oldest first, 50 a page; "Load more" follows the server's cursor forward
+  const load = usePages((after, signal) =>
+    api.get<{ payouts: Payout[]; next_after: string | null }>('/v1/staff/payouts', { state, limit: '50', ...(after === null ? {} : { after }) }, { signal })
+      .then((r) => ({ rows: r.payouts, next: r.next_after })), [state])
   const { ask, busy, view } = useConfirmedAction(load.reload)
-  const operator = can(me.roles, 'payout_operator')
+  const operator = can(me.roles, 'staff')
 
   const columns = useMemo<ColumnDef<Payout>[]>(() => [
     { id: 'payout', header: 'Payout', accessorFn: (p) => `${p.kind} ${p.id}`, cell: ({ row }) => <Stack primary={<span className="capitalize">{row.original.kind}</span>} secondary={<Mono>{row.original.id}</Mono>} /> },
@@ -93,9 +96,10 @@ export function PayoutsPage() {
       </Tabs>
       {view}
       <Loaded load={load} what="payouts">
-        {({ payouts }) =>
+        {(payouts) =>
           payouts.length === 0 ? <Empty icon={Banknote}>Nothing here.</Empty> : (
-            <DataTable columns={columns} data={payouts} rowId={(p) => p.id} caption="Payouts" filter="Search payouts" />
+            <DataTable columns={columns} data={payouts} rowId={(p) => p.id} caption="Payouts" filter="Search payouts"
+              more={{ has: load.more, loading: load.loadingMore, load: load.loadMore }} />
           )
         }
       </Loaded>

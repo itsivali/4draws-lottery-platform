@@ -440,11 +440,22 @@ func (q *Queries) InsertSignoff(ctx context.Context, arg InsertSignoffParams) er
 }
 
 const listDraws = `-- name: ListDraws :many
-SELECT id FROM draws.draws ORDER BY period_end DESC, draw_type, created_at DESC LIMIT $1
+SELECT id FROM draws.draws
+WHERE $1::uuid IS NULL
+   OR (period_end, id) < (SELECT b.period_end, b.id FROM draws.draws b WHERE b.id = $1::uuid)
+ORDER BY period_end DESC, id DESC
+LIMIT $2
 `
 
-func (q *Queries) ListDraws(ctx context.Context, maxRows int32) ([]string, error) {
-	rows, err := q.db.Query(ctx, listDraws, maxRows)
+type ListDrawsParams struct {
+	Before  *string
+	MaxRows int32
+}
+
+// Newest period first, the latest draw first within it (ids are uuid v7, so ordered by creation); before (a draw id)
+// continues a page from the draw after it.
+func (q *Queries) ListDraws(ctx context.Context, arg ListDrawsParams) ([]string, error) {
+	rows, err := q.db.Query(ctx, listDraws, arg.Before, arg.MaxRows)
 	if err != nil {
 		return nil, err
 	}

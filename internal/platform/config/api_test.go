@@ -194,19 +194,21 @@ func TestAPI_CORSOriginsAreExactHTTPSOriginsOrLocalhost(t *testing.T) {
 	}
 }
 
-func TestAPI_StaffSignInIsGoogleAppleOrTheLocalTestRealm(t *testing.T) {
+func TestAPI_StaffSignInIsPasswordWithGoogleAppleOrTheLocalTestRealmOptional(t *testing.T) {
 	fullAPIEnv(t)
 	for _, k := range []string{"STAFF_GOOGLE_CLIENT_ID", "STAFF_APPLE_CLIENT_ID", "STAFF_DEV_OIDC_ISSUER", "STAFF_DEV_OIDC_CLIENT_IDS",
-		"STAFF_DEV_OIDC_JWKS_URL", "STAFF_BOOTSTRAP_ADMIN", "STAFF_DATABASE_URL"} {
+		"STAFF_DEV_OIDC_JWKS_URL", "STAFF_BOOTSTRAP_ADMIN", "STAFF_BOOTSTRAP_PASSWORD", "STAFF_DATABASE_URL"} {
 		t.Setenv(k, "")
 	}
+	// password sign-in needs nothing configured (ADR 0019): the staff routes are always open
 	cfg, err := config.Load()
-	if err != nil || cfg.API.Staff.Enabled {
+	if err != nil || !cfg.API.Staff.Enabled || len(cfg.API.Staff.Providers()) != 1 || cfg.API.Staff.Providers()[0] != "password" {
 		t.Fatalf("unset: %+v %v", cfg.API.Staff, err)
 	}
 	t.Setenv("STAFF_GOOGLE_CLIENT_ID", "123-abc.apps.googleusercontent.com")
 	t.Setenv("STAFF_APPLE_CLIENT_ID", "ke.bahati.backoffice")
 	t.Setenv("STAFF_BOOTSTRAP_ADMIN", "Owner@Example.com")
+	t.Setenv("STAFF_BOOTSTRAP_PASSWORD", "a long temporary password")
 	t.Setenv("STAFF_DATABASE_URL", "postgres://worker@db/lottery")
 	cfg, err = config.Load()
 	if err != nil {
@@ -214,10 +216,10 @@ func TestAPI_StaffSignInIsGoogleAppleOrTheLocalTestRealm(t *testing.T) {
 	}
 	s := cfg.API.Staff
 	if !s.Enabled || s.GoogleClientID != "123-abc.apps.googleusercontent.com" || s.AppleClientID != "ke.bahati.backoffice" ||
-		s.BootstrapAdmin != "owner@example.com" || s.DatabaseURL != "postgres://worker@db/lottery" || s.Dev != nil {
+		s.BootstrapAdmin != "owner@example.com" || s.BootstrapPassword != "a long temporary password" || s.DatabaseURL != "postgres://worker@db/lottery" || s.Dev != nil {
 		t.Fatalf("staff: %+v", s)
 	}
-	if got := s.Providers(); len(got) != 2 || got[0] != "google" || got[1] != "apple" {
+	if got := s.Providers(); len(got) != 3 || got[0] != "password" || got[1] != "google" || got[2] != "apple" {
 		t.Fatalf("providers %v", got)
 	}
 	t.Setenv("STAFF_BOOTSTRAP_ADMIN", "not-an-email")
@@ -225,6 +227,10 @@ func TestAPI_StaffSignInIsGoogleAppleOrTheLocalTestRealm(t *testing.T) {
 		t.Fatalf("bad bootstrap admin accepted: %v", err)
 	}
 	t.Setenv("STAFF_BOOTSTRAP_ADMIN", "")
+	if _, err := config.Load(); err == nil || !strings.Contains(err.Error(), "STAFF_BOOTSTRAP_PASSWORD") {
+		t.Fatalf("a bootstrap password without an admin accepted: %v", err)
+	}
+	t.Setenv("STAFF_BOOTSTRAP_PASSWORD", "")
 
 	// the local staff realm, for local development and the e2e journey only: all three or none, https except in compose
 	t.Setenv("STAFF_DEV_OIDC_ISSUER", "http://localhost:8081/realms/lottery-staff")
@@ -241,7 +247,7 @@ func TestAPI_StaffSignInIsGoogleAppleOrTheLocalTestRealm(t *testing.T) {
 	if err != nil || cfg.API.Staff.Dev == nil || len(cfg.API.Staff.Dev.ClientIDs) != 2 || cfg.API.Staff.Dev.ClientIDs[1] != "lottery-e2e" {
 		t.Fatalf("dev realm: %+v %v", cfg.API.Staff.Dev, err)
 	}
-	if got := cfg.API.Staff.Providers(); len(got) != 3 || got[2] != "dev" {
+	if got := cfg.API.Staff.Providers(); len(got) != 4 || got[3] != "dev" {
 		t.Fatalf("providers %v", got)
 	}
 }

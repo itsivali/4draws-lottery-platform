@@ -49,7 +49,7 @@ export function AlertsPage() {
                         <p className="m-0 flex flex-wrap items-center gap-2 text-sm"><Pill tone="success">Acknowledged</Pill> <span className="text-muted-foreground">{eat(a.acknowledged_at)}</span> — {a.ack_note}</p>
                       ) : a.resolved_at ? (
                         <p className="m-0 flex flex-wrap items-center gap-2 text-sm"><Pill tone="neutral">Resolved</Pill> <span className="text-muted-foreground">{eat(a.resolved_at)}, before anyone acknowledged it</span></p>
-                      ) : can(me.roles, 'alerts_operator') ? (
+                      ) : can(me.roles, 'staff') ? (
                         <Button type="button" size="sm" disabled={busy} onClick={() => {
                           ask({ title: 'Acknowledge this alert?', body: <p>{a.summary}</p>, fields: [{ name: 'note', label: 'What you did or found', required: true }],
                             confirmLabel: 'Acknowledge', success: 'Acknowledged.', act: (v) => api.post(`/v1/staff/alerts/${a.id}/acknowledge`, { note: v.note }) })

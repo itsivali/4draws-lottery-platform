@@ -23,10 +23,9 @@ Widget host({
   WheelGeometry? resting,
   double size = 360,
   bool reduceMotion = false,
-  Brightness brightness = Brightness.light,
 }) => MaterialApp(
   debugShowCheckedModeBanner: false,
-  theme: buildTheme(brightness),
+  theme: buildTheme(),
   home: MediaQuery(
     data: MediaQueryData(size: const Size(800, 800), disableAnimations: reduceMotion),
     child: Scaffold(
@@ -249,21 +248,13 @@ void main() {
   });
 
   group('golden', () {
-    for (final b in Brightness.values) {
-      testWidgets('at rest, ${b.name}', (t) async {
-        await t.pumpWidget(
-          host(
-            spin: const WheelSpin.idle(),
-            haptics: SpinHaptics(Recorder()),
-            onSettled: () {},
-            resting: server,
-            brightness: b,
-          ),
-        );
-        await t.pump();
-        await expectLater(find.byType(LotteryWheel), matchesGoldenFile('goldens/wheel_rest_${b.name}.png'));
-      });
-    }
+    testWidgets('at rest', (t) async {
+      await t.pumpWidget(
+        host(spin: const WheelSpin.idle(), haptics: SpinHaptics(Recorder()), onSettled: () {}, resting: server),
+      );
+      await t.pump();
+      await expectLater(find.byType(LotteryWheel), matchesGoldenFile('goldens/wheel_rest_light.png'));
+    });
     testWidgets('settled on the lucky slot', (t) async {
       await t.pumpWidget(
         host(

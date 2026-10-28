@@ -8,6 +8,7 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
+	"fmt"
 	"net/http"
 	"strings"
 	"testing"
@@ -20,6 +21,7 @@ import (
 	"github.com/itsivali/lottery-platform/internal/ledger"
 	"github.com/itsivali/lottery-platform/internal/platform/clock"
 	"github.com/itsivali/lottery-platform/internal/platform/crypto"
+	"github.com/itsivali/lottery-platform/internal/staff"
 )
 
 // drawBeacon answers any published round with deterministic randomness.
@@ -122,8 +124,30 @@ func TestAPI_DrawsArePublicAndPlayersSeeOnlyTheirOwnEntries(t *testing.T) {
 	if r := e.do(t, http.MethodGet, "/v1/draws/periods", "", nil); r.Code != http.StatusUnauthorized {
 		t.Fatalf("periods without a token: %d", r.Code)
 	}
-	if one := e.do(t, http.MethodGet, "/v1/draws?limit=1", "", nil); len(one.Body["draws"].([]any)) != 1 {
-		t.Fatalf("limit 1: %s", one.Raw)
+	// pages of one, followed by next_before, walk the same list in the same order and end with null
+	var paged []any
+	for cursor, n := "", 0; n < 10; n++ {
+		page := e.do(t, http.MethodGet, "/v1/draws?limit=1&before="+cursor, "", nil)
+		if page.Code != http.StatusOK || len(page.Body["draws"].([]any)) != 1 {
+			t.Fatalf("page %d: %d %s", n, page.Code, page.Raw)
+		}
+		paged = append(paged, page.Body["draws"].([]any)[0].(map[string]any)["id"])
+		next, _ := page.Body["next_before"].(string)
+		if next == "" {
+			break
+		}
+		cursor = next
+	}
+	var all []any
+	for _, d := range list.Body["draws"].([]any) {
+		all = append(all, d.(map[string]any)["id"])
+	}
+	if list.Body["next_before"] != nil || fmt.Sprint(paged) != fmt.Sprint(all) {
+		t.Fatalf("paged %v, want %v (next_before %v)", paged, all, list.Body["next_before"])
+	}
+	if staffPage := e.do(t, http.MethodGet, "/v1/staff/draws?limit=1", e.member(staff.Staff), nil); staffPage.Code != http.StatusOK ||
+		staffPage.Body["next_before"] == nil || len(staffPage.Body["draws"].([]any)) != 1 {
+		t.Fatalf("staff page: %d %s", staffPage.Code, staffPage.Raw)
 	}
 	d := e.do(t, http.MethodGet, "/v1/draws/"+id, "", nil)
 	if d.Code != http.StatusOK || d.Body["status"] != "conducted" || len(d.Body["certificate_hash"].(string)) != 64 ||
@@ -184,6 +208,7 @@ func TestAPI_DrawErrorMapping(t *testing.T) {
 	}{
 		{"/v1/draws?limit=0", "", http.StatusBadRequest, "invalid-limit"},
 		{"/v1/draws?limit=101", "", http.StatusBadRequest, "invalid-limit"},
+		{"/v1/draws?before=not-a-uuid", "", http.StatusBadRequest, "invalid-cursor"},
 		{"/v1/draws/0192f000-0000-7000-8000-000000000000", "", http.StatusNotFound, "not-found"},
 		{"/v1/draws/not-a-uuid", "", http.StatusNotFound, "not-found"},
 		{"/v1/draws/" + open + "/certificate", "", http.StatusConflict, "not-conducted"},

@@ -501,17 +501,14 @@ paths:
         and re-run as a new draw (`rerun_of`).
       security: []
       parameters:
-        - { name: limit, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/DrawsBefore" }
       responses:
         "200":
           description: Draws
           content:
             application/json:
-              schema:
-                type: object
-                required: [draws]
-                properties:
-                  draws: { type: array, items: { $ref: "#/components/schemas/Draw" } }
+              schema: { $ref: "#/components/schemas/DrawPage" }
         "400": { $ref: "#/components/responses/Problem" }
         "429": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
@@ -701,10 +698,12 @@ paths:
       description: |
         Read in one snapshot, so the transactions of the first page add up with the older ones to the balance.
         `debt_kes` is what is owed after a reversed top-up (play and withdrawals are paused while it is above 0).
-        Pass `next_before` as `before` for the next page; it is null on the last.
+        Pass `next_before` as `before` for the next page; it is null on the last. `top_up` and `withdraw` are the
+        amounts the server accepts for each (null while that flow is unavailable): the apps read them here instead of
+        hard-coding them.
       parameters:
-        - { name: limit, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
-        - { name: before, in: query, required: false, schema: { type: string }, description: "`next_before` of the previous page." }
+        - { $ref: "#/components/parameters/Limit" }
+        - { name: before, in: query, required: false, schema: { type: string }, description: "`next_before` of the previous page (a transaction id)." }
       responses:
         "200":
           description: The wallet
@@ -751,23 +750,34 @@ paths:
     post:
       operationId: staffSignIn
       tags: [back-office]
-      summary: Open a back-office session with a Google or Apple ID token of an invited member
+      summary: Open a back-office session with an email address and password, or a Google or Apple ID token
       description: |
-        The ID token must be from the back office's own Google or Apple client and carry the nonce given here (Apple:
-        its SHA-256). The first sign-in binds the provider identity to the member invited with the token's verified
-        email address; later ones use that binding. Sessions end 12 hours after sign-in or after 30 idle minutes.
+        Provider `password` (ADR 0019): the member's email address and password; wrong ones answer `invalid-credentials`
+        (401) alike, rate limited per address and per client. A member signed in with a temporary password may only
+        change it (`PUT /v1/staff/password`), see `/me` and sign out until they do (`password-change-required`, 403).
+        Providers `google` and `apple` (ADR 0018, when configured): the ID token must be from the back office's own
+        client and carry the nonce given here (Apple: its SHA-256). The first sign-in binds the provider identity to
+        the member invited with the token's verified email address; later ones use that binding. Sessions end 12 hours
+        after sign-in or after 30 idle minutes.
       parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: object
-              required: [provider, id_token, nonce]
-              properties:
-                provider: { type: string, enum: [google, apple] }
-                id_token: { type: string }
-                nonce: { type: string }
+              oneOf:
+                - type: object
+                  required: [provider, email, password]
+                  properties:
+                    provider: { type: string, enum: [password] }
+                    email: { type: string, format: email }
+                    password: { type: string }
+                - type: object
+                  required: [provider, id_token, nonce]
+                  properties:
+                    provider: { type: string, enum: [google, apple] }
+                    id_token: { type: string }
+                    nonce: { type: string }
       responses:
         "201":
           description: The session
@@ -779,7 +789,7 @@ paths:
                 properties:
                   token: { type: string }
                   expires_at: { type: string, format: date-time }
-                  member: { type: object }
+                  member: { $ref: "#/components/schemas/StaffMe" }
         "400": { $ref: "#/components/responses/Problem" }
         "401": { $ref: "#/components/responses/Problem" }
         "403": { $ref: "#/components/responses/Problem" }
@@ -794,6 +804,56 @@ paths:
       responses:
         "204": { description: Signed out }
         "401": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+  /v1/staff/password:
+    put:
+      operationId: staffChangePassword
+      tags: [back-office]
+      summary: Set one's own password (required first after a temporary one)
+      description: |
+        The current password must match (unless the member has none yet). Rules: 12 to 128 characters, nothing from
+        the common-password list, not the member's email address. Every other session of the member ends. Audited.
+      security: [{ staffBearer: [] }]
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [new_password]
+              properties:
+                current_password: { type: string }
+                new_password: { type: string, minLength: 12, maxLength: 128 }
+      responses:
+        "204": { description: Changed }
+        "400": { description: "Too weak (`weak-password`, the rule broken in `detail`)", content: { application/problem+json: { schema: { $ref: "#/components/schemas/Problem" } } } }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { description: "Current password wrong (`wrong-password`)", content: { application/problem+json: { schema: { $ref: "#/components/schemas/Problem" } } } }
+        "429": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+  /v1/staff/metrics:
+    get:
+      operationId: staffMetrics
+      tags: [back-office]
+      summary: How the player apps are used, per platform and Nairobi day
+      description: |
+        Role: `admin`. Sign-ups (by the platform of the player's first device), sign-ins, players seen, plays, credited
+        top-ups and withdrawals, for web, android and ios, every day of the range (default: the last 30 days) with
+        totals per platform and over all. Money is attributed to the platform the player used that day.
+      security: [{ staffBearer: [] }]
+      parameters:
+        - { name: from, in: query, schema: { type: string, format: date } }
+        - { name: to, in: query, schema: { type: string, format: date } }
+      responses:
+        "200":
+          description: The metrics
+          content:
+            application/json:
+              schema: { type: object }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
   /v1/staff/members:
     get:
@@ -814,8 +874,10 @@ paths:
     post:
       operationId: staffInvite
       tags: [back-office]
-      summary: Invite a member by the email address of their Google or Apple account
-      description: "Role: `admin`. Audited."
+      summary: Invite a member by email address, with a temporary password or for Google or Apple sign-in
+      description: |
+        Role: `admin`. Audited. `password` is a temporary one the admin tells the member out of band; they must change
+        it at their first sign-in. Without one the member signs in with the Google or Apple account of that address.
       security: [{ staffBearer: [] }]
       parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
       requestBody:
@@ -828,7 +890,8 @@ paths:
               properties:
                 email: { type: string, format: email }
                 name: { type: string }
-                roles: { type: array, items: { type: string, enum: [admin, finance, kyc_reviewer, payments_operator, draw_official, payout_operator, tax_officer, alerts_operator, support, auditor] } }
+                roles: { type: array, minItems: 1, items: { $ref: "#/components/schemas/StaffRole" } }
+                password: { type: string, minLength: 12, maxLength: 128 }
       responses:
         "201":
           description: The member
@@ -856,13 +919,38 @@ paths:
               type: object
               required: [roles]
               properties:
-                roles: { type: array, items: { type: string } }
+                roles: { type: array, minItems: 1, items: { $ref: "#/components/schemas/StaffRole" } }
       responses:
         "200":
           description: The member
           content:
             application/json:
               schema: { type: object }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+  /v1/staff/members/{id}/password:
+    post:
+      operationId: staffResetPassword
+      tags: [back-office]
+      summary: Give a member a temporary password (not one's own); ends their sessions
+      description: "Role: `admin`. Audited. The member must change it at their next sign-in."
+      security: [{ staffBearer: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }, { $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [password]
+              properties:
+                password: { type: string, minLength: 12, maxLength: 128 }
+      responses:
+        "204": { description: Set }
         "400": { $ref: "#/components/responses/Problem" }
         "401": { $ref: "#/components/responses/Problem" }
         "403": { $ref: "#/components/responses/Problem" }
@@ -907,12 +995,98 @@ paths:
         "404": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
+  /v1/staff/players:
+    get:
+      operationId: staffPlayers
+      tags: [back-office]
+      summary: Registered players, newest first, with balance, plays and last sign-in
+      description: |
+        Role: `staff` (admins too). Narrow with `q` (a fragment of the phone number, or a user id) and `status`. Pass
+        `next_before` as `before` for the next page; it is null on the last. Each view is audited (it shows phone numbers).
+      security: [{ staffBearer: [] }]
+      parameters:
+        - { name: q, in: query, required: false, schema: { type: string } }
+        - { name: status, in: query, required: false, schema: { type: string, enum: [active, suspended, closed] } }
+        - { name: limit, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+        - { name: before, in: query, required: false, schema: { type: string }, description: "`next_before` of the previous page (a user id)." }
+      responses:
+        "200":
+          description: The page
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [players, next_before]
+                properties:
+                  players:
+                    type: array
+                    items:
+                      type: object
+                      required: [user_id, msisdn, kyc_status, status, phone_verified, balance_kes, plays, created_at, last_sign_in_at, closure_requested_at]
+                      properties:
+                        user_id: { type: string }
+                        msisdn: { type: string }
+                        kyc_status: { type: string, enum: [none, pending, verified, manual_review, rejected] }
+                        status: { type: string, enum: [active, suspended, closed] }
+                        phone_verified: { type: boolean }
+                        balance_kes: { type: integer }
+                        plays: { type: integer }
+                        created_at: { type: string, format: date-time }
+                        last_sign_in_at: { type: [string, "null"], format: date-time }
+                        closure_requested_at: { type: [string, "null"], format: date-time }
+                        full_name: { type: string, description: From the latest identity submission; empty when none. Each view is audited as unmasked. }
+                        national_id: { type: string, description: From the latest identity submission; empty when none. }
+                  next_before: { type: [string, "null"] }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+  /v1/staff/players/{user}/suspend:
+    post:
+      operationId: staffSuspendPlayer
+      tags: [back-office]
+      summary: Suspend an active account (no sign-in, play, top-up or withdrawal) and end its sessions
+      description: "Role: `staff` (admins too). Audited with the reason. A closed or already suspended account answers `state` (409)."
+      security: [{ staffBearer: [] }]
+      parameters: [{ name: user, in: path, required: true, schema: { type: string } }, { $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [reason], properties: { reason: { type: string } } }
+      responses:
+        "200": { description: Suspended, content: { application/json: { schema: { type: object } } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+  /v1/staff/players/{user}/reinstate:
+    post:
+      operationId: staffReinstatePlayer
+      tags: [back-office]
+      summary: Lift a suspension
+      description: "Role: `staff` (admins too). Audited with the reason. An account that is not suspended answers `state` (409)."
+      security: [{ staffBearer: [] }]
+      parameters: [{ name: user, in: path, required: true, schema: { type: string } }, { $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [reason], properties: { reason: { type: string } } }
+      responses:
+        "200": { description: Reinstated, content: { application/json: { schema: { type: object } } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
   /v1/staff/finance:
     get:
       operationId: staffFinance
       tags: [back-office]
       summary: The financial dashboard over Nairobi days, read from the ledger
-      description: "Role: `finance` or `auditor`. Defaults to the last 30 days, today included; at most 366 days."
+      description: "Role: `staff` (admins too). Defaults to the last 30 days, today included; at most 366 days."
       security: [{ staffBearer: [] }]
       parameters:
         - { name: from, in: query, schema: { type: string, format: date } }
@@ -932,7 +1106,7 @@ paths:
       operationId: staffMe
       tags: [back-office]
       summary: The signed-in staff member and their roles
-      description: "Role: `any back-office role`."
+      description: "Role: `staff` (admins too)."
       security: [{ staffBearer: [] }]
       responses:
         "200":
@@ -952,7 +1126,7 @@ paths:
       operationId: staffKycQueue
       tags: [back-office]
       summary: How many identity submissions await review and since when (counts only; not audited)
-      description: "Role: `kyc_reviewer`. The back office polls it to notify reviewers."
+      description: "Role: `staff` (admins too). The back office polls it to notify reviewers."
       security: [{ staffBearer: [] }]
       responses:
         "200":
@@ -974,7 +1148,7 @@ paths:
       operationId: staffKycPending
       tags: [back-office]
       summary: Identity submissions awaiting review (decrypted; each one shown is audited as unmasked)
-      description: "Role: `kyc_reviewer`."
+      description: "Role: `staff` (admins too)."
       security: [{ staffBearer: [] }]
       responses:
         "200":
@@ -994,7 +1168,7 @@ paths:
       operationId: staffKycApprove
       tags: [back-office]
       summary: Approve a submission
-      description: "Role: `kyc_reviewer`."
+      description: "Role: `staff` (admins too)."
       security: [{ staffBearer: [] }]
       parameters:
         - { $ref: "#/components/parameters/IdempotencyKey" }
@@ -1027,7 +1201,7 @@ paths:
       operationId: staffKycReject
       tags: [back-office]
       summary: Reject a submission
-      description: "Role: `kyc_reviewer`."
+      description: "Role: `staff` (admins too)."
       security: [{ staffBearer: [] }]
       parameters:
         - { $ref: "#/components/parameters/IdempotencyKey" }
@@ -1060,7 +1234,7 @@ paths:
       operationId: staffPaymentsReconcile
       tags: [back-office]
       summary: Run the payments reconciliation now (stored as a run)
-      description: "Role: `payments_operator or auditor`."
+      description: "Role: `staff` (admins too)."
       security: [{ staffBearer: [] }]
       parameters:
         - { $ref: "#/components/parameters/IdempotencyKey" }
@@ -1082,7 +1256,7 @@ paths:
       operationId: staffReverse
       tags: [back-office]
       summary: Record that M-Pesa reversed a credited top-up
-      description: "Role: `payments_operator`."
+      description: "Role: `staff` (admins too)."
       security: [{ staffBearer: [] }]
       parameters:
         - { $ref: "#/components/parameters/IdempotencyKey" }
@@ -1115,7 +1289,7 @@ paths:
       operationId: staffResolve
       tags: [back-office]
       summary: Resolve an unconfirmed top-up from the statement receipt
-      description: "Role: `payments_operator`."
+      description: "Role: `staff` (admins too)."
       security: [{ staffBearer: [] }]
       parameters:
         - { $ref: "#/components/parameters/IdempotencyKey" }
@@ -1146,7 +1320,7 @@ paths:
       operationId: staffSuspenseCredit
       tags: [back-office]
       summary: Credit a paybill payment held in suspense to a player
-      description: "Role: `payments_operator`."
+      description: "Role: `staff` (admins too)."
       security: [{ staffBearer: [] }]
       parameters:
         - { $ref: "#/components/parameters/IdempotencyKey" }
@@ -1179,7 +1353,7 @@ paths:
       operationId: staffSuspenseRefund
       tags: [back-office]
       summary: Record the refund of a paybill payment held in suspense
-      description: "Role: `payments_operator`."
+      description: "Role: `staff` (admins too)."
       security: [{ staffBearer: [] }]
       parameters:
         - { $ref: "#/components/parameters/IdempotencyKey" }
@@ -1209,7 +1383,7 @@ paths:
       operationId: staffRecheck
       tags: [back-office]
       summary: Ask Daraja again about an unverified paybill payment
-      description: "Role: `payments_operator`."
+      description: "Role: `staff` (admins too)."
       security: [{ staffBearer: [] }]
       parameters:
         - { $ref: "#/components/parameters/IdempotencyKey" }
@@ -1229,16 +1403,17 @@ paths:
       operationId: staffDraws
       tags: [back-office]
       summary: Draws, newest period first
-      description: "Role: `draw_official or auditor`."
+      description: "Role: `staff` (admins too). Pass `next_before` as `before` for the next page; it is null on the last."
       security: [{ staffBearer: [] }]
       parameters:
-        - { name: limit, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/DrawsBefore" }
       responses:
         "200":
           description: Done
           content:
             application/json:
-              schema: { type: object }
+              schema: { $ref: "#/components/schemas/DrawPage" }
         "400": { $ref: "#/components/responses/Problem" }
         "401": { $ref: "#/components/responses/Problem" }
         "403": { $ref: "#/components/responses/Problem" }
@@ -1251,7 +1426,7 @@ paths:
       operationId: staffDrawsOverdue
       tags: [back-office]
       summary: Draws late for a lifecycle step
-      description: "Role: `draw_official or auditor`."
+      description: "Role: `staff` (admins too)."
       security: [{ staffBearer: [] }]
       responses:
         "200":
@@ -1271,7 +1446,7 @@ paths:
       operationId: staffDrawsReconcile
       tags: [back-office]
       summary: Run the draws reconciliation now
-      description: "Role: `draw_official or auditor`."
+      description: "Role: `staff` (admins too)."
       security: [{ staffBearer: [] }]
       parameters:
         - { $ref: "#/components/parameters/IdempotencyKey" }
@@ -1293,7 +1468,7 @@ paths:
       operationId: staffDrawSign
       tags: [back-office]
       summary: Sign a frozen draw (two different officials make it signed)
-      description: "Role: `draw_official`."
+      description: "Role: `staff` (admins too)."
       security: [{ staffBearer: [] }]
       parameters:
         - { $ref: "#/components/parameters/IdempotencyKey" }
@@ -1316,7 +1491,7 @@ paths:
       operationId: staffDrawApprove
       tags: [back-office]
       summary: Approve a conducted draw (two different officials make it approved)
-      description: "Role: `draw_official`."
+      description: "Role: `staff` (admins too)."
       security: [{ staffBearer: [] }]
       parameters:
         - { $ref: "#/components/parameters/IdempotencyKey" }
@@ -1339,7 +1514,7 @@ paths:
       operationId: staffDrawVoid
       tags: [back-office]
       summary: Void a frozen or signed draw before its round; returns the re-run
-      description: "Role: `draw_official`."
+      description: "Role: `staff` (admins too)."
       security: [{ staffBearer: [] }]
       parameters:
         - { $ref: "#/components/parameters/IdempotencyKey" }
@@ -1372,7 +1547,7 @@ paths:
       operationId: staffGameReconcile
       tags: [back-office]
       summary: Run the game reconciliation now
-      description: "Role: `auditor or payments_operator`."
+      description: "Role: `staff` (admins too)."
       security: [{ staffBearer: [] }]
       parameters:
         - { $ref: "#/components/parameters/IdempotencyKey" }
@@ -1393,17 +1568,24 @@ paths:
     get:
       operationId: staffPayouts
       tags: [back-office]
-      summary: Payouts in a state (default held)
-      description: "Role: `payout_operator or auditor`."
+      summary: Payouts in a state (default held), oldest first
+      description: "Role: `staff` (admins too). The operator's queue: pass `next_after` as `after` for the next page; it is null on the last."
       security: [{ staffBearer: [] }]
       parameters:
         - { name: state, in: query, required: false, schema: { type: string, enum: [held, manual, pending, sending, sent, timed_out, result_received, succeeded, failed] } }
+        - { $ref: "#/components/parameters/Limit" }
+        - { name: after, in: query, required: false, schema: { type: string }, description: "`next_after` of the previous page (a payout id)." }
       responses:
         "200":
           description: Done
           content:
             application/json:
-              schema: { type: object }
+              schema:
+                type: object
+                required: [payouts, next_after]
+                properties:
+                  payouts: { type: array, items: { type: object } }
+                  next_after: { type: [string, "null"] }
         "400": { $ref: "#/components/responses/Problem" }
         "401": { $ref: "#/components/responses/Problem" }
         "403": { $ref: "#/components/responses/Problem" }
@@ -1416,7 +1598,7 @@ paths:
       operationId: staffPayoutsReconcile
       tags: [back-office]
       summary: Run the payouts reconciliation now
-      description: "Role: `payout_operator or auditor`."
+      description: "Role: `staff` (admins too)."
       security: [{ staffBearer: [] }]
       parameters:
         - { $ref: "#/components/parameters/IdempotencyKey" }
@@ -1438,7 +1620,7 @@ paths:
       operationId: staffPayoutApprove
       tags: [back-office]
       summary: Approve a held payout (it is then sent)
-      description: "Role: `payout_operator`."
+      description: "Role: `staff` (admins too)."
       security: [{ staffBearer: [] }]
       parameters:
         - { $ref: "#/components/parameters/IdempotencyKey" }
@@ -1461,7 +1643,7 @@ paths:
       operationId: staffPayoutReject
       tags: [back-office]
       summary: Reject a held payout (a withdrawal returns to the wallet)
-      description: "Role: `payout_operator`."
+      description: "Role: `staff` (admins too)."
       security: [{ staffBearer: [] }]
       parameters:
         - { $ref: "#/components/parameters/IdempotencyKey" }
@@ -1494,7 +1676,7 @@ paths:
       operationId: staffPayoutSettle
       tags: [back-office]
       summary: Settle a payout in manual from the M-Pesa statement
-      description: "Role: `payout_operator`."
+      description: "Role: `staff` (admins too)."
       security: [{ staffBearer: [] }]
       parameters:
         - { $ref: "#/components/parameters/IdempotencyKey" }
@@ -1529,7 +1711,7 @@ paths:
       operationId: staffRetryPrize
       tags: [back-office]
       summary: Pay again a prize whose payout failed
-      description: "Role: `payout_operator`."
+      description: "Role: `staff` (admins too)."
       security: [{ staffBearer: [] }]
       parameters:
         - { $ref: "#/components/parameters/IdempotencyKey" }
@@ -1552,7 +1734,7 @@ paths:
       operationId: staffTaxBatches
       tags: [back-office]
       summary: KRA withholding batches, newest first
-      description: "Role: `tax_officer or auditor`."
+      description: "Role: `staff` (admins too)."
       security: [{ staffBearer: [] }]
       responses:
         "200":
@@ -1571,7 +1753,7 @@ paths:
       operationId: staffTaxPrepare
       tags: [back-office]
       summary: Prepare the next batch of withheld tax
-      description: "Role: `tax_officer`."
+      description: "Role: `staff` (admins too)."
       security: [{ staffBearer: [] }]
       parameters:
         - { $ref: "#/components/parameters/IdempotencyKey" }
@@ -1593,7 +1775,7 @@ paths:
       operationId: staffTaxFile
       tags: [back-office]
       summary: The batch file, byte for byte as hashed (X-File-SHA256)
-      description: "Role: `tax_officer or auditor`."
+      description: "Role: `staff` (admins too)."
       security: [{ staffBearer: [] }]
       parameters:
         - { name: no, in: path, required: true, schema: { type: integer, minimum: 1 } }
@@ -1615,7 +1797,7 @@ paths:
       operationId: staffTaxRemit
       tags: [back-office]
       summary: Record a batch as remitted (by someone other than who prepared it)
-      description: "Role: `tax_officer`."
+      description: "Role: `staff` (admins too)."
       security: [{ staffBearer: [] }]
       parameters:
         - { $ref: "#/components/parameters/IdempotencyKey" }
@@ -1649,7 +1831,7 @@ paths:
       operationId: staffAlerts
       tags: [back-office]
       summary: Open alerts (all with all=true)
-      description: "Role: `alerts_operator or auditor`."
+      description: "Role: `staff` (admins too)."
       security: [{ staffBearer: [] }]
       parameters:
         - { name: all, in: query, required: false, schema: { type: boolean } }
@@ -1671,7 +1853,7 @@ paths:
       operationId: staffAlertAcknowledge
       tags: [back-office]
       summary: Acknowledge an alert (stops reminders; lifts a payout freeze)
-      description: "Role: `alerts_operator`."
+      description: "Role: `staff` (admins too)."
       security: [{ staffBearer: [] }]
       parameters:
         - { $ref: "#/components/parameters/IdempotencyKey" }
@@ -1704,7 +1886,7 @@ paths:
       operationId: staffClosures
       tags: [back-office]
       summary: Open account-closure requests, oldest first
-      description: "Role: `support or auditor`."
+      description: "Role: `staff` (admins too)."
       security: [{ staffBearer: [] }]
       responses:
         "200":
@@ -1724,7 +1906,7 @@ paths:
       operationId: staffClose
       tags: [back-office]
       summary: Close the account of an open request (refused while money is in it or moving)
-      description: "Role: `support`."
+      description: "Role: `staff` (admins too)."
       security: [{ staffBearer: [] }]
       parameters:
         - { $ref: "#/components/parameters/IdempotencyKey" }
@@ -2029,6 +2211,18 @@ components:
       in: path
       required: true
       schema: { type: string, format: uuid }
+    Limit:
+      name: limit
+      in: query
+      required: false
+      description: Rows per page.
+      schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+    DrawsBefore:
+      name: before
+      in: query
+      required: false
+      description: "`next_before` of the previous page (a draw id); pages run from the newest period back."
+      schema: { type: string }
     Provider:
       name: provider
       in: path
@@ -2106,6 +2300,25 @@ components:
         round: { type: integer }
         randomness: { type: string, description: "Hex SHA-256 of the signature." }
         signature: { type: string, description: "Hex BLS signature (quicknet, G1) on SHA-256 of the round as 8 big-endian bytes." }
+    DrawPage:
+      type: object
+      required: [draws, next_before]
+      properties:
+        draws: { type: array, items: { $ref: "#/components/schemas/Draw" } }
+        next_before: { type: [string, "null"], description: Pass as `before` for the next page; null on the last. }
+    StaffRole:
+      type: string
+      enum: [admin, staff]
+      description: "admin: the whole back office, staff management and app metrics; staff: every operational queue and the finance dashboard (ADR 0019)."
+    StaffMe:
+      type: object
+      required: [id, name, email, roles, must_change_password]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        email: { type: string }
+        roles: { type: array, items: { $ref: "#/components/schemas/StaffRole" } }
+        must_change_password: { type: boolean, description: Signed in with a temporary password; only PUT /v1/staff/password is allowed. }
     Draw:
       type: object
       required: [id, draw_type, period_start, period_end, status, freeze_at, entries, entry_list_hash, seed_commit, drand_round,
@@ -2245,12 +2458,24 @@ components:
           type: [integer, "null"]
           description: What the player actually paid (credited gross, before excise); null until credited.
         created_at: { type: string, format: date-time }
+    MoneyBounds:
+      type: object
+      required: [min_kes, max_kes]
+      properties:
+        min_kes: { type: integer }
+        max_kes: { type: integer }
     Wallet:
       type: object
-      required: [balance_kes, debt_kes, transactions, next_before]
+      required: [balance_kes, debt_kes, transactions, next_before, top_up, withdraw]
       properties:
         balance_kes: { type: integer }
         debt_kes: { type: integer }
+        top_up:
+          description: The top-up range the server accepts now; null while top-ups are unavailable.
+          oneOf: [{ $ref: "#/components/schemas/MoneyBounds" }, { type: "null" }]
+        withdraw:
+          description: The withdrawal range the server accepts now; null while withdrawals are unavailable (no B2C).
+          oneOf: [{ $ref: "#/components/schemas/MoneyBounds" }, { type: "null" }]
         transactions:
           type: array
           items:

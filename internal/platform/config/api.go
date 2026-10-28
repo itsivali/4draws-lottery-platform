@@ -97,17 +97,19 @@ func loadAttestation() (Attestation, error) {
 	return a, nil
 }
 
-// Staff is the back office's sign-in (ADR 0018): Google and Apple ID tokens for the back office's own client ids, and
-// optionally the local staff realm for local development and the e2e journey. Members and roles are in the database;
-// BootstrapAdmin is made an admin while there is none. DatabaseURL is what the back office acts through (the worker's
-// role; empty uses DATABASE_URL, for single-role mode).
+// Staff is the back office's sign-in (ADR 0018, 0019): every member has an email address and password; Google and
+// Apple ID tokens for the back office's own client ids are optional, as is the local staff realm for local development
+// and the e2e journey. Members and roles are in the database; BootstrapAdmin is made an admin while there is none, and
+// BootstrapPassword becomes their temporary password while they have none. DatabaseURL is what the back office acts
+// through (the worker's role; empty uses DATABASE_URL, for single-role mode).
 type Staff struct {
-	Enabled        bool
-	GoogleClientID string // STAFF_GOOGLE_CLIENT_ID: the back office's OAuth web client
-	AppleClientID  string // STAFF_APPLE_CLIENT_ID: the back office's Sign in with Apple Services ID
-	Dev            *DevOIDC
-	BootstrapAdmin string
-	DatabaseURL    string
+	Enabled           bool   // always: password sign-in needs no provider
+	GoogleClientID    string // STAFF_GOOGLE_CLIENT_ID: the back office's OAuth web client
+	AppleClientID     string // STAFF_APPLE_CLIENT_ID: the back office's Sign in with Apple Services ID
+	Dev               *DevOIDC
+	BootstrapAdmin    string
+	BootstrapPassword string // STAFF_BOOTSTRAP_PASSWORD: a secret; set once, changed at the first sign-in
+	DatabaseURL       string
 }
 
 // DevOIDC is the local staff realm (Keycloak in compose): never configured in production.
@@ -117,9 +119,9 @@ type DevOIDC struct {
 	JWKSURL   string
 }
 
-// Providers names the sign-in providers configured, in the order the back office offers them.
+// Providers names the sign-in providers configured, in the order the back office offers them. Password is always one.
 func (s Staff) Providers() []string {
-	var out []string
+	out := []string{"password"}
 	if s.GoogleClientID != "" {
 		out = append(out, "google")
 	}
@@ -138,7 +140,8 @@ var emailRE = regexp.MustCompile(`^[^@\s]+@[^@\s]+\.[^@\s]+$`)
 
 func loadStaff() (Staff, error) {
 	s := Staff{GoogleClientID: os.Getenv("STAFF_GOOGLE_CLIENT_ID"), AppleClientID: os.Getenv("STAFF_APPLE_CLIENT_ID"),
-		BootstrapAdmin: strings.ToLower(strings.TrimSpace(os.Getenv("STAFF_BOOTSTRAP_ADMIN"))), DatabaseURL: os.Getenv("STAFF_DATABASE_URL")}
+		BootstrapAdmin: strings.ToLower(strings.TrimSpace(os.Getenv("STAFF_BOOTSTRAP_ADMIN"))), BootstrapPassword: os.Getenv("STAFF_BOOTSTRAP_PASSWORD"),
+		DatabaseURL: os.Getenv("STAFF_DATABASE_URL")}
 	var set, missing []string
 	for _, k := range devOIDCVars {
 		if os.Getenv(k) != "" {
@@ -165,7 +168,10 @@ func loadStaff() (Staff, error) {
 	if s.BootstrapAdmin != "" && !emailRE.MatchString(s.BootstrapAdmin) {
 		return Staff{}, errors.New("config: STAFF_BOOTSTRAP_ADMIN must be an email address")
 	}
-	s.Enabled = len(s.Providers()) > 0
+	if s.BootstrapPassword != "" && s.BootstrapAdmin == "" {
+		return Staff{}, errors.New("config: STAFF_BOOTSTRAP_PASSWORD needs STAFF_BOOTSTRAP_ADMIN")
+	}
+	s.Enabled = true
 	return s, nil
 }
 

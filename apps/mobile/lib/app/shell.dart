@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 
 import '../core/widgets/brand_mark.dart';
 import '../core/widgets/content_frame.dart';
+import 'connectivity_strip.dart';
 import 'theme/tokens.dart';
 
 class _Destination {
@@ -34,9 +35,15 @@ class AppShell extends StatelessWidget {
   Widget build(BuildContext context) {
     final width = widthClassOf(context);
     final c = context.colors;
+    final body = Column(
+      children: [
+        const ConnectivityStrip(),
+        Expanded(child: shell),
+      ],
+    );
     if (width == WidthClass.compact) {
       return Scaffold(
-        body: shell,
+        body: body,
         bottomNavigationBar: DecoratedBox(
           decoration: BoxDecoration(
             border: Border(top: BorderSide(color: c.border)),
@@ -78,7 +85,7 @@ class AppShell extends StatelessWidget {
               ],
             ),
             VerticalDivider(width: 1, color: c.border),
-            Expanded(child: shell),
+            Expanded(child: body),
           ],
         ),
       ),

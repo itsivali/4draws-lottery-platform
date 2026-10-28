@@ -35,6 +35,7 @@ var (
 	ErrState             = errors.New("payouts: the payout is not in a state that allows this")
 	ErrOperator          = errors.New("payouts: an operator's name and a reason are required")
 	ErrReceiptRequired   = errors.New("payouts: the M-Pesa receipt of the payment is required")
+	ErrBadCursor         = errors.New("payouts: bad cursor")
 )
 
 // Tax rules applied to payouts (versioned in ledger.tax_rules; the rates are placeholders, phase 5 checkpoint).
@@ -179,6 +180,11 @@ func NewService(pool *pgxpool.Pool, clk clock.Clock, d Daraja, enq Enqueuer, ids
 
 // Enabled reports whether B2C is configured.
 func (s *Service) Enabled() bool { return s.daraja != nil }
+
+// WithdrawalBounds is the range a withdrawal may be, in whole KES (Config, or the defaults), for the apps to show.
+func (s *Service) WithdrawalBounds() (minKES, maxKES int64) {
+	return s.cfg.MinWithdrawalKES, s.cfg.MaxWithdrawalKES
+}
 
 // Payout is what is known about a payout. Status is what the player sees; State is the internal state.
 type Payout struct {

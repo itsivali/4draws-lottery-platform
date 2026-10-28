@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../app/theme/tokens.dart';
 
-/// One of the app's two hero surfaces (MASTER.md §5): deep emerald, lit from the top left, with a deep shadow. Text and
+/// One of the app's two hero surfaces (MASTER.md §5): the sunset gradient, lit from the top left, with a deep shadow. Text and
 /// icons inside default to `onHero`. Used for the balance and for the wheel's stage, nowhere else.
 class HeroCard extends StatelessWidget {
   const HeroCard({
@@ -11,6 +11,7 @@ class HeroCard extends StatelessWidget {
     this.padding = const EdgeInsets.all(Space.xl),
     this.radius = Radii.xl,
     this.ornament = true,
+    this.stage = false,
   });
 
   final Widget child;
@@ -20,13 +21,16 @@ class HeroCard extends StatelessWidget {
   /// The faint concentric rings in the corner (off for the wheel, which brings its own).
   final bool ornament;
 
+  /// The wheel's stage takes the dusk gradient (`Gradients.stage`) instead of the full sunset.
+  final bool stage;
+
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
     final t = Theme.of(context).textTheme;
     return DecoratedBox(
       decoration: BoxDecoration(
-        gradient: Gradients.hero(c),
+        gradient: stage ? Gradients.stage(c) : Gradients.hero(c),
         borderRadius: BorderRadius.circular(radius),
         boxShadow: Elevation.hero(c),
       ),

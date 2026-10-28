@@ -32,10 +32,10 @@ player_web() {
   if [ "$mode" = --hot ]; then
     echo "Player web app (debug, hot reload: press r in this terminal): http://localhost:$WEB_PORT"
     mise exec -- flutter run -d web-server --web-hostname localhost --web-port "$WEB_PORT" \
-      --dart-define=API_BASE_URL="$API"
+      --dart-define=API_BASE_URL="$API" --dart-define=BACKOFFICE_URL=http://localhost:5173
   else
     echo "Building the player web app (release; a few minutes the first time)..."
-    mise exec -- flutter build web --release --dart-define=API_BASE_URL="$API" >/dev/null
+    mise exec -- flutter build web --release --dart-define=API_BASE_URL="$API" --dart-define=BACKOFFICE_URL=http://localhost:5173 >/dev/null
     echo "Player web app: http://localhost:$WEB_PORT"
     python3 -m http.server "$WEB_PORT" --bind 127.0.0.1 --directory build/web >/dev/null 2>&1
   fi
@@ -46,7 +46,7 @@ back_office() {
   # a copy from before staff signed in with Google/Apple (ADR 0018) points at settings that no longer exist
   grep -qs VITE_DEV_OIDC_AUTHORITY .env.local || cp .env.example .env.local
   [ -d node_modules ] || mise exec -- npm ci
-  echo "Back office: http://localhost:5173 (local staff realm: ada (admin), alice, bob, kim, paula, otis, tara, tom, sam; password local-dev-staff)"
+  echo "Back office: http://localhost:5173 (email <user>@staff.local, password local-dev-staff-2026: ada, alice (admin), bob, kim, paula, otis, tara, tom, sam; or the local staff realm, password local-dev-staff)"
   mise exec -- npx vite --port 5173 --strictPort
 }
 

@@ -1,18 +1,22 @@
-// Package staff identifies back-office staff and names the roles that gate each back-office action. Staff sign in with
-// Google or Apple (ADR 0018); who they are and what they may do is kept in the staff schema and managed by admins in
-// the back office. Staff never use player accounts: they are a separate identity with their own sessions.
+// Package staff identifies back-office staff and names the two roles that gate the back office (ADR 0019). Staff sign
+// in with their email address and password, or with Google or Apple when those are configured (ADR 0018); who they are
+// and what they may do is kept in the staff schema and managed by admins in the back office. Staff never use player
+// accounts: they are a separate identity with their own sessions.
 package staff
 
 import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"regexp"
 	"slices"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/jackc/pgx/v5"
@@ -21,28 +25,29 @@ import (
 
 	"github.com/itsivali/lottery-platform/internal/audit"
 	"github.com/itsivali/lottery-platform/internal/platform/clock"
+	"github.com/itsivali/lottery-platform/internal/platform/password"
 	"github.com/itsivali/lottery-platform/internal/staff/store"
 )
 
 // Role is a back-office permission, granted to a member by an admin.
 type Role string
 
-// The roles. Each action needs one; nobody needs them all (the two-person rules in draws and tax still apply).
+// The roles (ADR 0019). An admin may do everything a staff member may; the two-person rules in draws and tax compare
+// people, not roles, so they still need two different members.
 const (
-	Admin            Role = "admin"             // invites staff, assigns roles, disables members
-	Finance          Role = "finance"           // reads the financial dashboard
-	KYCReviewer      Role = "kyc_reviewer"      // reads submitted identity details, approves or rejects them
-	PaymentsOperator Role = "payments_operator" // reconciliation, reversals, unconfirmed top-ups, suspense
-	DrawOfficial     Role = "draw_official"     // signs, approves and voids draws
-	PayoutOperator   Role = "payout_operator"   // approves, rejects and settles payouts; retries prizes
-	TaxOfficer       Role = "tax_officer"       // prepares and records KRA remittance batches
-	AlertsOperator   Role = "alerts_operator"   // acknowledges alerts (lifts a payout freeze)
-	Support          Role = "support"           // closes accounts on request
-	Auditor          Role = "auditor"           // runs reconciliations and reads, changes nothing
+	Admin Role = "admin" // the whole back office: staff management and the app metrics, on top of everything staff do
+	Staff Role = "staff" // every operational queue (identity review, payments, draws, payouts, tax, alerts, closures) and the finance dashboard
 )
 
 // AllRoles lists every role, in the order the back office shows them.
-var AllRoles = []Role{Admin, Finance, KYCReviewer, PaymentsOperator, DrawOfficial, PayoutOperator, TaxOfficer, AlertsOperator, Support, Auditor}
+var AllRoles = []Role{Admin, Staff}
+
+// Password rules for staff, on top of the common-password list in package password: longer than players' (the back
+// office moves money), never the member's own email address.
+const (
+	MinPasswordRunes = 12
+	MaxPasswordRunes = 128
+)
 
 // Session limits: a session ends 12 hours after sign-in, or after 30 minutes without a request.
 const (
@@ -64,7 +69,13 @@ var (
 	ErrNotFound        = errors.New("staff: no such member")
 	ErrSelf            = errors.New("staff: members cannot change their own roles or disable themselves")
 	ErrLastAdmin       = errors.New("staff: the last admin cannot be removed")
+	ErrWrongPassword   = errors.New("staff: the current password is wrong")
+	ErrNoPassword      = errors.New("staff: this member has no password; an admin sets a temporary one")
+	ErrMustChange      = errors.New("staff: the temporary password must be changed first")
 )
+
+// ErrWeakPassword wraps every password rule refusal (password.ErrWeak for the common rules).
+var ErrWeakPassword = password.ErrWeak
 
 // Member is a signed-in staff member, as they are now.
 type Member struct {
@@ -72,10 +83,15 @@ type Member struct {
 	Name  string
 	Email string
 	Roles []Role
+	// MustChangePassword: this session was opened with a temporary password and may do nothing else until the member
+	// changes it (a session opened with Google or Apple is not held back by it).
+	MustChangePassword bool
 }
 
-// Has reports whether the member holds role.
-func (m Member) Has(r Role) bool { return slices.Contains(m.Roles, r) }
+// Has reports whether the member may act as role: admins may act as anyone.
+func (m Member) Has(r Role) bool {
+	return slices.Contains(m.Roles, r) || (r == Staff && slices.Contains(m.Roles, Admin))
+}
 
 // Operator is how the member appears in audit records and in the services' operator fields. Two different members
 // always give two different operators, which is what the two-person rules compare.
@@ -102,15 +118,19 @@ type IDTokenVerifier interface {
 
 // Service signs staff in and manages members.
 type Service struct {
-	pool  *pgxpool.Pool
-	clk   clock.Clock
-	ids   IDTokenVerifier
-	audit *audit.Writer
+	pool      *pgxpool.Pool
+	clk       clock.Clock
+	ids       IDTokenVerifier // nil: Google and Apple sign-in are off; passwords still work
+	audit     *audit.Writer
+	pepper    []byte // password pepper (derived from the deployment's AUTH_KEY)
+	dummyHash string // compared when the email is unknown, so a miss costs the same as a wrong password
 }
 
-// NewService returns a Service.
-func NewService(pool *pgxpool.Pool, clk clock.Clock, ids IDTokenVerifier, a *audit.Writer) *Service {
-	return &Service{pool: pool, clk: clk, ids: ids, audit: a}
+// NewService returns a Service. pepper is the password pepper (internal/platform/password).
+func NewService(pool *pgxpool.Pool, clk clock.Clock, ids IDTokenVerifier, a *audit.Writer, pepper []byte) *Service {
+	s := &Service{pool: pool, clk: clk, ids: ids, audit: a, pepper: pepper}
+	s.dummyHash, _ = password.Hash("never matches: no such member", pepper)
+	return s
 }
 
 // Session is a signed-in back-office session. Token is shown once; only its hash is stored.
@@ -124,6 +144,9 @@ type Session struct {
 // that provider identity, or else the active member invited with the token's verified email address, to whom the
 // identity is then bound.
 func (s *Service) SignIn(ctx context.Context, provider, idToken, nonce string) (Session, error) {
+	if s.ids == nil {
+		return Session{}, ErrUnavailable
+	}
 	claims, err := s.ids.VerifyIDTokenClaims(ctx, provider, idToken, nonce)
 	if err != nil {
 		return Session{}, errors.Join(ErrUnauthenticated, err)
@@ -132,11 +155,10 @@ func (s *Service) SignIn(ctx context.Context, provider, idToken, nonce string) (
 	if sub == "" {
 		return Session{}, ErrUnauthenticated
 	}
-	raw := make([]byte, 32)
-	if _, err := rand.Read(raw); err != nil {
+	token, err := newToken()
+	if err != nil {
 		return Session{}, err
 	}
-	token := tokenPrefix + base64.RawURLEncoding.EncodeToString(raw)
 	var out Session
 	err = s.tx(ctx, func(tx pgx.Tx, q *store.Queries, now time.Time) error {
 		row, err := q.MemberByIdentity(ctx, store.MemberByIdentityParams{Provider: provider, Subject: sub})
@@ -167,16 +189,217 @@ func (s *Service) SignIn(ctx context.Context, provider, idToken, nonce string) (
 		if len(member.Roles) == 0 {
 			return ErrNoRole
 		}
-		h := sha256.Sum256([]byte(token))
-		if err := q.InsertSession(ctx, store.InsertSessionParams{TokenHash: h[:], MemberID: m.ID, Provider: provider, At: now,
-			ExpiresAt: now.Add(SessionMaxAge)}); err != nil {
-			return err
-		}
-		out = Session{Token: token, ExpiresAt: now.Add(SessionMaxAge), Member: member}
-		return s.audit.Record(ctx, tx, audit.Event{ActorType: audit.Staff, ActorID: member.Operator(), Action: "staff.sign_in",
-			EntityType: "staff_member", EntityID: m.ID, Details: map[string]any{"provider": provider}})
+		out, err = s.openSession(ctx, tx, q, now, token, provider, member)
+		return err
 	})
 	return out, err
+}
+
+// SignInWithPassword opens a session for the active member with this email address and password. A wrong password, an
+// unknown address and a member without a password are refused alike (ErrUnauthenticated), after the same work.
+func (s *Service) SignInWithPassword(ctx context.Context, email, pw string) (Session, error) {
+	email = strings.ToLower(strings.TrimSpace(email))
+	token, err := newToken()
+	if err != nil {
+		return Session{}, err
+	}
+	var out Session
+	err = s.tx(ctx, func(tx pgx.Tx, q *store.Queries, now time.Time) error {
+		m, err := q.MemberCredentials(ctx, email)
+		known := err == nil
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return err
+		}
+		hash := s.dummyHash
+		if known && m.PasswordHash != nil {
+			hash = *m.PasswordHash
+		}
+		ok, err := password.Verify(pw, hash, s.pepper)
+		if err != nil {
+			return err
+		}
+		if !ok || !known || m.PasswordHash == nil {
+			return ErrUnauthenticated
+		}
+		if !m.Active {
+			return ErrDisabled
+		}
+		member := Member{ID: m.ID, Name: m.Name, Email: m.Email, Roles: roles(m.Roles), MustChangePassword: m.MustChangePassword}
+		if len(member.Roles) == 0 {
+			return ErrNoRole
+		}
+		out, err = s.openSession(ctx, tx, q, now, token, "password", member)
+		return err
+	})
+	return out, err
+}
+
+func newToken() (string, error) {
+	raw := make([]byte, 32)
+	if _, err := rand.Read(raw); err != nil {
+		return "", err
+	}
+	return tokenPrefix + base64.RawURLEncoding.EncodeToString(raw), nil
+}
+
+// openSession stores the session's hash and audits the sign-in.
+func (s *Service) openSession(ctx context.Context, tx pgx.Tx, q *store.Queries, now time.Time, token, provider string, member Member) (Session, error) {
+	h := sha256.Sum256([]byte(token))
+	if err := q.InsertSession(ctx, store.InsertSessionParams{TokenHash: h[:], MemberID: member.ID, Provider: provider, At: now,
+		ExpiresAt: now.Add(SessionMaxAge)}); err != nil {
+		return Session{}, err
+	}
+	err := s.audit.Record(ctx, tx, audit.Event{ActorType: audit.Staff, ActorID: member.Operator(), Action: "staff.sign_in",
+		EntityType: "staff_member", EntityID: member.ID, Details: map[string]any{"provider": provider}})
+	return Session{Token: token, ExpiresAt: now.Add(SessionMaxAge), Member: member}, err
+}
+
+// CheckPassword applies the staff password rules: MinPasswordRunes to MaxPasswordRunes characters, nothing from the
+// common-password list, not the member's email address or its local part. Every refusal wraps ErrWeakPassword.
+func CheckPassword(pw, email string) error {
+	if n := utf8.RuneCountInString(pw); n < MinPasswordRunes {
+		return fmt.Errorf("%w: use at least %d characters", ErrWeakPassword, MinPasswordRunes)
+	} else if n > MaxPasswordRunes {
+		return fmt.Errorf("%w: use at most %d characters", ErrWeakPassword, MaxPasswordRunes)
+	}
+	if err := password.CheckPolicy(pw, ""); err != nil {
+		return err
+	}
+	lower := strings.ToLower(pw)
+	email = strings.ToLower(strings.TrimSpace(email))
+	local, _, _ := strings.Cut(email, "@")
+	if email != "" && (lower == email || (len(local) >= 4 && strings.Contains(lower, local))) {
+		return fmt.Errorf("%w: do not use your email address", ErrWeakPassword)
+	}
+	return nil
+}
+
+// ChangePassword sets the member's own password: the current one must match (unless they have none yet) and the new
+// one must pass CheckPassword. Every other session of the member ends; the one making the change (token) goes on.
+func (s *Service) ChangePassword(ctx context.Context, m Member, token, current, next string) error {
+	if err := CheckPassword(next, m.Email); err != nil {
+		return err
+	}
+	hash, err := password.Hash(next, s.pepper)
+	if err != nil {
+		return err
+	}
+	keep := sha256.Sum256([]byte(token))
+	return s.tx(ctx, func(tx pgx.Tx, q *store.Queries, now time.Time) error {
+		row, err := q.LockMember(ctx, m.ID)
+		if err != nil {
+			return err
+		}
+		if row.PasswordHash != nil {
+			ok, err := password.Verify(current, *row.PasswordHash, s.pepper)
+			if err != nil {
+				return err
+			}
+			if !ok {
+				return ErrWrongPassword
+			}
+			if subtle.ConstantTimeCompare([]byte(current), []byte(next)) == 1 {
+				return fmt.Errorf("%w: choose a password you have not used here", ErrWeakPassword)
+			}
+		}
+		if err := q.SetPassword(ctx, store.SetPasswordParams{PasswordHash: &hash, At: &now, MustChange: false, ID: m.ID}); err != nil {
+			return err
+		}
+		if err := q.RevokeOtherSessions(ctx, store.RevokeOtherSessionsParams{At: &now, MemberID: m.ID, KeepTokenHash: keep[:]}); err != nil {
+			return err
+		}
+		return s.audit.Record(ctx, tx, audit.Event{ActorType: audit.Staff, ActorID: m.Operator(), Action: "staff.password_changed",
+			EntityType: "staff_member", EntityID: m.ID})
+	})
+}
+
+// EmergencyPassword is lotteryctl's way back in when every administrator is locked out (ADR 0019): it gives the
+// member with this email address a temporary password (changed at their next sign-in), re-enables them and ends
+// their sessions; with makeAdmin it also makes them an administrator, creating the member when none exists. It runs
+// with database access only, so it is audited as the system, not as a member.
+func (s *Service) EmergencyPassword(ctx context.Context, email, temporary string, makeAdmin bool) (Record, error) {
+	email = strings.ToLower(strings.TrimSpace(email))
+	if !emailRE.MatchString(email) {
+		return Record{}, ErrInvalid
+	}
+	if err := CheckPassword(temporary, email); err != nil {
+		return Record{}, err
+	}
+	hash, err := password.Hash(temporary, s.pepper)
+	if err != nil {
+		return Record{}, err
+	}
+	var id string
+	err = s.tx(ctx, func(tx pgx.Tx, q *store.Queries, now time.Time) error {
+		if _, err := tx.Exec(ctx, `LOCK TABLE staff.members IN SHARE ROW EXCLUSIVE MODE`); err != nil {
+			return err
+		}
+		m, err := q.MemberByEmail(ctx, email)
+		switch {
+		case errors.Is(err, pgx.ErrNoRows) && makeAdmin:
+			if id, err = q.InsertMember(ctx, store.InsertMemberParams{Email: email, Roles: []string{string(Admin)}, InvitedBy: "lotteryctl", At: now}); err != nil {
+				return err
+			}
+		case errors.Is(err, pgx.ErrNoRows):
+			return ErrNotFound
+		case err != nil:
+			return err
+		default:
+			id = m.ID
+			rs := m.Roles
+			if makeAdmin {
+				rs = appendRole(rs, Admin)
+			}
+			if err := q.UpdateMember(ctx, store.UpdateMemberParams{Roles: rs, Active: true, At: now, ID: id}); err != nil {
+				return err
+			}
+		}
+		if err := q.SetPassword(ctx, store.SetPasswordParams{PasswordHash: &hash, At: &now, MustChange: true, ID: id}); err != nil {
+			return err
+		}
+		if err := q.RevokeMemberSessions(ctx, store.RevokeMemberSessionsParams{At: &now, MemberID: id}); err != nil {
+			return err
+		}
+		return s.audit.Record(ctx, tx, audit.Event{ActorType: audit.System, ActorID: "lotteryctl", Action: "staff.emergency_password",
+			EntityType: "staff_member", EntityID: id, Details: map[string]any{"email": email, "admin": makeAdmin}})
+	})
+	if err != nil {
+		return Record{}, err
+	}
+	return s.record(ctx, id)
+}
+
+// ResetPassword is an admin giving a member a temporary password (told to them out of band): the member must change
+// it at their next sign-in, and every session they have ends now. Admins reset their own through ChangePassword.
+func (s *Service) ResetPassword(ctx context.Context, by Member, id, temporary string) error {
+	if id == by.ID {
+		return ErrSelf
+	}
+	err := s.tx(ctx, func(tx pgx.Tx, q *store.Queries, now time.Time) error {
+		m, err := q.LockMember(ctx, id)
+		var pe *pgconn.PgError
+		if errors.Is(err, pgx.ErrNoRows) || (errors.As(err, &pe) && pe.Code == "22P02") {
+			return ErrNotFound
+		} else if err != nil {
+			return err
+		}
+		if err := CheckPassword(temporary, m.Email); err != nil {
+			return err
+		}
+		hash, err := password.Hash(temporary, s.pepper)
+		if err != nil {
+			return err
+		}
+		if err := q.SetPassword(ctx, store.SetPasswordParams{PasswordHash: &hash, At: &now, MustChange: true, ID: id}); err != nil {
+			return err
+		}
+		if err := q.RevokeMemberSessions(ctx, store.RevokeMemberSessionsParams{At: &now, MemberID: id}); err != nil {
+			return err
+		}
+		return s.audit.Record(ctx, tx, audit.Event{ActorType: audit.Staff, ActorID: by.Operator(), Action: "staff.password_reset",
+			EntityType: "staff_member", EntityID: id})
+	})
+	return err
 }
 
 // verifiedEmail returns the token's email address when the provider vouches for it (Apple sends "true" as a string).
@@ -208,7 +431,8 @@ func (s *Service) Authenticate(ctx context.Context, token string) (Member, error
 	if !r.Active {
 		return Member{}, ErrUnauthenticated
 	}
-	m := Member{ID: r.ID, Name: r.Name, Email: r.Email, Roles: roles(r.Roles)}
+	// the temporary password holds back the sessions it opened; a Google or Apple sign-in is not using it
+	m := Member{ID: r.ID, Name: r.Name, Email: r.Email, Roles: roles(r.Roles), MustChangePassword: r.MustChangePassword && r.Provider == "password"}
 	if len(m.Roles) == 0 {
 		return Member{}, ErrNoRole
 	}
@@ -241,6 +465,9 @@ type Record struct {
 	Providers  []string   `json:"providers"`
 	LastSignIn *time.Time `json:"last_sign_in"`
 	CreatedAt  time.Time  `json:"created_at"`
+	// HasPassword: the member can sign in with a password; MustChangePassword: it is a temporary one.
+	HasPassword        bool `json:"has_password"`
+	MustChangePassword bool `json:"must_change_password"`
 }
 
 // Members lists every member, active ones first.
@@ -261,7 +488,7 @@ func (s *Service) Members(ctx context.Context) ([]Record, error) {
 	out := make([]Record, 0, len(rows))
 	for _, r := range rows {
 		rec := Record{ID: r.ID, Email: r.Email, Name: r.Name, Roles: roles(r.Roles), Active: r.Active, InvitedBy: r.InvitedBy,
-			Providers: r.Providers, CreatedAt: r.CreatedAt}
+			Providers: r.Providers, CreatedAt: r.CreatedAt, HasPassword: r.HasPassword, MustChangePassword: r.MustChangePassword}
 		if t, ok := at[r.ID]; ok {
 			rec.LastSignIn = &t
 		}
@@ -272,17 +499,29 @@ func (s *Service) Members(ctx context.Context) ([]Record, error) {
 
 var emailRE = regexp.MustCompile(`^[^@\s]+@[^@\s]+\.[^@\s]+$`)
 
-// Invite adds a member who may sign in with Google or Apple using email.
-func (s *Service) Invite(ctx context.Context, by Member, email, name string, rs []Role) (Record, error) {
+// Invite adds a member. With temporary (a password the admin tells them out of band) they sign in with their email
+// address and must change it first; without, they sign in with Google or Apple using email, or wait for a reset.
+func (s *Service) Invite(ctx context.Context, by Member, email, name string, rs []Role, temporary string) (Record, error) {
 	email = strings.ToLower(strings.TrimSpace(email))
-	if !emailRE.MatchString(email) || !known(rs) {
+	if !emailRE.MatchString(email) || !known(rs) || len(rs) == 0 {
 		return Record{}, ErrInvalid
+	}
+	var hash *string
+	if temporary != "" {
+		if err := CheckPassword(temporary, email); err != nil {
+			return Record{}, err
+		}
+		h, err := password.Hash(temporary, s.pepper)
+		if err != nil {
+			return Record{}, err
+		}
+		hash = &h
 	}
 	var id string
 	err := s.tx(ctx, func(tx pgx.Tx, q *store.Queries, now time.Time) error {
 		var err error
 		id, err = q.InsertMember(ctx, store.InsertMemberParams{Email: email, Name: strings.TrimSpace(name), Roles: names(rs),
-			InvitedBy: by.Operator(), At: now})
+			InvitedBy: by.Operator(), At: now, PasswordHash: hash})
 		var pe *pgconn.PgError
 		if errors.As(err, &pe) && pe.Code == "23505" {
 			return ErrExists
@@ -300,7 +539,7 @@ func (s *Service) Invite(ctx context.Context, by Member, email, name string, rs 
 
 // SetRoles replaces a member's roles. Nobody changes their own, and the last active admin keeps theirs.
 func (s *Service) SetRoles(ctx context.Context, by Member, id string, rs []Role) (Record, error) {
-	if !known(rs) {
+	if !known(rs) || len(rs) == 0 {
 		return Record{}, ErrInvalid
 	}
 	return s.change(ctx, by, id, "staff.roles", func(m *store.LockMemberRow) {
@@ -362,36 +601,62 @@ func (s *Service) AdminCount(ctx context.Context) (int64, error) {
 }
 
 // Bootstrap makes email an admin when there is no active admin (STAFF_BOOTSTRAP_ADMIN, or lotteryctl), so the first
-// admin can sign in and invite everyone else. With an admin in place it does nothing.
-func (s *Service) Bootstrap(ctx context.Context, email string) error {
+// admin can sign in and invite everyone else; with an admin in place that part does nothing. temporary, when given
+// (STAFF_BOOTSTRAP_PASSWORD), becomes that member's temporary password while they have none, so the first admin can
+// sign in without Google or Apple; once they have set a password it is never touched again.
+func (s *Service) Bootstrap(ctx context.Context, email, temporary string) error {
 	email = strings.ToLower(strings.TrimSpace(email))
 	if !emailRE.MatchString(email) {
 		return ErrInvalid
+	}
+	if temporary != "" {
+		if err := CheckPassword(temporary, email); err != nil {
+			return err
+		}
 	}
 	return s.tx(ctx, func(tx pgx.Tx, q *store.Queries, now time.Time) error {
 		if _, err := tx.Exec(ctx, `LOCK TABLE staff.members IN SHARE ROW EXCLUSIVE MODE`); err != nil {
 			return err
 		}
-		if n, err := q.ActiveAdmins(ctx); err != nil || n > 0 {
+		n, err := q.ActiveAdmins(ctx)
+		if err != nil {
 			return err
 		}
-		m, err := q.MemberByEmail(ctx, email)
+		m, err := q.MemberCredentials(ctx, email)
+		missing := errors.Is(err, pgx.ErrNoRows)
+		if err != nil && !missing {
+			return err
+		}
+		if n > 0 && (missing || m.PasswordHash != nil || temporary == "") {
+			return nil // an admin exists and this member needs no password: nothing to do
+		}
 		var id string
 		switch {
-		case errors.Is(err, pgx.ErrNoRows):
+		case missing:
 			if id, err = q.InsertMember(ctx, store.InsertMemberParams{Email: email, Roles: []string{string(Admin)}, InvitedBy: "bootstrap", At: now}); err != nil {
 				return err
 			}
-		case err != nil:
-			return err
-		default:
+		case n == 0:
 			id = m.ID
 			if err := q.UpdateMember(ctx, store.UpdateMemberParams{Roles: appendRole(m.Roles, Admin), Active: true, At: now, ID: id}); err != nil {
 				return err
 			}
+		default:
+			id = m.ID
+		}
+		details := map[string]any{"email": email}
+		if temporary != "" && (missing || m.PasswordHash == nil) {
+			hash, err := password.Hash(temporary, s.pepper)
+			if err != nil {
+				return err
+			}
+			if err := q.SetPassword(ctx, store.SetPasswordParams{PasswordHash: &hash, At: &now, MustChange: true, ID: id}); err != nil {
+				return err
+			}
+			details["temporary_password"] = "set"
 		}
 		return s.audit.Record(ctx, tx, audit.Event{ActorType: audit.System, Action: "staff.bootstrap", EntityType: "staff_member",
-			EntityID: id, Details: map[string]any{"email": email}})
+			EntityID: id, Details: details})
 	})
 }
 

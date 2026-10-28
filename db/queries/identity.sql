@@ -9,7 +9,7 @@ RETURNING id;
 SELECT count(DISTINCT user_id) FROM identity.devices WHERE fingerprint_hash = $1 AND user_id <> $2;
 
 -- name: InsertSession :one
-INSERT INTO identity.sessions (user_id, device_id, created_at) VALUES ($1, $2, $3) RETURNING id;
+INSERT INTO identity.sessions (user_id, device_id, created_at, platform) VALUES ($1, $2, $3, sqlc.narg(platform)) RETURNING id;
 
 -- name: GetSession :one
 SELECT s.id, s.user_id, s.device_id, s.revoked_at, d.fingerprint_hash
@@ -120,3 +120,25 @@ FROM identity.users WHERE id = $1 FOR SHARE;
 
 -- name: LockUser :exec
 SELECT 1 FROM identity.users WHERE id = $1 FOR UPDATE;
+
+-- name: ListPlayers :many
+-- the back office's player list (ADR 0019): newest first (ids are uuid v7), narrowed by a phone-number fragment and a
+-- status; before (a user id) continues a page. Shows each player's balance, plays and last sign-in.
+SELECT u.id, u.msisdn, u.kyc_status, u.status, (u.msisdn_verified_at IS NOT NULL)::boolean AS phone_verified, u.created_at,
+       coalesce(w.balance_kes, 0)::bigint AS balance_kes,
+       (SELECT count(*) FROM tickets.tickets t WHERE t.user_id = u.id AND t.status = 'paid')::bigint AS plays,
+       (SELECT max(s.created_at) FROM identity.sessions s WHERE s.user_id = u.id) AS last_sign_in_at,
+       c.requested_at AS closure_requested_at
+FROM identity.users u
+LEFT JOIN wallet.wallets w ON w.user_id = u.id
+LEFT JOIN identity.closure_requests c ON c.user_id = u.id AND c.closed_at IS NULL
+WHERE (sqlc.narg(q)::text IS NULL OR u.msisdn LIKE '%' || sqlc.narg(q)::text || '%' OR u.id::text = sqlc.narg(q)::text)
+  AND (sqlc.narg(status)::text IS NULL OR u.status = sqlc.narg(status)::text)
+  AND (sqlc.narg(before)::uuid IS NULL OR u.id < sqlc.narg(before)::uuid)
+ORDER BY u.id DESC
+LIMIT sqlc.arg(lim);
+
+-- name: SetUserSuspended :execrows
+-- suspend an active account or reinstate a suspended one; closed accounts are left alone
+UPDATE identity.users SET status = sqlc.arg(status), updated_at = sqlc.arg(at)
+WHERE id = sqlc.arg(id) AND status = sqlc.arg(from_status);

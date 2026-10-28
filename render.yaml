@@ -65,15 +65,18 @@ services:
       # (shown in their dashboards once created), and later the Cloudflare domains. The phone apps need no entry.
       - key: CORS_ALLOWED_ORIGINS
         sync: false
-      # Back-office sign-in (ADR 0018): the back office's own Google OAuth web client id and Sign in with Apple Services
-      # ID (docs/runbooks/back-office.md). Either is enough; neither closes the back office. The bootstrap admin is made
-      # an admin while there is none, and invites everyone else from the Staff page.
+      # Back-office sign-in (ADR 0019): staff sign in with email and password; the bootstrap admin is made an admin
+      # while there is none and gets STAFF_BOOTSTRAP_PASSWORD as a temporary password (changed at the first sign-in),
+      # then invites everyone else from the Staff page. Google and Apple are optional (ADR 0018, the back office's own
+      # client ids; docs/runbooks/back-office.md).
+      - key: STAFF_BOOTSTRAP_ADMIN
+        value: itsivali@gmail.com
+      - key: STAFF_BOOTSTRAP_PASSWORD
+        sync: false
       - key: STAFF_GOOGLE_CLIENT_ID
         sync: false
       - key: STAFF_APPLE_CLIENT_ID
         sync: false
-      - key: STAFF_BOOTSTRAP_ADMIN
-        value: itsivali@gmail.com
       - key: APPLE_CLIENT_ID
         sync: false
 
@@ -123,18 +126,22 @@ services:
         sync: false
 
   # The player web app (Flutter web), built against the Render api until the Cloudflare domain is set up. Free static
-  # site: Render's build image has no Flutter, so the build fetches the pinned SDK (mise.toml) first.
+  # site: Render's build image has no Flutter, so the build fetches the pinned SDK (mise.toml) the first time and reuses
+  # it from the build cache afterwards (a second clone into the cached directory fails).
   - type: web
     name: lottery-web
     runtime: static
     buildCommand: >-
-      git clone --depth 1 --branch 3.47.7 https://github.com/flutter/flutter.git "$HOME/flutter" &&
-      export PATH="$HOME/flutter/bin:$PATH" && cd apps/mobile && flutter pub get &&
-      flutter build web --release --dart-define=API_BASE_URL="$API_BASE_URL"
+      if [ ! -x "$HOME/flutter/bin/flutter" ]; then rm -rf "$HOME/flutter" && git clone --depth 1 --branch 3.47.7 https://github.com/flutter/flutter.git "$HOME/flutter"; fi &&
+      export PATH="$HOME/flutter/bin:$PATH" && flutter --version && cd apps/mobile && flutter pub get &&
+      flutter build web --release --dart-define=API_BASE_URL="$API_BASE_URL" --dart-define=BACKOFFICE_URL="$BACKOFFICE_URL"
     staticPublishPath: apps/mobile/build/web
     envVars:
       - key: API_BASE_URL
         value: https://lottery-api-4u9g.onrender.com
+      # the staff back office the web app links to (its Render static site; the Cloudflare domain later)
+      - key: BACKOFFICE_URL
+        value: https://lottery-backoffice.onrender.com
     routes:
       - type: rewrite
         source: /*

@@ -1,18 +1,16 @@
 // Shapes of the /v1/staff answers (api/openapi.yaml, back-office tag).
 
-export type Role =
-  | 'admin'
-  | 'finance'
-  | 'kyc_reviewer'
-  | 'payments_operator'
-  | 'draw_official'
-  | 'payout_operator'
-  | 'tax_officer'
-  | 'alerts_operator'
-  | 'support'
-  | 'auditor'
+/** The two back-office roles (ADR 0019): an administrator may do everything staff may. */
+export type Role = 'admin' | 'staff'
 
-export interface Me { id: string; name: string; email: string; roles: Role[] }
+export interface Me {
+  id: string
+  name: string
+  email: string
+  roles: Role[]
+  /** signed in with a temporary password: only changing it is allowed until done */
+  must_change_password: boolean
+}
 
 export interface KycSubmission {
   user_id: string
@@ -87,6 +85,23 @@ export interface Alert {
 
 export interface Closure { user_id: string; msisdn: string; status: string; requested_at: string }
 
+/** A registered player as the back office lists them (GET /v1/staff/players). */
+export interface Player {
+  user_id: string
+  msisdn: string
+  kyc_status: 'none' | 'pending' | 'verified' | 'manual_review' | 'rejected'
+  status: 'active' | 'suspended' | 'closed'
+  phone_verified: boolean
+  balance_kes: number
+  plays: number
+  created_at: string
+  last_sign_in_at: string | null
+  closure_requested_at: string | null
+  /** from the latest identity submission; empty when the player never submitted one */
+  full_name: string
+  national_id: string
+}
+
 export interface Reconciliation {
   ran_at: string
   ok: boolean
@@ -106,6 +121,31 @@ export interface StaffMember {
   providers: string[]
   last_sign_in: string | null
   created_at: string
+  /** can sign in with a password; must_change_password: it is a temporary one an admin set */
+  has_password: boolean
+  must_change_password: boolean
+}
+
+/** One platform's counts on one day, or over the range (GET /v1/staff/metrics). Money in whole KES. */
+export interface MetricFigures {
+  signups: number
+  sessions: number
+  active_players: number
+  plays: number
+  stakes_kes: number
+  top_ups: number
+  top_ups_kes: number
+  withdrawals: number
+  withdrawals_kes: number
+}
+
+export interface MetricsSummary {
+  from: string
+  to: string
+  platforms: string[]
+  days: (MetricFigures & { day: string; platform: string })[]
+  totals: (MetricFigures & { platform: string })[]
+  all: MetricFigures
 }
 
 /** One day's, or a range's, money movements in whole KES (GET /v1/staff/finance). */

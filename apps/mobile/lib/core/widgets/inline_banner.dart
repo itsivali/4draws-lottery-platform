@@ -43,7 +43,7 @@ class InlineBanner extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(Space.lg),
         decoration: BoxDecoration(
-          color: color.withValues(alpha: c.isDark ? 0.12 : 0.07),
+          color: color.withValues(alpha: 0.07),
           borderRadius: BorderRadius.circular(Radii.lg),
           border: Border.all(color: color.withValues(alpha: 0.35)),
         ),

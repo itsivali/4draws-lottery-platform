@@ -62,13 +62,18 @@ func (h *handlers) getWallet(w http.ResponseWriter, r *http.Request) {
 	if st.NextBefore != "" {
 		next = &st.NextBefore
 	}
-	// the top-up bounds travel with the balance so the apps never hard-code them (null when top-ups are unavailable)
-	var topUp map[string]int64
+	// the top-up and withdrawal bounds travel with the balance so the apps never hard-code them (null while that
+	// money flow is unavailable: payments not configured, B2C not configured)
+	var topUp, withdraw map[string]int64
 	if h.Payments != nil {
 		topUp = map[string]int64{"min_kes": h.Payments.MinTopUpKES(), "max_kes": daraja.MaxSTKAmountKES}
 	}
+	if h.Payouts != nil && h.Payouts.Enabled() {
+		lo, hi := h.Payouts.WithdrawalBounds()
+		withdraw = map[string]int64{"min_kes": lo, "max_kes": hi}
+	}
 	httpx.WriteJSON(w, http.StatusOK, map[string]any{"balance_kes": st.BalanceKES, "debt_kes": st.DebtKES, "transactions": txs,
-		"next_before": next, "top_up": topUp})
+		"next_before": next, "top_up": topUp, "withdraw": withdraw})
 }
 
 type restrictionJSON struct {
