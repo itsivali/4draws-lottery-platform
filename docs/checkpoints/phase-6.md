@@ -7,8 +7,8 @@ office operations and continue with phase 7 and 8").
 
 - **One Flutter app for players** on iOS, Android and the web (`apps/mobile`); its web build is the player web app.
   `apps/web` stays empty. The staff back office is a separate app (`apps/backoffice`).
-- **Placeholders for the owner:** the brand name and wordmark ("Bahati", `BrandMark`), the app id
-  `ke.bahati.lottery_mobile`, and the icon (Flutter's default) are placeholders until the owner chooses them.
+- **Placeholders for the owner:** the brand name and wordmark ("Tajirika", `BrandMark`), the app id
+  `ke.tajirika.lottery_mobile`, and the icon (Flutter's default) are placeholders until the owner chooses them.
 
 ## Plan (written before coding)
 

@@ -28,7 +28,7 @@ func TestMailReviewNotifier_LinksTheSubmissionAndNamesNobody(t *testing.T) {
 		t.Fatalf("sent %+v", sent.msgs)
 	}
 	m := sent.msgs[0]
-	if m.Subject != "Bahati: an identity submission is waiting for review" {
+	if m.Subject != "Tajirika: an identity submission is waiting for review" {
 		t.Errorf("subject = %q", m.Subject)
 	}
 	for _, want := range []string{"https://backoffice.example.com/kyc?user=00000000-0000-7000-8000-000000000009", "Wed 28 Oct 2026 at 09:05 EAT", "only submission waiting"} {
@@ -39,7 +39,7 @@ func TestMailReviewNotifier_LinksTheSubmissionAndNamesNobody(t *testing.T) {
 	if err := n.NotifyReview(context.Background(), kyc.ReviewNotice{UserID: "u", SubmittedAt: at, Waiting: 3}); err != nil {
 		t.Fatal(err)
 	}
-	if m := sent.msgs[1]; m.Subject != "Bahati: 3 identity submissions are waiting for review" || !strings.Contains(m.Text, "3 submissions are waiting in all") {
+	if m := sent.msgs[1]; m.Subject != "Tajirika: 3 identity submissions are waiting for review" || !strings.Contains(m.Text, "3 submissions are waiting in all") {
 		t.Errorf("plural: %q\n%s", m.Subject, m.Text)
 	}
 }

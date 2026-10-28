@@ -157,7 +157,7 @@ function AppSidebar({ sections }: { sections: Section[] }) {
                   <BrandGlyph />
                 </span>
                 <span className="grid flex-1 text-left leading-tight">
-                  <span className="truncate font-display text-[15px] font-bold tracking-tight">Bahati</span>
+                  <span className="truncate font-display text-[15px] font-bold tracking-tight">Tajirika</span>
                   <span className="truncate text-xs text-muted-foreground">Back office</span>
                 </span>
               </Link>

@@ -17,7 +17,7 @@ type Mail struct {
 	SMTPPort     int
 	SMTPUsername string
 	SMTPPassword string // a secret
-	// From is the sender address, required with SMTP_HOST ("Bahati <noreply@example.com>" or a bare address).
+	// From is the sender address, required with SMTP_HOST ("Tajirika <noreply@example.com>" or a bare address).
 	From string
 	// KYCReviewTo is who is emailed when an identity submission waits for review; empty means nobody.
 	KYCReviewTo string

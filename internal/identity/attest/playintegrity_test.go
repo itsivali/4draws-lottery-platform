@@ -22,7 +22,7 @@ import (
 	"github.com/itsivali/lottery-platform/internal/identity/attest"
 )
 
-const pkg = "ke.bahati.lottery_mobile"
+const pkg = "ke.tajirika.lottery_mobile"
 
 type fakeGoogle struct {
 	srv        *httptest.Server

@@ -83,7 +83,7 @@ export function SignIn({ config, api, onSignedIn, providers = realProviders, not
         <div className="absolute -right-32 -top-32 size-[520px] rounded-full border border-white/15" />
         <div className="absolute -right-16 -top-16 size-[380px] rounded-full border border-white/15" />
         <div className="absolute -bottom-40 -left-24 size-[460px] rounded-full bg-white/10 blur-3xl" />
-        <p className="relative font-display text-2xl font-bold tracking-tight">Bahati</p>
+        <p className="relative font-display text-2xl font-bold tracking-tight">Tajirika</p>
         <div className="relative max-w-md">
           <p className="font-display text-4xl font-bold leading-tight tracking-tight">Every action, under your name.</p>
           <p className="mt-4 text-white/80">Identity review, draws, payouts, tax and the ledger, with two-person rules where the money moves.</p>
@@ -92,7 +92,7 @@ export function SignIn({ config, api, onSignedIn, providers = realProviders, not
       </aside>
       <div className="flex items-center justify-center p-6 md:p-10">
         <section className="w-full max-w-[400px]" aria-labelledby="signin-title">
-          <p className="mb-6 flex items-center gap-2 text-sm font-medium text-muted-foreground lg:hidden"><ShieldCheck aria-hidden="true" className="size-4 text-primary" /> Bahati back office</p>
+          <p className="mb-6 flex items-center gap-2 text-sm font-medium text-muted-foreground lg:hidden"><ShieldCheck aria-hidden="true" className="size-4 text-primary" /> Tajirika back office</p>
           <h1 id="signin-title" className="text-3xl font-bold tracking-tight">Sign in</h1>
           <p className="mt-2 text-sm text-muted-foreground">With the email address an administrator invited and your password. Every action you take is recorded under your name.</p>
           {notice ? (

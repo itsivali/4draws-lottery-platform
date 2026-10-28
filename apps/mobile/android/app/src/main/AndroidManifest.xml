@@ -2,7 +2,7 @@
     <!-- The app talks to the API; Flutter's template only grants this in debug and profile builds. -->
     <uses-permission android:name="android.permission.INTERNET"/>
     <application
-        android:label="Bahati"
+        android:label="Tajirika"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

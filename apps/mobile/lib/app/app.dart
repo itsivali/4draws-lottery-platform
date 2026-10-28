@@ -79,7 +79,7 @@ class _LotteryAppState extends ConsumerState<LotteryApp> with WidgetsBindingObse
 
   @override
   Widget build(BuildContext context) => MaterialApp.router(
-    title: 'Bahati',
+    title: 'Tajirika',
     debugShowCheckedModeBanner: false,
     theme: buildTheme(),
     routerConfig: ref.watch(routerProvider),

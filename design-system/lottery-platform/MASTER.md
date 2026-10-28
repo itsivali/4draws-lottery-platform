@@ -21,7 +21,7 @@ depth, metal and motion (the *hero surfaces*, §5), and even there they only eve
   "You're due".
 - No manufactured urgency: no countdown pressure, no scarcity, no near-miss staging, no confetti for ordinary plays.
 
-**Wordmark:** "Bahati" set in the heading face, semibold, with a small coral disc carrying a gold pointer notch
+**Wordmark:** "Tajirika" set in the heading face, semibold, with a small coral disc carrying a gold pointer notch
 (`BrandMark` widget). It is a placeholder: swap `BrandMark` for the final logo without touching layouts (it sizes to
 its parent height).
 

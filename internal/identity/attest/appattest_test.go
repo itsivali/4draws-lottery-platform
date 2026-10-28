@@ -23,7 +23,7 @@ import (
 
 var now = time.Date(2026, 10, 26, 12, 0, 0, 0, time.UTC)
 
-const appID = "ABCDE12345.ke.bahati.lottery_mobile"
+const appID = "ABCDE12345.ke.tajirika.lottery_mobile"
 
 type chain struct {
 	root     *x509.Certificate

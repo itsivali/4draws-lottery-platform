@@ -11,12 +11,12 @@ import (
 
 func TestRender_IsAPlainTextMessageWithCRLF(t *testing.T) {
 	at := time.Date(2026, 10, 28, 9, 30, 0, 0, time.UTC)
-	got := mail.Render("Bahati <noreply@example.com>", []string{"ops@example.com"}, "An ID is waiting", "Open the back office.\n.hidden", at)
+	got := mail.Render("Tajirika <noreply@example.com>", []string{"ops@example.com"}, "An ID is waiting", "Open the back office.\n.hidden", at)
 	head, body, ok := strings.Cut(got, "\r\n\r\n")
 	if !ok {
 		t.Fatal("no blank line between headers and body")
 	}
-	for _, h := range []string{"From: Bahati <noreply@example.com>", "To: ops@example.com", "Subject: An ID is waiting",
+	for _, h := range []string{"From: Tajirika <noreply@example.com>", "To: ops@example.com", "Subject: An ID is waiting",
 		"Date: Wed, 28 Oct 2026 09:30:00 +0000", "Content-Type: text/plain; charset=utf-8"} {
 		if !strings.Contains(head, h+"\r\n") {
 			t.Errorf("header %q missing in %q", h, head)

@@ -9,7 +9,7 @@ import '../../app/theme/tokens.dart';
 class BrandMark extends StatelessWidget {
   const BrandMark({super.key, this.height = 28, this.showWordmark = true});
 
-  static const name = 'Bahati';
+  static const name = 'Tajirika';
 
   final double height;
   final bool showWordmark;

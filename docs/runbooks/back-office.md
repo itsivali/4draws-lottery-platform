@@ -53,7 +53,7 @@ screen needs the app name and a support email. The client id goes into `STAFF_GO
 `VITE_GOOGLE_CLIENT_ID` (back office).
 
 **Apple** (Apple Developer → Certificates, Identifiers & Profiles → Identifiers): an App ID with Sign in with Apple,
-then a **Services ID** (e.g. `ke.bahati.backoffice`) with Sign in with Apple configured: domain = the back office's
+then a **Services ID** (e.g. `ke.tajirika.backoffice`) with Sign in with Apple configured: domain = the back office's
 host, return URL = its address with a trailing `/`. Apple needs https, so it cannot be tried on localhost. The
 Services ID goes into `STAFF_APPLE_CLIENT_ID` (api) and `VITE_APPLE_CLIENT_ID` (back office).
 

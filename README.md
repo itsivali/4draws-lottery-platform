@@ -1,4 +1,4 @@
-# Bahati — lottery platform
+# Tajirika — lottery platform
 
 A real-money, mobile-money lottery for the Kenyan market. One play a spin, a few spins a day, prizes drawn from a
 provably fair seed, money moving through M-Pesa and a double-entry ledger. This repository holds everything:

@@ -22,7 +22,7 @@ func TestLoad_MailIsOffByDefaultAndSwitchedOnByARecipient(t *testing.T) {
 	t.Setenv("SMTP_PORT", "465")
 	t.Setenv("SMTP_USERNAME", "resend")
 	t.Setenv("SMTP_PASSWORD", "re_x")
-	t.Setenv("SMTP_FROM", "Bahati <noreply@example.com>")
+	t.Setenv("SMTP_FROM", "Tajirika <noreply@example.com>")
 	t.Setenv("KYC_REVIEW_NOTIFY_TO", "ops@example.com")
 	t.Setenv("BACKOFFICE_URL", "https://backoffice.example.com/")
 	cfg, err = config.Load()
@@ -38,7 +38,7 @@ func TestLoad_MailRefusesHalfConfiguration(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgres://x")
 	for name, env := range map[string]map[string]string{
 		"smtp without a sender":         {"SMTP_HOST": "smtp.example.com"},
-		"sender that is not an address": {"SMTP_HOST": "smtp.example.com", "SMTP_FROM": "bahati"},
+		"sender that is not an address": {"SMTP_HOST": "smtp.example.com", "SMTP_FROM": "tajirika"},
 		"bad port":                      {"SMTP_PORT": "mail"},
 		"recipient without back office": {"KYC_REVIEW_NOTIFY_TO": "ops@example.com"},
 		"back office with a path":       {"KYC_REVIEW_NOTIFY_TO": "ops@example.com", "BACKOFFICE_URL": "https://x.example.com/kyc"},

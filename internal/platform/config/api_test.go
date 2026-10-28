@@ -206,7 +206,7 @@ func TestAPI_StaffSignInIsPasswordWithGoogleAppleOrTheLocalTestRealmOptional(t *
 		t.Fatalf("unset: %+v %v", cfg.API.Staff, err)
 	}
 	t.Setenv("STAFF_GOOGLE_CLIENT_ID", "123-abc.apps.googleusercontent.com")
-	t.Setenv("STAFF_APPLE_CLIENT_ID", "ke.bahati.backoffice")
+	t.Setenv("STAFF_APPLE_CLIENT_ID", "ke.tajirika.backoffice")
 	t.Setenv("STAFF_BOOTSTRAP_ADMIN", "Owner@Example.com")
 	t.Setenv("STAFF_BOOTSTRAP_PASSWORD", "a long temporary password")
 	t.Setenv("STAFF_DATABASE_URL", "postgres://worker@db/lottery")
@@ -215,7 +215,7 @@ func TestAPI_StaffSignInIsPasswordWithGoogleAppleOrTheLocalTestRealmOptional(t *
 		t.Fatal(err)
 	}
 	s := cfg.API.Staff
-	if !s.Enabled || s.GoogleClientID != "123-abc.apps.googleusercontent.com" || s.AppleClientID != "ke.bahati.backoffice" ||
+	if !s.Enabled || s.GoogleClientID != "123-abc.apps.googleusercontent.com" || s.AppleClientID != "ke.tajirika.backoffice" ||
 		s.BootstrapAdmin != "owner@example.com" || s.BootstrapPassword != "a long temporary password" || s.DatabaseURL != "postgres://worker@db/lottery" || s.Dev != nil {
 		t.Fatalf("staff: %+v", s)
 	}
@@ -271,8 +271,8 @@ func TestAPI_AttestationModeNeedsItsVerifiers(t *testing.T) {
 	if _, err := config.Load(); err == nil || !strings.Contains(err.Error(), "APP_ATTEST_APP_ID") {
 		t.Fatalf("require without verifiers accepted: %v", err)
 	}
-	t.Setenv("APP_ATTEST_APP_ID", "ABCDE12345.ke.bahati.lottery_mobile")
-	t.Setenv("PLAY_INTEGRITY_PACKAGE", "ke.bahati.lottery_mobile")
+	t.Setenv("APP_ATTEST_APP_ID", "ABCDE12345.ke.tajirika.lottery_mobile")
+	t.Setenv("PLAY_INTEGRITY_PACKAGE", "ke.tajirika.lottery_mobile")
 	t.Setenv("PLAY_INTEGRITY_SERVICE_ACCOUNT", base64.StdEncoding.EncodeToString([]byte(`{"client_email":"v@x.iam.gserviceaccount.com"}`)))
 	t.Setenv("PLAY_INTEGRITY_CERT_DIGESTS", "abc,def")
 	cfg, err = config.Load()
