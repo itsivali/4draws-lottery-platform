@@ -68,6 +68,8 @@ var staffRoutes = []staffRoute{
 	{http.MethodPost, "/v1/staff/members/0192f000-0000-7000-8000-000000000001/disable", staff.Admin},
 	{http.MethodPost, "/v1/staff/members/0192f000-0000-7000-8000-000000000001/enable", staff.Admin},
 	{http.MethodPost, "/v1/staff/members/0192f000-0000-7000-8000-000000000001/password", staff.Admin},
+	{http.MethodPut, "/v1/staff/members/0192f000-0000-7000-8000-000000000001/name", staff.Admin},
+	{http.MethodPut, "/v1/staff/me/name", staff.Staff},
 	{http.MethodGet, "/v1/staff/metrics", staff.Admin},
 	{http.MethodGet, "/v1/staff/finance", staff.Staff},
 	{http.MethodPost, "/v1/staff/kyc/0192f000-0000-7000-8000-000000000001/approve", staff.Staff},

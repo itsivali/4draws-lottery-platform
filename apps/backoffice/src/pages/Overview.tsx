@@ -33,7 +33,7 @@ export function OverviewPage() {
   const sections = visibleSections(me.roles)
   return (
     <section>
-      <PageHeader title={`Signed in as ${me.name || me.email}`}>
+      <PageHeader title={`Signed in as ${me.name}`}>
         Every action you take is recorded in the audit log under your name.
       </PageHeader>
       <div className="flex flex-wrap items-center gap-1.5">

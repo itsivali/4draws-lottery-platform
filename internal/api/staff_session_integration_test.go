@@ -137,6 +137,42 @@ const (
 	resetPW = "another temporary one"
 )
 
+func TestStaffMembers_MembersNameThemselvesAndAdminsNameAnyone(t *testing.T) {
+	e := setupStaff(t)
+	admin := e.staffSignIn(t, "google", "owner").Body["token"].(string)
+	inv := e.do(t, http.MethodPost, "/v1/staff/members", admin, map[string]any{"email": "otieno@example.com", "roles": []string{"staff"}, "password": tempPW})
+	id, _ := inv.Body["id"].(string)
+	if inv.Code != http.StatusCreated || inv.Body["name"] != "" {
+		t.Fatalf("invite without a name: %d %s", inv.Code, inv.Raw)
+	}
+	tok := e.passwordSignIn(t, "otieno@example.com", tempPW).Body["token"].(string)
+	// naming oneself waits for the temporary password to be changed, like everything else
+	if r := e.do(t, http.MethodPut, "/v1/staff/me/name", tok, map[string]any{"name": "Otieno"}); r.Code != http.StatusForbidden || !hasType(r, "password-change-required") {
+		t.Fatalf("before the password change: %d %s", r.Code, r.Raw)
+	}
+	if r := e.do(t, http.MethodPut, "/v1/staff/password", tok, map[string]any{"current_password": tempPW, "new_password": ownPW}); r.Code != http.StatusNoContent {
+		t.Fatalf("change: %d %s", r.Code, r.Raw)
+	}
+	if r := e.do(t, http.MethodPut, "/v1/staff/me/name", tok, map[string]any{"name": "   "}); r.Code != http.StatusBadRequest || !hasType(r, "invalid-name") {
+		t.Fatalf("blank name: %d %s", r.Code, r.Raw)
+	}
+	if r := e.do(t, http.MethodPut, "/v1/staff/me/name", tok, map[string]any{"name": "  Otieno Kamau "}); r.Code != http.StatusOK || r.Body["name"] != "Otieno Kamau" {
+		t.Fatalf("own name: %d %s", r.Code, r.Raw)
+	}
+	if r := e.do(t, http.MethodGet, "/v1/staff/me", tok, nil); r.Body["name"] != "Otieno Kamau" {
+		t.Fatalf("me after naming: %s", r.Raw)
+	}
+	if r := e.do(t, http.MethodPut, "/v1/staff/members/"+id+"/name", tok, map[string]any{"name": "Someone else"}); r.Code != http.StatusForbidden {
+		t.Fatalf("staff naming a member: %d %s", r.Code, r.Raw)
+	}
+	if r := e.do(t, http.MethodPut, "/v1/staff/members/"+id+"/name", admin, map[string]any{"name": "Otieno K."}); r.Code != http.StatusOK || r.Body["name"] != "Otieno K." {
+		t.Fatalf("admin renames: %d %s", r.Code, r.Raw)
+	}
+	if r := e.do(t, http.MethodPut, "/v1/staff/members/0192f000-0000-7000-8000-000000000009/name", admin, map[string]any{"name": "Nobody"}); r.Code != http.StatusNotFound {
+		t.Fatalf("unknown member: %d %s", r.Code, r.Raw)
+	}
+}
+
 func TestStaffSession_PasswordSignInStartsTemporaryAndIsChangedBeforeAnythingElse(t *testing.T) {
 	e := setupStaff(t)
 	admin := e.staffSignIn(t, "google", "owner").Body["token"].(string)

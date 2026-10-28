@@ -375,6 +375,24 @@ func (q *Queries) SessionMember(ctx context.Context, arg SessionMemberParams) (S
 	return i, err
 }
 
+const setName = `-- name: SetName :execrows
+UPDATE staff.members SET name = $1, updated_at = $2 WHERE id = $3
+`
+
+type SetNameParams struct {
+	Name string
+	At   time.Time
+	ID   string
+}
+
+func (q *Queries) SetName(ctx context.Context, arg SetNameParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setName, arg.Name, arg.At, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const setPassword = `-- name: SetPassword :exec
 UPDATE staff.members SET password_hash = $1, password_changed_at = $2,
        must_change_password = $3, updated_at = $2

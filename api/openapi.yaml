@@ -832,6 +832,29 @@ paths:
         "403": { description: "Current password wrong (`wrong-password`)", content: { application/problem+json: { schema: { $ref: "#/components/schemas/Problem" } } } }
         "429": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
+  /v1/staff/me/name:
+    put:
+      operationId: staffSetOwnName
+      tags: [back-office]
+      summary: Set one's own name, shown across the back office in place of the email address
+      description: "1 to 80 characters. Audited. The back office asks for it after the first sign-in when it is empty."
+      security: [{ staffBearer: [] }]
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string, minLength: 1, maxLength: 80 }
+      responses:
+        "200": { description: The member as now, content: { application/json: { schema: { type: object } } } }
+        "400": { description: "Not a name (`invalid-name`)", content: { application/problem+json: { schema: { $ref: "#/components/schemas/Problem" } } } }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
   /v1/staff/metrics:
     get:
       operationId: staffMetrics
@@ -956,6 +979,30 @@ paths:
         "403": { $ref: "#/components/responses/Problem" }
         "404": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+  /v1/staff/members/{id}/name:
+    put:
+      operationId: staffSetName
+      tags: [back-office]
+      summary: Set a member's name
+      description: "Role: `admin`. 1 to 80 characters. Audited."
+      security: [{ staffBearer: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }, { $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string, minLength: 1, maxLength: 80 }
+      responses:
+        "200": { description: The member as now, content: { application/json: { schema: { type: object } } } }
+        "400": { description: "Not a name (`invalid-name`)", content: { application/problem+json: { schema: { $ref: "#/components/schemas/Problem" } } } }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
   /v1/staff/members/{id}/disable:
     post:

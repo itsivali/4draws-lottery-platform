@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -214,6 +215,37 @@ func TestStaff_AdminsManageRolesButNeverLockThemselvesOrEveryoneOut(t *testing.T
 	var changes int
 	if err := e.pool.QueryRow(ctx, `SELECT count(*) FROM audit.audit_log WHERE action IN ('staff.invite','staff.roles','staff.disable')`).Scan(&changes); err != nil || changes != 5 {
 		t.Fatalf("audited changes: %d %v", changes, err)
+	}
+}
+
+func TestStaff_NamesAreSetTrimmedBoundedAndAudited(t *testing.T) {
+	ctx := context.Background()
+	e := setup(t)
+	admin := e.admin(t)
+	for name, in := range map[string]string{"empty": "", "blank": "   ", "control": "Ada\nLovelace", "long": strings.Repeat("a", staff.MaxNameRunes+1)} {
+		if _, err := e.svc.SetName(ctx, admin, admin.ID, in); !errors.Is(err, staff.ErrInvalidName) {
+			t.Errorf("%s name: %v", name, err)
+		}
+	}
+	if _, err := e.svc.Invite(ctx, admin, "x@example.com", "Bad\tName", []staff.Role{staff.Staff}, ""); !errors.Is(err, staff.ErrInvalidName) {
+		t.Fatalf("invite with a control character: %v", err)
+	}
+	rec, err := e.svc.SetName(ctx, admin, admin.ID, "  Willis Ivali  ")
+	if err != nil || rec.Name != "Willis Ivali" {
+		t.Fatalf("set name: %+v %v", rec, err)
+	}
+	if m, err := e.svc.Authenticate(ctx, e.sessionOf(t, "owner")); err != nil || m.Name != "Willis Ivali" {
+		t.Fatalf("the open session sees the new name: %+v %v", m, err)
+	}
+	if _, err := e.svc.SetName(ctx, admin, "0192f000-0000-7000-8000-000000000009", "Nobody"); !errors.Is(err, staff.ErrNotFound) {
+		t.Fatalf("unknown member: %v", err)
+	}
+	if _, err := e.svc.SetName(ctx, admin, "not-a-uuid", "Nobody"); !errors.Is(err, staff.ErrNotFound) {
+		t.Fatalf("malformed id: %v", err)
+	}
+	var n int
+	if err := e.pool.QueryRow(ctx, `SELECT count(*) FROM audit.audit_log WHERE action = 'staff.name'`).Scan(&n); err != nil || n != 1 {
+		t.Fatalf("audited renames: %d %v", n, err)
 	}
 }
 

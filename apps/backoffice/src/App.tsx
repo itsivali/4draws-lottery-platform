@@ -1,7 +1,8 @@
 import {
-  Banknote, Bell, ChartSpline, ChevronsUpDown, IdCard, KeyRound, Landmark, LayoutDashboard, LogOut, Receipt, Search, Ticket, UserRound, UserX, Users, Wallet,
+  Banknote, Bell, ChartSpline, ChevronsUpDown, IdCard, KeyRound, Landmark, LayoutDashboard, LogOut, Receipt, Search, Ticket, UserPen, UserRound, UserX, Users, Wallet,
 } from 'lucide-react'
 import { useEffect, useState, type ComponentType } from 'react'
+import { NameDialog } from './components/NameDialog'
 import { PasswordDialog } from './components/PasswordDialog'
 import { MetricsPage } from './pages/Metrics'
 import { Link, NavLink, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
@@ -135,14 +136,16 @@ function Layout() {
 }
 
 function AppSidebar({ sections }: { sections: Section[] }) {
-  const { me, signOut } = useSession()
+  const { me, signOut, updateMe } = useSession()
   const { queue } = useReviewQueue()
   const { pathname } = useLocation()
   const { isMobile, setOpenMobile } = useSidebar()
   const close = () => { if (isMobile) setOpenMobile(false) }
   const waiting = queue && queue.waiting > 0 ? queue.waiting : 0
-  const initials = (me.name || me.email).split(/[\s@.]+/).filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase() ?? '').join('')
+  const initials = me.name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase() ?? '').join('')
+  const roles = me.roles.map((r) => roleLabels[r]).join(', ') || 'No role'
   const [changing, setChanging] = useState(false)
+  const [renaming, setRenaming] = useState(false)
   return (
     <Sidebar collapsible="icon" variant="inset">
       <SidebarHeader>
@@ -216,23 +219,25 @@ function AppSidebar({ sections }: { sections: Section[] }) {
                 <SidebarMenuButton size="lg" className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground">
                   <span aria-hidden="true" className="flex size-8 items-center justify-center rounded-lg bg-primary-container text-sm font-semibold text-primary-container-foreground">{initials}</span>
                   <span className="grid flex-1 text-left text-sm leading-tight">
-                    <span className="truncate font-medium">{me.name || me.email}</span>
-                    <span className="truncate text-xs text-muted-foreground">{me.email}</span>
+                    <span className="truncate font-medium">{me.name}</span>
+                    <span className="truncate text-xs text-muted-foreground">{roles}</span>
                   </span>
                   <ChevronsUpDown aria-hidden="true" className="ml-auto size-4" />
                 </SidebarMenuButton>
               </DropdownMenuTrigger>
               <DropdownMenuContent side={isMobile ? 'bottom' : 'right'} align="end" sideOffset={4} className="min-w-56 rounded-lg">
                 <DropdownMenuLabel className="font-normal">
-                  <span className="block truncate font-medium">{me.name || me.email}</span>
-                  <span className="block truncate text-xs text-muted-foreground">{me.roles.map((r) => roleLabels[r]).join(', ') || 'No role'}</span>
+                  <span className="block truncate font-medium">{me.name}</span>
+                  <span className="block truncate text-xs text-muted-foreground">{roles}</span>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
+                <DropdownMenuItem onSelect={() => { setRenaming(true) }}><UserPen /> Change name</DropdownMenuItem>
                 <DropdownMenuItem onSelect={() => { setChanging(true) }}><KeyRound /> Change password</DropdownMenuItem>
                 <DropdownMenuItem onSelect={signOut}><LogOut /> Sign out</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
             <PasswordDialog open={changing} onClose={() => { setChanging(false) }} />
+            <NameDialog open={renaming} onClose={() => { setRenaming(false) }} onSaved={updateMe} />
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarFooter>

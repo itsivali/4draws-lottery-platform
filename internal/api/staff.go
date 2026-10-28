@@ -135,12 +135,14 @@ func (h *handlers) mountStaff(r chi.Router) {
 	r.Delete("/session", h.needs(signIn, "Staff sign-in", h.staffSignOut))
 	r.Get("/me", h.staffMe)
 	r.Put("/password", h.needs(signIn, "Staff sign-in", h.staffChangePassword))
+	r.Put("/me/name", h.needs(signIn, "Staff sign-in", h.staffSetName(false)))
 	r.With(admin).Get("/members", h.needs(signIn, "Staff members", h.staffMembers))
 	r.With(admin).Post("/members", h.needs(signIn, "Staff members", h.staffInvite))
 	r.With(admin).Put("/members/{id}/roles", h.needs(signIn, "Staff members", h.staffSetRoles))
 	r.With(admin).Post("/members/{id}/disable", h.needs(signIn, "Staff members", h.staffSetActive(false)))
 	r.With(admin).Post("/members/{id}/enable", h.needs(signIn, "Staff members", h.staffSetActive(true)))
 	r.With(admin).Post("/members/{id}/password", h.needs(signIn, "Staff members", h.staffResetPassword))
+	r.With(admin).Put("/members/{id}/name", h.needs(signIn, "Staff members", h.staffSetName(true)))
 	r.With(admin).Get("/metrics", h.needs(h.StaffServices.Metrics != nil, "App metrics", h.staffMetrics))
 	r.With(anyStaff).Get("/finance", h.needs(h.StaffServices.Finance != nil, "Finance", h.staffFinance))
 
@@ -221,6 +223,7 @@ func staffError(w http.ResponseWriter, err error) {
 		{kyc.ErrNothingToReview, m{http.StatusConflict, "nothing-to-review", "No submission awaits review"}},
 		{staff.ErrExists, m{http.StatusConflict, "exists", "A member with this email address exists"}},
 		{staff.ErrInvalid, m{http.StatusBadRequest, "invalid", "Invalid email address or role"}},
+		{staff.ErrInvalidName, m{http.StatusBadRequest, "invalid-name", "A name is 1 to 80 characters"}},
 		{staff.ErrNotFound, m{http.StatusNotFound, "not-found", "No such member"}},
 		{staff.ErrSelf, m{http.StatusConflict, "self", "You cannot change your own roles or disable yourself"}},
 		{staff.ErrLastAdmin, m{http.StatusConflict, "last-admin", "The last admin cannot be removed"}},
@@ -914,6 +917,29 @@ func (h *handlers) staffChangePassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// staffSetName sets the name the back office shows: the signed-in member's own, or (admin) any member's.
+func (h *handlers) staffSetName(anyMember bool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var in struct {
+			Name string `json:"name"`
+		}
+		if !httpx.DecodeJSON(w, r, &in) {
+			return
+		}
+		by := member(r)
+		id := by.ID
+		if anyMember {
+			id = chi.URLParam(r, "id")
+		}
+		rec, err := h.StaffServices.Members.SetName(r.Context(), by, id, in.Name)
+		if err != nil {
+			staffError(w, err)
+			return
+		}
+		httpx.WriteJSON(w, http.StatusOK, rec)
+	}
 }
 
 // staffResetPassword is an admin giving a member a temporary password.

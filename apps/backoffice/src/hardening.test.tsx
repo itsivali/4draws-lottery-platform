@@ -24,6 +24,8 @@ describe('forms refuse what the server would refuse', () => {
     await user.clear(within(dialog).getByLabelText(/^Email address/))
     await user.type(within(dialog).getByLabelText(/^Email address/), 'tara@staff.local')
     expect(within(dialog).getByRole('radio', { name: /^Staff/ })).toBeChecked() // the usual role, chosen by default
+    expect(invite).toBeDisabled() // the back office shows members by name, so an invite needs one
+    await user.type(within(dialog).getByLabelText(/^Name/), 'Tara')
     expect(invite).toBeEnabled() // a password is optional: Google or Apple may be their way in
     await user.type(within(dialog).getByLabelText(/^Temporary password/), 'short1')
     expect(within(dialog).getByText(/Use at least 12 characters/)).toBeInTheDocument()

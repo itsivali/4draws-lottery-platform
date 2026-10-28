@@ -6,6 +6,7 @@ import { App } from './App'
 import { loadConfig, type Config } from './config'
 import { SessionContext, useSession, type Session } from './context'
 import { completeDevPopup } from './providers'
+import { NameForm } from './components/NameDialog'
 import { PasswordForm } from './components/PasswordDialog'
 import { SignIn, type StaffSession } from './SignIn'
 import type { Me } from './types'
@@ -80,11 +81,21 @@ function Root({ config }: { config: Config }) {
     }
   }, [api, current])
 
+  const updateMe = useCallback((me: Me) => {
+    setCurrent((c) => {
+      if (!c) return c
+      const next = { ...c, member: me }
+      try { sessionStorage.setItem(KEY, JSON.stringify(next)) } catch { /* until reload */ }
+      return next
+    })
+  }, [])
+
   const session: Session | null = useMemo(() => current && {
     me: current.member,
     api,
     signOut: () => { void api.delete('/v1/staff/session').catch(() => undefined).finally(() => { end() }) },
-  }, [current, api, end])
+    updateMe,
+  }, [current, api, end, updateMe])
 
   if (!session) {
     return (
@@ -98,14 +109,9 @@ function Root({ config }: { config: Config }) {
   return (
     <SessionContext.Provider value={session}>
       {session.me.must_change_password ? (
-        <FirstPassword onDone={() => {
-          setCurrent((c) => {
-            if (!c) return c
-            const next = { ...c, member: { ...c.member, must_change_password: false } }
-            try { sessionStorage.setItem(KEY, JSON.stringify(next)) } catch { /* until reload */ }
-            return next
-          })
-        }} />
+        <FirstPassword onDone={() => { updateMe({ ...session.me, must_change_password: false }) }} />
+      ) : !session.me.name.trim() ? (
+        <FirstName onDone={updateMe} />
       ) : <App />}
     </SessionContext.Provider>
   )
@@ -113,16 +119,35 @@ function Root({ config }: { config: Config }) {
 
 /** A member signed in with a temporary password sets their own before anything else (ADR 0019). */
 function FirstPassword({ onDone }: { onDone: () => void }) {
-  const { me, signOut } = useSession()
+  const { signOut } = useSession()
   return (
     <main id="main" className="grid min-h-svh place-items-center bg-background p-6">
       <Card className="w-full max-w-[460px] shadow-float">
         <CardHeader>
           <CardTitle className="text-xl">Choose your password</CardTitle>
-          <CardDescription>You signed in as {me.email} with a temporary password. Set your own to continue.</CardDescription>
+          <CardDescription>You signed in with a temporary password. Set your own to continue.</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4">
           <PasswordForm forced onDone={onDone} />
+          <button type="button" className="justify-self-start text-sm text-muted-foreground underline-offset-4 hover:underline" onClick={signOut}>Sign out instead</button>
+        </CardContent>
+      </Card>
+    </main>
+  )
+}
+
+/** A member without a name gives one before anything else: the back office shows it in place of their email address. */
+function FirstName({ onDone }: { onDone: (me: Me) => void }) {
+  const { signOut } = useSession()
+  return (
+    <main id="main" className="grid min-h-svh place-items-center bg-background p-6">
+      <Card className="w-full max-w-[460px] shadow-float">
+        <CardHeader>
+          <CardTitle className="text-xl">What should we call you?</CardTitle>
+          <CardDescription>The back office shows your name, not your email address, wherever you appear.</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-4">
+          <NameForm onDone={onDone} label="Continue" />
           <button type="button" className="justify-self-start text-sm text-muted-foreground underline-offset-4 hover:underline" onClick={signOut}>Sign out instead</button>
         </CardContent>
       </Card>

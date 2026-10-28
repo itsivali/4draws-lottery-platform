@@ -13,6 +13,11 @@ of band (never in a chat that keeps history). The person must change it at their
 anything else. An admin can set a new temporary password at any time (*Reset password*), which also signs the person
 out everywhere. A person without a password signs in with the Google or Apple account of that address.
 
+The back office shows each member by **name**, never by email address: an invite needs a name, a member without one
+(the bootstrap admin, say) is asked for it right after their first sign-in, anyone can change their own from the
+account menu (*Change name*), and an admin can rename a member on the *Staff* page. Every change is audited
+(`staff.name`).
+
 | Role | Can |
 |---|---|
 | `staff` | every operational queue: identity review (each view audited as unmasked; approve or reject with a reason), payments (reconciliations, reversals, unconfirmed top-ups, suspense, paybill re-checks), draws (sign, approve, void with a reason), payouts (approve, reject, settle from the statement, retry prizes), KRA tax (prepare batches, download files, record remittances), alerts (acknowledge), account closures; and the *Finance* dashboard |

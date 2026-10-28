@@ -16,6 +16,7 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -49,6 +50,22 @@ const (
 	MaxPasswordRunes = 128
 )
 
+// MaxNameRunes bounds a member's name, which the back office shows in place of their email address.
+const MaxNameRunes = 80
+
+// validName reports whether name (already trimmed) can be a member's name.
+func validName(name string) bool {
+	if name == "" || utf8.RuneCountInString(name) > MaxNameRunes {
+		return false
+	}
+	for _, r := range name {
+		if unicode.IsControl(r) {
+			return false
+		}
+	}
+	return true
+}
+
 // Session limits: a session ends 12 hours after sign-in, or after 30 minutes without a request.
 const (
 	SessionMaxAge = 12 * time.Hour
@@ -66,6 +83,7 @@ var (
 	ErrDisabled        = errors.New("staff: this member is disabled")
 	ErrExists          = errors.New("staff: a member with this email address exists")
 	ErrInvalid         = errors.New("staff: invalid email address or role")
+	ErrInvalidName     = errors.New("staff: a name is 1 to 80 characters, without control characters")
 	ErrNotFound        = errors.New("staff: no such member")
 	ErrSelf            = errors.New("staff: members cannot change their own roles or disable themselves")
 	ErrLastAdmin       = errors.New("staff: the last admin cannot be removed")
@@ -502,9 +520,12 @@ var emailRE = regexp.MustCompile(`^[^@\s]+@[^@\s]+\.[^@\s]+$`)
 // Invite adds a member. With temporary (a password the admin tells them out of band) they sign in with their email
 // address and must change it first; without, they sign in with Google or Apple using email, or wait for a reset.
 func (s *Service) Invite(ctx context.Context, by Member, email, name string, rs []Role, temporary string) (Record, error) {
-	email = strings.ToLower(strings.TrimSpace(email))
+	email, name = strings.ToLower(strings.TrimSpace(email)), strings.TrimSpace(name)
 	if !emailRE.MatchString(email) || !known(rs) || len(rs) == 0 {
 		return Record{}, ErrInvalid
+	}
+	if name != "" && !validName(name) {
+		return Record{}, ErrInvalidName
 	}
 	var hash *string
 	if temporary != "" {
@@ -520,7 +541,7 @@ func (s *Service) Invite(ctx context.Context, by Member, email, name string, rs 
 	var id string
 	err := s.tx(ctx, func(tx pgx.Tx, q *store.Queries, now time.Time) error {
 		var err error
-		id, err = q.InsertMember(ctx, store.InsertMemberParams{Email: email, Name: strings.TrimSpace(name), Roles: names(rs),
+		id, err = q.InsertMember(ctx, store.InsertMemberParams{Email: email, Name: name, Roles: names(rs),
 			InvitedBy: by.Operator(), At: now, PasswordHash: hash})
 		var pe *pgconn.PgError
 		if errors.As(err, &pe) && pe.Code == "23505" {
@@ -530,6 +551,33 @@ func (s *Service) Invite(ctx context.Context, by Member, email, name string, rs 
 		}
 		return s.audit.Record(ctx, tx, audit.Event{ActorType: audit.Staff, ActorID: by.Operator(), Action: "staff.invite",
 			EntityType: "staff_member", EntityID: id, Details: map[string]any{"email": email, "roles": names(rs)}})
+	})
+	if err != nil {
+		return Record{}, err
+	}
+	return s.record(ctx, id)
+}
+
+// SetName sets the name the back office shows for member id in place of their email address: members name themselves,
+// and an admin may name anyone (the API decides who may call it for whom).
+func (s *Service) SetName(ctx context.Context, by Member, id, name string) (Record, error) {
+	name = strings.TrimSpace(name)
+	if !validName(name) {
+		return Record{}, ErrInvalidName
+	}
+	err := s.tx(ctx, func(tx pgx.Tx, q *store.Queries, now time.Time) error {
+		n, err := q.SetName(ctx, store.SetNameParams{Name: name, At: now, ID: id})
+		var pe *pgconn.PgError
+		if errors.As(err, &pe) && pe.Code == "22P02" {
+			return ErrNotFound
+		} else if err != nil {
+			return err
+		}
+		if n == 0 {
+			return ErrNotFound
+		}
+		return s.audit.Record(ctx, tx, audit.Event{ActorType: audit.Staff, ActorID: by.Operator(), Action: "staff.name",
+			EntityType: "staff_member", EntityID: id, Details: map[string]any{"name": name}})
 	})
 	if err != nil {
 		return Record{}, err

@@ -21,7 +21,7 @@ export function renderSignedIn(ui: ReactNode, { roles, route, path = '/' }: { ro
     })
   })
   const api = new ApiClient('https://api.test', () => Promise.resolve('staff-token'), fetch)
-  const session = { me: { id: 's1', name: 'Alice', email: 'alice@staff.local', roles, must_change_password: false }, api, signOut: vi.fn() }
+  const session = { me: { id: 's1', name: 'Alice', email: 'alice@staff.local', roles, must_change_password: false }, api, signOut: vi.fn(), updateMe: vi.fn() }
   const view = render(
     <MemoryRouter initialEntries={[path]}>
       <SessionContext.Provider value={session}>{ui}</SessionContext.Provider>

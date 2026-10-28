@@ -1,5 +1,5 @@
 import type { ColumnDef } from '@tanstack/react-table'
-import { KeyRound, UserPlus, Users } from 'lucide-react'
+import { KeyRound, UserPen, UserPlus, Users } from 'lucide-react'
 import { useMemo } from 'react'
 import { Actions, DataTable, Stack } from '../components/DataTable'
 import { useConfirmedAction } from '../components/useConfirmedAction'
@@ -17,6 +17,11 @@ const roleField: ConfirmField = {
   options: (['staff', 'admin'] as Role[]).map((r) => ({ value: r, label: roleLabels[r], description: roleDescriptions[r] })),
 }
 
+const nameField: ConfirmField = { name: 'name', label: 'Name', required: true, help: 'As colleagues know them. The back office shows it in place of their email address.' }
+
+/** How the back office names a member: by name, or by email address only until they have one. */
+const who = (m: StaffMember) => m.name || m.email
+
 const passwordHelp = 'Tell it to them in person or by phone, never in a chat that keeps history. They must change it at their first sign-in.'
 
 /** Admins invite members, set their role, give them temporary passwords and disable them (ADR 0019). */
@@ -28,7 +33,7 @@ export function StaffPage() {
   const columns = useMemo<ColumnDef<StaffMember>[]>(() => [
     {
       id: 'member', header: 'Member', accessorFn: (m) => `${m.name} ${m.email}`,
-      cell: ({ row }) => <Stack primary={<span className={row.original.active ? '' : 'text-muted-foreground'}>{row.original.name || row.original.email}</span>} secondary={row.original.email} />,
+      cell: ({ row }) => <Stack primary={<span className={row.original.active ? '' : 'text-muted-foreground'}>{who(row.original)}</span>} secondary={row.original.name ? row.original.email : 'No name yet'} />,
     },
     {
       id: 'role', header: 'Role', accessorFn: (m) => m.roles.map((r) => roleLabels[r]).join(', '),
@@ -62,12 +67,12 @@ export function StaffPage() {
               disabled={busy}
               onClick={() => {
                 ask({
-                  title: `Role of ${m.email}`,
-                  body: <p>Choose what {m.name || m.email} may do. It applies from their next request.</p>,
+                  title: `Role of ${who(m)}`,
+                  body: <p>Choose what {who(m)} may do. It applies from their next request.</p>,
                   fields: [roleField],
                   initial: { role: m.roles.includes('admin') ? 'admin' : 'staff' },
                   confirmLabel: 'Save role',
-                  success: `Role of ${m.email} saved.`,
+                  success: `Role of ${who(m)} saved.`,
                   act: (v) => api.put(`/v1/staff/members/${m.id}/roles`, { roles: [v.role] }),
                 })
               }}
@@ -81,11 +86,30 @@ export function StaffPage() {
               disabled={busy}
               onClick={() => {
                 ask({
-                  title: `Reset the password of ${m.email}`,
+                  title: m.name ? `Rename ${m.name}` : `Name ${m.email}`,
+                  body: <p>The back office shows this name for them wherever they appear.</p>,
+                  fields: [nameField],
+                  initial: { name: m.name },
+                  confirmLabel: 'Save name',
+                  success: 'Name saved.',
+                  act: (v) => api.put(`/v1/staff/members/${m.id}/name`, { name: v.name }),
+                })
+              }}
+            >
+              <UserPen aria-hidden="true" /> {m.name ? 'Rename' : 'Add name'}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={busy}
+              onClick={() => {
+                ask({
+                  title: `Reset the password of ${who(m)}`,
                   body: <p>Their sessions end at once. They sign in with this temporary password and must choose their own.</p>,
                   fields: [{ name: 'password', label: 'Temporary password', type: 'password', required: true, help: passwordHelp }],
                   confirmLabel: 'Set temporary password',
-                  success: `${m.email} has a temporary password.`,
+                  success: `${who(m)} has a temporary password.`,
                   act: (v) => api.post(`/v1/staff/members/${m.id}/password`, { password: v.password }),
                 })
               }}
@@ -100,17 +124,17 @@ export function StaffPage() {
               disabled={busy}
               onClick={() => {
                 ask(m.active ? {
-                  title: `Disable ${m.email}?`,
+                  title: `Disable ${who(m)}?`,
                   body: <p>Their sessions end at once and they cannot sign in until re-enabled.</p>,
                   confirmLabel: 'Disable',
                   danger: true,
-                  success: `${m.email} is disabled.`,
+                  success: `${who(m)} is disabled.`,
                   act: () => api.post(`/v1/staff/members/${m.id}/disable`),
                 } : {
-                  title: `Enable ${m.email}?`,
+                  title: `Enable ${who(m)}?`,
                   body: <p>They can sign in again with their role.</p>,
                   confirmLabel: 'Enable',
-                  success: `${m.email} is enabled.`,
+                  success: `${who(m)} is enabled.`,
                   act: () => api.post(`/v1/staff/members/${m.id}/enable`),
                 })
               }}
@@ -137,14 +161,14 @@ export function StaffPage() {
                 body: <p>Their email address is their username. Give them a temporary password, or leave it empty if they will sign in with the Google or Apple account of that address.</p>,
                 fields: [
                   { name: 'email', label: 'Email address', required: true, type: 'email' },
-                  { name: 'name', label: 'Name' },
+                  { ...nameField },
                   { ...roleField },
                   { name: 'password', label: 'Temporary password', type: 'password', help: passwordHelp },
                 ],
                 initial: { role: 'staff' },
                 confirmLabel: 'Invite',
                 success: 'Invited.',
-                act: (v) => api.post('/v1/staff/members', { email: v.email, name: v.name ?? '', roles: [v.role], ...(v.password ? { password: v.password } : {}) }),
+                act: (v) => api.post('/v1/staff/members', { email: v.email, name: v.name, roles: [v.role], ...(v.password ? { password: v.password } : {}) }),
               })
             }}
           >

@@ -88,7 +88,7 @@ describe('staff', () => {
     expect(JSON.parse(invite?.[1]?.body as string)).toEqual({ email: 'wanjiru@example.com', name: 'Wanjiru', roles: ['admin'], password: 'welcome wanjiru 2026' })
 
     await user.click(within(screen.getByRole('row', { name: /kim@staff.local/ })).getByRole('button', { name: 'Change role' }))
-    const roles = screen.getByRole('dialog', { name: 'Role of kim@staff.local' })
+    const roles = screen.getByRole('dialog', { name: 'Role of Kim' })
     expect(within(roles).getByRole('radio', { name: /^Staff/ })).toBeChecked()
     await user.click(within(roles).getByRole('radio', { name: /^Administrator/ }))
     await user.click(within(roles).getByRole('button', { name: 'Save role' }))
@@ -97,10 +97,10 @@ describe('staff', () => {
     expect(JSON.parse(put?.[1]?.body as string)).toEqual({ roles: ['admin'] })
 
     await user.click(within(screen.getByRole('row', { name: /kim@staff.local/ })).getByRole('button', { name: 'Reset password' }))
-    const reset = screen.getByRole('dialog', { name: 'Reset the password of kim@staff.local' })
+    const reset = screen.getByRole('dialog', { name: 'Reset the password of Kim' })
     await user.type(within(reset).getByLabelText(/^Temporary password/), 'another temporary one')
     await user.click(within(reset).getByRole('button', { name: 'Set temporary password' }))
-    expect(await screen.findByRole('status')).toHaveTextContent('kim@staff.local has a temporary password.')
+    expect(await screen.findByRole('status')).toHaveTextContent('Kim has a temporary password.')
     const resetCall = fetch.mock.calls.find(([u, init]) => init?.method === 'POST' && (u as string).endsWith('/s2/password'))
     expect(JSON.parse(resetCall?.[1]?.body as string)).toEqual({ password: 'another temporary one' })
     // nobody changes their own role or resets their own password here
@@ -114,7 +114,7 @@ describe('passwords and metrics', () => {
   it('a member changes their own password from the account menu; mismatches and short ones never leave the page', async () => {
     const { fetch } = renderSignedIn(<App />, { roles: ['staff'], route: (method, url) => (method === 'PUT' && url.pathname === '/v1/staff/password' ? { status: 204 } : { status: 200, body: { waiting: 0, oldest_submitted_at: null } }) })
     const user = userEvent.setup()
-    await user.click(await screen.findByRole('button', { name: /alice@staff.local/ }))
+    await user.click(await screen.findByRole('button', { name: /Alice/ }))
     await user.click(await screen.findByRole('menuitem', { name: 'Change password' }))
     const dialog = await screen.findByRole('dialog', { name: 'Change your password' })
     const save = within(dialog).getByRole('button', { name: 'Set password' })
@@ -131,6 +131,24 @@ describe('passwords and metrics', () => {
     expect(await within(dialog).findByRole('status')).toHaveTextContent('Password changed')
     const put = fetch.mock.calls.find(([, init]) => init?.method === 'PUT')
     expect(JSON.parse(put?.[1]?.body as string)).toEqual({ current_password: 'old one here', new_password: 'a brand new long password' })
+  })
+
+  it('a member changes their name from the account menu, and it shows in place of their email address', async () => {
+    const { fetch, session } = renderSignedIn(<App />, { roles: ['staff'], route: (method, url) => (method === 'PUT' && url.pathname === '/v1/staff/me/name' ? { status: 200, body: { id: 's1', name: 'Alice Njeri', email: 'alice@staff.local' } } : { status: 200, body: { waiting: 0, oldest_submitted_at: null } }) })
+    const user = userEvent.setup()
+    const account = await screen.findByRole('button', { name: /Alice/ })
+    expect(account).not.toHaveTextContent('alice@staff.local')
+    await user.click(account)
+    await user.click(await screen.findByRole('menuitem', { name: 'Change name' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Change your name' })
+    const name = within(dialog).getByLabelText('Your name')
+    await user.clear(name)
+    expect(within(dialog).getByRole('button', { name: 'Save name' })).toBeDisabled()
+    await user.type(name, '  Alice Njeri ')
+    await user.click(within(dialog).getByRole('button', { name: 'Save name' }))
+    await waitFor(() => { expect(session.updateMe).toHaveBeenCalledWith(expect.objectContaining({ name: 'Alice Njeri', email: 'alice@staff.local' })) })
+    const put = fetch.mock.calls.find(([, init]) => init?.method === 'PUT')
+    expect(JSON.parse(put?.[1]?.body as string)).toEqual({ name: 'Alice Njeri' })
   })
 
   it('app metrics show each platform’s figures, a chart of the chosen measure and the per-day table', async () => {

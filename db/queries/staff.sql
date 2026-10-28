@@ -64,6 +64,9 @@ SELECT id, email, name, roles, active, password_hash FROM staff.members WHERE id
 -- name: UpdateMember :exec
 UPDATE staff.members SET roles = sqlc.arg(roles), active = sqlc.arg(active), updated_at = sqlc.arg(at) WHERE id = sqlc.arg(id);
 
+-- name: SetName :execrows
+UPDATE staff.members SET name = sqlc.arg(name), updated_at = sqlc.arg(at) WHERE id = sqlc.arg(id);
+
 -- name: ActiveAdmins :one
 -- serialises role changes that could leave no admin (callers lock the member rows they change first)
 SELECT count(*) FROM staff.members WHERE active AND 'admin' = ANY (roles);
