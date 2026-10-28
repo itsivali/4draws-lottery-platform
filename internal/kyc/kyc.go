@@ -81,22 +81,32 @@ var (
 // that the submission and its job commit or roll back together (invariant 9).
 type Enqueuer interface {
 	EnqueueVerify(ctx context.Context, tx pgx.Tx, checkID, userID string) error
+	// EnqueueReviewNotice schedules telling the reviewers that a submission waits for their decision.
+	EnqueueReviewNotice(ctx context.Context, tx pgx.Tx, checkID, userID string) error
 }
 
 // Service runs KYC.
 type Service struct {
-	pool  *pgxpool.Pool
-	clk   clock.Clock
-	prov  Provider
-	kr    *crypto.Keyring
-	idKey []byte
-	audit *audit.Writer
-	enq   Enqueuer
+	pool   *pgxpool.Pool
+	clk    clock.Clock
+	prov   Provider
+	kr     *crypto.Keyring
+	idKey  []byte
+	audit  *audit.Writer
+	enq    Enqueuer
+	notify ReviewNotifier // nil: nobody is told, so no notice job is enqueued
 }
 
 // NewService returns a Service. idKey keys the lookup hash that enforces one account per national ID.
 func NewService(pool *pgxpool.Pool, clk clock.Clock, prov Provider, kr *crypto.Keyring, idKey []byte, a *audit.Writer, enq Enqueuer) *Service {
 	return &Service{pool: pool, clk: clk, prov: prov, kr: kr, idKey: idKey, audit: a, enq: enq}
+}
+
+// WithReviewNotifier makes the service tell n, through a queued job, whenever a submission starts waiting for a staff
+// decision (a manual submission, or a registry mismatch).
+func (s *Service) WithReviewNotifier(n ReviewNotifier) *Service {
+	s.notify = n
+	return s
 }
 
 func (s *Service) idHash(id string) []byte { return crypto.MAC(s.idKey, "national-id", id) }
@@ -186,7 +196,7 @@ func (s *Service) Submit(ctx context.Context, userID string, in Submission) (Sta
 			return err
 		}
 		if manual {
-			return nil
+			return s.enqueueReviewNotice(ctx, tx, id, userID)
 		}
 		return s.enq.EnqueueVerify(ctx, tx, id, userID)
 	})
@@ -400,14 +410,26 @@ func (s *Service) finish(ctx context.Context, chk store.GetKYCCheckRow, outcome 
 		if res != nil {
 			rec.providerRef, rec.nameMatch, rec.dobMatch = res.Ref, &res.NameMatch, &res.DOBMatch
 		}
-		if _, err := insertCheck(ctx, q, chk.UserID, &chk.ID, rec, now); err != nil {
+		id, err := insertCheck(ctx, q, chk.UserID, &chk.ID, rec, now)
+		if err != nil {
 			return err
 		}
 		if err := q.SetUserKYC(ctx, store.SetUserKYCParams{KycStatus: string(outcome), NationalIDHash: hashToSet, At: now, ID: chk.UserID}); err != nil {
 			return mapUnique(err)
 		}
+		if outcome == ManualReview {
+			return s.enqueueReviewNotice(ctx, tx, id, chk.UserID)
+		}
 		return nil
 	})
+}
+
+// enqueueReviewNotice schedules the reviewers' notice with the submission, when anyone is to be told.
+func (s *Service) enqueueReviewNotice(ctx context.Context, tx pgx.Tx, checkID, userID string) error {
+	if s.notify == nil {
+		return nil
+	}
+	return s.enq.EnqueueReviewNotice(ctx, tx, checkID, userID)
 }
 
 type checkRecord struct {

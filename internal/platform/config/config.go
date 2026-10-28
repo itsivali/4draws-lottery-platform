@@ -28,6 +28,8 @@ type Config struct {
 	Payments Payments
 	// Alerts configures where alerts are sent.
 	Alerts Alerts
+	// Mail configures the email sent to staff (identity submissions waiting for review).
+	Mail Mail
 }
 
 // Load reads configuration from environment variables.
@@ -65,6 +67,9 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	if cfg.Alerts, err = loadAlerts(); err != nil {
+		return Config{}, err
+	}
+	if cfg.Mail, err = loadMail(); err != nil {
 		return Config{}, err
 	}
 	return cfg, nil

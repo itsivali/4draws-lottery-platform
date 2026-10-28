@@ -124,6 +124,24 @@ services:
         sync: false
       - key: ALERT_HEARTBEAT_URL
         sync: false
+      # Email to staff (docs/runbooks/kyc-review.md): whenever a player's identity submission starts waiting for a
+      # decision, KYC_REVIEW_NOTIFY_TO gets an email with a link into the back office. It is sent through the SMTP
+      # server below (a transactional provider such as Resend or Brevo; SMTP_PASSWORD is a secret); with no SMTP_HOST
+      # the notice is only logged.
+      - key: KYC_REVIEW_NOTIFY_TO
+        value: itsivali@outlook.com
+      - key: BACKOFFICE_URL
+        value: https://lottery-backoffice.onrender.com
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        sync: false
+      - key: SMTP_USERNAME
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: SMTP_FROM
+        sync: false
 
   # The player web app (Flutter web), built against the Render api until the Cloudflare domain is set up. Free static
   # site: Render's build image has no Flutter, so the build fetches the pinned SDK (mise.toml) the first time and reuses

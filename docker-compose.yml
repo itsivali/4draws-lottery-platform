@@ -91,6 +91,15 @@ services:
       STAFF_BOOTSTRAP_ADMIN: ada@staff.local
       STAFF_BOOTSTRAP_PASSWORD: local-dev-staff-2026 # local only; a real deployment's is a secret and changed at once
       STAFF_GOOGLE_CLIENT_ID: ${STAFF_GOOGLE_CLIENT_ID:-}
+      # Each identity submission emails the reviewers a link into the back office; with no SMTP_HOST the email is only
+      # logged (api logs: "email not sent"). Export SMTP_HOST, SMTP_FROM, SMTP_USERNAME and SMTP_PASSWORD to send real ones.
+      KYC_REVIEW_NOTIFY_TO: ada@staff.local
+      BACKOFFICE_URL: http://localhost:5173
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-}
     ports: ["8080:8080"]
     depends_on:
       migrate: { condition: service_completed_successfully }

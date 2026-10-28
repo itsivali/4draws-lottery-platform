@@ -30,6 +30,7 @@ export function DataTable<T>({
   initialSort = [],
   empty,
   more,
+  highlight,
 }: {
   columns: ColumnDef<T>[]
   data: T[]
@@ -43,6 +44,8 @@ export function DataTable<T>({
   empty?: ReactNode
   /** the server has rows after these: a "Load more" control asks for them (omitted: every row is here) */
   more?: { has: boolean; loading: boolean; load: () => void }
+  /** the row (by rowId) the reader was sent to, for example from an email: tinted and scrolled into view */
+  highlight?: string | undefined
 }) {
   const [sorting, setSorting] = useState<SortingState>(initialSort)
   const [globalFilter, setGlobalFilter] = useState('')
@@ -111,7 +114,11 @@ export function DataTable<T>({
               </TableRow>
             ) : (
               rows.map((row) => (
-                <TableRow key={row.id} className="align-top">
+                <TableRow
+                  key={row.id}
+                  className={cn('align-top', row.id === highlight && 'bg-pending/10 hover:bg-pending/15')}
+                  ref={row.id === highlight ? (el) => { el?.scrollIntoView({ block: 'center' }) } : undefined}
+                >
                   {row.getVisibleCells().map((cell) => (
                     <TableCell key={cell.id} className={cn('py-3', (cell.column.columnDef.meta as ColumnMeta | undefined)?.className)}>
                       {flexRender(cell.column.columnDef.cell, cell.getContext())}

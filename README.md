@@ -177,6 +177,10 @@ sandbox cannot prompt the seeded number). Its identity submission then waits in 
 Deployment is described by `render.yaml` (a Blueprint). Secrets are set in the Render dashboard, never in the
 repository; `docs/ci-secrets.md` lists what CI needs.
 
+Every identity submission emails **itsivali@outlook.com** (`KYC_REVIEW_NOTIFY_TO`) a link into the back office once
+the `SMTP_*` variables name a transactional email provider (`docs/runbooks/kyc-review.md`); until then the api only
+logs the notice. Locally the notice is logged by the `api` container (`docker compose logs api | grep "email not sent"`).
+
 ## 4. Tests and checks
 
 ```sh

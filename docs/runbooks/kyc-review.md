@@ -4,6 +4,35 @@ Identities are checked by staff (ADR 0009). A player submits national ID number,
 account then waits in `manual_review` and cannot top up until a reviewer decides. Under-18s and IDs already verified
 on another account are refused before they reach the queue.
 
+## Be told when a submission arrives
+
+Reviewers are told two ways:
+
+- **In the back office**, the sidebar's Identity review count and a banner update every 30 seconds while the tab
+  is open (and whenever it regains focus).
+- **By email**, the moment a submission starts waiting (a manual submission, or a registry mismatch): the api queues
+  a `kyc.review_notice` job with the submission, and the job emails `KYC_REVIEW_NOTIFY_TO` (on Render
+  `itsivali@outlook.com`) a link that opens the back office at that submission,
+  `${BACKOFFICE_URL}/kyc?user=<account id>`. The email names no one: it says when the submission arrived and how
+  many are waiting. If the submission was decided before the job ran, nothing is sent. A failed send is retried by
+  the queue (8 attempts, backing off).
+
+Email goes through the SMTP server in `SMTP_HOST`, `SMTP_PORT` (587 with STARTTLS, or 465 with TLS), `SMTP_USERNAME`,
+`SMTP_PASSWORD` and `SMTP_FROM` (the sender address, which the provider must have verified). Use a transactional
+provider rather than a personal mailbox's SMTP (Outlook and Gmail refuse or throttle password sign-ins from servers):
+
+| Provider | `SMTP_HOST` | `SMTP_PORT` | `SMTP_USERNAME` | `SMTP_PASSWORD` |
+|---|---|---|---|---|
+| Resend | `smtp.resend.com` | `465` | `resend` | an API key |
+| Brevo | `smtp-relay.brevo.com` | `587` | the account's SMTP login | its SMTP key |
+
+Set them in the Render dashboard on `lottery-api` (`render.yaml` lists the keys; `SMTP_PASSWORD` is a secret). With
+no `SMTP_HOST` the api logs `email not sent (no SMTP_HOST: logged only)` with the recipient and subject, and the
+notice goes no further. With no `KYC_REVIEW_NOTIFY_TO` no notice job is queued at all.
+
+The link opens the Identity review page after sign-in, with the submission tinted and marked "From your email". If
+it is no longer waiting (decided already, or the player submitted again), the page says so.
+
 ## List what is waiting
 
 Listing decrypts personal data, so it needs the api's configuration (copy the api's environment from the Render

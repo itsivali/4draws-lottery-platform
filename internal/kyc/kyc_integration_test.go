@@ -24,9 +24,20 @@ import (
 
 // recorder is an Enqueuer that remembers the job enqueued for each user instead of running it.
 type recorder struct {
-	mu   sync.Mutex
-	jobs map[string]string // user id -> check id
-	n    int
+	mu      sync.Mutex
+	jobs    map[string]string // user id -> check id
+	n       int
+	notices map[string]string // user id -> check id of a queued reviewers' notice
+}
+
+func (r *recorder) EnqueueReviewNotice(_ context.Context, _ pgx.Tx, checkID, userID string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.notices == nil {
+		r.notices = map[string]string{}
+	}
+	r.notices[userID] = checkID
+	return nil
 }
 
 func (r *recorder) EnqueueVerify(_ context.Context, _ pgx.Tx, checkID, userID string) error {
@@ -282,6 +293,10 @@ func (failingEnqueuer) EnqueueVerify(context.Context, pgx.Tx, string, string) er
 	return errors.New("queue down")
 }
 
+func (failingEnqueuer) EnqueueReviewNotice(context.Context, pgx.Tx, string, string) error {
+	return errors.New("queue down")
+}
+
 func TestSubmit_IfTheJobCannotBeEnqueuedNothingIsStored(t *testing.T) {
 	e := setup(t)
 	u := e.user(t)
@@ -478,6 +493,105 @@ func manualSetup(t *testing.T) *env {
 	e := setup(t)
 	e.svc = kyc.NewService(e.pool, e.clk, kyc.ManualProvider{}, e.kr, []byte("0123456789abcdef0123456789abcdef"), audit.NewWriter(), e.enq)
 	return e
+}
+
+// notices records what the reviewers were told.
+type notices struct {
+	mu   sync.Mutex
+	sent []kyc.ReviewNotice
+}
+
+func (n *notices) NotifyReview(_ context.Context, r kyc.ReviewNotice) error {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.sent = append(n.sent, r)
+	return nil
+}
+
+func TestManual_NobodyIsToldUnlessANotifierIsConfigured(t *testing.T) {
+	e := manualSetup(t)
+	if _, err := e.svc.Submit(context.Background(), e.user(t), jane); err != nil {
+		t.Fatal(err)
+	}
+	if len(e.enq.notices) != 0 {
+		t.Fatalf("%d notices queued without a notifier", len(e.enq.notices))
+	}
+}
+
+func TestManual_ASubmissionTellsTheReviewersOnceWhileItWaits(t *testing.T) {
+	e := manualSetup(t)
+	told := &notices{}
+	e.svc.WithReviewNotifier(told)
+	ctx := context.Background()
+	u := e.user(t)
+	if _, err := e.svc.Submit(ctx, u, jane); err != nil {
+		t.Fatal(err)
+	}
+	check := e.enq.notices[u]
+	if check == "" {
+		t.Fatal("no notice queued with the submission")
+	}
+	if e.enq.n != 0 {
+		t.Fatalf("%d verification jobs: there is no registry", e.enq.n)
+	}
+	if err := e.svc.SendReviewNotice(ctx, check, u); err != nil {
+		t.Fatal(err)
+	}
+	if len(told.sent) != 1 || told.sent[0].UserID != u || told.sent[0].Waiting != 1 || told.sent[0].SubmittedAt.IsZero() {
+		t.Fatalf("told = %+v", told.sent)
+	}
+	// a second account makes the count two
+	v := e.user(t)
+	if _, err := e.svc.Submit(ctx, v, kyc.Submission{IDNumber: "87654321", FullName: "John Otieno", DateOfBirth: "1985-02-03"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.svc.SendReviewNotice(ctx, e.enq.notices[v], v); err != nil {
+		t.Fatal(err)
+	}
+	if len(told.sent) != 2 || told.sent[1].Waiting != 2 {
+		t.Fatalf("told = %+v", told.sent)
+	}
+	// once decided, a late or repeated job says nothing
+	if _, err := e.svc.Review(ctx, u, "alice", true, "ID seen"); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.svc.SendReviewNotice(ctx, check, u); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.svc.SendReviewNotice(ctx, "00000000-0000-7000-8000-000000000000", "00000000-0000-7000-8000-000000000001"); err != nil {
+		t.Fatal(err)
+	}
+	if len(told.sent) != 2 {
+		t.Fatalf("told again after the decision: %+v", told.sent)
+	}
+}
+
+func TestProcess_ARegistryMismatchTellsTheReviewers(t *testing.T) {
+	e := setup(t)
+	told := &notices{}
+	e.svc.WithReviewNotifier(told)
+	ctx := context.Background()
+	u := e.user(t)
+	e.prov.Register(jane.IDNumber, "Someone Else", time.Date(1990, 5, 17, 0, 0, 0, 0, time.UTC))
+	if _, err := e.svc.Submit(ctx, u, jane); err != nil {
+		t.Fatal(err)
+	}
+	if len(e.enq.notices) != 0 {
+		t.Fatal("told before the registry answered")
+	}
+	if err := e.svc.Process(ctx, e.enq.take(u)); err != nil {
+		t.Fatal(err)
+	}
+	check := e.enq.notices[u]
+	if check == "" {
+		t.Fatal("no notice queued with the mismatch")
+	}
+	if err := e.svc.SendReviewNotice(ctx, check, u); err != nil {
+		t.Fatal(err)
+	}
+	if len(told.sent) != 1 || told.sent[0].UserID != u {
+		t.Fatalf("told = %+v", told.sent)
+	}
 }
 
 func TestManual_ASubmissionWaitsForAStaffDecisionWithoutAJob(t *testing.T) {

@@ -53,6 +53,18 @@ describe('identity review', () => {
     const post = fetch.mock.calls.find(([, init]) => init?.method === 'POST')
     expect(post?.[1]?.body).toBe(JSON.stringify({ reason: 'ID card seen; details match' }))
   })
+
+  it('marks the submission an email linked to, and says when it is no longer waiting', async () => {
+    const route = (method: string, url: URL) =>
+      method === 'GET' && url.pathname === '/v1/staff/kyc/pending' ? { status: 200, body: { submissions: [submission] } } : { status: 404 }
+    const first = renderSignedIn(<App />, { roles: ['staff'], path: '/kyc?user=u1', route })
+    expect(await screen.findByText('From your email')).toBeInTheDocument()
+    expect(screen.queryByText(/no longer waiting/)).not.toBeInTheDocument()
+    first.unmount()
+    renderSignedIn(<App />, { roles: ['staff'], path: '/kyc?user=u9', route })
+    expect(await screen.findByText('The submission from your email is no longer waiting.')).toBeInTheDocument()
+    expect(screen.queryByText('From your email')).not.toBeInTheDocument()
+  })
 })
 
 const frozen: Draw = {

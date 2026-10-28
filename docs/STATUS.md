@@ -67,6 +67,11 @@ Read this first at the start of every session.
   (temporary ones set by admins, changed at the first sign-in); Google and Apple are optional. itsivali@gmail.com is
   the bootstrap admin; `STAFF_BOOTSTRAP_PASSWORD` (Render secret, to set) is their first temporary password. The back
   office has Finance and App metrics dashboards and deploys as the `lottery-backoffice` static site.
+- **Identity review notices (owner, 2026-10-28):** whenever a player's ID submission starts waiting for a decision,
+  the api emails `KYC_REVIEW_NOTIFY_TO` (itsivali@outlook.com on Render) a link that opens the back office at that
+  submission (`internal/platform/mail`, job `kyc.review_notice`; `docs/runbooks/kyc-review.md`). The email names
+  nobody. It is sent once `SMTP_HOST`, `SMTP_FROM`, `SMTP_USERNAME` and `SMTP_PASSWORD` point at a transactional
+  provider (Resend or Brevo suggested); **to set in the Render dashboard**. Until then the notice is only logged.
 - **Testing with real M-Pesa (owner, 2026-10-26):** top-ups from KES 1 (`TOP_UP_MIN_KES=1` on Render and in compose;
   the apps read the top-up and withdrawal bounds from `GET /v1/wallet`) and plays at KES 1 from 2026-10-26 (migration 00028). Before launch:
   set `TOP_UP_MIN_KES` and add an odds/price version with the launch price from the launch date. The apps point at
@@ -126,6 +131,8 @@ Read this first at the start of every session.
   heartbeat, and a failed reconciliation freezes payouts until acknowledged (`docs/runbooks/alerts.md`).
 - **KRA:** how the return is filed (iTax upload, API, adviser); the remittance deadline (alerts use 72 h / 120 h
   placeholders); whether to keep payees' ID numbers (encrypted) for withholding certificates — only a hash is stored.
+- **Email setup:** sign up with a transactional email provider, verify a sender address, and set `SMTP_HOST`,
+  `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD` and `SMTP_FROM` on `lottery-api` so the identity-review emails are sent.
 - **Alerts setup:** create the channel and set `ALERT_WEBHOOK_URL`; create a healthchecks.io check (notifying a phone)
   and set `ALERT_HEARTBEAT_URL`; name who is on call and who may lift a payout freeze.
 

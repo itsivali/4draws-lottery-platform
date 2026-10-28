@@ -41,6 +41,7 @@ import (
 	"github.com/itsivali/lottery-platform/internal/platform/crypto"
 	"github.com/itsivali/lottery-platform/internal/platform/db"
 	"github.com/itsivali/lottery-platform/internal/platform/idempotency"
+	"github.com/itsivali/lottery-platform/internal/platform/mail"
 	"github.com/itsivali/lottery-platform/internal/platform/ratelimit"
 	"github.com/itsivali/lottery-platform/internal/rg"
 	"github.com/itsivali/lottery-platform/internal/staff"
@@ -178,6 +179,9 @@ func buildServices(pool *pgxpool.Pool, sh shared) services {
 	c, cfg := sh.cfg.API, sh.cfg
 	var s services
 	s.kyc = kyc.NewService(pool, sh.clk, sh.provider, sh.keyring, c.IdentityKey, sh.aw, kyc.NewRiverEnqueuer(sh.insertOnly, 0))
+	if m := cfg.Mail; m.KYCReviewTo != "" {
+		s.kyc.WithReviewNotifier(kyc.MailReviewNotifier{Sender: mailer(m), To: m.KYCReviewTo, BackOfficeURL: m.BackOfficeURL})
+	}
 	s.identity = identity.NewService(pool, sh.clk, oidcVerifier(clock.Wall{}, sh.hc, c), sh.aw, identity.Config{
 		AuthKey: c.AuthKey, TokenKey: ed25519.NewKeyFromSeed(c.TokenSeed), Issuer: issuer, Audience: audience,
 		AccessTTL: 10 * time.Minute, RefreshTTL: 30 * 24 * time.Hour, DeviceCap: 2,
@@ -337,6 +341,14 @@ func (a *App) StartWorkers(ctx context.Context) error {
 	}
 	a.workers = wc
 	return nil
+}
+
+// mailer sends through the configured SMTP server, or only logs when there is none.
+func mailer(m config.Mail) mail.Sender {
+	if !m.Enabled() {
+		return mail.Log{}
+	}
+	return mail.SMTP{Host: m.SMTPHost, Port: m.SMTPPort, Username: m.SMTPUsername, Password: m.SMTPPassword, From: m.From}
 }
 
 // ReconciliationStaleAfter is how long after its last run a daily reconciliation counts as not running.

@@ -97,6 +97,8 @@ func (q *kycQueue) EnqueueVerify(_ context.Context, _ pgx.Tx, checkID, _ string)
 	return nil
 }
 
+func (q *kycQueue) EnqueueReviewNotice(context.Context, pgx.Tx, string, string) error { return nil }
+
 // drain runs every queued verification job, as the worker would.
 func (e *env) drainKYC(t *testing.T) {
 	t.Helper()

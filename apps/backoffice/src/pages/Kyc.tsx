@@ -1,6 +1,7 @@
 import type { ColumnDef } from '@tanstack/react-table'
-import { IdCard } from 'lucide-react'
+import { IdCard, Mail } from 'lucide-react'
 import { useEffect, useMemo } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useSession } from '../context'
 import { Actions, DataTable } from '../components/DataTable'
 import { useConfirmedAction } from '../components/useConfirmedAction'
@@ -10,10 +11,14 @@ import { useLoad } from '../hooks'
 import { useReviewQueue } from '../reviewQueue'
 import type { KycSubmission } from '../types'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 
 export function KycPage() {
   const { api } = useSession()
+  // the email sent when a submission arrives links here with the account: that row is marked, or its absence explained
+  const [params] = useSearchParams()
+  const linked = params.get('user')
   const load = useLoad((signal) => api.get<{ submissions: KycSubmission[] }>('/v1/staff/kyc/pending', undefined, { signal }))
   const { queue, dismiss, refresh } = useReviewQueue()
   // after a decision the list and the count are re-read together, so they never disagree for a poll interval
@@ -23,7 +28,17 @@ export function KycPage() {
   const fresh = (queue?.waiting ?? 0) - (load.data?.submissions.length ?? Infinity)
 
   const columns = useMemo<ColumnDef<KycSubmission>[]>(() => [
-    { id: 'name', header: 'Name', accessorFn: (s) => s.full_name, cell: ({ row }) => <span className="font-medium">{row.original.full_name}</span> },
+    {
+      id: 'name',
+      header: 'Name',
+      accessorFn: (s) => s.full_name,
+      cell: ({ row }) => (
+        <span className="font-medium">
+          {row.original.full_name}
+          {row.original.user_id === linked ? <Badge variant="outline" className="ml-2 border-pending/50 text-pending"><Mail aria-hidden="true" className="size-3" /> From your email</Badge> : null}
+        </span>
+      ),
+    },
     { id: 'id', header: 'ID number', accessorFn: (s) => s.national_id, cell: ({ row }) => <Mono>{row.original.national_id}</Mono> },
     { id: 'born', header: 'Born', accessorFn: (s) => s.date_of_birth },
     { id: 'phone', header: 'Phone', accessorFn: (s) => msisdn(s.msisdn), cell: ({ row }) => <span className="tabular-nums">{msisdn(row.original.msisdn)}</span> },
@@ -77,7 +92,8 @@ export function KycPage() {
         )
       },
     },
-  ], [api, ask, busy])
+  ], [api, ask, busy, linked])
+  const linkedGone = linked !== null && load.data !== undefined && !load.data.submissions.some((s) => s.user_id === linked)
 
   return (
     <section>
@@ -94,12 +110,19 @@ export function KycPage() {
           </AlertDescription>
         </Alert>
       ) : null}
+      {linkedGone ? (
+        <Alert className="my-4">
+          <Mail />
+          <AlertTitle>The submission from your email is no longer waiting.</AlertTitle>
+          <AlertDescription>It was decided already, or the player submitted again. Player <Mono>{linked}</Mono></AlertDescription>
+        </Alert>
+      ) : null}
       <Loaded load={load} what="submissions">
         {({ submissions }) =>
           submissions.length === 0 ? (
             <Empty icon={IdCard}>No submission is waiting for review.</Empty>
           ) : (
-            <DataTable columns={columns} data={submissions} rowId={(s) => s.user_id} caption="Submissions awaiting review, oldest first" filter="Search by name, ID or phone" />
+            <DataTable columns={columns} data={submissions} rowId={(s) => s.user_id} caption="Submissions awaiting review, oldest first" filter="Search by name, ID or phone" highlight={linked ?? undefined} />
           )
         }
       </Loaded>
