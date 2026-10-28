@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/auth/session_manager.dart';
+import '../core/input/text_focus.dart';
 import '../features/account/application/account_providers.dart';
 import '../features/draws/application/draws_providers.dart';
 import '../features/fairness/application/fairness_providers.dart';
@@ -61,7 +62,9 @@ class _LotteryAppState extends ConsumerState<LotteryApp> with WidgetsBindingObse
   /// re-read, and a money request still being followed asks again now rather than when its paused timer fires.
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state != AppLifecycleState.resumed || _session.status.value != SessionStatus.signedIn) return;
+    if (state != AppLifecycleState.resumed) return;
+    reconnectFocusedTextField(); // the web drops the field's input while the window is away
+    if (_session.status.value != SessionStatus.signedIn) return;
     refreshAll(ref);
     if (ref.exists(topUpFlowProvider)) ref.read(topUpFlowProvider).flow.resume();
     if (ref.exists(withdrawFlowProvider)) ref.read(withdrawFlowProvider).flow.resume();
