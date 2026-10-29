@@ -490,10 +490,12 @@ func TestUsers_APhoneNumberIsUniqueOnlyOnceItIsVerified(t *testing.T) {
 	claim()                                // an unverified claim of a verified number is still allowed; it can never be verified
 }
 
-func TestUsers_AVerifiedPhoneRequiresAPassword(t *testing.T) {
+// An account created with Google or Apple has no password and still proves its number (ADR 0020, migration 00035).
+func TestUsers_AVerifiedPhoneNeedsNoPassword(t *testing.T) {
 	ctx, c := connect(t)
-	_, err := c.Exec(ctx, `INSERT INTO identity.users (msisdn, msisdn_verified_at) VALUES ('254712345678', now())`)
-	wantState(t, err, codeCheckViolation)
+	if _, err := c.Exec(ctx, `INSERT INTO identity.users (msisdn, msisdn_verified_at) VALUES ('254712345678', now())`); err != nil {
+		t.Fatalf("a proved number without a password: %v", err)
+	}
 }
 
 func TestSchema_SmsOtpTableIsGone(t *testing.T) {

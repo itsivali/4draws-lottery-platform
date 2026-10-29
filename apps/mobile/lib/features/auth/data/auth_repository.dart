@@ -4,6 +4,8 @@ import '../../../core/api/idempotency.dart';
 import '../../../core/api/parse.dart';
 import '../../../core/auth/session_manager.dart';
 import '../../../core/platform/device_attestation.dart';
+import 'provider_sign_in.dart';
+import 'sign_in_providers.dart';
 
 class AuthRepository {
   const AuthRepository(this._api, this._device, {this._attestation = const NoDeviceAttestation()});
@@ -17,6 +19,36 @@ class AuthRepository {
 
   Future<Tokens> logIn({required String msisdn, required String password, required String idempotencyKey}) =>
       _credentials('/v1/auth/login', msisdn, password, idempotencyKey);
+
+  /// Which of Google and Apple the API offers (ADR 0020).
+  Future<SignInProviders> providers() async {
+    final r = await _api.get('/v1/auth/providers', authenticated: false);
+    return parse(r, SignInProviders.fromJson);
+  }
+
+  /// Signs in with a Google or Apple token. An identity with no account yet fails with `sso-not-linked`: the screen
+  /// then asks for a phone number and calls [signUpWithProvider] with the same token.
+  Future<Tokens> signInWithProvider(ProviderToken t, {required String idempotencyKey}) =>
+      _provider('/v1/auth/sso/${t.provider}', t, idempotencyKey);
+
+  /// Creates the account for a Google or Apple identity from the player's phone number, and signs it in.
+  Future<Tokens> signUpWithProvider(ProviderToken t, {required String msisdn, required String idempotencyKey}) =>
+      _provider('/v1/auth/sso/${t.provider}/signup', t, idempotencyKey, msisdn: msisdn);
+
+  Future<Tokens> _provider(String path, ProviderToken t, String key, {String? msisdn}) async {
+    final r = await _api.post(
+      path,
+      idempotencyKey: key,
+      authenticated: false,
+      body: {
+        'id_token': t.idToken,
+        'nonce': t.nonce,
+        'msisdn': ?msisdn,
+        'device': {..._device.toJson(), ...await _evidence()},
+      },
+    );
+    return parse(r, (j) => Tokens.fromJson(j.raw));
+  }
 
   Future<Tokens> _credentials(String path, String msisdn, String password, String key) async {
     final r = await _api.post(

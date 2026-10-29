@@ -13,6 +13,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"sync"
 	"testing"
@@ -368,7 +369,7 @@ func TestAPI_EveryWriteRequiresAnIdempotencyKey(t *testing.T) {
 	s := e.signIn(t)
 	writes := append([]route{
 		{http.MethodPost, "/v1/auth/signup"}, {http.MethodPost, "/v1/auth/login"},
-		{http.MethodPost, "/v1/auth/refresh"}, {http.MethodPost, "/v1/auth/sso/google"},
+		{http.MethodPost, "/v1/auth/refresh"}, {http.MethodPost, "/v1/auth/sso/google"}, {http.MethodPost, "/v1/auth/sso/google/signup"},
 		{http.MethodPost, "/v1/auth/attestation/challenge"},
 	}, authedRoutes...)
 	for _, rt := range writes {
@@ -541,6 +542,9 @@ func TestAPI_ErrorMapping(t *testing.T) {
 		{"unknown account", http.MethodPost, "/v1/auth/login", map[string]any{"msisdn": "0712345678", "password": strongPassword, "device": map[string]any{"fingerprint": "f", "platform": "android"}}, 401},
 		{"unknown sso provider", http.MethodPost, "/v1/auth/sso/facebook", map[string]any{"id_token": "x", "nonce": "n1"}, 404},
 		{"unlinked sso", http.MethodPost, "/v1/auth/sso/google", map[string]any{"id_token": "ok:nobody", "nonce": "n1"}, 409},
+		{"sso sign-up with a bad number", http.MethodPost, "/v1/auth/sso/google/signup", map[string]any{"id_token": "ok:nobody", "nonce": "n1", "msisdn": "12345", "device": map[string]any{"fingerprint": "f", "platform": "android"}}, 400},
+		{"sso sign-up with a bad token", http.MethodPost, "/v1/auth/sso/google/signup", map[string]any{"id_token": "forged", "nonce": "n1", "msisdn": "0712345678", "device": map[string]any{"fingerprint": "f", "platform": "android"}}, 401},
+		{"sso sign-up with an unknown provider", http.MethodPost, "/v1/auth/sso/facebook/signup", map[string]any{"id_token": "x", "nonce": "n1", "msisdn": "0712345678"}, 404},
 		{"bad refresh token", http.MethodPost, "/v1/auth/refresh", map[string]any{"refresh_token": "nope", "device_fingerprint": "f"}, 401},
 	}
 	for _, c := range cases {
@@ -805,5 +809,70 @@ func TestAPI_PaybillHooksNeedTheSecretPathAndAnswerDaraja(t *testing.T) {
 	}
 	if code, _ := e.hook(t, base+"/status-timeout", `not json`); code != http.StatusOK {
 		t.Fatalf("status timeout: %d", code)
+	}
+}
+
+func TestAPI_GoogleOrAppleWithoutAnAccountSignsUpWithAPhoneNumber(t *testing.T) {
+	e := setupWith(t, func(d *apiDeps) {
+		d.SignIn = api.SignInProviders{GoogleClientID: "web.apps.googleusercontent.com", GoogleIOSClientID: "ios.apps.googleusercontent.com",
+			AppleClientID: "ke.tajirika.web", AndroidPackage: "ke.tajirika.lottery_mobile"}
+	})
+	dev := map[string]any{"fingerprint": "fp-sso", "platform": "android"}
+
+	// the apps learn what to offer from the API
+	r := e.do(t, http.MethodGet, "/v1/auth/providers", "", nil)
+	if r.Code != http.StatusOK || !strings.Contains(r.Raw, `"ios_client_id":"ios.apps.googleusercontent.com"`) || !strings.Contains(r.Raw, `"apple":{"client_id":"ke.tajirika.web"}`) {
+		t.Fatalf("providers: %d %s", r.Code, r.Raw)
+	}
+
+	// first time: no account yet, so the app asks for a phone number and signs up with the same token
+	if r := e.do(t, http.MethodPost, "/v1/auth/sso/google", "", map[string]any{"id_token": "ok:g-new", "nonce": "n1", "device": dev}); r.Code != http.StatusConflict || !strings.Contains(r.Raw, "sso-not-linked") {
+		t.Fatalf("unlinked: %d %s", r.Code, r.Raw)
+	}
+	r = e.do(t, http.MethodPost, "/v1/auth/sso/google/signup", "", map[string]any{"id_token": "ok:g-new", "nonce": "n1", "msisdn": "0712 000 111", "device": dev})
+	if r.Code != http.StatusCreated || r.Body["access_token"] == nil {
+		t.Fatalf("sign-up: %d %s", r.Code, r.Raw)
+	}
+	access := r.Body["access_token"].(string)
+	if r := e.do(t, http.MethodGet, "/v1/account", access, nil); r.Code != http.StatusOK || r.Body["msisdn"] != "254712000111" {
+		t.Fatalf("account: %d %s", r.Code, r.Raw)
+	}
+	// from then on the identity signs straight in; a second sign-up for it is refused
+	if r := e.do(t, http.MethodPost, "/v1/auth/sso/google", "", map[string]any{"id_token": "ok:g-new", "nonce": "n1", "device": dev}); r.Code != http.StatusOK {
+		t.Fatalf("sign-in: %d %s", r.Code, r.Raw)
+	}
+	if r := e.do(t, http.MethodPost, "/v1/auth/sso/google/signup", "", map[string]any{"id_token": "ok:g-new", "nonce": "n1", "msisdn": "0712000222", "device": dev}); r.Code != http.StatusConflict || !strings.Contains(r.Raw, "sso-already-linked") {
+		t.Fatalf("second sign-up: %d %s", r.Code, r.Raw)
+	}
+
+	// Apple's return for the Android app only bounces the browser back into the app, with Apple's fields and no others
+	form := url.Values{"code": {"c.0.abc"}, "id_token": {"eyJ.x.y"}, "state": {"s1"}, "evil": {"1"}}
+	req, _ := http.NewRequestWithContext(context.Background(), http.MethodPost, e.srv.URL+"/auth/apple/android", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	res, err := (&http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}).Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = res.Body.Close()
+	loc := res.Header.Get("Location")
+	if res.StatusCode != http.StatusTemporaryRedirect || loc != "intent://callback?code=c.0.abc&id_token=eyJ.x.y&state=s1#Intent;package=ke.tajirika.lottery_mobile;scheme=signinwithapple;end" {
+		t.Fatalf("apple return: %d %q", res.StatusCode, loc)
+	}
+}
+
+func TestAPI_WithoutProviderIdsNothingIsOfferedAndAppleReturnIsClosed(t *testing.T) {
+	e := setup(t)
+	if r := e.do(t, http.MethodGet, "/v1/auth/providers", "", nil); r.Code != http.StatusOK || strings.TrimSpace(r.Raw) != "{}" {
+		t.Fatalf("providers: %d %s", r.Code, r.Raw)
+	}
+	req, _ := http.NewRequestWithContext(context.Background(), http.MethodPost, e.srv.URL+"/auth/apple/android", strings.NewReader("code=x"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = res.Body.Close()
+	if res.StatusCode != http.StatusNotFound {
+		t.Fatalf("apple return without configuration: %d", res.StatusCode)
 	}
 }

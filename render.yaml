@@ -58,10 +58,19 @@ services:
         generateValue: true
 
       # Identities are reviewed by staff, with no paid registry (owner decision 2026-10-24, ADR 0009), so there is no
-      # KYC gateway to configure. Sign-in client ids are set in the dashboard when the web app arrives; unset means SSO
-      # is off. There is no SMS gateway: phone ownership is proved by the first M-Pesa top-up.
+      # KYC gateway to configure. There is no SMS gateway: phone ownership is proved by the first M-Pesa top-up.
+      # Players' Google and Apple sign-in (ADR 0020, docs/runbooks/player-sign-in.md): the client ids are set in the
+      # dashboard (none is a secret); unset, the apps offer neither and the api refuses every token.
       - key: GOOGLE_CLIENT_ID
         sync: false
+      - key: GOOGLE_IOS_CLIENT_ID
+        sync: false
+      - key: APPLE_CLIENT_ID
+        sync: false
+      - key: APPLE_BUNDLE_ID
+        sync: false
+      - key: ANDROID_PACKAGE
+        value: ke.tajirika.lottery_mobile
       # Browser origins (comma-separated, exact, https): https://tajirika.co.ke and https://backoffice.tajirika.co.ke, plus
       # the static sites' onrender.com addresses, which keep working. The phone apps need no entry.
       - key: CORS_ALLOWED_ORIGINS
@@ -77,8 +86,6 @@ services:
       - key: STAFF_GOOGLE_CLIENT_ID
         sync: false
       - key: STAFF_APPLE_CLIENT_ID
-        sync: false
-      - key: APPLE_CLIENT_ID
         sync: false
 
       # M-Pesa (Daraja). Sandbox only until the owner decides otherwise: the production host is refused unless

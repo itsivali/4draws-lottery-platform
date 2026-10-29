@@ -74,3 +74,56 @@ func (s *Service) LinkSSO(ctx context.Context, userID, provider, idToken, nonce 
 			Details: map[string]any{"provider": provider}})
 	})
 }
+
+// SignupSSO creates an account for a Google or Apple identity that has none, from the phone number the player gives,
+// links the identity and signs the account in (ADR 0020). The account has no password: the identity is how it signs
+// in (staff may still give it a temporary one). As with Signup, the number is a claim until the first top-up proves it,
+// and a number with a proved owner cannot be claimed.
+func (s *Service) SignupSSO(ctx context.Context, provider, idToken, nonce, rawMSISDN string, dev Device) (Tokens, error) {
+	msisdn, err := NormalizeMSISDN(rawMSISDN)
+	if err != nil {
+		return Tokens{}, err
+	}
+	sub, err := s.verifyIDToken(ctx, provider, idToken, nonce)
+	if err != nil {
+		return Tokens{}, err
+	}
+	verdict := s.verdict(ctx, dev)
+	var tokens Tokens
+	err = s.withTx(ctx, func(tx pgx.Tx, q *store.Queries, now time.Time) error {
+		if _, err := q.FindAuthIdentity(ctx, store.FindAuthIdentityParams{Provider: provider, Subject: sub}); err == nil {
+			return ErrSSOAlreadyLinked
+		} else if !errors.Is(err, pgx.ErrNoRows) {
+			return err
+		}
+		taken, err := q.VerifiedAccountExists(ctx, msisdn)
+		if err != nil {
+			return err
+		}
+		if taken {
+			return ErrPhoneRegistered
+		}
+		id, err := q.InsertAccount(ctx, store.InsertAccountParams{Msisdn: msisdn, At: &now})
+		if err != nil {
+			return err
+		}
+		if err := q.InsertAuthIdentity(ctx, store.InsertAuthIdentityParams{UserID: id, Provider: provider, Subject: sub}); err != nil {
+			var pe *pgconn.PgError
+			if errors.As(err, &pe) && pe.Code == "23505" {
+				return ErrSSOAlreadyLinked
+			}
+			return err
+		}
+		if err := s.audit.Record(ctx, tx, audit.Event{ActorType: audit.System, Action: "user.created", EntityType: "user", EntityID: id,
+			Details: map[string]any{"provider": provider}}); err != nil {
+			return err
+		}
+		if err := s.audit.Record(ctx, tx, audit.Event{ActorType: audit.System, Action: "sso.linked", EntityType: "user", EntityID: id,
+			Details: map[string]any{"provider": provider}}); err != nil {
+			return err
+		}
+		tokens, err = s.startSession(ctx, q, id, dev, verdict, now)
+		return err
+	})
+	return tokens, err
+}

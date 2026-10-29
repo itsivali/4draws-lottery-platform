@@ -64,6 +64,9 @@ as `staff.emergency_password` by `lotteryctl`. `-password P` is accepted for scr
 
 ## Setting up Google and Apple (once, by the owner)
 
+These are the back office's own client ids. The player apps' Google and Apple sign-in is a separate set, in
+`docs/runbooks/player-sign-in.md`.
+
 **Google** (Google Cloud console → APIs & Services → Credentials → Create OAuth client ID → Web application):
 authorised JavaScript origins = the back office's address (`https://backoffice.tajirika.co.ke`) and
 `http://localhost:5173` for local testing; no redirect URI is needed (popup). The consent

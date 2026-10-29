@@ -91,6 +91,9 @@ services:
       STAFF_BOOTSTRAP_ADMIN: ada@staff.local
       STAFF_BOOTSTRAP_PASSWORD: local-dev-staff-2026 # local only; a real deployment's is a secret and changed at once
       STAFF_GOOGLE_CLIENT_ID: ${STAFF_GOOGLE_CLIENT_ID:-}
+      # Players' Google and Apple (ADR 0020): export a web client id that allows http://localhost:8088 to try the button
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      APPLE_CLIENT_ID: ${APPLE_CLIENT_ID:-}
       # Each identity submission emails the reviewers a link into the back office; with no SMTP_HOST the email is only
       # logged (api logs: "email not sent"). Export SMTP_HOST, SMTP_FROM, SMTP_USERNAME and SMTP_PASSWORD to send real ones.
       KYC_REVIEW_NOTIFY_TO: ada@staff.local

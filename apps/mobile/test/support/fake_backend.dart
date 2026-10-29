@@ -57,6 +57,15 @@ class FakeBackend {
     ),
   ];
 
+  /// What GET /v1/auth/providers answers: Google and Apple on offer, or {} for neither (ADR 0020).
+  Map<String, Object?> providers = {
+    'google': {'client_id': 'web-client.apps.googleusercontent.com'},
+    'apple': {'client_id': 'ke.tajirika.web'},
+  };
+
+  /// The Google or Apple ID tokens that already sign in to an account; others get 409 sso-not-linked.
+  final ssoAccounts = <String>{};
+
   final requests = <http.Request>[];
   final _idempotent = <String, http.Response>{};
   int _ids = 0;
@@ -90,6 +99,8 @@ class FakeBackend {
         path == '/v1/auth/login' ||
         path == '/v1/auth/signup' ||
         path == '/v1/auth/refresh' ||
+        path == '/v1/auth/providers' ||
+        path.startsWith('/v1/auth/sso/') ||
         (method == 'GET' && path.startsWith('/v1/draws') && !path.endsWith('/mine') && path != '/v1/draws/periods');
     if (!public && r.headers['Authorization'] != 'Bearer $access') {
       return _problem(401, 'unauthenticated', 'Authentication required');
@@ -128,6 +139,40 @@ class FakeBackend {
         signedIn = true;
         return _ok(tokens);
       case ('POST', '/v1/auth/signup'):
+        signedIn = true;
+        return _ok(tokens, 201);
+      case ('GET', '/v1/auth/providers'):
+        return _ok(providers);
+      case ('POST', '/v1/auth/sso/google') || ('POST', '/v1/auth/sso/apple'):
+        if (body['nonce'] == null || body['id_token'] == null) return _problem(400, 'invalid-body', 'Invalid body');
+        if (!ssoAccounts.contains(body['id_token'])) {
+          return _problem(
+            409,
+            'sso-not-linked',
+            'No account is linked to this identity',
+            'give your phone number to create one',
+          );
+        }
+        signedIn = true;
+        return _ok(tokens);
+      case ('POST', '/v1/auth/sso/google/signup') || ('POST', '/v1/auth/sso/apple/signup'):
+        if (body['id_token'] == 'expired-token') return _problem(401, 'invalid-token', 'Invalid token');
+        if (ssoAccounts.contains(body['id_token'])) {
+          return _problem(409, 'sso-already-linked', 'This identity already signs in to an account');
+        }
+        final digits = (body['msisdn'] as String? ?? '').replaceAll(' ', '');
+        if (!RegExp(r'^(\+?254|0)[17]\d{8}$').hasMatch(digits)) {
+          return _problem(
+            400,
+            'invalid-msisdn',
+            'Invalid phone number',
+            'use a Kenyan mobile number such as 0712345678',
+          );
+        }
+        if (digits.endsWith('999999')) {
+          return _problem(409, 'phone-registered', 'This number already has an account', 'sign in instead');
+        }
+        ssoAccounts.add(body['id_token'] as String);
         signedIn = true;
         return _ok(tokens, 201);
       case ('POST', '/v1/auth/refresh'):

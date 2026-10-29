@@ -32,8 +32,8 @@ type API struct {
 
 	KYCURL, KYCKey string
 
-	GoogleClientID string
-	AppleClientID  string
+	// SignIn is the players' Google and Apple sign-in (ADR 0020); every id unset means neither is offered.
+	SignIn SignIn
 
 	// CORSOrigins are the browser origins (the player web app) allowed to call the API; empty turns CORS off.
 	CORSOrigins []string
@@ -43,6 +43,60 @@ type API struct {
 
 	// Attestation configures server-side device attestation.
 	Attestation Attestation
+}
+
+// SignIn holds the client ids the player apps request Google and Apple ID tokens for, which are the audiences the API
+// accepts (ADR 0020). GOOGLE_CLIENT_ID is the web app's OAuth client, also the server client id the phone apps name,
+// so every Google token carries it or GOOGLE_IOS_CLIENT_ID (the iOS app's own client). APPLE_CLIENT_ID is the Services
+// ID the web app and Android use; APPLE_BUNDLE_ID is the iOS app, whose native Sign in with Apple tokens name it.
+// ANDROID_PACKAGE is the Android app Apple's return URL sends the browser back to.
+type SignIn struct {
+	GoogleClientID    string
+	GoogleIOSClientID string
+	AppleClientID     string
+	AppleBundleID     string
+	AndroidPackage    string
+}
+
+// Google reports whether Google sign-in is offered.
+func (s SignIn) Google() bool { return s.GoogleClientID != "" }
+
+// Apple reports whether Apple sign-in is offered (on iOS alone when only the bundle id is set).
+func (s SignIn) Apple() bool { return s.AppleClientID != "" || s.AppleBundleID != "" }
+
+// GoogleAudiences are the client ids a Google ID token may name.
+func (s SignIn) GoogleAudiences() []string { return nonEmpty(s.GoogleClientID, s.GoogleIOSClientID) }
+
+// AppleAudiences are the client ids an Apple ID token may name.
+func (s SignIn) AppleAudiences() []string { return nonEmpty(s.AppleClientID, s.AppleBundleID) }
+
+func nonEmpty(vs ...string) []string {
+	var out []string
+	for _, v := range vs {
+		if v != "" {
+			out = append(out, v)
+		}
+	}
+	return out
+}
+
+var androidPackageRe = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z][A-Za-z0-9_]*)+$`)
+
+func loadSignIn() (SignIn, error) {
+	s := SignIn{GoogleClientID: os.Getenv("GOOGLE_CLIENT_ID"), GoogleIOSClientID: os.Getenv("GOOGLE_IOS_CLIENT_ID"),
+		AppleClientID: os.Getenv("APPLE_CLIENT_ID"), AppleBundleID: os.Getenv("APPLE_BUNDLE_ID"), AndroidPackage: os.Getenv("ANDROID_PACKAGE")}
+	if s.GoogleIOSClientID != "" && s.GoogleClientID == "" {
+		return SignIn{}, errors.New("config: GOOGLE_IOS_CLIENT_ID needs GOOGLE_CLIENT_ID (the web client every app names as its server client)")
+	}
+	if s.AndroidPackage != "" && !androidPackageRe.MatchString(s.AndroidPackage) {
+		return SignIn{}, errors.New("config: ANDROID_PACKAGE must be an Android application id such as ke.tajirika.lottery_mobile")
+	}
+	for _, v := range []struct{ k, v string }{{"GOOGLE_CLIENT_ID", s.GoogleClientID}, {"GOOGLE_IOS_CLIENT_ID", s.GoogleIOSClientID}, {"APPLE_CLIENT_ID", s.AppleClientID}, {"APPLE_BUNDLE_ID", s.AppleBundleID}} {
+		if strings.ContainsAny(v.v, " \t\n,") {
+			return SignIn{}, fmt.Errorf("config: %s must be a single client id", v.k)
+		}
+	}
+	return s, nil
 }
 
 // Attestation is ATTESTATION_MODE and its verifiers. Modes: off (never verify), record (verify and store verdicts;
@@ -218,9 +272,11 @@ func loadAPI() (API, error) {
 	}
 
 	a := API{Enabled: true, ValkeyAddr: os.Getenv("VALKEY_ADDR"), TrustedProxyHops: 1,
-		KYCURL: os.Getenv("KYC_API_URL"), KYCKey: os.Getenv("KYC_API_KEY"),
-		GoogleClientID: os.Getenv("GOOGLE_CLIENT_ID"), AppleClientID: os.Getenv("APPLE_CLIENT_ID")}
+		KYCURL: os.Getenv("KYC_API_URL"), KYCKey: os.Getenv("KYC_API_KEY")}
 	var err error
+	if a.SignIn, err = loadSignIn(); err != nil {
+		return API{}, err
+	}
 	if a.AuthKey, err = secret("AUTH_KEY", 32, false); err != nil {
 		return API{}, err
 	}

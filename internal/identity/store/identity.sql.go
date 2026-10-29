@@ -414,7 +414,7 @@ func (q *Queries) LockUserPhone(ctx context.Context, id string) (LockUserPhoneRo
 const loginCandidates = `-- name: LoginCandidates :many
 SELECT id, password_hash, status, (msisdn_verified_at IS NOT NULL)::boolean AS phone_verified, must_change_password
 FROM identity.users
-WHERE msisdn = $1 AND password_hash IS NOT NULL
+WHERE msisdn = $1
 ORDER BY (msisdn_verified_at IS NULL), created_at DESC
 LIMIT 5
 `
@@ -427,7 +427,8 @@ type LoginCandidatesRow struct {
 	MustChangePassword bool
 }
 
-// A number with a proved owner admits only that owner; otherwise the newest few unproved claims are tried.
+// A number with a proved owner admits only that owner; otherwise the newest few unproved claims are tried. An account
+// without a password (Google or Apple only) is still the owner that excludes the others; the caller skips its hash.
 func (q *Queries) LoginCandidates(ctx context.Context, msisdn string) ([]LoginCandidatesRow, error) {
 	rows, err := q.db.Query(ctx, loginCandidates, msisdn)
 	if err != nil {

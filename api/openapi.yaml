@@ -172,12 +172,31 @@ paths:
       responses:
         "204": { description: Signed out }
         "401": { $ref: "#/components/responses/Problem" }
+  /v1/auth/providers:
+    get:
+      operationId: signInProviders
+      tags: [auth]
+      summary: Which of Google and Apple the apps may offer, and their client ids
+      description: |
+        ADR 0020. Nothing here is secret: the ids are in every build that uses them. An app renders a provider's button
+        only when it is listed; `apple` without `client_id` means Apple is offered on iOS alone (natively, by bundle id).
+        The ID token an app obtains is sent to `POST /v1/auth/sso/{provider}` and, for a new account,
+        `POST /v1/auth/sso/{provider}/signup`.
+      security: []
+      responses:
+        "200":
+          description: "The providers on offer; `{}` when none"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SignInProviders" }
   /v1/auth/sso/{provider}:
     post:
       operationId: signInSso
       tags: [auth]
       summary: Sign in with a linked Google or Apple identity
-      description: An unlinked identity gets 409; it must sign in by phone, pass KYC and then link.
+      description: |
+        The ID token is checked against the provider's keys (issuer, audience, expiry, nonce). An identity with no
+        account gets 409 `sso-not-linked`: the app then asks for a phone number and calls `/signup` with the same token.
       security: []
       parameters:
         - { $ref: "#/components/parameters/IdempotencyKey" }
@@ -196,6 +215,38 @@ paths:
         "401": { $ref: "#/components/responses/Problem" }
         "404": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
+  /v1/auth/sso/{provider}/signup:
+    post:
+      operationId: signUpSso
+      tags: [auth]
+      summary: Create an account for a Google or Apple identity from a phone number
+      description: |
+        ADR 0020. The identity must not sign in to an account already (409 `sso-already-linked`: sign in instead). The
+        account has no password; the identity is how it signs in, and the number is a claim until the first top-up
+        proves it, exactly as with `/v1/auth/signup` (409 `phone-registered` when a proved owner exists). The same
+        rate limits as a password sign-up apply.
+      security: []
+      parameters:
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+        - { $ref: "#/components/parameters/Provider" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SsoSignUp" }
+      responses:
+        "201":
+          description: Account created and signed in
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Tokens" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
   /v1/auth/sso/{provider}/link:
     post:
       operationId: linkSso
@@ -2285,6 +2336,38 @@ paths:
                   ResultDesc: { type: string }
         "400": { $ref: "#/components/responses/Problem" }
         "404": { $ref: "#/components/responses/Problem" }
+  /auth/apple/android:
+    post:
+      operationId: appleAndroidReturn
+      tags: [auth]
+      summary: Apple's return URL for the Android app's Sign in with Apple
+      description: |
+        ADR 0020. Android has no native Sign in with Apple: the app opens Apple in the browser with this address as the
+        return URL, Apple posts its answer here, and the browser is redirected into the app
+        (`intent://callback?…#Intent;package=<ANDROID_PACKAGE>;scheme=signinwithapple;end`), where the plugin reads it.
+        Only Apple's own fields (`code`, `id_token`, `state`, `user`, `error`) are passed on; nothing is verified or
+        stored here. The app then calls `POST /v1/auth/sso/apple` with the token. 404 unless `APPLE_CLIENT_ID` and
+        `ANDROID_PACKAGE` are set. Not for clients to call.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                code: { type: string }
+                id_token: { type: string }
+                state: { type: string }
+                user: { type: string }
+                error: { type: string }
+      responses:
+        "307":
+          description: Into the app
+          headers:
+            Location: { schema: { type: string } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
   /hooks/b2c/{path}/status-timeout:
     post:
       operationId: b2cStatusTimeout
@@ -2695,6 +2778,28 @@ components:
       properties:
         id_token: { type: string }
         nonce: { type: string }
+    SsoSignUp:
+      type: object
+      additionalProperties: false
+      required: [id_token, nonce, msisdn, device]
+      properties:
+        id_token: { type: string }
+        nonce: { type: string }
+        msisdn: { type: string, example: "0712345678" }
+        device: { $ref: "#/components/schemas/Device" }
+    SignInProviders:
+      type: object
+      properties:
+        google:
+          type: object
+          required: [client_id]
+          properties:
+            client_id: { type: string, description: The web app's OAuth client; the phone apps' server client id. }
+            ios_client_id: { type: string, description: "The iOS app's own OAuth client, when it has one." }
+        apple:
+          type: object
+          properties:
+            client_id: { type: string, description: "The Services ID the web app and Android use; absent when Apple is offered on iOS alone." }
     Tokens:
       type: object
       required: [access_token, refresh_token, expires_at]

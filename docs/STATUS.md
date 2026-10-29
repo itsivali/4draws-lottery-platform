@@ -73,6 +73,11 @@ Read this first at the start of every session.
   (temporary ones set by admins, changed at the first sign-in); Google and Apple are optional. admin@tajirika.co.ke ("Administrator"; was itsivali@gmail.com until 2026-10-29) is
   the bootstrap admin; `STAFF_BOOTSTRAP_PASSWORD` (Render secret, to set) is their first temporary password. The back
   office has Finance and App metrics dashboards and deploys as the `lottery-backoffice` static site.
+- **Players sign in with Google or Apple (owner, 2026-10-29, ADR 0020):** the sign-in screen offers both when the API
+  lists them (`GET /v1/auth/providers`); an identity without an account is asked for its M-Pesa number and nothing else
+  (`POST /v1/auth/sso/{provider}/signup`: no password, the number proved by the first top-up as always). Waits on the
+  owner's client ids (`docs/runbooks/player-sign-in.md`): `GOOGLE_CLIENT_ID`, `GOOGLE_IOS_CLIENT_ID`, `APPLE_CLIENT_ID`,
+  `APPLE_BUNDLE_ID` on `lottery-api`; until then the apps show neither button.
 - **Identity review notices (owner, 2026-10-28):** whenever a player's ID submission starts waiting for a decision,
   the api emails `KYC_REVIEW_NOTIFY_TO` (itsivali@outlook.com on Render) a link that opens the back office at that
   submission (`internal/platform/mail`, job `kyc.review_notice`; `docs/runbooks/kyc-review.md`). The email names

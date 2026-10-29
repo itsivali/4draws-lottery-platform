@@ -126,13 +126,18 @@ func (s *Service) Login(ctx context.Context, rawMSISDN, pw string, dev Device) (
 		cands = cands[:1] // the proved owner is the only one who may use this number
 	}
 	var matched *store.LoginCandidatesRow
+	tried := false
 	for i := range cands {
+		if cands[i].PasswordHash == nil { // an account that signs in with Google or Apple only (ADR 0020)
+			continue
+		}
+		tried = true
 		if ok, verr := password.Verify(pw, *cands[i].PasswordHash, s.pepper); verr == nil && ok {
 			matched = &cands[i]
 			break
 		}
 	}
-	if len(cands) == 0 {
+	if !tried {
 		_, _ = password.Verify(pw, s.dummyHash, s.pepper)
 	}
 	if matched == nil {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -70,9 +71,9 @@ func authError(w http.ResponseWriter, err error) {
 		httpx.WriteProblem(w, http.StatusForbidden, "account-suspended", "Account suspended", "")
 	case errors.Is(err, identity.ErrSSONotLinked):
 		httpx.WriteProblem(w, http.StatusConflict, "sso-not-linked", "No account is linked to this identity",
-			"sign in with your phone, complete verification, then link it")
+			"give your phone number to create one, or sign in with your phone number and password")
 	case errors.Is(err, identity.ErrSSOAlreadyLinked):
-		httpx.WriteProblem(w, http.StatusConflict, "sso-already-linked", "Identity already linked", "")
+		httpx.WriteProblem(w, http.StatusConflict, "sso-already-linked", "This identity already signs in to an account", "sign in with it instead")
 	case errors.Is(err, identity.ErrKYCRequired):
 		httpx.WriteProblem(w, http.StatusForbidden, "kyc-required", "Identity verification required", "")
 	case errors.Is(err, identity.ErrPhoneNotVerified):
@@ -192,6 +193,101 @@ func (h *handlers) ssoSignIn(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeTokens(w, t)
+}
+
+// SignInProviders is what the player apps need to offer Google and Apple (ADR 0020): the client ids they request ID
+// tokens for, which are the audiences the API accepts. An empty id means the provider is not offered there.
+type SignInProviders struct {
+	GoogleClientID    string // the web app's OAuth client; the phone apps' server client id
+	GoogleIOSClientID string // the iOS app's OAuth client, when it has one
+	AppleClientID     string // the Services ID the web app and Android use
+	AppleBundleID     string // the iOS app: its native Sign in with Apple tokens name it
+	AndroidPackage    string // the Android app, for Apple's return to it
+}
+
+type googleProviderJSON struct {
+	ClientID    string `json:"client_id"`
+	IOSClientID string `json:"ios_client_id,omitempty"`
+}
+
+type appleProviderJSON struct {
+	// empty when Apple is offered on iOS alone (the app signs in natively, no Services ID involved)
+	ClientID string `json:"client_id,omitempty"`
+}
+
+type signInProvidersJSON struct {
+	Google *googleProviderJSON `json:"google,omitempty"`
+	Apple  *appleProviderJSON  `json:"apple,omitempty"`
+}
+
+// signInProviders tells the apps which of Google and Apple they may offer, and with which client ids. Nothing here is
+// secret: the ids are in every app build and web page that uses them.
+func (h *handlers) signInProviders(w http.ResponseWriter, _ *http.Request) {
+	var out signInProvidersJSON
+	if p := h.SignIn; p.GoogleClientID != "" {
+		out.Google = &googleProviderJSON{ClientID: p.GoogleClientID, IOSClientID: p.GoogleIOSClientID}
+	}
+	if p := h.SignIn; p.AppleClientID != "" || p.AppleBundleID != "" {
+		out.Apple = &appleProviderJSON{ClientID: p.AppleClientID}
+	}
+	w.Header().Set("Cache-Control", "public, max-age=300")
+	httpx.WriteJSON(w, http.StatusOK, out)
+}
+
+// ssoSignup creates an account for a Google or Apple identity that has none, from the phone number the player gives
+// after the provider's window (ADR 0020). The same budgets as a password sign-up apply.
+func (h *handlers) ssoSignup(w http.ResponseWriter, r *http.Request) {
+	provider := chi.URLParam(r, "provider")
+	if !validProvider(provider) {
+		httpx.WriteProblem(w, http.StatusNotFound, "unknown-provider", "Unknown identity provider", "")
+		return
+	}
+	var in struct {
+		IDToken string     `json:"id_token"`
+		Nonce   string     `json:"nonce"`
+		MSISDN  string     `json:"msisdn"`
+		Device  deviceJSON `json:"device"`
+	}
+	if !httpx.DecodeJSON(w, r, &in) {
+		return
+	}
+	key := in.MSISDN
+	if n, err := identity.NormalizeMSISDN(in.MSISDN); err == nil {
+		key = n
+	}
+	if !h.limit(w, r, "signup:ip:"+h.clientIP(r), 10, time.Hour) || !h.limit(w, r, "signup:msisdn:"+key, 5, 24*time.Hour) {
+		return
+	}
+	t, err := h.Identity.SignupSSO(r.Context(), provider, in.IDToken, in.Nonce, in.MSISDN, h.device(r.Context(), in.Device))
+	if err != nil {
+		authError(w, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusCreated, tokensJSON{AccessToken: t.Access, RefreshToken: t.Refresh, ExpiresAt: t.AccessExpires})
+}
+
+// appleAndroidReturn is the return URL Apple posts to when a Sign in with Apple was started by the Android app (which
+// opens Apple in the browser, there being no native Apple sign-in on Android). It only hands Apple's answer back to the
+// app, through the intent link the sign_in_with_apple plugin registers; the app then sends the token to
+// /v1/auth/sso/apple like any other, where it is verified. Nothing is trusted or stored here.
+func (h *handlers) appleAndroidReturn(w http.ResponseWriter, r *http.Request) {
+	if h.SignIn.AndroidPackage == "" || h.SignIn.AppleClientID == "" {
+		httpx.WriteProblem(w, http.StatusNotFound, "not-found", "Not found", "")
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, 64<<10)
+	if err := r.ParseForm(); err != nil {
+		httpx.WriteProblem(w, http.StatusBadRequest, "invalid-form", "Invalid form", "")
+		return
+	}
+	q := url.Values{}
+	for _, k := range []string{"code", "id_token", "state", "user", "error"} {
+		if v := r.PostForm.Get(k); v != "" {
+			q.Set(k, v)
+		}
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	http.Redirect(w, r, "intent://callback?"+q.Encode()+"#Intent;package="+h.SignIn.AndroidPackage+";scheme=signinwithapple;end", http.StatusTemporaryRedirect)
 }
 
 func (h *handlers) ssoLink(w http.ResponseWriter, r *http.Request) {

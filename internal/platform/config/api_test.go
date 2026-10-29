@@ -20,7 +20,7 @@ func fullAPIEnv(t *testing.T) {
 	t.Setenv("IDENTITY_KEY", b64(32))
 	t.Setenv("VALKEY_ADDR", "valkey:6379")
 	t.Setenv("TRUSTED_PROXY_HEADER", "X-Forwarded-For")
-	for _, k := range []string{"TRUSTED_PROXY_HOPS", "DATA_KEY_ACTIVE", "KYC_API_URL", "KYC_API_KEY", "GOOGLE_CLIENT_ID", "APPLE_CLIENT_ID", "CORS_ALLOWED_ORIGINS", "STAFF_GOOGLE_CLIENT_ID", "STAFF_APPLE_CLIENT_ID", "STAFF_DEV_OIDC_ISSUER", "STAFF_DEV_OIDC_CLIENT_IDS", "STAFF_DEV_OIDC_JWKS_URL", "STAFF_BOOTSTRAP_ADMIN", "STAFF_DATABASE_URL", "ATTESTATION_MODE", "APP_ATTEST_APP_ID", "APP_ATTEST_ALLOW_DEVELOPMENT", "PLAY_INTEGRITY_PACKAGE", "PLAY_INTEGRITY_SERVICE_ACCOUNT", "PLAY_INTEGRITY_CERT_DIGESTS", "ATTESTATION_WEB"} {
+	for _, k := range []string{"TRUSTED_PROXY_HOPS", "DATA_KEY_ACTIVE", "KYC_API_URL", "KYC_API_KEY", "GOOGLE_CLIENT_ID", "GOOGLE_IOS_CLIENT_ID", "APPLE_CLIENT_ID", "APPLE_BUNDLE_ID", "ANDROID_PACKAGE", "CORS_ALLOWED_ORIGINS", "STAFF_GOOGLE_CLIENT_ID", "STAFF_APPLE_CLIENT_ID", "STAFF_DEV_OIDC_ISSUER", "STAFF_DEV_OIDC_CLIENT_IDS", "STAFF_DEV_OIDC_JWKS_URL", "STAFF_BOOTSTRAP_ADMIN", "STAFF_DATABASE_URL", "ATTESTATION_MODE", "APP_ATTEST_APP_ID", "APP_ATTEST_ALLOW_DEVELOPMENT", "PLAY_INTEGRITY_PACKAGE", "PLAY_INTEGRITY_SERVICE_ACCOUNT", "PLAY_INTEGRITY_CERT_DIGESTS", "ATTESTATION_WEB"} {
 		t.Setenv(k, "")
 	}
 }
@@ -301,5 +301,47 @@ func TestAPI_AttestationModeNeedsItsVerifiers(t *testing.T) {
 	t.Setenv("PLAY_INTEGRITY_SERVICE_ACCOUNT", "not base64!")
 	if _, err := config.Load(); err == nil {
 		t.Fatal("bad service account encoding accepted")
+	}
+}
+
+func TestAPI_PlayerSignInProvidersAreOptionalAndTheirIdsAreTheAudiences(t *testing.T) {
+	fullAPIEnv(t)
+	cfg, err := config.Load()
+	if err != nil || cfg.API.SignIn.Google() || cfg.API.SignIn.Apple() {
+		t.Fatalf("unset: %+v %v", cfg.API.SignIn, err)
+	}
+	t.Setenv("GOOGLE_CLIENT_ID", "web.apps.googleusercontent.com")
+	t.Setenv("GOOGLE_IOS_CLIENT_ID", "ios.apps.googleusercontent.com")
+	t.Setenv("APPLE_CLIENT_ID", "ke.tajirika.web")
+	t.Setenv("APPLE_BUNDLE_ID", "ke.tajirika.lotteryMobile")
+	t.Setenv("ANDROID_PACKAGE", "ke.tajirika.lottery_mobile")
+	cfg, err = config.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	si := cfg.API.SignIn
+	if !si.Google() || !si.Apple() || strings.Join(si.GoogleAudiences(), ",") != "web.apps.googleusercontent.com,ios.apps.googleusercontent.com" ||
+		strings.Join(si.AppleAudiences(), ",") != "ke.tajirika.web,ke.tajirika.lotteryMobile" || si.AndroidPackage != "ke.tajirika.lottery_mobile" {
+		t.Fatalf("sign-in: %+v", si)
+	}
+	// Apple on iOS alone: the bundle id without a Services ID
+	t.Setenv("APPLE_CLIENT_ID", "")
+	if cfg, err = config.Load(); err != nil || !cfg.API.SignIn.Apple() || len(cfg.API.SignIn.AppleAudiences()) != 1 {
+		t.Fatalf("ios-only apple: %+v %v", cfg.API.SignIn, err)
+	}
+	// an iOS Google client without the web client it names as its server client is a mistake
+	t.Setenv("GOOGLE_CLIENT_ID", "")
+	if _, err := config.Load(); err == nil || !strings.Contains(err.Error(), "GOOGLE_IOS_CLIENT_ID") {
+		t.Fatalf("ios google client alone accepted: %v", err)
+	}
+	t.Setenv("GOOGLE_IOS_CLIENT_ID", "")
+	t.Setenv("ANDROID_PACKAGE", "not a package")
+	if _, err := config.Load(); err == nil || !strings.Contains(err.Error(), "ANDROID_PACKAGE") {
+		t.Fatalf("bad android package accepted: %v", err)
+	}
+	t.Setenv("ANDROID_PACKAGE", "")
+	t.Setenv("APPLE_BUNDLE_ID", "a, b")
+	if _, err := config.Load(); err == nil || !strings.Contains(err.Error(), "APPLE_BUNDLE_ID") {
+		t.Fatalf("list of ids accepted: %v", err)
 	}
 }

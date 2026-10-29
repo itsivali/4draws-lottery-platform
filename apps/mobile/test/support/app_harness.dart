@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -8,9 +10,38 @@ import 'package:lottery_mobile/core/auth/session_manager.dart';
 import 'package:lottery_mobile/core/auth/token_store.dart';
 import 'package:lottery_mobile/core/platform/haptics.dart';
 import 'package:lottery_mobile/core/platform/preferences.dart';
+import 'package:lottery_mobile/features/auth/application/auth_providers.dart';
+import 'package:lottery_mobile/features/auth/data/provider_sign_in.dart';
+import 'package:lottery_mobile/features/auth/data/sign_in_providers.dart';
 import 'package:lottery_mobile/features/play/application/pending_play_store.dart';
 
 import 'fake_backend.dart';
+
+/// Stands in for Google's and Apple's own sign-in: every tap yields [nextToken] at once.
+class FakeProviderSignIn implements ProviderSignIn {
+  final _tokens = StreamController<ProviderToken>.broadcast();
+  SignInProviders? prepared;
+  int opened = 0;
+  String nextToken = 'google-id-token';
+
+  @override
+  Future<void> prepare(SignInProviders providers) async => prepared = providers;
+  @override
+  Widget? googleButton() => null;
+  @override
+  Stream<ProviderToken> get tokens => _tokens.stream;
+  @override
+  Future<void> google() async {
+    opened++;
+    _tokens.add(ProviderToken(provider: 'google', idToken: nextToken, nonce: 'n1'));
+  }
+
+  @override
+  Future<void> apple(SignInProviders providers) async {
+    opened++;
+    _tokens.add(ProviderToken(provider: 'apple', idToken: nextToken, nonce: 'n1'));
+  }
+}
 
 class RecordingHaptics implements Haptics {
   final events = <HapticEvent>[];
@@ -19,12 +50,13 @@ class RecordingHaptics implements Haptics {
 }
 
 class AppHarness {
-  AppHarness(this.container, this.backend, this.haptics, this.pending);
+  AppHarness(this.container, this.backend, this.haptics, this.pending, this.providerSignIn);
 
   final ProviderContainer container;
   final FakeBackend backend;
   final RecordingHaptics haptics;
   final MemoryPendingPlayStore pending;
+  final FakeProviderSignIn providerSignIn;
 }
 
 /// Runs the whole app against [backend] at a given screen size and accessibility settings.
@@ -47,6 +79,7 @@ Future<AppHarness> pumpApp(
   final haptics = RecordingHaptics();
   final prefs = MemoryPreferenceStore()..values['wheel_haptics'] = hapticsOn;
   final pending = MemoryPendingPlayStore();
+  final providerSignIn = FakeProviderSignIn();
   late final ProviderContainer container;
   container = ProviderContainer(
     overrides: [
@@ -55,6 +88,7 @@ Future<AppHarness> pumpApp(
       tokenStoreProvider.overrideWithValue(MemoryTokenStore()),
       deviceIdentityProvider.overrideWithValue(const DeviceIdentity(platform: 'android', fingerprint: 'fp-test')),
       pendingPlayStoreProvider.overrideWithValue(pending),
+      providerSignInProvider.overrideWithValue(providerSignIn),
       preferenceStoreProvider.overrideWithValue(prefs),
       storedHapticsPreferenceProvider.overrideWithValue(hapticsOn),
       hapticsSupportedProvider.overrideWithValue(true),
@@ -73,7 +107,7 @@ Future<AppHarness> pumpApp(
   }
   await tester.pumpWidget(UncontrolledProviderScope(container: container, child: const LotteryApp()));
   await tester.pumpAndSettle();
-  return AppHarness(container, backend, haptics, pending);
+  return AppHarness(container, backend, haptics, pending, providerSignIn);
 }
 
 /// Pumps frames until [finder] appears (the wheel's spin takes a few seconds of fake time).

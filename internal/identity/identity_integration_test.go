@@ -647,3 +647,70 @@ func (countingAttestor) Verify(context.Context, string, string, string) (bool, e
 	calls.Add(1)
 	return true, nil
 }
+
+func TestSSO_AnIdentityWithoutAnAccountCreatesOneFromAPhoneNumber(t *testing.T) {
+	e := setup(t)
+	ctx := context.Background()
+	m := e.newMSISDN()
+
+	if _, err := e.svc.SignInSSO(ctx, "google", "ok:new-1", "n1", phone); !errors.Is(err, identity.ErrSSONotLinked) {
+		t.Fatalf("unlinked sign-in err = %v", err)
+	}
+	if _, err := e.svc.SignupSSO(ctx, "google", "ok:new-1", "n1", "12345", phone); !errors.Is(err, identity.ErrInvalidMSISDN) {
+		t.Fatalf("bad number err = %v", err)
+	}
+	if _, err := e.svc.SignupSSO(ctx, "google", "forged", "n1", m, phone); !errors.Is(err, identity.ErrTokenInvalid) {
+		t.Fatalf("forged token err = %v", err)
+	}
+	if _, err := e.svc.SignupSSO(ctx, "google", "ok:new-1", "n1", m, identity.Device{Platform: "android"}); !errors.Is(err, identity.ErrDeviceRequired) {
+		t.Fatalf("phone without a fingerprint err = %v", err)
+	}
+	tok, err := e.svc.SignupSSO(ctx, "google", "ok:new-1", "n1", m, phone)
+	if err != nil {
+		t.Fatalf("sign-up: %v", err)
+	}
+	p, err := e.svc.Authenticate(ctx, tok.Access)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var hash *string
+	var verified bool
+	if err := e.pool.QueryRow(ctx, `SELECT password_hash, msisdn_verified_at IS NOT NULL FROM identity.users WHERE id = $1`, p.UserID).Scan(&hash, &verified); err != nil {
+		t.Fatal(err)
+	}
+	if hash != nil || verified {
+		t.Fatalf("a Google account has no password and an unproved number: hash=%v verified=%v", hash != nil, verified)
+	}
+	// the same identity now signs in, and cannot create a second account
+	signed, err := e.svc.SignInSSO(ctx, "google", "ok:new-1", "n1", phone)
+	if err != nil {
+		t.Fatalf("sign-in after sign-up: %v", err)
+	}
+	if q, _ := e.svc.Authenticate(ctx, signed.Access); q.UserID != p.UserID {
+		t.Fatalf("signed in as %s, want %s", q.UserID, p.UserID)
+	}
+	if _, err := e.svc.SignupSSO(ctx, "google", "ok:new-1", "n1", e.newMSISDN(), phone); !errors.Is(err, identity.ErrSSOAlreadyLinked) {
+		t.Fatalf("second account for one identity err = %v", err)
+	}
+	// a password sign-in with that number does not break on the password-less account, and does not let anyone in
+	if _, err := e.svc.Login(ctx, m, goodPassword, phone); !errors.Is(err, identity.ErrInvalidCredentials) {
+		t.Fatalf("password login against a Google account err = %v", err)
+	}
+	// once the account proves its number, nobody else may claim it, by either route
+	if _, err := e.pool.Exec(ctx, `UPDATE identity.users SET msisdn_verified_at = now() WHERE id = $1`, p.UserID); err != nil {
+		t.Fatalf("a password-less account may prove its number: %v", err)
+	}
+	if _, err := e.svc.Signup(ctx, m, goodPassword, phone); !errors.Is(err, identity.ErrPhoneRegistered) {
+		t.Fatalf("claiming a proved number by password err = %v", err)
+	}
+	if _, err := e.svc.SignupSSO(ctx, "apple", "ok:new-2", "n1", m, phone); !errors.Is(err, identity.ErrPhoneRegistered) {
+		t.Fatalf("claiming a proved number by Apple err = %v", err)
+	}
+	// staff may still give the account a temporary password, after which the number and password sign in
+	if err := e.svc.SetTemporaryPassword(ctx, p.UserID, "staff:1", "lost phone", "temporary pass 2026"); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := e.svc.Login(ctx, m, "temporary pass 2026", phone); err != nil || !got.MustChangePassword {
+		t.Fatalf("login with the temporary password: %+v %v", got, err)
+	}
+}

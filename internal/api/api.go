@@ -63,6 +63,8 @@ type Deps struct {
 	AttestationMode string
 	// AttestationWeb is ATTESTATION_WEB: allow (default) or refuse web sessions on money routes under the strict modes.
 	AttestationWeb string
+	// SignIn is the players' Google and Apple sign-in (ADR 0020): which to offer, with which client ids.
+	SignIn SignInProviders
 }
 
 type ctxKey struct{}
@@ -89,6 +91,9 @@ func Mount(d Deps) func(chi.Router) {
 		r.Post("/hooks/b2c/{path}/timeout", h.b2cHook(payouts.CallbackTimeout))
 		r.Post("/hooks/b2c/{path}/status-result", h.b2cHook(payouts.CallbackStatusResult))
 		r.Post("/hooks/b2c/{path}/status-timeout", h.b2cHook(payouts.CallbackStatusTimeout))
+		// Apple's return URL for the Android app's Sign in with Apple: a form post from the browser, outside /v1 (no
+		// token, no Idempotency-Key, no CORS); it only redirects back into the app.
+		r.Post("/auth/apple/android", h.appleAndroidReturn)
 
 		r.Route("/v1", func(r chi.Router) {
 			r.Use(httpx.CORS(d.CORSOrigins))
@@ -101,7 +106,9 @@ func Mount(d Deps) func(chi.Router) {
 			r.Post("/auth/login", h.login)
 			r.Post("/auth/refresh", h.refresh)
 			r.Post("/auth/attestation/challenge", h.attestationChallenge)
+			r.Get("/auth/providers", h.signInProviders)
 			r.Post("/auth/sso/{provider}", h.ssoSignIn)
+			r.Post("/auth/sso/{provider}/signup", h.ssoSignup)
 			r.Get("/draws", h.listDraws)
 			r.Get("/draws/{id}", h.getDraw)
 			r.Get("/draws/{id}/certificate", h.drawCertificate)

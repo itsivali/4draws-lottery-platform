@@ -143,9 +143,11 @@ func New(ctx context.Context, cfg config.Config, pool *pgxpool.Pool) (*App, erro
 		Challenges:      challenge.NewStore(vk, 5*time.Minute),
 		AttestationMode: c.Attestation.Mode,
 		AttestationWeb:  c.Attestation.Web,
+		SignIn: api.SignInProviders{GoogleClientID: c.SignIn.GoogleClientID, GoogleIOSClientID: c.SignIn.GoogleIOSClientID,
+			AppleClientID: c.SignIn.AppleClientID, AppleBundleID: c.SignIn.AppleBundleID, AndroidPackage: c.SignIn.AndroidPackage},
 	})
 	slog.InfoContext(ctx, "v1 API enabled", "trusted_proxy_header", c.TrustedProxyHeader, "trusted_proxy_hops", c.TrustedProxyHops,
-		"kyc_registry", c.KYCURL != "", "google", c.GoogleClientID != "", "apple", c.AppleClientID != "",
+		"kyc_registry", c.KYCURL != "", "google", c.SignIn.Google(), "apple", c.SignIn.Apple(),
 		"payments", cfg.Payments.Enabled, "buy_goods", cfg.Payments.TillNumber != "", "paybill", cfg.Payments.C2BEnabled(), "payouts", cfg.Payments.B2CEnabled(), "daraja", cfg.Payments.BaseURL, "cors_origins", len(c.CORSOrigins), "staff", c.Staff.Enabled, "staff_pool", c.Staff.DatabaseURL != "",
 		"attestation", c.Attestation.Mode, "app_attest", c.Attestation.AppID != "", "play_integrity", c.Attestation.PlayPackage != "")
 	return a, nil
@@ -430,17 +432,20 @@ func (refusingOIDC) VerifyIDToken(context.Context, string, string, string) (stri
 	return "", errors.New("sso is not configured")
 }
 
+// oidcVerifier checks the players' Google and Apple ID tokens (ADR 0020). A token may name any of the app's client
+// ids for that provider: the web client (also the phone apps' server client id) or the iOS client for Google; the
+// Services ID (web, Android) or the iOS app's bundle id (native) for Apple.
 func oidcVerifier(clk clock.Clock, hc *http.Client, c config.API) identity.IDTokenVerifier {
 	providers := map[string]identity.OIDCProvider{}
-	if c.GoogleClientID != "" {
+	if c.SignIn.Google() {
 		providers["google"] = identity.OIDCProvider{
-			Issuers: []string{"https://accounts.google.com", "accounts.google.com"}, Audiences: []string{c.GoogleClientID},
+			Issuers: []string{"https://accounts.google.com", "accounts.google.com"}, Audiences: c.SignIn.GoogleAudiences(),
 			JWKSURL: "https://www.googleapis.com/oauth2/v3/certs",
 		}
 	}
-	if c.AppleClientID != "" {
+	if c.SignIn.Apple() {
 		providers["apple"] = identity.OIDCProvider{
-			Issuers: []string{"https://appleid.apple.com"}, Audiences: []string{c.AppleClientID},
+			Issuers: []string{"https://appleid.apple.com"}, Audiences: c.SignIn.AppleAudiences(),
 			JWKSURL: "https://appleid.apple.com/auth/keys", NonceSHA256: true,
 		}
 	}

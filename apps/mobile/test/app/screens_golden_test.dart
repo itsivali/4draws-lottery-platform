@@ -19,6 +19,12 @@ void main() {
     await shot(t, 'sign_in_phone');
   });
 
+  testWidgets('sign in with Google: the phone number step', (t) async {
+    await pumpApp(t, FakeBackend(), signedIn: false);
+    await t.tap(find.widgetWithText(OutlinedButton, 'Continue with Google'));
+    await shot(t, 'sign_in_phone_google_number');
+  });
+
   testWidgets('home', (t) async {
     final b = FakeBackend(balance: 1250);
     await pumpApp(t, b);

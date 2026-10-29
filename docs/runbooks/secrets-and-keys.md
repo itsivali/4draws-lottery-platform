@@ -12,4 +12,4 @@
   2026-10-24, with only a test account affected): without the old values, passwords (`AUTH_KEY` pepper), KYC fields
   (`DATA_KEY`) and the one-account-per-ID lookup (`IDENTITY_KEY`) of existing accounts can no longer be checked.
 - None of these are ever committed. The database never holds a key, so no database role can decrypt KYC data on its own.
-- The sign-in client ids (`GOOGLE_CLIENT_ID`, `APPLE_CLIENT_ID`) are `sync: false` and entered once in the dashboard. Unset means the feature fails closed.
+- The sign-in client ids (`GOOGLE_CLIENT_ID`, `GOOGLE_IOS_CLIENT_ID`, `APPLE_CLIENT_ID`, `APPLE_BUNDLE_ID` for players; `STAFF_GOOGLE_CLIENT_ID`, `STAFF_APPLE_CLIENT_ID` for the back office) are `sync: false` and entered once in the dashboard. They are not secrets (every app build carries them), but unset means the feature fails closed.
