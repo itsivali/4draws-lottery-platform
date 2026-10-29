@@ -59,9 +59,10 @@ Read this first at the start of every session.
 - Free-tier deployment: migrate on start (advisory lock), workers in-process, free Postgres + Key Value.
 - **Draws (owner, 2026-10-26, ADR 0017):** weekly, monthly and quarterly periods are each player's own, 7, 30 and 90
   days back to back from their first play; a draw closes each day for the players whose period ends that day.
-- **Plays (owner, 2026-10-28):** a spin costs **KES 100** again from 2026-10-28 (migration 00033), up to four a day, and
-  is paid from the player's own M-Pesa number through the Daraja sandbox: when the wallet cannot cover the price the
-  app charges exactly the price as a top-up and spins the moment it is credited ("Pay KES 100 with M-Pesa and spin");
+- **Plays (owner, 2026-10-29):** a spin costs **KES 1** from 2026-10-29 (migration 00036; it was KES 100 from
+  2026-10-28, migration 00033), so a top-up of a shilling (`TOP_UP_MIN_KES=1`) is enough to play; up to four a day, and
+  paid from the player's own M-Pesa number: when the wallet cannot cover the price the
+  app charges exactly the price as a top-up and spins the moment it is credited ("Pay KES 1 with M-Pesa and spin");
   a wallet that can cover it still pays from the wallet.
 - **Look (owner, 2026-10-28):** colourful, premium and light only, on a white background, in the player apps and the
   back office: the "Sunset" palette (coral primary, violet accents, gold decorative; `design-system/lottery-platform/

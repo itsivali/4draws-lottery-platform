@@ -172,7 +172,7 @@ class _Panel extends StatelessWidget {
             BrandMark(height: 44, wordmarkColor: c.onHero),
             const Spacer(),
             Text(
-              'KES 100 a spin, up to four a day.\nEvery draw on the record.',
+              'KES 1 a spin, up to four a day.\nEvery draw on the record.',
               style: t.displaySmall?.copyWith(color: c.onHero),
             ),
             const SizedBox(height: Space.lg),

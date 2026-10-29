@@ -1,6 +1,6 @@
 # Runbook: game operations
 
-Plays, tickets and provably fair spins (phase 3). Rules: KES 100 a play (the odds version's price), at most 4 plays
+Plays, tickets and provably fair spins (phase 3). Rules: KES 1 a play from 2026-10-29 (migration 00036; the odds version's price, KES 100 before), at most 4 plays
 per player per Nairobi day, a lucky spin doubles that day's draw chances.
 
 ## Daily reconciliation

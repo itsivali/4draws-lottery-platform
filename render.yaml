@@ -90,8 +90,8 @@ services:
       - key: PUBLIC_BASE_URL
         value: https://api.tajirika.co.ke
       # Smallest top-up, whole KES (default 10). KES 1 while the owner tests the apps with M-Pesa (owner, 2026-10-26);
-      # the apps read it from GET /v1/wallet, so raising it needs no store release. Plays cost KES 1 from 2026-10-26
-      # (migration 00028) until a launch price version is added.
+      # the apps read it from GET /v1/wallet, so raising it needs no store release. Plays cost KES 1 from 2026-10-29
+      # (migration 00036; the owner's choice, so a shilling is enough to play).
       - key: TOP_UP_MIN_KES
         value: '1'
       - key: DARAJA_CALLBACK_TOKEN

@@ -156,7 +156,7 @@ Created by `scripts/dev-backend.sh --seed`, already verified so it can play, top
 To receive real prompts, **create an account with your own Safaricom number** from the app's sign-up screen (the
 sandbox cannot prompt the seeded number). Its identity submission then waits in the back office (Identity review) for
 `kim` or anyone else to approve; its first credited top-up proves the phone, and from then on plays, top-ups and the
-"Pay KES 100 with M-Pesa and spin" button all send prompts to that phone. In mock mode the prompt is approved for you.
+"Pay KES 1 with M-Pesa and spin" button all send prompts to that phone. In mock mode the prompt is approved for you.
 
 ### 3.3 Infrastructure
 
