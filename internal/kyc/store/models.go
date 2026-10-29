@@ -258,8 +258,6 @@ type IdentityUser struct {
 	MsisdnVerifiedAt   *time.Time
 	MustChangePassword bool
 	Email              *string
-	FirstName          *string
-	SecondName         *string
 }
 
 type KycKycCheck struct {

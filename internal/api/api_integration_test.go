@@ -290,7 +290,7 @@ func (e *env) signIn(t *testing.T) session {
 	fp := fmt.Sprintf("fp-%d", seq)
 	email := e.email()
 	r := e.do(t, http.MethodPost, "/v1/auth/signup", "", map[string]any{
-		"msisdn": m, "email": email, "first_name": "Jane", "second_name": "Wanjiru", "password": strongPassword, "device": map[string]any{"fingerprint": fp, "platform": "android"},
+		"msisdn": m, "email": email, "password": strongPassword, "device": map[string]any{"fingerprint": fp, "platform": "android"},
 	})
 	if r.Code != http.StatusCreated {
 		t.Fatalf("signup: %d %s", r.Code, r.Raw)
@@ -462,7 +462,7 @@ func TestAPI_LoginGuessingIsStoppedPerNumberAndFailsClosedWithoutValkey(t *testi
 	s := e.signIn(t)
 	login := func(pw string) resp {
 		return e.do(t, http.MethodPost, "/v1/auth/login", "", map[string]any{
-			"msisdn": s.msisdn, "email": e.email(), "first_name": "Jane", "second_name": "Wanjiru", "password": pw, "device": map[string]any{"fingerprint": s.fp, "platform": "android"},
+			"msisdn": s.msisdn, "email": e.email(), "password": pw, "device": map[string]any{"fingerprint": s.fp, "platform": "android"},
 		})
 	}
 	for i := 1; i <= 10; i++ {
@@ -475,7 +475,7 @@ func TestAPI_LoginGuessingIsStoppedPerNumberAndFailsClosedWithoutValkey(t *testi
 		t.Fatalf("11th attempt: %d retry-after=%q, want 429", r.Code, r.Header.Get("Retry-After"))
 	}
 	e.vk.Stop()
-	if r := e.do(t, http.MethodPost, "/v1/auth/signup", "", map[string]any{"msisdn": e.msisdn(), "email": e.email(), "first_name": "Jane", "second_name": "Wanjiru", "password": strongPassword, "device": map[string]any{"fingerprint": "x", "platform": "android"}}); r.Code != http.StatusServiceUnavailable {
+	if r := e.do(t, http.MethodPost, "/v1/auth/signup", "", map[string]any{"msisdn": e.msisdn(), "email": e.email(), "password": strongPassword, "device": map[string]any{"fingerprint": "x", "platform": "android"}}); r.Code != http.StatusServiceUnavailable {
 		t.Fatalf("Valkey down: %d, want 503 (fail closed)", r.Code)
 	}
 }
@@ -486,7 +486,7 @@ func TestAPI_SignupIsRateLimitedPerNumber(t *testing.T) {
 	var last int
 	for i := range 6 {
 		last = e.do(t, http.MethodPost, "/v1/auth/signup", "", map[string]any{
-			"msisdn": m, "email": e.email(), "first_name": "Jane", "second_name": "Wanjiru", "password": fmt.Sprintf("claim password %d", i), "device": map[string]any{"fingerprint": fmt.Sprintf("claimer-%d", i), "platform": "android"},
+			"msisdn": m, "email": e.email(), "password": fmt.Sprintf("claim password %d", i), "device": map[string]any{"fingerprint": fmt.Sprintf("claimer-%d", i), "platform": "android"},
 		}).Code
 		if i < 5 && last != http.StatusCreated {
 			t.Fatalf("claim %d = %d, want 201", i, last)
@@ -501,7 +501,7 @@ func TestAPI_LoginAndPasswordChange(t *testing.T) {
 	e := setup(t)
 	s := e.signIn(t)
 	dev := map[string]any{"fingerprint": s.fp, "platform": "android"}
-	r := e.do(t, http.MethodPost, "/v1/auth/login", "", map[string]any{"msisdn": s.msisdn, "email": e.email(), "first_name": "Jane", "second_name": "Wanjiru", "password": strongPassword, "device": dev})
+	r := e.do(t, http.MethodPost, "/v1/auth/login", "", map[string]any{"msisdn": s.msisdn, "email": e.email(), "password": strongPassword, "device": dev})
 	if r.Code != http.StatusOK || r.Body["access_token"] == nil {
 		t.Fatalf("login: %d %s", r.Code, r.Raw)
 	}
@@ -525,7 +525,7 @@ func TestAPI_LoginAndPasswordChange(t *testing.T) {
 	if got := e.do(t, http.MethodGet, "/v1/kyc", s.access, nil); got.Code != http.StatusOK {
 		t.Errorf("the session that changed it was ended: %d", got.Code)
 	}
-	if got := e.do(t, http.MethodPost, "/v1/auth/login", "", map[string]any{"msisdn": s.msisdn, "email": e.email(), "first_name": "Jane", "second_name": "Wanjiru", "password": strongPassword, "device": dev}); got.Code != http.StatusUnauthorized {
+	if got := e.do(t, http.MethodPost, "/v1/auth/login", "", map[string]any{"msisdn": s.msisdn, "email": e.email(), "password": strongPassword, "device": dev}); got.Code != http.StatusUnauthorized {
 		t.Errorf("old password still works: %d", got.Code)
 	}
 }
@@ -539,22 +539,21 @@ func TestAPI_ErrorMapping(t *testing.T) {
 		body   any
 		want   int
 	}{
-		{"invalid number", http.MethodPost, "/v1/auth/signup", map[string]any{"msisdn": "12345", "email": e.email(), "first_name": "Jane", "second_name": "Wanjiru", "password": strongPassword, "device": map[string]any{"fingerprint": "f", "platform": "android"}}, 400},
-		{"weak password", http.MethodPost, "/v1/auth/signup", map[string]any{"msisdn": "0712345678", "email": e.email(), "first_name": "Jane", "second_name": "Wanjiru", "password": "password", "device": map[string]any{"fingerprint": "f", "platform": "android"}}, 400},
-		{"missing device fingerprint", http.MethodPost, "/v1/auth/signup", map[string]any{"msisdn": "0712345678", "email": e.email(), "first_name": "Jane", "second_name": "Wanjiru", "password": strongPassword, "device": map[string]any{"platform": "android"}}, 400},
-		{"unknown field", http.MethodPost, "/v1/auth/signup", map[string]any{"msisdn": "0712345678", "email": e.email(), "first_name": "Jane", "second_name": "Wanjiru", "password": strongPassword, "admin": true}, 400},
+		{"invalid number", http.MethodPost, "/v1/auth/signup", map[string]any{"msisdn": "12345", "email": e.email(), "password": strongPassword, "device": map[string]any{"fingerprint": "f", "platform": "android"}}, 400},
+		{"weak password", http.MethodPost, "/v1/auth/signup", map[string]any{"msisdn": "0712345678", "email": e.email(), "password": "password", "device": map[string]any{"fingerprint": "f", "platform": "android"}}, 400},
+		{"missing device fingerprint", http.MethodPost, "/v1/auth/signup", map[string]any{"msisdn": "0712345678", "email": e.email(), "password": strongPassword, "device": map[string]any{"platform": "android"}}, 400},
+		{"unknown field", http.MethodPost, "/v1/auth/signup", map[string]any{"msisdn": "0712345678", "email": e.email(), "password": strongPassword, "admin": true}, 400},
 		{"not json", http.MethodPost, "/v1/auth/signup", "hello", 400},
 		{"oversized body", http.MethodPost, "/v1/auth/signup", `{"msisdn":"` + strings.Repeat("1", 2<<20) + `"}`, 413},
 		{"signup without an email address", http.MethodPost, "/v1/auth/signup", map[string]any{"msisdn": "0712345678", "password": strongPassword, "device": map[string]any{"fingerprint": "f", "platform": "android"}}, 400},
-		{"signup with a bad email address", http.MethodPost, "/v1/auth/signup", map[string]any{"msisdn": "0712345678", "email": "not an address", "first_name": "Jane", "second_name": "Wanjiru", "password": strongPassword, "device": map[string]any{"fingerprint": "f", "platform": "android"}}, 400},
+		{"signup with a bad email address", http.MethodPost, "/v1/auth/signup", map[string]any{"msisdn": "0712345678", "email": "not an address", "password": strongPassword, "device": map[string]any{"fingerprint": "f", "platform": "android"}}, 400},
 		{"forgot without an address", http.MethodPost, "/v1/auth/password/forgot", map[string]any{"email": ""}, 400},
 		{"reset with an unknown link", http.MethodPost, "/v1/auth/password/reset", map[string]any{"token": "nope", "new_password": strongPassword}, 410},
-		{"unknown account", http.MethodPost, "/v1/auth/login", map[string]any{"msisdn": "0712345678", "email": e.email(), "first_name": "Jane", "second_name": "Wanjiru", "password": strongPassword, "device": map[string]any{"fingerprint": "f", "platform": "android"}}, 401},
+		{"unknown account", http.MethodPost, "/v1/auth/login", map[string]any{"msisdn": "0712345678", "email": e.email(), "password": strongPassword, "device": map[string]any{"fingerprint": "f", "platform": "android"}}, 401},
 		{"unknown sso provider", http.MethodPost, "/v1/auth/sso/facebook", map[string]any{"id_token": "x", "nonce": "n1"}, 404},
 		{"unlinked sso", http.MethodPost, "/v1/auth/sso/google", map[string]any{"id_token": "ok:nobody", "nonce": "n1"}, 409},
-		{"sso sign-up with a bad number", http.MethodPost, "/v1/auth/sso/google/signup", map[string]any{"id_token": "ok:nobody", "nonce": "n1", "msisdn": "12345", "first_name": "Jane", "second_name": "Wanjiru", "device": map[string]any{"fingerprint": "f", "platform": "android"}}, 400},
-		{"sso sign-up without names", http.MethodPost, "/v1/auth/sso/google/signup", map[string]any{"id_token": "ok:nobody", "nonce": "n1", "msisdn": "0712345671", "device": map[string]any{"fingerprint": "f", "platform": "android"}}, 400},
-		{"sso sign-up with a bad token", http.MethodPost, "/v1/auth/sso/google/signup", map[string]any{"id_token": "forged", "nonce": "n1", "msisdn": "0712345672", "first_name": "Jane", "second_name": "Wanjiru", "device": map[string]any{"fingerprint": "f", "platform": "android"}}, 401},
+		{"sso sign-up with a bad number", http.MethodPost, "/v1/auth/sso/google/signup", map[string]any{"id_token": "ok:nobody", "nonce": "n1", "msisdn": "12345", "device": map[string]any{"fingerprint": "f", "platform": "android"}}, 400},
+		{"sso sign-up with a bad token", http.MethodPost, "/v1/auth/sso/google/signup", map[string]any{"id_token": "forged", "nonce": "n1", "msisdn": "0712345672", "device": map[string]any{"fingerprint": "f", "platform": "android"}}, 401},
 		{"sso sign-up with an unknown provider", http.MethodPost, "/v1/auth/sso/facebook/signup", map[string]any{"id_token": "x", "nonce": "n1", "msisdn": "0712345678"}, 404},
 		{"bad refresh token", http.MethodPost, "/v1/auth/refresh", map[string]any{"refresh_token": "nope", "device_fingerprint": "f"}, 401},
 	}
@@ -650,12 +649,12 @@ func TestAPI_ClientClaimedAttestationIsNeverTrusted(t *testing.T) {
 	e := setup(t)
 	m := e.msisdn()
 	// the attestation verdict is not part of the request contract; sending one is refused
-	r := e.do(t, http.MethodPost, "/v1/auth/signup", "", `{"msisdn":"`+m+`","email":"`+e.email()+`","first_name":"Jane","second_name":"Wanjiru","password":"`+strongPassword+`","device":{"fingerprint":"fp","platform":"android","attestation":"passed"}}`)
+	r := e.do(t, http.MethodPost, "/v1/auth/signup", "", `{"msisdn":"`+m+`","email":"`+e.email()+`","password":"`+strongPassword+`","device":{"fingerprint":"fp","platform":"android","attestation":"passed"}}`)
 	if r.Code != http.StatusBadRequest {
 		t.Fatalf("client attestation claim accepted: %d %s", r.Code, r.Raw)
 	}
 	// an opaque token is accepted but, with no verifier configured, never yields a pass
-	r = e.do(t, http.MethodPost, "/v1/auth/signup", "", map[string]any{"msisdn": m, "email": e.email(), "first_name": "Jane", "second_name": "Wanjiru", "password": strongPassword, "device": map[string]any{"fingerprint": "fp", "platform": "android", "attestation_token": "looks-valid"}})
+	r = e.do(t, http.MethodPost, "/v1/auth/signup", "", map[string]any{"msisdn": m, "email": e.email(), "password": strongPassword, "device": map[string]any{"fingerprint": "fp", "platform": "android", "attestation_token": "looks-valid"}})
 	if r.Code != http.StatusCreated {
 		t.Fatalf("signup: %d %s", r.Code, r.Raw)
 	}
@@ -837,7 +836,7 @@ func TestAPI_GoogleOrAppleWithoutAnAccountSignsUpWithAPhoneNumber(t *testing.T) 
 	if r := e.do(t, http.MethodPost, "/v1/auth/sso/google", "", map[string]any{"id_token": "ok:g-new", "nonce": "n1", "device": dev}); r.Code != http.StatusConflict || !strings.Contains(r.Raw, "sso-not-linked") {
 		t.Fatalf("unlinked: %d %s", r.Code, r.Raw)
 	}
-	r = e.do(t, http.MethodPost, "/v1/auth/sso/google/signup", "", map[string]any{"id_token": "ok:g-new", "nonce": "n1", "msisdn": "0712 000 111", "first_name": "Jane", "second_name": "Wanjiru", "device": dev})
+	r = e.do(t, http.MethodPost, "/v1/auth/sso/google/signup", "", map[string]any{"id_token": "ok:g-new", "nonce": "n1", "msisdn": "0712 000 111", "device": dev})
 	if r.Code != http.StatusCreated || r.Body["access_token"] == nil {
 		t.Fatalf("sign-up: %d %s", r.Code, r.Raw)
 	}
@@ -849,7 +848,7 @@ func TestAPI_GoogleOrAppleWithoutAnAccountSignsUpWithAPhoneNumber(t *testing.T) 
 	if r := e.do(t, http.MethodPost, "/v1/auth/sso/google", "", map[string]any{"id_token": "ok:g-new", "nonce": "n1", "device": dev}); r.Code != http.StatusOK {
 		t.Fatalf("sign-in: %d %s", r.Code, r.Raw)
 	}
-	if r := e.do(t, http.MethodPost, "/v1/auth/sso/google/signup", "", map[string]any{"id_token": "ok:g-new", "nonce": "n1", "msisdn": "0712000222", "first_name": "Jane", "second_name": "Wanjiru", "device": dev}); r.Code != http.StatusConflict || !strings.Contains(r.Raw, "sso-already-linked") {
+	if r := e.do(t, http.MethodPost, "/v1/auth/sso/google/signup", "", map[string]any{"id_token": "ok:g-new", "nonce": "n1", "msisdn": "0712000222", "device": dev}); r.Code != http.StatusConflict || !strings.Contains(r.Raw, "sso-already-linked") {
 		t.Fatalf("second sign-up: %d %s", r.Code, r.Raw)
 	}
 
@@ -949,7 +948,7 @@ func TestAPI_AForgottenPasswordIsResetThroughAnEmailedLinkOnce(t *testing.T) {
 		t.Fatalf("account after change: %d %s", r.Code, r.Raw)
 	}
 	// signing up with an address in use is refused
-	if r := e.do(t, http.MethodPost, "/v1/auth/signup", "", map[string]any{"msisdn": e.msisdn(), "email": "new@example.com", "first_name": "Jane", "second_name": "Wanjiru", "password": strongPassword, "device": map[string]any{"fingerprint": "fp-dup", "platform": "android"}}); r.Code != http.StatusConflict || !hasType(r, "email-registered") {
+	if r := e.do(t, http.MethodPost, "/v1/auth/signup", "", map[string]any{"msisdn": e.msisdn(), "email": "new@example.com", "password": strongPassword, "device": map[string]any{"fingerprint": "fp-dup", "platform": "android"}}); r.Code != http.StatusConflict || !hasType(r, "email-registered") {
 		t.Fatalf("duplicate address sign-up: %d %s", r.Code, r.Raw)
 	}
 }
@@ -958,5 +957,21 @@ func TestAPI_WithoutAWebAppAddressResetByEmailIsUnavailable(t *testing.T) {
 	e := setup(t)
 	if r := e.do(t, http.MethodPost, "/v1/auth/password/forgot", "", map[string]any{"email": "jane@example.com"}); r.Code != http.StatusServiceUnavailable {
 		t.Fatalf("forgot: %d %s", r.Code, r.Raw)
+	}
+}
+
+func TestAPI_TheAccountsNameIsTheOneOnItsIdentitySubmission(t *testing.T) {
+	e := setup(t)
+	e.kyc.Register("12345678", "Willis Ivali Mutia", time.Date(1990, 5, 17, 0, 0, 0, 0, time.UTC))
+	s := e.signIn(t)
+	if r := e.do(t, http.MethodGet, "/v1/account", s.access, nil); r.Code != http.StatusOK || r.Body["first_name"] != nil {
+		t.Fatalf("before any submission: %d %s", r.Code, r.Raw)
+	}
+	if r := e.do(t, http.MethodPost, "/v1/kyc", s.access, map[string]any{"national_id": "12345678", "full_name": "Willis Ivali Mutia", "date_of_birth": "1990-05-17"}); r.Code != http.StatusAccepted {
+		t.Fatalf("submit: %d %s", r.Code, r.Raw)
+	}
+	r := e.do(t, http.MethodGet, "/v1/account", s.access, nil)
+	if r.Code != http.StatusOK || r.Body["first_name"] != "Willis" || r.Body["second_name"] != "Ivali" {
+		t.Fatalf("after the submission: %d %s", r.Code, r.Raw)
 	}
 }

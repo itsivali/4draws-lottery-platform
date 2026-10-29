@@ -236,7 +236,7 @@ func TestStaffPlayers_StaffGiveAPlayerATemporaryPasswordTheyMustChange(t *testin
 	if r := e.do(t, http.MethodGet, "/v1/account", player.access, nil); r.Code != http.StatusUnauthorized {
 		t.Fatalf("the player's session survived: %d", r.Code)
 	}
-	login := e.do(t, http.MethodPost, "/v1/auth/login", "", map[string]any{"msisdn": player.msisdn, "email": e.email(), "first_name": "Jane", "second_name": "Wanjiru", "password": "fresh start 2026", "device": map[string]any{"fingerprint": "fp-temp", "platform": "android"}})
+	login := e.do(t, http.MethodPost, "/v1/auth/login", "", map[string]any{"msisdn": player.msisdn, "email": e.email(), "password": "fresh start 2026", "device": map[string]any{"fingerprint": "fp-temp", "platform": "android"}})
 	access, _ := login.Body["access_token"].(string)
 	if login.Code != http.StatusOK || login.Body["must_change_password"] != true || access == "" {
 		t.Fatalf("login with the temporary password: %d %s", login.Code, login.Raw)
@@ -395,7 +395,7 @@ func TestStaffMetrics_CountSignupsSessionsAndPlaysPerPlatform(t *testing.T) {
 		t.Fatalf("default range: %d, %d cells", r.Code, len(r.Body["days"].([]any)))
 	}
 	// the web app sends no device fingerprint: its sessions still count as web (the platform is kept on the session)
-	if r := e.do(t, http.MethodPost, "/v1/auth/signup", "", map[string]any{"msisdn": e.msisdn(), "email": e.email(), "first_name": "Jane", "second_name": "Wanjiru", "password": strongPassword, "device": map[string]any{"platform": "web"}}); r.Code != http.StatusCreated {
+	if r := e.do(t, http.MethodPost, "/v1/auth/signup", "", map[string]any{"msisdn": e.msisdn(), "email": e.email(), "password": strongPassword, "device": map[string]any{"platform": "web"}}); r.Code != http.StatusCreated {
 		t.Fatalf("web signup: %d %s", r.Code, r.Raw)
 	}
 	r = e.do(t, http.MethodGet, "/v1/staff/metrics?from=2026-10-01&to="+time.Now().AddDate(0, 0, 1).Format(time.DateOnly), admin, nil)

@@ -58,7 +58,7 @@ func (q *Queries) FindAuthIdentity(ctx context.Context, arg FindAuthIdentityPara
 }
 
 const getAccount = `-- name: GetAccount :one
-SELECT u.id, u.msisdn, u.email, u.first_name, u.second_name, u.kyc_status, u.status, (u.msisdn_verified_at IS NOT NULL)::boolean AS phone_verified, u.created_at,
+SELECT u.id, u.msisdn, u.email, u.kyc_status, u.status, (u.msisdn_verified_at IS NOT NULL)::boolean AS phone_verified, u.created_at,
   u.must_change_password, (u.password_hash IS NOT NULL)::boolean AS has_password, c.requested_at AS closure_requested_at
 FROM identity.users u LEFT JOIN identity.closure_requests c ON c.user_id = u.id
 WHERE u.id = $1
@@ -68,8 +68,6 @@ type GetAccountRow struct {
 	ID                 string
 	Msisdn             string
 	Email              *string
-	FirstName          *string
-	SecondName         *string
 	KycStatus          string
 	Status             string
 	PhoneVerified      bool
@@ -86,8 +84,6 @@ func (q *Queries) GetAccount(ctx context.Context, id string) (GetAccountRow, err
 		&i.ID,
 		&i.Msisdn,
 		&i.Email,
-		&i.FirstName,
-		&i.SecondName,
 		&i.KycStatus,
 		&i.Status,
 		&i.PhoneVerified,
@@ -206,16 +202,14 @@ func (q *Queries) GetUserForShare(ctx context.Context, id string) (GetUserForSha
 }
 
 const insertAccount = `-- name: InsertAccount :one
-INSERT INTO identity.users (msisdn, email, first_name, second_name, password_hash, password_changed_at, created_at, updated_at)
-VALUES ($1, $2, $3, $4, $5, $6, $6, $6)
+INSERT INTO identity.users (msisdn, email, password_hash, password_changed_at, created_at, updated_at)
+VALUES ($1, $2, $3, $4, $4, $4)
 RETURNING id
 `
 
 type InsertAccountParams struct {
 	Msisdn       string
 	Email        *string
-	FirstName    *string
-	SecondName   *string
 	PasswordHash *string
 	At           *time.Time
 }
@@ -224,8 +218,6 @@ func (q *Queries) InsertAccount(ctx context.Context, arg InsertAccountParams) (s
 	row := q.db.QueryRow(ctx, insertAccount,
 		arg.Msisdn,
 		arg.Email,
-		arg.FirstName,
-		arg.SecondName,
 		arg.PasswordHash,
 		arg.At,
 	)
@@ -764,27 +756,6 @@ type SetUserEmailParams struct {
 
 func (q *Queries) SetUserEmail(ctx context.Context, arg SetUserEmailParams) error {
 	_, err := q.db.Exec(ctx, setUserEmail, arg.Email, arg.At, arg.ID)
-	return err
-}
-
-const setUserName = `-- name: SetUserName :exec
-UPDATE identity.users SET first_name = $1::text, second_name = $2::text, updated_at = $3 WHERE id = $4
-`
-
-type SetUserNameParams struct {
-	FirstName  string
-	SecondName string
-	At         time.Time
-	ID         string
-}
-
-func (q *Queries) SetUserName(ctx context.Context, arg SetUserNameParams) error {
-	_, err := q.db.Exec(ctx, setUserName,
-		arg.FirstName,
-		arg.SecondName,
-		arg.At,
-		arg.ID,
-	)
 	return err
 }
 

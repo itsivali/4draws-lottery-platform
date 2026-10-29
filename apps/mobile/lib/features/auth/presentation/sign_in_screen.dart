@@ -43,8 +43,6 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
   final _form = GlobalKey<FormState>();
   final _phone = TextEditingController();
   final _email = TextEditingController();
-  final _first = TextEditingController();
-  final _second = TextEditingController();
   final _password = TextEditingController();
   var _mode = _Mode.signIn;
   var _step = _Step.form;
@@ -55,7 +53,7 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
   var _prepared = false;
   ProviderToken? _providerToken;
   StreamSubscription<ProviderToken>? _tokens;
-  String? _phoneError, _emailError, _nameError, _passwordError, _formError, _formDetail;
+  String? _phoneError, _emailError, _passwordError, _formError, _formDetail;
 
   @override
   void initState() {
@@ -68,13 +66,11 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
     _tokens?.cancel();
     _phone.dispose();
     _email.dispose();
-    _first.dispose();
-    _second.dispose();
     _password.dispose();
     super.dispose();
   }
 
-  void _clearErrors() => _phoneError = _emailError = _nameError = _passwordError = _formError = _formDetail = null;
+  void _clearErrors() => _phoneError = _emailError = _passwordError = _formError = _formDetail = null;
 
   Future<void> _submit() async {
     setState(_clearErrors);
@@ -91,8 +87,6 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
           : await repo.signUp(
               msisdn: _phone.text.trim(),
               email: _email.text.trim(),
-              firstName: _first.text.trim(),
-              secondName: _second.text.trim(),
               password: _password.text,
               idempotencyKey: newIdempotencyKey(),
             );
@@ -107,8 +101,6 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
             _phoneError = detail ?? 'Enter a Kenyan mobile number such as 0712 345 678.';
           case ProblemFailure(slug: 'invalid-email' || 'email-registered', :final title, :final detail):
             _emailError = detail == null ? title : '$title: $detail';
-          case ProblemFailure(slug: 'invalid-name', :final title, :final detail):
-            _nameError = detail == null ? title : '$title: $detail';
           case ProblemFailure(slug: 'weak-password', :final title, :final detail):
             _passwordError = detail == null ? title : '$title: $detail';
           default:
@@ -193,13 +185,7 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
     try {
       final tokens = await ref
           .read(authRepositoryProvider)
-          .signUpWithProvider(
-            t,
-            msisdn: _phone.text.trim(),
-            firstName: _first.text.trim(),
-            secondName: _second.text.trim(),
-            idempotencyKey: newIdempotencyKey(),
-          );
+          .signUpWithProvider(t, msisdn: _phone.text.trim(), idempotencyKey: newIdempotencyKey());
       await ref.read(sessionManagerProvider).signedIn(tokens);
     } on ApiFailure catch (f) {
       if (!mounted) return;
@@ -207,8 +193,6 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
         switch (f) {
           case ProblemFailure(slug: 'invalid-msisdn', :final detail):
             _phoneError = detail ?? 'Enter a Kenyan mobile number such as 0712 345 678.';
-          case ProblemFailure(slug: 'invalid-name', :final title, :final detail):
-            _nameError = detail == null ? title : '$title: $detail';
           case ProblemFailure(slug: 'phone-registered', :final title):
             _formError = title;
             _formDetail = 'Sign in with that number and its password instead.';
@@ -232,8 +216,6 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
     _step = _Step.form;
     _adult = false;
     _phone.clear();
-    _first.clear();
-    _second.clear();
     _clearErrors();
   }
 
@@ -249,8 +231,6 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
       formKey: _form,
       phone: _phone,
       email: _email,
-      first: _first,
-      second: _second,
       password: _password,
       mode: _mode,
       step: _step,
@@ -259,7 +239,6 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
       busy: _busy,
       phoneError: _phoneError,
       emailError: _emailError,
-      nameError: _nameError,
       passwordError: _passwordError,
       formError: _formError,
       formDetail: _formDetail,
@@ -460,8 +439,6 @@ class _Form extends StatelessWidget {
     required this.formKey,
     required this.phone,
     required this.email,
-    required this.first,
-    required this.second,
     required this.password,
     required this.mode,
     required this.step,
@@ -470,7 +447,6 @@ class _Form extends StatelessWidget {
     required this.busy,
     required this.phoneError,
     required this.emailError,
-    required this.nameError,
     required this.passwordError,
     required this.formError,
     required this.formDetail,
@@ -491,8 +467,6 @@ class _Form extends StatelessWidget {
   final GlobalKey<FormState> formKey;
   final TextEditingController phone;
   final TextEditingController email;
-  final TextEditingController first;
-  final TextEditingController second;
   final TextEditingController password;
   final _Mode mode;
   final _Step step;
@@ -501,7 +475,6 @@ class _Form extends StatelessWidget {
   final bool busy;
   final String? phoneError;
   final String? emailError;
-  final String? nameError;
   final String? passwordError;
   final String? formError;
   final String? formDetail;
@@ -537,43 +510,6 @@ class _Form extends StatelessWidget {
         prefixIcon: const Icon(Icons.phone_iphone_rounded),
       ),
       validator: (v) => isLikelyKenyanMobile(v ?? '') ? null : 'Enter a Kenyan mobile number such as 0712 345 678.',
-    );
-    // the player's names, side by side: what the app calls them (not the legal name, which the ID submission has)
-    final nameFields = Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: TextFormField(
-                controller: first,
-                textCapitalization: TextCapitalization.words,
-                autofillHints: const [AutofillHints.givenName],
-                textInputAction: TextInputAction.next,
-                decoration: const InputDecoration(labelText: 'First name', prefixIcon: Icon(Icons.person_rounded)),
-                validator: (v) => (v ?? '').trim().isEmpty ? 'Enter your first name.' : null,
-              ),
-            ),
-            const SizedBox(width: Space.md),
-            Expanded(
-              child: TextFormField(
-                controller: second,
-                textCapitalization: TextCapitalization.words,
-                autofillHints: const [AutofillHints.familyName],
-                textInputAction: TextInputAction.next,
-                decoration: const InputDecoration(labelText: 'Second name'),
-                validator: (v) => (v ?? '').trim().isEmpty ? 'Enter your second name.' : null,
-              ),
-            ),
-          ],
-        ),
-        if (nameError != null)
-          Padding(
-            padding: const EdgeInsets.only(top: Space.sm, left: Space.md),
-            child: Text(nameError!, style: t.bodySmall?.copyWith(color: context.colors.error)),
-          ),
-      ],
     );
     final adultTile = CheckboxListTile(
       value: adult,
@@ -611,8 +547,6 @@ class _Form extends StatelessWidget {
               const SizedBox(height: Space.xl),
             ],
             if (phoneStep) ...[
-              nameFields,
-              const SizedBox(height: Space.lg),
               phoneField,
               const SizedBox(height: Space.md),
               adultTile,
@@ -632,7 +566,6 @@ class _Form extends StatelessWidget {
                 onSelectionChanged: busy ? null : (s) => onMode(s.first),
               ),
               const SizedBox(height: Space.xl),
-              if (creating) ...[nameFields, const SizedBox(height: Space.lg)],
               phoneField,
               if (creating) ...[
                 const SizedBox(height: Space.lg),

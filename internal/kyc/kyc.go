@@ -312,6 +312,20 @@ func (s *Service) Identities(ctx context.Context, userIDs []string, viewer strin
 	return out, err
 }
 
+// OwnName is the full name a player gave on their latest identity submission, for the player themself (their own
+// data, so no unmasking is audited); "" for an account that never submitted.
+func (s *Service) OwnName(ctx context.Context, userID string) (string, error) {
+	rows, err := store.New(s.pool).LatestChecksFor(ctx, []string{userID})
+	if err != nil || len(rows) == 0 {
+		return "", err
+	}
+	nm, err := s.kr.Decrypt(rows[0].FullNameEnc, []byte("kyc.full_name"))
+	if err != nil {
+		return "", err
+	}
+	return string(nm), nil
+}
+
 // pendingCheck loads a check and reports whether it is still the live pending submission of its user.
 func (s *Service) pendingCheck(ctx context.Context, q *store.Queries, checkID string) (store.GetKYCCheckRow, bool, error) {
 	chk, err := q.GetKYCCheck(ctx, checkID)

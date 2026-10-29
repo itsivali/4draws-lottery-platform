@@ -39,8 +39,6 @@ void main() {
     expect(find.text('Almost there'), findsOneWidget);
     expect(find.textContaining('Your Google account is ready'), findsOneWidget);
     expect(find.text('Password'), findsNothing, reason: 'no password is asked of a Google account');
-    await t.enterText(find.widgetWithText(TextFormField, 'First name'), 'Jane');
-    await t.enterText(find.widgetWithText(TextFormField, 'Second name'), 'Wanjiru');
 
     // the number is required, and so is the age confirmation
     await t.tap(find.widgetWithText(FilledButton, 'Create account'));
@@ -83,8 +81,6 @@ void main() {
     await pumpApp(t, FakeBackend(), signedIn: false);
     await tapGoogle(t);
     await t.enterText(find.widgetWithText(TextFormField, 'M-Pesa phone number'), '0712999999');
-    await t.enterText(find.widgetWithText(TextFormField, 'First name'), 'Jane');
-    await t.enterText(find.widgetWithText(TextFormField, 'Second name'), 'Wanjiru');
     await t.tap(find.text('I am 18 or older'));
     await t.tap(find.widgetWithText(FilledButton, 'Create account'));
     await t.pumpAndSettle();
@@ -101,8 +97,6 @@ void main() {
     h.providerSignIn.nextToken = 'expired-token';
     await tapGoogle(t);
     await t.enterText(find.widgetWithText(TextFormField, 'M-Pesa phone number'), '0712345678');
-    await t.enterText(find.widgetWithText(TextFormField, 'First name'), 'Jane');
-    await t.enterText(find.widgetWithText(TextFormField, 'Second name'), 'Wanjiru');
     await t.tap(find.text('I am 18 or older'));
     await t.tap(find.widgetWithText(FilledButton, 'Create account'));
     await t.pumpAndSettle();

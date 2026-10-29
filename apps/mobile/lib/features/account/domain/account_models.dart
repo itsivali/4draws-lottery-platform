@@ -83,7 +83,7 @@ class Account {
   /// False for an account that signs in with Google or Apple only.
   final bool hasPassword;
 
-  /// What the app calls the player; null for an account from before names were asked for.
+  /// The first two words of the name on the player's identity submission; null before any submission.
   final String? firstName;
   final String? secondName;
 

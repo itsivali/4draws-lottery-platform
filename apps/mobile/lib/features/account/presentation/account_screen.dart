@@ -97,12 +97,6 @@ class AccountScreen extends ConsumerWidget {
         const SectionHeader(title: 'Your account'),
         RowGroup(
           children: [
-            link(
-              Icons.person_rounded,
-              'Your name',
-              '/account/name',
-              subtitle: account.value?.displayName ?? 'Add your first and second names',
-            ),
             link(Icons.badge_rounded, 'Identity verification', '/account/verify'),
             link(Icons.lock_rounded, 'Change password', '/account/password'),
             link(

@@ -258,8 +258,6 @@ type IdentityUser struct {
 	MsisdnVerifiedAt   pgtype.Timestamptz
 	MustChangePassword bool
 	Email              pgtype.Text
-	FirstName          pgtype.Text
-	SecondName         pgtype.Text
 }
 
 type KycKycCheck struct {

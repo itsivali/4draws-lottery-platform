@@ -22,7 +22,7 @@ dev='"device":{"fingerprint":"e2e-device","platform":"android"}'
 # test staff first (ADR 0018).
 scripts/seed-staff.sh >/dev/null
 staff_token() { scripts/seed-staff.sh token "$1"; }
-creds="{\"msisdn\":\"0712345678\",\"email\":\"e2e@example.com\",\"first_name\":\"Jane\",\"second_name\":\"Kamau\",\"password\":\"correct horse battery\",$dev}"
+creds="{\"msisdn\":\"0712345678\",\"email\":\"e2e@example.com\",\"password\":\"correct horse battery\",$dev}"
 
 [ "$(post /v1/auth/signup e2e-1 "$creds")" = 201 ] || { echo "signup failed"; cat /tmp/e2e.body; exit 1; }
 [ "$(post /v1/auth/login e2e-2 "$creds")" = 200 ] || { echo "login failed"; cat /tmp/e2e.body; exit 1; }

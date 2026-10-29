@@ -42,12 +42,9 @@ FROM identity.sessions s JOIN identity.devices d ON d.id = s.device_id
 WHERE s.id = $1;
 
 -- name: InsertAccount :one
-INSERT INTO identity.users (msisdn, email, first_name, second_name, password_hash, password_changed_at, created_at, updated_at)
-VALUES (sqlc.arg(msisdn), sqlc.narg(email), sqlc.narg(first_name), sqlc.narg(second_name), sqlc.arg(password_hash), sqlc.arg(at), sqlc.arg(at), sqlc.arg(at))
+INSERT INTO identity.users (msisdn, email, password_hash, password_changed_at, created_at, updated_at)
+VALUES (sqlc.arg(msisdn), sqlc.narg(email), sqlc.arg(password_hash), sqlc.arg(at), sqlc.arg(at), sqlc.arg(at))
 RETURNING id;
-
--- name: SetUserName :exec
-UPDATE identity.users SET first_name = sqlc.arg(first_name)::text, second_name = sqlc.arg(second_name)::text, updated_at = sqlc.arg(at) WHERE id = sqlc.arg(id);
 
 -- name: UserByEmail :one
 SELECT id, msisdn, status FROM identity.users WHERE email = sqlc.arg(email)::text;
@@ -113,7 +110,7 @@ UPDATE identity.users SET msisdn_verified_at = $2, updated_at = $2 WHERE id = $1
 SELECT id, status, kyc_status FROM identity.users WHERE msisdn = $1 AND msisdn_verified_at IS NOT NULL;
 
 -- name: GetAccount :one
-SELECT u.id, u.msisdn, u.email, u.first_name, u.second_name, u.kyc_status, u.status, (u.msisdn_verified_at IS NOT NULL)::boolean AS phone_verified, u.created_at,
+SELECT u.id, u.msisdn, u.email, u.kyc_status, u.status, (u.msisdn_verified_at IS NOT NULL)::boolean AS phone_verified, u.created_at,
   u.must_change_password, (u.password_hash IS NOT NULL)::boolean AS has_password, c.requested_at AS closure_requested_at
 FROM identity.users u LEFT JOIN identity.closure_requests c ON c.user_id = u.id
 WHERE u.id = $1;

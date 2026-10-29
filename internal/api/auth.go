@@ -58,8 +58,6 @@ func authError(w http.ResponseWriter, err error) {
 		httpx.WriteProblem(w, http.StatusUnauthorized, "invalid-credentials", "Invalid phone number or password", "")
 	case errors.Is(err, identity.ErrPhoneRegistered):
 		httpx.WriteProblem(w, http.StatusConflict, "phone-registered", "This number already has an account", "sign in instead")
-	case errors.Is(err, identity.ErrInvalidName):
-		httpx.WriteProblem(w, http.StatusBadRequest, "invalid-name", "Enter your first and second names", "letters only, up to 40 characters each")
 	case errors.Is(err, identity.ErrInvalidEmail):
 		httpx.WriteProblem(w, http.StatusBadRequest, "invalid-email", "Invalid email address", "use an address like name@example.com")
 	case errors.Is(err, identity.ErrEmailRegistered):
@@ -95,9 +93,7 @@ func authError(w http.ResponseWriter, err error) {
 
 type credentialsJSON struct {
 	MSISDN   string     `json:"msisdn"`
-	Email    string     `json:"email"`       // sign-up only (ADR 0021)
-	First    string     `json:"first_name"`  // sign-up only
-	Second   string     `json:"second_name"` // sign-up only
+	Email    string     `json:"email"` // sign-up only (ADR 0021)
 	Password string     `json:"password"`
 	Device   deviceJSON `json:"device"`
 }
@@ -115,7 +111,7 @@ func (h *handlers) signup(w http.ResponseWriter, r *http.Request) {
 	if !h.limit(w, r, "signup:ip:"+h.clientIP(r), 10, time.Hour) || !h.limit(w, r, "signup:msisdn:"+key, 5, 24*time.Hour) {
 		return
 	}
-	t, err := h.Identity.Signup(r.Context(), in.MSISDN, in.Email, in.First, in.Second, in.Password, h.device(r.Context(), in.Device))
+	t, err := h.Identity.Signup(r.Context(), in.MSISDN, in.Email, in.Password, h.device(r.Context(), in.Device))
 	if err != nil {
 		authError(w, err)
 		return
@@ -299,8 +295,6 @@ func (h *handlers) ssoSignup(w http.ResponseWriter, r *http.Request) {
 		IDToken string     `json:"id_token"`
 		Nonce   string     `json:"nonce"`
 		MSISDN  string     `json:"msisdn"`
-		First   string     `json:"first_name"`
-		Second  string     `json:"second_name"`
 		Device  deviceJSON `json:"device"`
 	}
 	if !httpx.DecodeJSON(w, r, &in) {
@@ -313,7 +307,7 @@ func (h *handlers) ssoSignup(w http.ResponseWriter, r *http.Request) {
 	if !h.limit(w, r, "signup:ip:"+h.clientIP(r), 10, time.Hour) || !h.limit(w, r, "signup:msisdn:"+key, 5, 24*time.Hour) {
 		return
 	}
-	t, err := h.Identity.SignupSSO(r.Context(), provider, in.IDToken, in.Nonce, in.MSISDN, in.First, in.Second, h.device(r.Context(), in.Device))
+	t, err := h.Identity.SignupSSO(r.Context(), provider, in.IDToken, in.Nonce, in.MSISDN, h.device(r.Context(), in.Device))
 	if err != nil {
 		authError(w, err)
 		return
