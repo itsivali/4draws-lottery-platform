@@ -35,10 +35,10 @@ export function Pill({ tone, children, className }: { tone: Tone; children: Reac
 
 export function PageHeader({ title, children, actions }: { title: string; children?: ReactNode; actions?: ReactNode }) {
   return (
-    <header className="mb-6 flex flex-wrap items-start justify-between gap-4">
+    <header className="mb-8 flex flex-wrap items-start justify-between gap-4 animate-in fade-in-0 slide-in-from-bottom-1 duration-300 motion-reduce:animate-none">
       <div className="max-w-[70ch]">
-        <h1 className="text-2xl font-bold leading-tight md:text-3xl">{title}</h1>
-        {children ? <p className="mt-1.5 text-sm text-muted-foreground md:text-[15px]">{children}</p> : null}
+        <h1 className="font-display text-3xl font-extrabold leading-tight tracking-tight md:text-4xl">{title}</h1>
+        {children ? <p className="mt-2 text-[15px] text-muted-foreground md:text-base">{children}</p> : null}
       </div>
       {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
     </header>
@@ -51,7 +51,7 @@ export function Mono({ children, className }: { children: ReactNode; className?:
 }
 
 export function SectionTitle({ children, className }: { children: ReactNode; className?: string }) {
-  return <h2 className={cn('mb-3 mt-8 text-lg font-semibold', className)}>{children}</h2>
+  return <h2 className={cn('mb-3 mt-10 font-display text-xl font-bold tracking-tight', className)}>{children}</h2>
 }
 
 function LoadError({ what, error, reload }: { what: string; error: unknown; reload: () => void }) {

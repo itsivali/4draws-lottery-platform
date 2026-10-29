@@ -154,11 +154,11 @@ function AppSidebar({ sections }: { sections: Section[] }) {
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild tooltip="Overview">
               <Link to="/" onClick={close}>
-                <span aria-hidden="true" className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-card">
-                  <BrandGlyph />
+                <span aria-hidden="true" className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-hero text-primary-foreground shadow-card">
+                  <BrandGlyph className="size-6" />
                 </span>
                 <span className="grid flex-1 text-left leading-tight">
-                  <span className="truncate font-display text-[15px] font-bold tracking-tight">Tajirika</span>
+                  <span className="truncate font-display text-lg font-extrabold tracking-tight">Tajirika</span>
                   <span className="truncate text-xs text-muted-foreground">Back office</span>
                 </span>
               </Link>

@@ -166,7 +166,7 @@ abstract final class Radii {
 abstract final class Elevation {
   static List<BoxShadow> card(AppColors c) => [
     BoxShadow(color: c.shadow.withValues(alpha: 0.04), blurRadius: 2, offset: const Offset(0, 1)),
-    BoxShadow(color: c.shadow.withValues(alpha: 0.06), blurRadius: 24, offset: const Offset(0, 8)),
+    BoxShadow(color: c.shadow.withValues(alpha: 0.08), blurRadius: 28, offset: const Offset(0, 10)),
   ];
 
   static List<BoxShadow> float(AppColors c) => [
@@ -174,14 +174,19 @@ abstract final class Elevation {
   ];
 
   static List<BoxShadow> hero(AppColors c) => [
-    BoxShadow(color: c.heroEnd.withValues(alpha: 0.35), blurRadius: 40, offset: const Offset(0, 16)),
+    BoxShadow(color: c.heroEnd.withValues(alpha: 0.42), blurRadius: 48, offset: const Offset(0, 18)),
+    BoxShadow(color: c.heroStart.withValues(alpha: 0.18), blurRadius: 16, offset: const Offset(0, 4)),
   ];
 }
 
 /// The hero surfaces' gradient: the sunset, coral into violet, lit from the top left (MASTER.md §5).
 abstract final class Gradients {
-  static LinearGradient hero(AppColors c) =>
-      LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [c.heroStart, c.heroEnd]);
+  static LinearGradient hero(AppColors c) => LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [c.heroStart, c.primary, c.accent, c.heroEnd],
+    stops: const [0, 0.28, 0.72, 1],
+  );
 
   /// The wheel's stage: the dusk end of the sunset, violet into plum, so both segment colours and the gold rim stand
   /// out from it.
@@ -191,7 +196,7 @@ abstract final class Gradients {
   static RadialGradient heroGlow(AppColors c) => RadialGradient(
     center: const Alignment(-0.8, -1.2),
     radius: 1.4,
-    colors: [c.heroGlow.withValues(alpha: 0.45), c.heroGlow.withValues(alpha: 0)],
+    colors: [c.heroGlow.withValues(alpha: 0.6), c.heroGlow.withValues(alpha: 0)],
   );
 }
 

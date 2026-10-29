@@ -22,12 +22,12 @@ TextTheme _textTheme(AppColors c) {
       );
   return TextTheme(
     displayLarge: s(48, 56, FontWeight.w700, c.ink, display: true, tracking: -1.2),
-    displayMedium: s(40, 48, FontWeight.w700, c.ink, display: true, tracking: -1.0),
-    displaySmall: s(32, 40, FontWeight.w700, c.ink, display: true, tracking: -0.6),
-    headlineLarge: s(28, 36, FontWeight.w700, c.ink, display: true, tracking: -0.4),
+    displayMedium: s(44, 52, FontWeight.w800, c.ink, display: true, tracking: -1.2),
+    displaySmall: s(34, 42, FontWeight.w800, c.ink, display: true, tracking: -0.8),
+    headlineLarge: s(30, 38, FontWeight.w800, c.ink, display: true, tracking: -0.6),
     headlineMedium: s(28, 36, FontWeight.w600, c.ink, display: true, tracking: -0.4),
     headlineSmall: s(24, 32, FontWeight.w600, c.ink, display: true, tracking: -0.3),
-    titleLarge: s(20, 28, FontWeight.w600, c.ink, display: true, tracking: -0.2),
+    titleLarge: s(22, 30, FontWeight.w700, c.ink, display: true, tracking: -0.3),
     titleMedium: s(16, 24, FontWeight.w600, c.ink),
     titleSmall: s(14, 20, FontWeight.w600, c.ink),
     bodyLarge: s(16, 24, FontWeight.w400, c.ink),

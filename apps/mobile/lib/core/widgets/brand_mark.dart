@@ -5,12 +5,15 @@ import '../../app/theme/tokens.dart';
 /// The brand: the Tajirika mark (a sunset tile with a white T and the wheel's gold pointer) and the wordmark. Layouts
 /// only give it a height.
 class BrandMark extends StatelessWidget {
-  const BrandMark({super.key, this.height = 28, this.showWordmark = true});
+  const BrandMark({super.key, this.height = 28, this.showWordmark = true, this.wordmarkColor});
 
   static const name = 'Tajirika';
 
   final double height;
   final bool showWordmark;
+
+  /// The wordmark's colour; ink by default, `onHero` on a hero surface.
+  final Color? wordmarkColor;
 
   @override
   Widget build(BuildContext context) {
@@ -26,7 +29,13 @@ class BrandMark extends StatelessWidget {
             SizedBox(width: height * 0.32),
             Text(
               name,
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(fontSize: height * 0.72, height: 1, color: c.ink),
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                fontSize: height * 0.74,
+                fontWeight: FontWeight.w800,
+                letterSpacing: -height * 0.02,
+                height: 1,
+                color: wordmarkColor ?? c.ink,
+              ),
             ),
           ],
         ],

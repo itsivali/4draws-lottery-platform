@@ -102,17 +102,17 @@ export function SignIn({ config, api, onSignedIn, providers = realProviders, not
       <aside aria-hidden="true" className="relative hidden overflow-hidden bg-hero text-white lg:flex lg:flex-col lg:justify-between lg:p-12">
         <div className="absolute inset-0 bg-[radial-gradient(90%_70%_at_0%_0%,rgb(255_255_255_/_0.28)_0%,transparent_60%),radial-gradient(80%_60%_at_100%_100%,rgb(43_18_84_/_0.55)_0%,transparent_55%)]" />
         <div className="absolute -bottom-40 -left-24 size-[460px] rounded-full bg-white/10 blur-3xl" />
-        <p className="relative flex items-center gap-3 font-display text-2xl font-bold tracking-tight"><BrandGlyph className="size-8" /> Tajirika</p>
-        <div className="relative max-w-md">
-          <p className="font-display text-4xl font-bold leading-tight tracking-tight">Every action, under your name.</p>
-          <p className="mt-4 text-white/80">Identity review, draws, payouts, tax and the ledger, with two-person rules where the money moves.</p>
+        <p className="relative flex items-center gap-3 font-display text-3xl font-extrabold tracking-tight"><span className="flex size-12 items-center justify-center rounded-2xl bg-white/15 shadow-float backdrop-blur"><BrandGlyph className="size-9" /></span> Tajirika</p>
+        <div className="relative max-w-lg animate-in fade-in-0 slide-in-from-bottom-4 duration-700 motion-reduce:animate-none">
+          <p className="font-display text-5xl font-extrabold leading-[1.05] tracking-tight">Every action, under your name.</p>
+          <p className="mt-5 text-lg text-white/85">Identity review, draws, payouts, tax and the ledger, with two-person rules where the money moves.</p>
         </div>
         <p className="relative text-xs text-white/60">Staff back office · Nairobi time</p>
       </aside>
       <div className="flex items-center justify-center p-6 md:p-10">
         <section className="w-full max-w-[400px]" aria-labelledby="signin-title">
           <p className="mb-6 flex items-center gap-2 text-sm font-medium text-muted-foreground lg:hidden"><ShieldCheck aria-hidden="true" className="size-4 text-primary" /> Tajirika back office</p>
-          <h1 id="signin-title" className="text-3xl font-bold tracking-tight">Sign in</h1>
+          <h1 id="signin-title" className="font-display text-4xl font-extrabold tracking-tight">Sign in</h1>
           <p className="mt-2 text-sm text-muted-foreground">With the email address an administrator invited and your password. Every action you take is recorded under your name.</p>
           {notice ? (
             <Alert role="status" className="mt-6 border-pending/40 bg-pending/10 [&>svg]:text-pending">

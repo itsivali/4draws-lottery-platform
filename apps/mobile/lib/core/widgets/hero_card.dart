@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../app/theme/tokens.dart';
+import 'reveal.dart';
 
 /// One of the app's two hero surfaces (MASTER.md §5): the sunset gradient, lit from the top left, with a deep shadow. Text and
 /// icons inside default to `onHero`. Used for the balance and for the wheel's stage, nowhere else.
@@ -24,30 +25,32 @@ class HeroCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.colors;
     final t = Theme.of(context).textTheme;
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        gradient: stage ? Gradients.stage(c) : Gradients.hero(c),
-        borderRadius: BorderRadius.circular(radius),
-        boxShadow: Elevation.hero(c),
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(radius),
-        child: Stack(
-          children: [
-            Positioned.fill(
-              child: DecoratedBox(decoration: BoxDecoration(gradient: Gradients.heroGlow(c))),
-            ),
-            Padding(
-              padding: padding,
-              child: DefaultTextStyle.merge(
-                style: t.bodyMedium?.copyWith(color: c.onHero),
-                child: IconTheme.merge(
-                  data: IconThemeData(color: c.onHero),
-                  child: child,
+    return Reveal(
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: stage ? Gradients.stage(c) : Gradients.hero(c),
+          borderRadius: BorderRadius.circular(radius),
+          boxShadow: Elevation.hero(c),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(radius),
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: DecoratedBox(decoration: BoxDecoration(gradient: Gradients.heroGlow(c))),
+              ),
+              Padding(
+                padding: padding,
+                child: DefaultTextStyle.merge(
+                  style: t.bodyMedium?.copyWith(color: c.onHero),
+                  child: IconTheme.merge(
+                    data: IconThemeData(color: c.onHero),
+                    child: child,
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

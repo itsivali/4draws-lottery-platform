@@ -72,7 +72,7 @@ class AppShell extends StatelessWidget {
               onDestinationSelected: _go,
               leading: Padding(
                 padding: const EdgeInsets.fromLTRB(Space.sm, Space.xl, Space.sm, Space.xl),
-                child: BrandMark(height: 30, showWordmark: extended),
+                child: BrandMark(height: 34, showWordmark: extended),
               ),
               destinations: [
                 for (final d in _destinations)

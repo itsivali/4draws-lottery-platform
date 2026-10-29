@@ -112,7 +112,8 @@ Touch targets ≥ 48×48 dp, ≥ 8 dp apart. Safe areas respected; the bottom ba
   lift; `tinted` cards sit on `primaryContainer` for quiet emphasis.
 - Elevation exists in three steps: `card` (above), `float` (sheets, dialogs, tooltips: `0 12 40 / 14%`) and `hero`
   (`0 16 40 / 35% heroEnd`). The wheel has its own lighting (see `pages/play.md`).
-- **Hero surfaces** (`HeroCard`): the sunset gradient `heroStart → heroEnd` (coral into violet) with a radial
+- **Hero surfaces** (`HeroCard`): the sunset gradient `heroStart → primary → accent → heroEnd` (coral through violet,
+  four stops since 2026-10-29 so both ends read) with a radial
   `heroGlow` from the top left; the wheel's stage takes the dusk end only (`heroEnd → shadow`, `Gradients.stage`) so
   the coral and violet segments and the gold rim stand out from it, `hero` elevation and `xl` corners (no ornaments:
   the corner rings were removed on 2026-10-29, owner). Exactly two uses: the balance

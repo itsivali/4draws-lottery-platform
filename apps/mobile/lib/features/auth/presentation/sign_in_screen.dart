@@ -138,7 +138,7 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        const Align(alignment: Alignment.centerLeft, child: BrandMark(height: 36)),
+                        const Align(alignment: Alignment.centerLeft, child: BrandMark(height: 42)),
                         const SizedBox(height: Space.xxl),
                         form,
                         const SizedBox(height: Space.lg),
@@ -169,7 +169,7 @@ class _Panel extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(BrandMark.name, style: t.titleLarge?.copyWith(color: c.onHero)),
+            BrandMark(height: 44, wordmarkColor: c.onHero),
             const Spacer(),
             Text(
               'KES 100 a spin, up to four a day.\nEvery draw on the record.',

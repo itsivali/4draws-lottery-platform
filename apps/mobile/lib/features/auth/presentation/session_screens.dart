@@ -17,7 +17,7 @@ class StartingScreen extends StatelessWidget {
         child: const Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            BrandMark(height: 44),
+            BrandMark(height: 56),
             SizedBox(height: Space.xxl),
             SizedBox.square(dimension: 28, child: CircularProgressIndicator(strokeWidth: 3)),
           ],

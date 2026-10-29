@@ -12,6 +12,7 @@ import '../../../core/widgets/content_frame.dart';
 import '../../../core/widgets/hero_card.dart';
 import '../../../core/widgets/inline_banner.dart';
 import '../../../core/widgets/motion.dart';
+import '../../../core/widgets/reveal.dart';
 import '../../../core/widgets/skeleton.dart';
 import '../../../core/widgets/status_pill.dart';
 import '../../account/application/account_providers.dart';
@@ -36,7 +37,7 @@ class HomeScreen extends ConsumerWidget {
     ];
     final side = const <Widget>[OpenDrawsCard()];
     return Scaffold(
-      appBar: AppBar(title: const BrandMark(height: 26)),
+      appBar: AppBar(title: const BrandMark(height: 30)),
       body: SafeArea(
         top: false,
         child: RefreshIndicator(
@@ -161,13 +162,11 @@ class _BalanceHero extends ConsumerWidget {
           children: [
             Text('Confirmed balance', style: t.labelMedium?.copyWith(color: c.onHeroMuted)),
             const SizedBox(height: Space.xs),
-            AnimatedSwitcher(
-              duration: context.reduceMotion ? Duration.zero : Motion.standard,
-              child: Text(
-                formatKes(w.balanceKes),
-                key: ValueKey(w.balanceKes),
-                style: t.displayMedium?.copyWith(color: c.onHero),
-              ),
+            CountUp(
+              key: ValueKey(w.balanceKes),
+              value: w.balanceKes,
+              format: formatKes,
+              style: t.displayMedium?.copyWith(color: c.onHero),
             ),
             if (w.debtKes > 0) ...[
               const SizedBox(height: Space.sm),
