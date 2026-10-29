@@ -1,5 +1,9 @@
 # Runbook: recreating the free Render Postgres before it expires
 
+> **Not in use since 2026-10-29:** `lottery-db` is on the paid `0.1c-256mb` plan (no expiry), and the workflow's daily
+> schedule is off. A manual `dry-run` still makes a verified, encrypted dump on demand. This page applies again only if
+> the database goes back to the free plan.
+
 Until the database is upgraded to a paid plan, `.github/workflows/db-rotate.yml` keeps it alive. Render's free Postgres
 **expires 30 days after creation** (then 14 days' grace to upgrade, then deletion), keeps **no backups**, and a
 workspace may have **only one** free instance, so a new one cannot be created next to the old one.

@@ -1,10 +1,9 @@
 name: db-rotate
 # Recreates the Render free Postgres before it expires (scripts/rotate-free-db.sh, docs/runbooks/free-database-rotation.md).
-# Daily at 01:00 Nairobi: rotate when expiry is near. Manual runs: check, dry-run (backup and verify only), rotate,
-# or recover (restore the encrypted backup of a failed run after its old database was already deleted).
+# The database has been on a paid plan since 2026-10-29, so nothing expires and the daily run is off. Manual runs remain:
+# check, dry-run (backup and verify only: a verified, encrypted dump on demand), rotate (refused unless the plan is
+# free), or recover (restore the encrypted backup of a failed run after its old database was already deleted).
 on:
-  schedule:
-    - cron: "0 22 * * *"   # 01:00 EAT
   workflow_dispatch:
     inputs:
       mode:

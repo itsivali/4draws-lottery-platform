@@ -1,8 +1,9 @@
-# Render Blueprint for the free tier: one web service (API + in-process job workers), free Postgres, free Key Value.
+# Render Blueprint: one web service (API + in-process job workers) on 0.5c-512mb, Postgres on 0.1c-256mb (both paid
+# since 2026-10-29: always on, no expiry), free Key Value. Plans here must match the dashboard, or a sync changes them back.
 # Secrets marked `sync: false` are entered once in the dashboard and are never stored in this repository.
 databases:
   - name: lottery-db
-    plan: free
+    plan: 0.1c-256mb
     databaseName: lottery
     user: lottery
 
@@ -16,7 +17,7 @@ services:
   - type: web
     name: lottery-api
     runtime: docker
-    plan: free
+    plan: 0.5c-512mb
     dockerfilePath: ./Dockerfile
     dockerContext: .
     healthCheckPath: /healthz
