@@ -18,6 +18,16 @@ The back office shows each member by **name**, never by email address: an invite
 account menu (*Change name*), and an admin can rename a member on the *Staff* page. Every change is audited
 (`staff.name`).
 
+**Forgotten password:** *Forgotten it?* on the sign-in page emails the member a link (from `SMTP_FROM`, to the
+address they sign in with) that opens `/reset-password` and works for 30 minutes; the new password follows the staff
+rules and ends their other sessions. The answer is the same whether or not the address is a member's. It needs the
+api's `SMTP_*` and `BACKOFFICE_URL` set; without them an admin sets a temporary password instead.
+
+**Players who forgot their password** have no email, so staff reset it from the *Players* page (*Temporary password*):
+check who is asking against the name and ID number shown, give them a temporary password by phone (never SMS or
+chat) with a reason for the audit log. Every session of theirs ends and the app makes them choose their own password
+at the next sign-in before anything else.
+
 **Locked out (the only admin has lost their password):** nobody can reset it from the back office, and
 `lotteryctl staff password` needs database access. Without that, set `STAFF_BOOTSTRAP_RESET=true` on the api (Render →
 lottery-api → Environment), with `STAFF_BOOTSTRAP_PASSWORD` set to a fresh temporary password (12 characters or more),

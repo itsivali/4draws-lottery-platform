@@ -1,5 +1,5 @@
 import type { ColumnDef } from '@tanstack/react-table'
-import { Search, UserRound, UserRoundCheck, UserRoundX } from 'lucide-react'
+import { KeyRound, Search, UserRound, UserRoundCheck, UserRoundX } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { Actions, DataTable, Stack } from '../components/DataTable'
 import { useConfirmedAction } from '../components/useConfirmedAction'
@@ -75,6 +75,20 @@ export function PlayersPage() {
         if (p.status === 'closed') return null
         return (
           <Actions>
+            {p.status === 'active' ? (
+              <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => {
+                ask({
+                  title: `Temporary password for ${msisdn(p.msisdn)}`,
+                  body: <p>First check the caller against the name and ID number shown here. Tell them the password by phone, never by SMS or chat. Every session of theirs ends now, and the app makes them choose their own password when they next sign in.</p>,
+                  fields: [
+                    { name: 'reason', label: 'Reason (goes in the audit log)', required: true },
+                    { name: 'password', label: 'Temporary password', type: 'password', required: true, help: 'A short sentence works best. It is never stored in clear.' },
+                  ],
+                  confirmLabel: 'Set temporary password', success: `${msisdn(p.msisdn)} has a temporary password.`,
+                  act: (v) => api.post(`/v1/staff/players/${p.user_id}/password`, { password: v.password, reason: v.reason }),
+                })
+              }}><KeyRound aria-hidden="true" /> Temporary password</Button>
+            ) : null}
             {p.status === 'active' ? (
               <Button type="button" size="sm" variant="outline" className="border-destructive/50 text-destructive hover:bg-destructive/10 hover:text-destructive" disabled={busy} onClick={() => {
                 ask({

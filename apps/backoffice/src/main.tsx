@@ -1,6 +1,6 @@
 import { StrictMode, useCallback, useEffect, useMemo, useState } from 'react'
 import { createRoot } from 'react-dom/client'
-import { BrowserRouter } from 'react-router-dom'
+import { BrowserRouter, useLocation, useNavigate } from 'react-router-dom'
 import { ApiClient } from './api'
 import { App } from './App'
 import { loadConfig, type Config } from './config'
@@ -8,6 +8,7 @@ import { SessionContext, useSession, type Session } from './context'
 import { completeDevPopup } from './providers'
 import { NameForm } from './components/NameDialog'
 import { PasswordForm } from './components/PasswordDialog'
+import { ResetPassword } from './ResetPassword'
 import { SignIn, type StaffSession } from './SignIn'
 import type { Me } from './types'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -31,6 +32,8 @@ function stored(): StaffSession | null {
 function Root({ config }: { config: Config }) {
   const [current, setCurrent] = useState<StaffSession | null>(stored)
   const [notice, setNotice] = useState<string | undefined>()
+  const location = useLocation()
+  const navigate = useNavigate()
 
   const end = useCallback((message?: string) => {
     try { sessionStorage.removeItem(KEY) } catch { /* nothing stored */ }
@@ -98,6 +101,14 @@ function Root({ config }: { config: Config }) {
   }, [current, api, end, updateMe])
 
   if (!session) {
+    if (location.pathname === '/reset-password') {
+      return (
+        <ResetPassword api={api} token={new URLSearchParams(location.search).get('token') ?? ''} onDone={() => {
+          setNotice('Your password is set. Sign in with it.')
+          void navigate('/', { replace: true })
+        }} />
+      )
+    }
     return (
       <SignIn config={config} api={api} notice={notice} onSignedIn={(s) => {
         try { sessionStorage.setItem(KEY, JSON.stringify(s)) } catch { /* the session lasts until reload */ }

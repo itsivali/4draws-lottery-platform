@@ -87,6 +87,9 @@ type Tokens struct {
 	Access        string
 	Refresh       string
 	AccessExpires time.Time
+	// MustChangePassword: the player signed in with a temporary password staff gave them; the app makes them choose
+	// their own before anything else (set by Login only).
+	MustChangePassword bool
 }
 
 // Principal is an authenticated caller.

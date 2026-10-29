@@ -51,7 +51,7 @@ SELECT EXISTS (SELECT 1 FROM identity.users WHERE msisdn = $1 AND msisdn_verifie
 
 -- A number with a proved owner admits only that owner; otherwise the newest few unproved claims are tried.
 -- name: LoginCandidates :many
-SELECT id, password_hash, status, (msisdn_verified_at IS NOT NULL)::boolean AS phone_verified
+SELECT id, password_hash, status, (msisdn_verified_at IS NOT NULL)::boolean AS phone_verified, must_change_password
 FROM identity.users
 WHERE msisdn = $1 AND password_hash IS NOT NULL
 ORDER BY (msisdn_verified_at IS NULL), created_at DESC
@@ -62,7 +62,12 @@ SELECT id, msisdn, kyc_status, status, language, password_hash, (msisdn_verified
 FROM identity.users WHERE id = $1;
 
 -- name: SetPassword :exec
-UPDATE identity.users SET password_hash = $2, password_changed_at = $3, updated_at = $3 WHERE id = $1;
+UPDATE identity.users SET password_hash = $2, password_changed_at = $3, must_change_password = false, updated_at = $3 WHERE id = $1;
+
+-- name: SetTemporaryPassword :execrows
+-- staff gave the player a password to sign in with once; the app makes them choose their own next
+UPDATE identity.users SET password_hash = sqlc.arg(password_hash), password_changed_at = sqlc.arg(at), must_change_password = true, updated_at = sqlc.arg(at)
+WHERE id = sqlc.arg(id) AND status <> 'closed';
 
 -- name: RevokeOtherSessions :exec
 UPDATE identity.sessions SET revoked_at = sqlc.arg(at), revoked_reason = 'password_change'
@@ -80,7 +85,7 @@ SELECT id, status, kyc_status FROM identity.users WHERE msisdn = $1 AND msisdn_v
 
 -- name: GetAccount :one
 SELECT u.id, u.msisdn, u.kyc_status, u.status, (u.msisdn_verified_at IS NOT NULL)::boolean AS phone_verified, u.created_at,
-  c.requested_at AS closure_requested_at
+  u.must_change_password, c.requested_at AS closure_requested_at
 FROM identity.users u LEFT JOIN identity.closure_requests c ON c.user_id = u.id
 WHERE u.id = $1;
 

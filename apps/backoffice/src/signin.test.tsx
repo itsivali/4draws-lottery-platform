@@ -72,6 +72,18 @@ describe('sign in', () => {
     expect(JSON.parse(init?.body as string)).toEqual({ provider: 'password', email: 'Owner@Example.com', password: 'the right one here' })
   })
 
+  it('emails a reset link to a member who forgot their password, and never says whether the address is known', async () => {
+    const { fetch } = setup(() => ({ status: 202 }))
+    const user = userEvent.setup()
+    await user.type(screen.getByLabelText('Email address'), 'owner@example.com')
+    await user.click(screen.getByRole('button', { name: 'Forgotten it?' }))
+    await user.click(screen.getByRole('button', { name: 'Email me a reset link' }))
+    expect(await screen.findByRole('status')).toHaveTextContent('If that address belongs to a staff member, a reset link is on its way.')
+    const [url, init] = fetch.mock.calls[0] ?? []
+    expect(url).toBe('https://api.test/v1/staff/password/forgot')
+    expect(JSON.parse(init?.body as string)).toEqual({ email: 'owner@example.com' })
+  })
+
   it('offers Google and Apple and exchanges the ID token for a back-office session', async () => {
     const session = { token: 'stf_x', expires_at: '2026-10-26T21:00:00Z', member: { id: 'm1', name: 'Owner', email: 'owner@example.com', roles: ['admin'], must_change_password: false } }
     const { fetch, onSignedIn, all } = setup(() => ({ status: 201, body: session }))

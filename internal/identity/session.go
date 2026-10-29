@@ -155,6 +155,7 @@ func (s *Service) Login(ctx context.Context, rawMSISDN, pw string, dev Device) (
 		}
 		var err error
 		tokens, err = s.startSession(ctx, q, matched.ID, dev, verdict, now)
+		tokens.MustChangePassword = matched.MustChangePassword
 		return err
 	})
 	return tokens, err

@@ -6,12 +6,17 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"regexp"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 
 	"github.com/itsivali/lottery-platform/internal/api"
+	"github.com/itsivali/lottery-platform/internal/platform/mail"
+	"github.com/itsivali/lottery-platform/internal/staff"
 )
 
 // staffIDTokens plays Google and Apple for the back office: the token names its claims.
@@ -136,6 +141,116 @@ const (
 	ownPW   = "my own long password"
 	resetPW = "another temporary one"
 )
+
+// outbox records the emails the api would send.
+type outbox struct {
+	mu   sync.Mutex
+	msgs []mail.Message
+}
+
+func (o *outbox) Send(_ context.Context, m mail.Message) error {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.msgs = append(o.msgs, m)
+	return nil
+}
+
+func TestStaffSession_AForgottenPasswordIsResetThroughAnEmailedLinkOnce(t *testing.T) {
+	sent := &outbox{}
+	e := setupWith(t, func(d *api.Deps) {
+		d.Staff = d.StaffServices.Members
+		d.StaffServices.Members.WithPasswordResets(staff.PasswordResets{Sender: sent, BackOfficeURL: "https://bo.example.com/"})
+	})
+	if err := e.deps.StaffServices.Members.Bootstrap(context.Background(), "owner@example.com", ""); err != nil {
+		t.Fatal(err)
+	}
+	admin := e.staffSignIn(t, "google", "owner").Body["token"].(string)
+	if r := e.do(t, http.MethodPost, "/v1/staff/members", admin, map[string]any{"email": "otieno@example.com", "name": "Otieno", "roles": []string{"staff"}, "password": tempPW}); r.Code != http.StatusCreated {
+		t.Fatalf("invite: %d %s", r.Code, r.Raw)
+	}
+	tok := e.passwordSignIn(t, "otieno@example.com", tempPW).Body["token"].(string)
+	// an unknown address is answered exactly like a known one, and nothing is sent
+	if r := e.do(t, http.MethodPost, "/v1/staff/password/forgot", "", map[string]any{"email": "nobody@example.com"}); r.Code != http.StatusAccepted {
+		t.Fatalf("forgot (unknown): %d %s", r.Code, r.Raw)
+	}
+	if r := e.do(t, http.MethodPost, "/v1/staff/password/forgot", "", map[string]any{"email": " Otieno@Example.com "}); r.Code != http.StatusAccepted {
+		t.Fatalf("forgot: %d %s", r.Code, r.Raw)
+	}
+	if len(sent.msgs) != 1 || sent.msgs[0].To[0] != "otieno@example.com" || !strings.Contains(sent.msgs[0].Subject, "reset your password") {
+		t.Fatalf("sent %+v", sent.msgs)
+	}
+	m := regexp.MustCompile(`https://bo\.example\.com/reset-password\?token=([A-Za-z0-9_-]+)`).FindStringSubmatch(sent.msgs[0].Text)
+	if m == nil {
+		t.Fatalf("no link in:\n%s", sent.msgs[0].Text)
+	}
+	token := m[1]
+	if r := e.do(t, http.MethodPost, "/v1/staff/password/reset", "", map[string]any{"token": "not-a-token", "new_password": ownPW}); r.Code != http.StatusGone || !hasType(r, "invalid-token") {
+		t.Fatalf("bad token: %d %s", r.Code, r.Raw)
+	}
+	if r := e.do(t, http.MethodPost, "/v1/staff/password/reset", "", map[string]any{"token": token, "new_password": "short"}); r.Code != http.StatusBadRequest || !hasType(r, "weak-password") {
+		t.Fatalf("weak: %d %s", r.Code, r.Raw)
+	}
+	if r := e.do(t, http.MethodPost, "/v1/staff/password/reset", "", map[string]any{"token": token, "new_password": ownPW}); r.Code != http.StatusNoContent {
+		t.Fatalf("reset: %d %s", r.Code, r.Raw)
+	}
+	// the link is spent, the old sessions are over, the new password works and needs no change
+	if r := e.do(t, http.MethodPost, "/v1/staff/password/reset", "", map[string]any{"token": token, "new_password": resetPW}); r.Code != http.StatusGone {
+		t.Fatalf("link reused: %d %s", r.Code, r.Raw)
+	}
+	if r := e.do(t, http.MethodGet, "/v1/staff/me", tok, nil); r.Code != http.StatusUnauthorized {
+		t.Fatalf("old session survived: %d", r.Code)
+	}
+	if r := e.passwordSignIn(t, "otieno@example.com", tempPW); r.Code != http.StatusUnauthorized {
+		t.Fatalf("old password still works: %d", r.Code)
+	}
+	if r := e.passwordSignIn(t, "otieno@example.com", ownPW); r.Code != http.StatusCreated || r.Body["member"].(map[string]any)["must_change_password"] != false {
+		t.Fatalf("new password: %d %s", r.Code, r.Raw)
+	}
+}
+
+func TestStaffSession_ForgotPasswordNeedsEmailConfigured(t *testing.T) {
+	e := setupStaff(t)
+	if r := e.do(t, http.MethodPost, "/v1/staff/password/forgot", "", map[string]any{"email": "owner@example.com"}); r.Code != http.StatusServiceUnavailable {
+		t.Fatalf("without a mailer: %d %s", r.Code, r.Raw)
+	}
+}
+
+func TestStaffPlayers_StaffGiveAPlayerATemporaryPasswordTheyMustChange(t *testing.T) {
+	e := setupStaff(t)
+	player := e.signIn(t)
+	admin := e.staffSignIn(t, "google", "owner").Body["token"].(string)
+	userID, _ := e.do(t, http.MethodGet, "/v1/account", player.access, nil).Body["user_id"].(string)
+	path := "/v1/staff/players/" + userID + "/password"
+	if r := e.do(t, http.MethodPost, path, admin, map[string]any{"password": "fresh start 2026", "reason": ""}); r.Code != http.StatusBadRequest || !hasType(r, "reason-required") {
+		t.Fatalf("no reason: %d %s", r.Code, r.Raw)
+	}
+	if r := e.do(t, http.MethodPost, path, admin, map[string]any{"password": "short", "reason": "caller verified by ID"}); r.Code != http.StatusBadRequest || !hasType(r, "weak-password") {
+		t.Fatalf("weak: %d %s", r.Code, r.Raw)
+	}
+	if r := e.do(t, http.MethodPost, "/v1/staff/players/0192f000-0000-7000-8000-000000000009/password", admin, map[string]any{"password": "fresh start 2026", "reason": "x"}); r.Code != http.StatusNotFound {
+		t.Fatalf("unknown player: %d %s", r.Code, r.Raw)
+	}
+	if r := e.do(t, http.MethodPost, path, admin, map[string]any{"password": "fresh start 2026", "reason": "caller verified by ID"}); r.Code != http.StatusNoContent {
+		t.Fatalf("set: %d %s", r.Code, r.Raw)
+	}
+	if r := e.do(t, http.MethodGet, "/v1/account", player.access, nil); r.Code != http.StatusUnauthorized {
+		t.Fatalf("the player's session survived: %d", r.Code)
+	}
+	login := e.do(t, http.MethodPost, "/v1/auth/login", "", map[string]any{"msisdn": player.msisdn, "password": "fresh start 2026", "device": map[string]any{"fingerprint": "fp-temp", "platform": "android"}})
+	access, _ := login.Body["access_token"].(string)
+	if login.Code != http.StatusOK || login.Body["must_change_password"] != true || access == "" {
+		t.Fatalf("login with the temporary password: %d %s", login.Code, login.Raw)
+	}
+	if r := e.do(t, http.MethodGet, "/v1/account", access, nil); r.Code != http.StatusOK || r.Body["must_change_password"] != true {
+		t.Fatalf("account: %d %s", r.Code, r.Raw)
+	}
+	if r := e.do(t, http.MethodPost, "/v1/auth/password/change", access, map[string]any{"current_password": "fresh start 2026", "new_password": strongPassword + " again"}); r.Code != http.StatusNoContent && r.Code != http.StatusOK {
+		t.Fatalf("change: %d %s", r.Code, r.Raw)
+	}
+	if r := e.do(t, http.MethodGet, "/v1/account", access, nil); r.Code != http.StatusOK || r.Body["must_change_password"] != false {
+		t.Fatalf("account after the change: %d %s", r.Code, r.Raw)
+	}
+}
 
 func TestStaffMembers_MembersNameThemselvesAndAdminsNameAnyone(t *testing.T) {
 	e := setupStaff(t)

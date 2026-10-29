@@ -70,3 +70,17 @@ UPDATE staff.members SET name = sqlc.arg(name), updated_at = sqlc.arg(at) WHERE 
 -- name: ActiveAdmins :one
 -- serialises role changes that could leave no admin (callers lock the member rows they change first)
 SELECT count(*) FROM staff.members WHERE active AND 'admin' = ANY (roles);
+
+-- name: InsertPasswordReset :exec
+INSERT INTO staff.password_resets (member_id, token_hash, expires_at, created_at)
+VALUES (sqlc.arg(member_id), sqlc.arg(token_hash), sqlc.arg(expires_at), sqlc.arg(at));
+
+-- name: PasswordResetByHash :one
+SELECT r.id, r.member_id, r.expires_at, r.used_at, m.email, m.active
+FROM staff.password_resets r JOIN staff.members m ON m.id = r.member_id
+WHERE r.token_hash = $1
+FOR UPDATE OF r;
+
+-- name: UseMemberPasswordResets :exec
+-- a reset consumes every open link of the member, not only the one used
+UPDATE staff.password_resets SET used_at = sqlc.arg(at) WHERE member_id = sqlc.arg(member_id) AND used_at IS NULL;

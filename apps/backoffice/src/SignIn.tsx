@@ -1,4 +1,4 @@
-import { CircleX, KeyRound, ShieldCheck } from 'lucide-react'
+import { CircleX, KeyRound, MailCheck, ShieldCheck } from 'lucide-react'
 import { useEffect, useId, useRef, useState } from 'react'
 import { ProblemError, type ApiClient } from './api'
 import { BrandGlyph } from './components/BrandGlyph'
@@ -39,6 +39,23 @@ export function SignIn({ config, api, onSignedIn, providers = realProviders, not
   const [password, setPassword] = useState('')
   const [busy, setBusy] = useState(false)
   const [problem, setProblem] = useState<{ title: string; detail?: string | undefined } | null>(null)
+  // a forgotten password: the member asks for an emailed link (answered the same whether or not the address is known)
+  const [forgot, setForgot] = useState(false)
+  const [forgotSent, setForgotSent] = useState(false)
+  const askForLink = async () => {
+    if (busy || !email.trim()) return
+    setBusy(true)
+    setProblem(null)
+    try {
+      await api.post('/v1/staff/password/forgot', { email: email.trim() })
+      setForgotSent(true)
+    } catch (e) {
+      if (e instanceof ProblemError && e.status === 503) setProblem({ title: 'Password reset by email is not set up.', detail: 'An administrator can give you a temporary password.' })
+      else setProblem(e instanceof ProblemError ? { title: e.title, detail: e.detail } : { title: 'The server could not be reached. Try again.' })
+    } finally {
+      setBusy(false)
+    }
+  }
 
   // one sign-in at a time: a second click (or Google's callback during an Apple popup) is ignored, not run alongside
   const running = useRef(false)
@@ -118,8 +135,29 @@ export function SignIn({ config, api, onSignedIn, providers = realProviders, not
             <div className="grid gap-1.5">
               <Label htmlFor={`${id}-password`}>Password</Label>
               <Input id={`${id}-password`} name="password" type="password" autoComplete="current-password" required value={password} onChange={(e) => { setPassword(e.target.value) }} />
-              <p className="text-xs text-muted-foreground">Forgotten it? An administrator can give you a temporary one.</p>
+              {forgot ? null : (
+                <p className="text-xs text-muted-foreground">
+                  <button type="button" className="underline-offset-4 hover:underline" onClick={() => { setForgot(true); setProblem(null) }}>Forgotten it?</button>
+                </p>
+              )}
             </div>
+            {forgot ? (
+              forgotSent ? (
+                <Alert role="status" className="border-success/40 bg-success/10 [&>svg]:text-success">
+                  <MailCheck />
+                  <AlertTitle>If that address belongs to a staff member, a reset link is on its way.</AlertTitle>
+                  <AlertDescription>It works for 30 minutes. Check the junk folder if nothing arrives.</AlertDescription>
+                </Alert>
+              ) : (
+                <div className="grid gap-2 rounded-lg border bg-muted/40 p-3">
+                  <p className="text-sm">Enter the email address above and we will email you a link to choose a new password. An administrator can also give you a temporary one.</p>
+                  <div className="flex gap-2">
+                    <Button type="button" size="sm" variant="outline" disabled={busy || !email.trim()} onClick={() => { void askForLink() }}>Email me a reset link</Button>
+                    <Button type="button" size="sm" variant="ghost" disabled={busy} onClick={() => { setForgot(false) }}>Cancel</Button>
+                  </div>
+                </div>
+              )
+            ) : null}
             <Button type="submit" size="lg" className="h-11 w-full" disabled={busy || !email.trim() || !password}>
               <KeyRound aria-hidden="true" /> {busy ? 'Signing in…' : 'Sign in'}
             </Button>

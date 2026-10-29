@@ -238,6 +238,9 @@ func (a *App) staff(ctx context.Context, sh shared, base services) (staff.Authen
 		ids = identity.NewOIDCVerifier(clock.Wall{}, sh.hc, providers)
 	}
 	members := staff.NewService(pool, sh.clk, ids, sh.aw, crypto.MAC(sh.cfg.API.AuthKey, "staff-password-pepper"))
+	if m := sh.cfg.Mail; m.BackOfficeURL != "" {
+		members.WithPasswordResets(staff.PasswordResets{Sender: mailer(m), BackOfficeURL: m.BackOfficeURL})
+	}
 	switch {
 	case c.BootstrapReset:
 		// the owner's way back in without database access: the bootstrap admin gets the temporary password again

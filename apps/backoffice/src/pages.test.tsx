@@ -230,6 +230,33 @@ describe('players', () => {
   })
 })
 
+describe('players: temporary passwords', () => {
+  it('staff give a player a temporary password with a reason, after being told to check who is asking', async () => {
+    const player: Player = {
+      user_id: 'u1', msisdn: '254796992457', kyc_status: 'verified', status: 'active', phone_verified: true, balance_kes: 100, plays: 3,
+      created_at: '2026-10-26T08:00:00Z', last_sign_in_at: '2026-10-28T08:00:00Z', closure_requested_at: null, full_name: 'Amina Otieno', national_id: '12345678',
+    }
+    const { fetch } = renderSignedIn(<App />, { roles: ['staff'], path: '/players', route: (method, url) => {
+      if (method === 'POST' && url.pathname === '/v1/staff/players/u1/password') return { status: 204 }
+      if (url.pathname === '/v1/staff/players') return { status: 200, body: { players: [player], next_before: null } }
+      return { status: 200, body: { waiting: 0, oldest_submitted_at: null } }
+    } })
+    const user = userEvent.setup()
+    await user.click(within(await screen.findByRole('row', { name: /0796 992 457/ })).getByRole('button', { name: 'Temporary password' }))
+    const dialog = screen.getByRole('dialog', { name: 'Temporary password for 0796 992 457' })
+    expect(within(dialog).getByText(/check the caller against the name and ID number/)).toBeInTheDocument()
+    const confirm = within(dialog).getByRole('button', { name: 'Set temporary password' })
+    await user.type(within(dialog).getByLabelText(/^Reason/), 'caller verified by ID over the phone')
+    await user.type(within(dialog).getByLabelText(/^Temporary password/), 'short')
+    expect(confirm).toBeDisabled()
+    await user.type(within(dialog).getByLabelText(/^Temporary password/), ' but long enough now')
+    await user.click(confirm)
+    expect(await screen.findByRole('status')).toHaveTextContent('0796 992 457 has a temporary password.')
+    const post = fetch.mock.calls.find(([, init]) => init?.method === 'POST')
+    expect(JSON.parse(post?.[1]?.body as string)).toEqual({ password: 'short but long enough now', reason: 'caller verified by ID over the phone' })
+  })
+})
+
 const draw = (id: string): Draw => ({
   id, draw_type: 'daily', period_start: '2026-10-25', period_end: '2026-10-25', basis: 'calendar', status: 'frozen', freeze_at: '2026-10-26T00:05:00+03:00',
   entries: 42, drand_round_at: '2026-10-26T09:00:00+03:00', voided_reason: null, results: [], signoffs: [],

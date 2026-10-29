@@ -35,9 +35,11 @@ class Account {
     required this.createdAt,
     required this.restriction,
     required this.closureRequestedAt,
+    this.mustChangePassword = false,
   });
 
   factory Account.fromJson(JsonObject j) => Account(
+    mustChangePassword: j.raw['must_change_password'] == true,
     userId: j.str('user_id'),
     msisdn: j.str('msisdn'),
     phoneVerified: j.boolean('phone_verified'),
@@ -63,6 +65,9 @@ class Account {
   final DateTime createdAt;
   final Restriction? restriction;
   final DateTime? closureRequestedAt;
+
+  /// Staff gave the player a temporary password they have not replaced yet.
+  final bool mustChangePassword;
 }
 
 class DepositLimit {

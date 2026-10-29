@@ -832,6 +832,55 @@ paths:
         "403": { description: "Current password wrong (`wrong-password`)", content: { application/problem+json: { schema: { $ref: "#/components/schemas/Problem" } } } }
         "429": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
+  /v1/staff/password/forgot:
+    post:
+      operationId: staffForgotPassword
+      tags: [back-office]
+      summary: Email a password-reset link to a staff member who forgot theirs
+      description: |
+        No session needed. Always answers 202, whether or not the address belongs to a member, so the staff list stays
+        private. The link opens the back office's /reset-password page and works for 30 minutes. 503 when the api has
+        no SMTP server or back-office address configured (an administrator sets a temporary password instead).
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string, format: email }
+      responses:
+        "202": { description: "If the address is a member's, an email is on its way" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+  /v1/staff/password/reset:
+    post:
+      operationId: staffResetPasswordWithToken
+      tags: [back-office]
+      summary: Set a new password from an emailed reset link
+      description: |
+        No session needed: the token from the link identifies the member. The new password follows the staff rules;
+        every session of the member ends and all their open links are spent. Audited.
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, new_password]
+              properties:
+                token: { type: string }
+                new_password: { type: string, minLength: 12, maxLength: 128 }
+      responses:
+        "204": { description: Changed; sign in with the new password }
+        "400": { description: "Too weak (`weak-password`, the rule broken in `detail`)", content: { application/problem+json: { schema: { $ref: "#/components/schemas/Problem" } } } }
+        "410": { description: "The link expired or was already used (`invalid-token`)", content: { application/problem+json: { schema: { $ref: "#/components/schemas/Problem" } } } }
+        "429": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
   /v1/staff/me/name:
     put:
       operationId: staffSetOwnName
@@ -1127,6 +1176,35 @@ paths:
         "401": { $ref: "#/components/responses/Problem" }
         "403": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+  /v1/staff/players/{user}/password:
+    post:
+      operationId: staffPlayerTemporaryPassword
+      tags: [back-office]
+      summary: Give a player a temporary password
+      description: |
+        Role: `staff`. Players have no email address, so a forgotten password is reset by staff after checking who is
+        asking (the name and ID number on the Players page). The password follows the player rules (8 to 128
+        characters, not common, not the number); every session of the player ends; the app makes them choose their own
+        password at the next sign-in. Audited with the reason; the password is never recorded.
+      security: [{ staffBearer: [] }]
+      parameters: [{ name: user, in: path, required: true, schema: { type: string } }, { $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [password, reason]
+              properties:
+                password: { type: string, minLength: 8, maxLength: 128 }
+                reason: { type: string }
+      responses:
+        "204": { description: Set }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
   /v1/staff/finance:
     get:
@@ -2558,6 +2636,7 @@ components:
                 until: { type: [string, "null"], format: date-time, description: Null for a permanent self-exclusion. }
             - { type: "null" }
         closure_requested_at: { type: [string, "null"], format: date-time }
+        must_change_password: { type: boolean, description: Staff gave the player a temporary password they have not replaced yet; the app asks for a new one first. }
     Problem:
       type: object
       required: [type, title, status]
@@ -2623,6 +2702,7 @@ components:
         access_token: { type: string }
         refresh_token: { type: string }
         expires_at: { type: string, format: date-time }
+        must_change_password: { type: boolean, description: "Login only: the player signed in with a temporary password staff gave them; the app asks for a new one before anything else." }
     KycSubmission:
       type: object
       additionalProperties: false

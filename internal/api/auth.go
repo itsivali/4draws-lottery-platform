@@ -38,10 +38,12 @@ type tokensJSON struct {
 	AccessToken  string    `json:"access_token"`
 	RefreshToken string    `json:"refresh_token"`
 	ExpiresAt    time.Time `json:"expires_at"`
+	// true after a sign-in with a temporary password staff gave the player: the app asks for a new one first
+	MustChangePassword bool `json:"must_change_password,omitempty"`
 }
 
 func writeTokens(w http.ResponseWriter, t identity.Tokens) {
-	httpx.WriteJSON(w, http.StatusOK, tokensJSON{AccessToken: t.Access, RefreshToken: t.Refresh, ExpiresAt: t.AccessExpires})
+	httpx.WriteJSON(w, http.StatusOK, tokensJSON{AccessToken: t.Access, RefreshToken: t.Refresh, ExpiresAt: t.AccessExpires, MustChangePassword: t.MustChangePassword})
 }
 
 // authError maps identity errors to problem responses. Credential failures are deliberately uniform.

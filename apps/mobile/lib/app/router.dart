@@ -27,7 +27,10 @@ const _sessionRoutes = {'/sign-in', '/starting', '/offline'};
 
 /// Where the session says the player may be: nowhere but sign-in while signed out; never on sign-in while signed in.
 /// Deep links survive the detour through sign-in (`from`).
-String? sessionRedirect(SessionStatus status, Uri location) {
+/// The password screen a player with a temporary password is held on until they choose their own.
+const requiredPasswordRoute = '/account/password?required=1';
+
+String? sessionRedirect(SessionStatus status, Uri location, {bool mustChangePassword = false}) {
   final path = location.path;
   switch (status) {
     case SessionStatus.restoring:
@@ -39,6 +42,7 @@ String? sessionRedirect(SessionStatus status, Uri location) {
       final from = _sessionRoutes.contains(path) ? location.queryParameters['from'] : location.toString();
       return from == null || from == '/' ? '/sign-in' : '/sign-in?from=${Uri.encodeComponent(from)}';
     case SessionStatus.signedIn:
+      if (mustChangePassword) return path == '/account/password' ? null : requiredPasswordRoute;
       if (!_sessionRoutes.contains(path)) return path == '/' ? '/home' : null;
       final from = location.queryParameters['from'];
       return from == null || from.isEmpty || from == '/' || _sessionRoutes.contains(Uri.parse(from).path)
@@ -51,8 +55,9 @@ final routerProvider = Provider<GoRouter>((ref) {
   final session = ref.watch(sessionManagerProvider);
   final router = GoRouter(
     initialLocation: '/home',
-    refreshListenable: session.status,
-    redirect: (context, state) => sessionRedirect(session.status.value, state.uri),
+    refreshListenable: Listenable.merge([session.status, session.mustChangePassword]),
+    redirect: (context, state) =>
+        sessionRedirect(session.status.value, state.uri, mustChangePassword: session.mustChangePassword.value),
     routes: [
       GoRoute(path: '/', redirect: (_, _) => '/home'),
       GoRoute(path: '/starting', builder: (_, _) => const StartingScreen()),

@@ -102,6 +102,7 @@ func (h *handlers) getAccount(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusOK, map[string]any{
 		"user_id": a.UserID, "msisdn": a.MSISDN, "phone_verified": a.PhoneVerified, "kyc_status": a.KYCStatus, "status": a.Status,
 		"created_at": a.CreatedAt, "restriction": restriction, "closure_requested_at": a.ClosureRequestedAt,
+		"must_change_password": a.MustChangePassword,
 	})
 }
 

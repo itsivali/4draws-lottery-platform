@@ -56,14 +56,17 @@ func staffFrom(ctx context.Context) (staff.Member, bool) {
 const (
 	staffPrefix  = "/v1/staff/"
 	staffSession = "/v1/staff/session"
+	// a forgotten password is reset without a session: the request is answered by email, the reset by the link's token
+	staffForgot = "/v1/staff/password/forgot"
+	staffReset  = "/v1/staff/password/reset"
 )
 
 // staffAuth authenticates staff tokens on /v1/staff routes, before idempotency (so keys are scoped to the staff
 // member). Player tokens never authenticate here: they are not issued by the staff realm.
 func (h *handlers) staffAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !strings.HasPrefix(r.URL.Path, staffPrefix) || (r.URL.Path == staffSession && r.Method == http.MethodPost) {
-			next.ServeHTTP(w, r) // signing in is how a staff member gets a token
+		if !strings.HasPrefix(r.URL.Path, staffPrefix) || (r.Method == http.MethodPost && (r.URL.Path == staffSession || r.URL.Path == staffForgot || r.URL.Path == staffReset)) {
+			next.ServeHTTP(w, r) // signing in (or resetting a forgotten password) is how a staff member gets a token
 			return
 		}
 		auth := h.Staff
@@ -135,6 +138,8 @@ func (h *handlers) mountStaff(r chi.Router) {
 	r.Delete("/session", h.needs(signIn, "Staff sign-in", h.staffSignOut))
 	r.Get("/me", h.staffMe)
 	r.Put("/password", h.needs(signIn, "Staff sign-in", h.staffChangePassword))
+	r.Post("/password/forgot", h.needs(signIn, "Staff sign-in", h.staffForgotPassword))
+	r.Post("/password/reset", h.needs(signIn, "Staff sign-in", h.staffResetWithToken))
 	r.Put("/me/name", h.needs(signIn, "Staff sign-in", h.staffSetName(false)))
 	r.With(admin).Get("/members", h.needs(signIn, "Staff members", h.staffMembers))
 	r.With(admin).Post("/members", h.needs(signIn, "Staff members", h.staffInvite))
@@ -187,6 +192,7 @@ func (h *handlers) mountStaff(r chi.Router) {
 	r.With(anyStaff).Get("/players", h.staffPlayers)
 	r.With(anyStaff).Post("/players/{user}/suspend", h.staffSuspend(true))
 	r.With(anyStaff).Post("/players/{user}/reinstate", h.staffSuspend(false))
+	r.With(anyStaff).Post("/players/{user}/password", h.staffPlayerPassword)
 }
 
 // needs answers 503 when the service behind a route is not configured.
@@ -224,6 +230,8 @@ func staffError(w http.ResponseWriter, err error) {
 		{staff.ErrExists, m{http.StatusConflict, "exists", "A member with this email address exists"}},
 		{staff.ErrInvalid, m{http.StatusBadRequest, "invalid", "Invalid email address or role"}},
 		{staff.ErrInvalidName, m{http.StatusBadRequest, "invalid-name", "A name is 1 to 80 characters"}},
+		{staff.ErrInvalidToken, m{http.StatusGone, "invalid-token", "This reset link has expired or was already used"}},
+		{identity.ErrNoSuchPlayer, m{http.StatusNotFound, "not-found", "No such player"}},
 		{staff.ErrNotFound, m{http.StatusNotFound, "not-found", "No such member"}},
 		{staff.ErrSelf, m{http.StatusConflict, "self", "You cannot change your own roles or disable yourself"}},
 		{staff.ErrLastAdmin, m{http.StatusConflict, "last-admin", "The last admin cannot be removed"}},
@@ -940,6 +948,69 @@ func (h *handlers) staffSetName(anyMember bool) http.HandlerFunc {
 		}
 		httpx.WriteJSON(w, http.StatusOK, rec)
 	}
+}
+
+// staffForgotPassword emails a reset link to a member who forgot their password. It always answers 202 so the
+// address book stays private; the per-address budget stops it being used to flood someone's inbox.
+func (h *handlers) staffForgotPassword(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Email string `json:"email"`
+	}
+	if !httpx.DecodeJSON(w, r, &in) || !h.limit(w, r, "staff-forgot:ip:"+h.clientIP(r), 10, time.Hour) {
+		return
+	}
+	email := strings.ToLower(strings.TrimSpace(in.Email))
+	if email == "" {
+		httpx.WriteProblem(w, http.StatusBadRequest, "invalid-request", "An email address is required", "")
+		return
+	}
+	if !h.limit(w, r, "staff-forgot:email:"+email, 3, time.Hour) {
+		return
+	}
+	switch err := h.StaffServices.Members.RequestPasswordReset(r.Context(), email); {
+	case err == nil:
+		w.WriteHeader(http.StatusAccepted)
+	case errors.Is(err, staff.ErrUnavailable):
+		httpx.WriteProblemRetry(w, http.StatusServiceUnavailable, "staff-unavailable", "Password reset by email is not configured", "ask an administrator for a temporary password", 60)
+	default:
+		internalError(w, err)
+	}
+}
+
+// staffResetWithToken sets a new password from an emailed link.
+func (h *handlers) staffResetWithToken(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Token string `json:"token"`
+		New   string `json:"new_password"`
+	}
+	if !httpx.DecodeJSON(w, r, &in) || !h.limit(w, r, "staff-reset:ip:"+h.clientIP(r), 20, time.Hour) {
+		return
+	}
+	if err := h.StaffServices.Members.ResetPasswordWithToken(r.Context(), in.Token, in.New); err != nil {
+		staffError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// staffPlayerPassword is staff giving a player a temporary password (players have no email to send a link to).
+func (h *handlers) staffPlayerPassword(w http.ResponseWriter, r *http.Request) {
+	if h.StaffServices.Identity == nil {
+		unavailable(w, "Players")
+		return
+	}
+	var in struct {
+		Password string `json:"password"`
+		Reason   string `json:"reason"`
+	}
+	if !httpx.DecodeJSON(w, r, &in) {
+		return
+	}
+	if err := h.StaffServices.Identity.SetTemporaryPassword(r.Context(), chi.URLParam(r, "user"), member(r).Operator(), in.Reason, in.Password); err != nil {
+		staffError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // staffResetPassword is an admin giving a member a temporary password.

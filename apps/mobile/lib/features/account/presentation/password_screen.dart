@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../app/providers.dart';
 import '../../../app/theme/tokens.dart';
 import '../../../core/api/api_failure.dart';
 import '../../../core/api/idempotency.dart';
@@ -45,10 +46,13 @@ class _PasswordScreenState extends ConsumerState<PasswordScreen> {
           .read(accountRepositoryProvider)
           .changePassword(current: _current.text, next: _next.text, idempotencyKey: newIdempotencyKey());
       TextInput.finishAutofillContext(); // the password manager offers to update the saved password
+      ref.read(sessionManagerProvider).passwordChanged();
+      ref.invalidate(accountProvider);
       if (!mounted) return;
+      final required = _required(context);
       ScaffoldMessenger.of(context)
           .showSnackBar(const SnackBar(content: Text('Password changed. Other devices are signed out.')));
-      context.go('/account');
+      context.go(required ? '/home' : '/account');
     } on ApiFailure catch (f) {
       if (!mounted) return;
       final d = describeFailure(f);
@@ -58,9 +62,12 @@ class _PasswordScreenState extends ConsumerState<PasswordScreen> {
     }
   }
 
+  /// Staff gave this player a temporary password: the router sent them here and holds them until it is replaced.
+  static bool _required(BuildContext context) => GoRouterState.of(context).uri.queryParameters['required'] == '1';
+
   @override
   Widget build(BuildContext context) => PageScaffold(
-    title: 'Change password',
+    title: _required(context) ? 'Choose a new password' : 'Change password',
     children: [
       Form(
         key: _form,
@@ -69,12 +76,21 @@ class _PasswordScreenState extends ConsumerState<PasswordScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                if (_required(context)) ...[
+                  const InlineBanner(
+                    tone: StatusTone.pending,
+                    icon: Icons.key_rounded,
+                    live: true,
+                    title: 'You signed in with a temporary password. Choose your own to continue; the temporary one stops working now.',
+                  ),
+                  const SizedBox(height: Space.lg),
+                ],
                 TextFormField(
                   controller: _current,
                   obscureText: _obscure,
                   autofillHints: const [AutofillHints.password],
                   decoration: InputDecoration(
-                    labelText: 'Current password',
+                    labelText: _required(context) ? 'Temporary password' : 'Current password',
                     prefixIcon: const Icon(Icons.lock_outline_rounded),
                     suffixIcon: IconButton(
                       tooltip: _obscure ? 'Show passwords' : 'Hide passwords',

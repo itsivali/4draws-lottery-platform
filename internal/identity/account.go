@@ -11,6 +11,7 @@ import (
 
 	"github.com/itsivali/lottery-platform/internal/audit"
 	"github.com/itsivali/lottery-platform/internal/identity/store"
+	"github.com/itsivali/lottery-platform/internal/platform/password"
 )
 
 // Account is what a player sees about their own account.
@@ -22,6 +23,8 @@ type Account struct {
 	Status             string
 	CreatedAt          time.Time
 	ClosureRequestedAt *time.Time
+	// MustChangePassword: staff gave the player a temporary password they have not replaced yet.
+	MustChangePassword bool
 }
 
 // Account returns the player's account.
@@ -30,7 +33,7 @@ func (s *Service) Account(ctx context.Context, userID string) (Account, error) {
 	if err != nil {
 		return Account{}, err
 	}
-	return Account{UserID: u.ID, MSISDN: u.Msisdn, PhoneVerified: u.PhoneVerified, KYCStatus: u.KycStatus, Status: u.Status,
+	return Account{UserID: u.ID, MSISDN: u.Msisdn, PhoneVerified: u.PhoneVerified, KYCStatus: u.KycStatus, Status: u.Status, MustChangePassword: u.MustChangePassword,
 		CreatedAt: u.CreatedAt, ClosureRequestedAt: u.ClosureRequestedAt}, nil
 }
 
@@ -243,6 +246,48 @@ func (s *Service) Suspend(ctx context.Context, userID, staff, reason string, sus
 
 // ErrReasonRequired: a suspension or reinstatement needs a reason for the audit log.
 var ErrReasonRequired = errors.New("identity: a reason is required")
+
+// ErrNoSuchPlayer: no open account with that id.
+var ErrNoSuchPlayer = errors.New("identity: no such player")
+
+// SetTemporaryPassword is staff giving a player a password to sign in with once, after checking who they are (players
+// have no email, so there is no link to send). Every session the player has ends, the password must pass the player
+// rules, and the app makes them choose their own at the next sign-in (Tokens.MustChangePassword). Audited with the
+// reason; the password itself is never recorded.
+func (s *Service) SetTemporaryPassword(ctx context.Context, userID, staff, reason, temporary string) error {
+	reason = strings.TrimSpace(reason)
+	if reason == "" {
+		return ErrReasonRequired
+	}
+	u, err := store.New(s.pool).GetUser(ctx, userID)
+	var pe *pgconn.PgError
+	if errors.Is(err, pgx.ErrNoRows) || (errors.As(err, &pe) && pe.Code == "22P02") {
+		return ErrNoSuchPlayer
+	} else if err != nil {
+		return err
+	}
+	if err := password.CheckPolicy(temporary, u.Msisdn); err != nil {
+		return err
+	}
+	hash, err := password.Hash(temporary, s.pepper)
+	if err != nil {
+		return err
+	}
+	return s.withTx(ctx, func(tx pgx.Tx, q *store.Queries, now time.Time) error {
+		n, err := q.SetTemporaryPassword(ctx, store.SetTemporaryPasswordParams{PasswordHash: &hash, At: &now, ID: userID})
+		if err != nil {
+			return err
+		}
+		if n == 0 {
+			return ErrNoSuchPlayer
+		}
+		if err := q.RevokeAllSessions(ctx, store.RevokeAllSessionsParams{UserID: userID, At: &now}); err != nil {
+			return err
+		}
+		return s.audit.Record(ctx, tx, audit.Event{ActorType: audit.Staff, ActorID: staff, Action: "identity.temporary_password",
+			EntityType: "user", EntityID: userID, Details: map[string]any{"reason": reason}})
+	})
+}
 
 // timePtr reads an optional timestamp the store could not type (an aggregate in a sub-select): nil when NULL.
 func timePtr(v any) *time.Time {

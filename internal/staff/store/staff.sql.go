@@ -67,6 +67,28 @@ func (q *Queries) InsertMember(ctx context.Context, arg InsertMemberParams) (str
 	return id, err
 }
 
+const insertPasswordReset = `-- name: InsertPasswordReset :exec
+INSERT INTO staff.password_resets (member_id, token_hash, expires_at, created_at)
+VALUES ($1, $2, $3, $4)
+`
+
+type InsertPasswordResetParams struct {
+	MemberID  string
+	TokenHash []byte
+	ExpiresAt time.Time
+	At        time.Time
+}
+
+func (q *Queries) InsertPasswordReset(ctx context.Context, arg InsertPasswordResetParams) error {
+	_, err := q.db.Exec(ctx, insertPasswordReset,
+		arg.MemberID,
+		arg.TokenHash,
+		arg.ExpiresAt,
+		arg.At,
+	)
+	return err
+}
+
 const insertSession = `-- name: InsertSession :exec
 INSERT INTO staff.sessions (token_hash, member_id, provider, created_at, expires_at, last_seen_at)
 VALUES ($1, $2, $3, $4, $5, $4)
@@ -287,6 +309,36 @@ func (q *Queries) MemberCredentials(ctx context.Context, email string) (MemberCr
 	return i, err
 }
 
+const passwordResetByHash = `-- name: PasswordResetByHash :one
+SELECT r.id, r.member_id, r.expires_at, r.used_at, m.email, m.active
+FROM staff.password_resets r JOIN staff.members m ON m.id = r.member_id
+WHERE r.token_hash = $1
+FOR UPDATE OF r
+`
+
+type PasswordResetByHashRow struct {
+	ID        string
+	MemberID  string
+	ExpiresAt time.Time
+	UsedAt    *time.Time
+	Email     string
+	Active    bool
+}
+
+func (q *Queries) PasswordResetByHash(ctx context.Context, tokenHash []byte) (PasswordResetByHashRow, error) {
+	row := q.db.QueryRow(ctx, passwordResetByHash, tokenHash)
+	var i PasswordResetByHashRow
+	err := row.Scan(
+		&i.ID,
+		&i.MemberID,
+		&i.ExpiresAt,
+		&i.UsedAt,
+		&i.Email,
+		&i.Active,
+	)
+	return i, err
+}
+
 const revokeMemberSessions = `-- name: RevokeMemberSessions :exec
 UPDATE staff.sessions SET revoked_at = $1 WHERE member_id = $2 AND revoked_at IS NULL
 `
@@ -448,5 +500,20 @@ func (q *Queries) UpdateMember(ctx context.Context, arg UpdateMemberParams) erro
 		arg.At,
 		arg.ID,
 	)
+	return err
+}
+
+const useMemberPasswordResets = `-- name: UseMemberPasswordResets :exec
+UPDATE staff.password_resets SET used_at = $1 WHERE member_id = $2 AND used_at IS NULL
+`
+
+type UseMemberPasswordResetsParams struct {
+	At       *time.Time
+	MemberID string
+}
+
+// a reset consumes every open link of the member, not only the one used
+func (q *Queries) UseMemberPasswordResets(ctx context.Context, arg UseMemberPasswordResetsParams) error {
+	_, err := q.db.Exec(ctx, useMemberPasswordResets, arg.At, arg.MemberID)
 	return err
 }

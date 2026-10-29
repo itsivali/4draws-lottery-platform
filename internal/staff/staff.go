@@ -12,6 +12,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"net/url"
 	"regexp"
 	"slices"
 	"strings"
@@ -26,6 +27,7 @@ import (
 
 	"github.com/itsivali/lottery-platform/internal/audit"
 	"github.com/itsivali/lottery-platform/internal/platform/clock"
+	"github.com/itsivali/lottery-platform/internal/platform/mail"
 	"github.com/itsivali/lottery-platform/internal/platform/password"
 	"github.com/itsivali/lottery-platform/internal/staff/store"
 )
@@ -90,7 +92,11 @@ var (
 	ErrWrongPassword   = errors.New("staff: the current password is wrong")
 	ErrNoPassword      = errors.New("staff: this member has no password; an admin sets a temporary one")
 	ErrMustChange      = errors.New("staff: the temporary password must be changed first")
+	ErrInvalidToken    = errors.New("staff: this reset link has expired or was already used")
 )
+
+// ResetLinkTTL is how long an emailed password-reset link works.
+const ResetLinkTTL = 30 * time.Minute
 
 // ErrWeakPassword wraps every password rule refusal (password.ErrWeak for the common rules).
 var ErrWeakPassword = password.ErrWeak
@@ -140,8 +146,9 @@ type Service struct {
 	clk       clock.Clock
 	ids       IDTokenVerifier // nil: Google and Apple sign-in are off; passwords still work
 	audit     *audit.Writer
-	pepper    []byte // password pepper (derived from the deployment's AUTH_KEY)
-	dummyHash string // compared when the email is unknown, so a miss costs the same as a wrong password
+	pepper    []byte          // password pepper (derived from the deployment's AUTH_KEY)
+	dummyHash string          // compared when the email is unknown, so a miss costs the same as a wrong password
+	resets    *PasswordResets // nil: forgotten passwords are reset by an admin only
 }
 
 // NewService returns a Service. pepper is the password pepper (internal/platform/password).
@@ -149,6 +156,109 @@ func NewService(pool *pgxpool.Pool, clk clock.Clock, ids IDTokenVerifier, a *aud
 	s := &Service{pool: pool, clk: clk, ids: ids, audit: a, pepper: pepper}
 	s.dummyHash, _ = password.Hash("never matches: no such member", pepper)
 	return s
+}
+
+// PasswordResets is how a member who forgot their password gets back in by themselves: an emailed link that opens
+// BackOfficeURL/reset-password and works for ResetLinkTTL.
+type PasswordResets struct {
+	Sender        mail.Sender
+	BackOfficeURL string
+}
+
+// WithPasswordResets switches on RequestPasswordReset.
+func (s *Service) WithPasswordResets(p PasswordResets) *Service {
+	s.resets = &p
+	return s
+}
+
+// RequestPasswordReset emails email a reset link if it belongs to an active member. It answers the same, and takes
+// about the same time, whether or not it does, so nobody learns who the staff are. Without WithPasswordResets it
+// returns ErrUnavailable.
+func (s *Service) RequestPasswordReset(ctx context.Context, email string) error {
+	if s.resets == nil {
+		return ErrUnavailable
+	}
+	email = strings.ToLower(strings.TrimSpace(email))
+	if !emailRE.MatchString(email) {
+		return nil
+	}
+	m, err := store.New(s.pool).MemberCredentials(ctx, email)
+	if errors.Is(err, pgx.ErrNoRows) {
+		_, _ = password.Hash("no such member: same cost", s.pepper)
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if !m.Active {
+		return nil
+	}
+	raw := make([]byte, 32)
+	if _, err := rand.Read(raw); err != nil {
+		return err
+	}
+	token := base64.RawURLEncoding.EncodeToString(raw)
+	hash := sha256.Sum256([]byte(token))
+	var expires time.Time
+	err = s.tx(ctx, func(tx pgx.Tx, q *store.Queries, now time.Time) error {
+		expires = now.Add(ResetLinkTTL)
+		if err := q.InsertPasswordReset(ctx, store.InsertPasswordResetParams{MemberID: m.ID, TokenHash: hash[:], ExpiresAt: expires, At: now}); err != nil {
+			return err
+		}
+		return s.audit.Record(ctx, tx, audit.Event{ActorType: audit.System, Action: "staff.password_reset_requested",
+			EntityType: "staff_member", EntityID: m.ID})
+	})
+	if err != nil {
+		return err
+	}
+	link := strings.TrimRight(s.resets.BackOfficeURL, "/") + "/reset-password?token=" + url.QueryEscape(token)
+	return s.resets.Sender.Send(ctx, mail.Message{To: []string{email}, Subject: "Tajirika back office: reset your password",
+		Text: resetText(link, expires)})
+}
+
+func resetText(link string, expires time.Time) string {
+	nairobi := time.FixedZone("EAT", 3*60*60)
+	return "Someone asked to reset the password of the Tajirika back-office account with this email address.\n\n" +
+		"If it was you, choose a new password here (the link works until " + expires.In(nairobi).Format("15:04 MST") + "):\n" + link + "\n\n" +
+		"If it was not you, ignore this email: nothing changes until the link is used, and it is sent only to this address.\n"
+}
+
+// ResetPasswordWithToken sets the password of the member an emailed link belongs to, ends their sessions and spends
+// the link (and any other open link of theirs). Expired, used or unknown tokens are ErrInvalidToken.
+func (s *Service) ResetPasswordWithToken(ctx context.Context, token, next string) error {
+	if token == "" {
+		return ErrInvalidToken
+	}
+	hash := sha256.Sum256([]byte(token))
+	return s.tx(ctx, func(tx pgx.Tx, q *store.Queries, now time.Time) error {
+		r, err := q.PasswordResetByHash(ctx, hash[:])
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrInvalidToken
+		} else if err != nil {
+			return err
+		}
+		if r.UsedAt != nil || !now.Before(r.ExpiresAt) || !r.Active {
+			return ErrInvalidToken
+		}
+		if err := CheckPassword(next, r.Email); err != nil {
+			return err
+		}
+		h, err := password.Hash(next, s.pepper)
+		if err != nil {
+			return err
+		}
+		if err := q.SetPassword(ctx, store.SetPasswordParams{PasswordHash: &h, At: &now, MustChange: false, ID: r.MemberID}); err != nil {
+			return err
+		}
+		if err := q.UseMemberPasswordResets(ctx, store.UseMemberPasswordResetsParams{At: &now, MemberID: r.MemberID}); err != nil {
+			return err
+		}
+		if err := q.RevokeMemberSessions(ctx, store.RevokeMemberSessionsParams{At: &now, MemberID: r.MemberID}); err != nil {
+			return err
+		}
+		return s.audit.Record(ctx, tx, audit.Event{ActorType: audit.System, Action: "staff.password_reset_by_email",
+			EntityType: "staff_member", EntityID: r.MemberID})
+	})
 }
 
 // Session is a signed-in back-office session. Token is shown once; only its hash is stored.

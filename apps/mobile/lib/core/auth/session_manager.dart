@@ -25,17 +25,25 @@ class DeviceIdentity {
 }
 
 class Tokens {
-  const Tokens({required this.access, required this.refresh, required this.expiresAt});
+  const Tokens({required this.access, required this.refresh, required this.expiresAt, this.mustChangePassword = false});
 
   factory Tokens.fromJson(Map<String, Object?> j) {
     final a = j['access_token'], r = j['refresh_token'], e = j['expires_at'];
     if (a is! String || r is! String || e is! String) throw const FormatException('tokens');
-    return Tokens(access: a, refresh: r, expiresAt: DateTime.parse(e));
+    return Tokens(
+      access: a,
+      refresh: r,
+      expiresAt: DateTime.parse(e),
+      mustChangePassword: j['must_change_password'] == true,
+    );
   }
 
   final String access;
   final String refresh;
   final DateTime expiresAt;
+
+  /// The player signed in with a temporary password staff gave them: a new one comes before anything else.
+  final bool mustChangePassword;
 }
 
 /// Owns the session: keeps the access token in memory and the refresh token in [TokenStore], refreshes shortly before
@@ -61,6 +69,12 @@ class SessionManager implements AccessTokenSource {
 
   final status = ValueNotifier(SessionStatus.restoring);
   SessionEndReason? endReason;
+
+  /// True while the player must replace a temporary password (set at sign-in, or when the account says so); the
+  /// router keeps them on the password screen until [passwordChanged].
+  final mustChangePassword = ValueNotifier(false);
+
+  void passwordChanged() => mustChangePassword.value = false;
 
   Tokens? _tokens;
   Future<String?>? _refreshing;
@@ -90,6 +104,7 @@ class SessionManager implements AccessTokenSource {
   Future<void> signedIn(Tokens t) async {
     _tokens = t;
     endReason = null;
+    mustChangePassword.value = t.mustChangePassword;
     await _store.write(t.refresh);
     status.value = SessionStatus.signedIn;
   }
@@ -158,6 +173,7 @@ class SessionManager implements AccessTokenSource {
   }
 
   Future<void> _end(SessionEndReason reason) async {
+    mustChangePassword.value = false;
     _tokens = null;
     endReason = reason;
     await _store.clear();

@@ -234,19 +234,20 @@ type IdentitySession struct {
 }
 
 type IdentityUser struct {
-	ID                string
-	Msisdn            string
-	NationalIDHash    []byte
-	KycStatus         string
-	Status            string
-	Language          string
-	PayoutMsisdn      *string
-	PayoutHoldUntil   *time.Time
-	CreatedAt         time.Time
-	UpdatedAt         time.Time
-	PasswordHash      *string
-	PasswordChangedAt *time.Time
-	MsisdnVerifiedAt  *time.Time
+	ID                 string
+	Msisdn             string
+	NationalIDHash     []byte
+	KycStatus          string
+	Status             string
+	Language           string
+	PayoutMsisdn       *string
+	PayoutHoldUntil    *time.Time
+	CreatedAt          time.Time
+	UpdatedAt          time.Time
+	PasswordHash       *string
+	PasswordChangedAt  *time.Time
+	MsisdnVerifiedAt   *time.Time
+	MustChangePassword bool
 }
 
 type KycKycCheck struct {
@@ -475,6 +476,15 @@ type StaffMember struct {
 	PasswordHash       *string
 	PasswordChangedAt  *time.Time
 	MustChangePassword bool
+}
+
+type StaffPasswordReset struct {
+	ID        string
+	MemberID  string
+	TokenHash []byte
+	ExpiresAt time.Time
+	UsedAt    *time.Time
+	CreatedAt time.Time
 }
 
 type StaffSession struct {
