@@ -207,7 +207,7 @@ class _Stage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) =>
-      HeroCard(ornament: false, stage: true, radius: Radii.xxl, padding: const EdgeInsets.all(Space.lg), child: child);
+      HeroCard(stage: true, radius: Radii.xxl, padding: const EdgeInsets.all(Space.lg), child: child);
 }
 
 class _PlayPanel extends ConsumerWidget {

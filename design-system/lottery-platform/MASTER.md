@@ -21,9 +21,10 @@ depth, metal and motion (the *hero surfaces*, §5), and even there they only eve
   "You're due".
 - No manufactured urgency: no countdown pressure, no scarcity, no near-miss staging, no confetti for ordinary plays.
 
-**Wordmark:** "Tajirika" set in the heading face, semibold, with a small coral disc carrying a gold pointer notch
-(`BrandMark` widget). It is a placeholder: swap `BrandMark` for the final logo without touching layouts (it sizes to
-its parent height).
+**Mark and wordmark:** the Tajirika mark is a sunset tile (coral into violet, 25% corner radius) carrying a white T,
+with the wheel's pointer above it in decorative gold (`logo/tajirika-mark.svg`; `BrandMark` draws it, `scripts/
+gen-icons.sh` renders every app icon and favicon from it). The wordmark is "Tajirika" in the heading face, semibold.
+Layouts only give the mark a height.
 
 ## 2. Colour
 
@@ -113,7 +114,8 @@ Touch targets ≥ 48×48 dp, ≥ 8 dp apart. Safe areas respected; the bottom ba
   (`0 16 40 / 35% heroEnd`). The wheel has its own lighting (see `pages/play.md`).
 - **Hero surfaces** (`HeroCard`): the sunset gradient `heroStart → heroEnd` (coral into violet) with a radial
   `heroGlow` from the top left; the wheel's stage takes the dusk end only (`heroEnd → shadow`, `Gradients.stage`) so
-  the coral and violet segments and the gold rim stand out from it, faint concentric rings in a corner, `hero` elevation and `xl` corners. Exactly two uses: the balance
+  the coral and violet segments and the gold rim stand out from it, `hero` elevation and `xl` corners (no ornaments:
+  the corner rings were removed on 2026-10-29, owner). Exactly two uses: the balance
   (Home, Wallet) and the wheel's stage (Play). On wide screens the sign-in page's brand panel borrows it for words,
   never for money. Nothing else is a hero.
 - Radii: `sm 8` (chips), `md 12` (buttons, inputs), `lg 16` (cards), `xl 24` (hero cards, dialogs), `xxl 28` (sheets'

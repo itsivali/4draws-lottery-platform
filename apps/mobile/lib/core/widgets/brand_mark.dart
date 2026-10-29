@@ -1,11 +1,9 @@
-import 'dart:math';
-
 import 'package:flutter/material.dart';
 
 import '../../app/theme/tokens.dart';
 
-/// A placeholder brand: a coral disc with a gold pointer notch, and the wordmark. Replace this widget with the final
-/// logo; layouts only give it a height.
+/// The brand: the Tajirika mark (a sunset tile with a white T and the wheel's gold pointer) and the wordmark. Layouts
+/// only give it a height.
 class BrandMark extends StatelessWidget {
   const BrandMark({super.key, this.height = 28, this.showWordmark = true});
 
@@ -23,7 +21,7 @@ class BrandMark extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          CustomPaint(size: Size.square(height), painter: _DiscPainter(c.primary, c.gold)),
+          CustomPaint(size: Size.square(height), painter: _MarkPainter(c)),
           if (showWordmark) ...[
             SizedBox(width: height * 0.32),
             Text(
@@ -37,30 +35,44 @@ class BrandMark extends StatelessWidget {
   }
 }
 
-class _DiscPainter extends CustomPainter {
-  _DiscPainter(this.disc, this.notch);
+/// The Tajirika mark (design-system/lottery-platform/logo/tajirika-mark.svg): a sunset tile carrying a white T, with
+/// the wheel's pointer above it in decorative gold. Drawn in a 64-unit box so it matches the icons exactly.
+class _MarkPainter extends CustomPainter {
+  _MarkPainter(this.c);
 
-  final Color disc;
-  final Color notch;
+  final AppColors c;
 
   @override
   void paint(Canvas canvas, Size size) {
-    final r = size.width / 2;
-    final centre = Offset(r, r);
-    canvas.drawCircle(centre, r, Paint()..color = disc);
-    final ring = Paint()
-      ..color = notch
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = r * 0.14;
-    canvas.drawArc(Rect.fromCircle(center: centre, radius: r * 0.62), -pi / 2 + 0.5, 2 * pi - 1.0, false, ring);
-    final path = Path()
-      ..moveTo(r, r * 0.12)
-      ..lineTo(r - r * 0.26, -r * 0.08)
-      ..lineTo(r + r * 0.26, -r * 0.08)
+    final u = size.width / 64;
+    final tile = RRect.fromRectAndRadius(Offset.zero & size, Radius.circular(16 * u));
+    canvas.drawRRect(
+      tile,
+      Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [c.heroStart, c.primary, c.heroEnd],
+          stops: const [0, 0.62, 1],
+        ).createShader(Offset.zero & size),
+    );
+    final white = Paint()..color = Colors.white;
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(Rect.fromLTWH(15 * u, 17 * u, 34 * u, 10 * u), Radius.circular(3 * u)),
+      white,
+    );
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(Rect.fromLTWH(27 * u, 17 * u, 10 * u, 33 * u), Radius.circular(3 * u)),
+      white,
+    );
+    final pointer = Path()
+      ..moveTo(32 * u, 7.5 * u)
+      ..lineTo(36.6 * u, 14 * u)
+      ..lineTo(27.4 * u, 14 * u)
       ..close();
-    canvas.drawPath(path.shift(Offset(0, r * 0.2)), Paint()..color = notch);
+    canvas.drawPath(pointer, Paint()..color = const Color(0xFFF2C14E)); // decorative gold, never text
   }
 
   @override
-  bool shouldRepaint(_DiscPainter old) => old.disc != disc || old.notch != notch;
+  bool shouldRepaint(_MarkPainter old) => old.c != c;
 }

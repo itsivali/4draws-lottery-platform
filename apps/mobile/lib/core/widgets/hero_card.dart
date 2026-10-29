@@ -10,16 +10,12 @@ class HeroCard extends StatelessWidget {
     required this.child,
     this.padding = const EdgeInsets.all(Space.xl),
     this.radius = Radii.xl,
-    this.ornament = true,
     this.stage = false,
   });
 
   final Widget child;
   final EdgeInsets padding;
   final double radius;
-
-  /// The faint concentric rings in the corner (off for the wheel, which brings its own).
-  final bool ornament;
 
   /// The wheel's stage takes the dusk gradient (`Gradients.stage`) instead of the full sunset.
   final bool stage;
@@ -41,14 +37,6 @@ class HeroCard extends StatelessWidget {
             Positioned.fill(
               child: DecoratedBox(decoration: BoxDecoration(gradient: Gradients.heroGlow(c))),
             ),
-            if (ornament)
-              Positioned(
-                right: -radius * 2,
-                top: -radius * 2.5,
-                child: ExcludeSemantics(
-                  child: CustomPaint(size: const Size(220, 220), painter: _RingsPainter(c.onHero)),
-                ),
-              ),
             Padding(
               padding: padding,
               child: DefaultTextStyle.merge(
@@ -64,24 +52,4 @@ class HeroCard extends StatelessWidget {
       ),
     );
   }
-}
-
-class _RingsPainter extends CustomPainter {
-  _RingsPainter(this.color);
-
-  final Color color;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final centre = Offset(size.width / 2, size.height / 2);
-    final paint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1;
-    for (final (r, a) in [(size.width / 2, 0.10), (size.width / 2.8, 0.08), (size.width / 4.6, 0.06)]) {
-      canvas.drawCircle(centre, r, paint..color = color.withValues(alpha: a));
-    }
-  }
-
-  @override
-  bool shouldRepaint(_RingsPainter old) => old.color != color;
 }

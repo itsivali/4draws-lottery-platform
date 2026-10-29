@@ -1,6 +1,7 @@
 import { CircleX, KeyRound, ShieldCheck } from 'lucide-react'
 import { useEffect, useId, useRef, useState } from 'react'
 import { ProblemError, type ApiClient } from './api'
+import { BrandGlyph } from './components/BrandGlyph'
 import type { Config } from './config'
 import { cancelled, renderGoogle, signInWithApple, signInWithDevRealm, type IDToken } from './providers'
 import type { Me } from './types'
@@ -80,10 +81,8 @@ export function SignIn({ config, api, onSignedIn, providers = realProviders, not
     <main id="main" className="grid min-h-svh lg:grid-cols-[1.1fr_1fr]">
       <aside aria-hidden="true" className="relative hidden overflow-hidden bg-hero text-white lg:flex lg:flex-col lg:justify-between lg:p-12">
         <div className="absolute inset-0 bg-[radial-gradient(90%_70%_at_0%_0%,rgb(255_255_255_/_0.28)_0%,transparent_60%),radial-gradient(80%_60%_at_100%_100%,rgb(43_18_84_/_0.55)_0%,transparent_55%)]" />
-        <div className="absolute -right-32 -top-32 size-[520px] rounded-full border border-white/15" />
-        <div className="absolute -right-16 -top-16 size-[380px] rounded-full border border-white/15" />
         <div className="absolute -bottom-40 -left-24 size-[460px] rounded-full bg-white/10 blur-3xl" />
-        <p className="relative font-display text-2xl font-bold tracking-tight">Tajirika</p>
+        <p className="relative flex items-center gap-3 font-display text-2xl font-bold tracking-tight"><BrandGlyph className="size-8" /> Tajirika</p>
         <div className="relative max-w-md">
           <p className="font-display text-4xl font-bold leading-tight tracking-tight">Every action, under your name.</p>
           <p className="mt-4 text-white/80">Identity review, draws, payouts, tax and the ledger, with two-person rules where the money moves.</p>

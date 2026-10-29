@@ -43,3 +43,5 @@ tmp/
 docs/BUILD_PROMPT.md
 docs/OPEN_DECISIONS.md
 docs/PROJECT_DESCRIPTION.pdf
+# Git worktrees kept inside the checkout (.worktrees/lp-bo, .worktrees/lp-ui)
+.worktrees/

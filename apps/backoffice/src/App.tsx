@@ -2,6 +2,7 @@ import {
   Banknote, Bell, ChartSpline, ChevronsUpDown, IdCard, KeyRound, Landmark, LayoutDashboard, LogOut, Receipt, Search, Ticket, UserPen, UserRound, UserX, Users, Wallet,
 } from 'lucide-react'
 import { useEffect, useState, type ComponentType } from 'react'
+import { BrandGlyph } from './components/BrandGlyph'
 import { NameDialog } from './components/NameDialog'
 import { PasswordDialog } from './components/PasswordDialog'
 import { MetricsPage } from './pages/Metrics'
@@ -246,16 +247,6 @@ function AppSidebar({ sections }: { sections: Section[] }) {
   )
 }
 
-/** The brand's disc: a coral circle with a gold pointer notch (the player app's BrandMark, in one glyph). */
-function BrandGlyph() {
-  return (
-    <svg viewBox="0 0 24 24" className="size-5" aria-hidden="true">
-      <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeWidth="2.2" />
-      <circle cx="12" cy="12" r="2.4" fill="currentColor" />
-      <path d="M12 1.5 L14.6 6.5 L9.4 6.5 Z" className="fill-gold" />
-    </svg>
-  )
-}
 
 /** ⌘K: jump to a section or sign out. */
 function CommandMenu({ sections }: { sections: Section[] }) {
