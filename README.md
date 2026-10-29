@@ -17,6 +17,9 @@ Read `docs/STATUS.md` first in a new session: it is the running record of what i
 
 ---
 
+> **Fairness, in public:** the spin and draw protocol and the verifier tool live in the public repository
+> [itsivali/tajirika-fairness](https://github.com/itsivali/tajirika-fairness); this repository (the platform) is private.
+
 ## 1. Prerequisites
 
 - **[mise](https://mise.jdx.dev)** pins every tool (`mise.toml`: Go, Node, Flutter, Java 17, sqlc, goose,

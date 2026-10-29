@@ -53,7 +53,8 @@ is a bug or tampering: stop approving draws, keep the evidence and investigate b
 
 ## Public verification
 
-Anyone can check a conducted draw without trusting the server:
+The protocol and the verifier are published at https://github.com/itsivali/tajirika-fairness (MIT): the one place to
+point players, auditors and the regulator. Anyone can check a conducted draw without trusting the server:
 
 ```sh
 curl -s https://<api>/v1/draws/<id> | python3 -m json.tool          # certificate_hash, drand round, results
