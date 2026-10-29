@@ -71,7 +71,7 @@ services:
       # then invites everyone else from the Staff page. Google and Apple are optional (ADR 0018, the back office's own
       # client ids; docs/runbooks/back-office.md).
       - key: STAFF_BOOTSTRAP_ADMIN
-        value: itsivali@gmail.com
+        value: admin@tajirika.co.ke
       - key: STAFF_BOOTSTRAP_PASSWORD
         sync: false
       - key: STAFF_GOOGLE_CLIENT_ID

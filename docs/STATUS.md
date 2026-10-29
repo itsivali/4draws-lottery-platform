@@ -69,7 +69,7 @@ Read this first at the start of every session.
   `lottery-web` points at `https://backoffice.tajirika.co.ke`).
 - **Staff (owner, 2026-10-28, ADR 0019; was ADR 0018):** two roles, `admin` (everything, staff management, app
   metrics) and `staff` (every operational queue and the finance dashboard). Staff sign in with email and password
-  (temporary ones set by admins, changed at the first sign-in); Google and Apple are optional. itsivali@gmail.com is
+  (temporary ones set by admins, changed at the first sign-in); Google and Apple are optional. admin@tajirika.co.ke ("Administrator"; was itsivali@gmail.com until 2026-10-29) is
   the bootstrap admin; `STAFF_BOOTSTRAP_PASSWORD` (Render secret, to set) is their first temporary password. The back
   office has Finance and App metrics dashboards and deploys as the `lottery-backoffice` static site.
 - **Identity review notices (owner, 2026-10-28):** whenever a player's ID submission starts waiting for a decision,
