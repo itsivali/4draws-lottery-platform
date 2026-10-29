@@ -73,6 +73,10 @@ Read this first at the start of every session.
   (temporary ones set by admins, changed at the first sign-in); Google and Apple are optional. admin@tajirika.co.ke ("Administrator"; was itsivali@gmail.com until 2026-10-29) is
   the bootstrap admin; `STAFF_BOOTSTRAP_PASSWORD` (Render secret, to set) is their first temporary password. The back
   office has Finance and App metrics dashboards and deploys as the `lottery-backoffice` static site.
+- **Email at sign-up and self-service password reset (owner, 2026-10-29, ADR 0021):** sign-up asks for an email address
+  (unique, unverified); "Forgotten your password?" emails a 30-minute link to the web app's `/#/reset-password` page
+  (`WEB_APP_URL` on `lottery-api`, Resend SMTP); players from before add an address from the account screen; staff's
+  temporary password remains the fallback. The Players page shows and searches addresses.
 - **Players sign in with Google or Apple (owner, 2026-10-29, ADR 0020):** the sign-in screen offers both when the API
   lists them (`GET /v1/auth/providers`); an identity without an account is asked for its M-Pesa number and nothing else
   (`POST /v1/auth/sso/{provider}/signup`: no password, the number proved by the first top-up as always). Waits on the

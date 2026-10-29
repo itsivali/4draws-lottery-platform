@@ -213,6 +213,15 @@ type IdentityDevice struct {
 	LastSeenAt         time.Time
 }
 
+type IdentityPasswordReset struct {
+	ID        string
+	UserID    string
+	TokenHash []byte
+	ExpiresAt time.Time
+	UsedAt    *time.Time
+	CreatedAt time.Time
+}
+
 type IdentityRefreshToken struct {
 	ID        string
 	SessionID string
@@ -248,6 +257,7 @@ type IdentityUser struct {
 	PasswordChangedAt  *time.Time
 	MsisdnVerifiedAt   *time.Time
 	MustChangePassword bool
+	Email              *string
 }
 
 type KycKycCheck struct {

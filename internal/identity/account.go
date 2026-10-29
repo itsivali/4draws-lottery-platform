@@ -25,6 +25,10 @@ type Account struct {
 	ClosureRequestedAt *time.Time
 	// MustChangePassword: staff gave the player a temporary password they have not replaced yet.
 	MustChangePassword bool
+	// Email is nil for an account from before addresses were asked for (ADR 0021).
+	Email *string
+	// HasPassword is false for an account that signs in with Google or Apple only (ADR 0020).
+	HasPassword bool
 }
 
 // Account returns the player's account.
@@ -34,7 +38,7 @@ func (s *Service) Account(ctx context.Context, userID string) (Account, error) {
 		return Account{}, err
 	}
 	return Account{UserID: u.ID, MSISDN: u.Msisdn, PhoneVerified: u.PhoneVerified, KYCStatus: u.KycStatus, Status: u.Status, MustChangePassword: u.MustChangePassword,
-		CreatedAt: u.CreatedAt, ClosureRequestedAt: u.ClosureRequestedAt}, nil
+		CreatedAt: u.CreatedAt, ClosureRequestedAt: u.ClosureRequestedAt, Email: u.Email, HasPassword: u.HasPassword}, nil
 }
 
 // RequestClosure records that the player wants their account closed and returns when they first asked. Asking again
@@ -133,6 +137,7 @@ func (s *Service) CloseAccount(ctx context.Context, userID, staffID, staff strin
 type Player struct {
 	UserID             string     `json:"user_id"`
 	MSISDN             string     `json:"msisdn"`
+	Email              *string    `json:"email"`
 	KYCStatus          string     `json:"kyc_status"`
 	Status             string     `json:"status"`
 	PhoneVerified      bool       `json:"phone_verified"`
@@ -147,7 +152,7 @@ type Player struct {
 	NationalID string `json:"national_id"`
 }
 
-// PlayerFilter narrows the list: a fragment of the phone number (or a user id), and a status.
+// PlayerFilter narrows the list: a fragment of the phone number or email address (or a user id), and a status.
 type PlayerFilter struct {
 	Query  string
 	Status string
@@ -187,7 +192,7 @@ func (s *Service) Players(ctx context.Context, f PlayerFilter, limit int, before
 		}
 		page.Players = make([]Player, 0, len(rows))
 		for _, r := range rows {
-			page.Players = append(page.Players, Player{UserID: r.ID, MSISDN: r.Msisdn, KYCStatus: r.KycStatus, Status: r.Status,
+			page.Players = append(page.Players, Player{UserID: r.ID, MSISDN: r.Msisdn, Email: r.Email, KYCStatus: r.KycStatus, Status: r.Status,
 				PhoneVerified: r.PhoneVerified, BalanceKES: r.BalanceKes, Plays: r.Plays, CreatedAt: r.CreatedAt,
 				LastSignInAt: timePtr(r.LastSignInAt), ClosureRequestedAt: r.ClosureRequestedAt})
 		}

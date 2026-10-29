@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 
 import '../../../app/providers.dart';
@@ -22,6 +23,7 @@ import '../../../core/widgets/status_pill.dart';
 import '../application/auth_providers.dart';
 import '../data/provider_sign_in.dart';
 import '../data/sign_in_providers.dart';
+import 'email_rules.dart';
 
 enum _Mode { signIn, create }
 
@@ -39,6 +41,7 @@ class SignInScreen extends ConsumerStatefulWidget {
 class _SignInScreenState extends ConsumerState<SignInScreen> {
   final _form = GlobalKey<FormState>();
   final _phone = TextEditingController();
+  final _email = TextEditingController();
   final _password = TextEditingController();
   var _mode = _Mode.signIn;
   var _step = _Step.form;
@@ -49,7 +52,7 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
   var _prepared = false;
   ProviderToken? _providerToken;
   StreamSubscription<ProviderToken>? _tokens;
-  String? _phoneError, _passwordError, _formError, _formDetail;
+  String? _phoneError, _emailError, _passwordError, _formError, _formDetail;
 
   @override
   void initState() {
@@ -61,11 +64,12 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
   void dispose() {
     _tokens?.cancel();
     _phone.dispose();
+    _email.dispose();
     _password.dispose();
     super.dispose();
   }
 
-  void _clearErrors() => _phoneError = _passwordError = _formError = _formDetail = null;
+  void _clearErrors() => _phoneError = _emailError = _passwordError = _formError = _formDetail = null;
 
   Future<void> _submit() async {
     setState(_clearErrors);
@@ -81,6 +85,7 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
           ? await repo.logIn(msisdn: _phone.text.trim(), password: _password.text, idempotencyKey: newIdempotencyKey())
           : await repo.signUp(
               msisdn: _phone.text.trim(),
+              email: _email.text.trim(),
               password: _password.text,
               idempotencyKey: newIdempotencyKey(),
             );
@@ -93,6 +98,8 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
         switch (f) {
           case ProblemFailure(slug: 'invalid-msisdn', :final detail):
             _phoneError = detail ?? 'Enter a Kenyan mobile number such as 0712 345 678.';
+          case ProblemFailure(slug: 'invalid-email' || 'email-registered', :final title, :final detail):
+            _emailError = detail == null ? title : '$title: $detail';
           case ProblemFailure(slug: 'weak-password', :final title, :final detail):
             _passwordError = detail == null ? title : '$title: $detail';
           default:
@@ -222,6 +229,7 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
     final form = _Form(
       formKey: _form,
       phone: _phone,
+      email: _email,
       password: _password,
       mode: _mode,
       step: _step,
@@ -230,10 +238,12 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
       adult: _adult,
       busy: _busy,
       phoneError: _phoneError,
+      emailError: _emailError,
       passwordError: _passwordError,
       formError: _formError,
       formDetail: _formDetail,
       expired: ref.watch(sessionManagerProvider).endReason == SessionEndReason.expired,
+      justReset: GoRouterState.of(context).uri.queryParameters['reset'] == '1',
       providers: _prepared ? providers : SignInProviders.none,
       googleButton: _prepared ? signIn.googleButton() : null,
       onMode: (m) => setState(() => _mode = m),
@@ -243,6 +253,7 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
       onGoogle: () => _open(signIn.google, 'Google'),
       onApple: () => _open(() => signIn.apple(providers), 'Apple'),
       onBack: () => setState(_back),
+      onForgot: () => context.go('/forgot-password'),
     );
     return Scaffold(
       body: SafeArea(
@@ -333,6 +344,7 @@ class _Form extends StatelessWidget {
   const _Form({
     required this.formKey,
     required this.phone,
+    required this.email,
     required this.password,
     required this.mode,
     required this.step,
@@ -341,10 +353,12 @@ class _Form extends StatelessWidget {
     required this.adult,
     required this.busy,
     required this.phoneError,
+    required this.emailError,
     required this.passwordError,
     required this.formError,
     required this.formDetail,
     required this.expired,
+    required this.justReset,
     required this.providers,
     required this.googleButton,
     required this.onMode,
@@ -354,10 +368,12 @@ class _Form extends StatelessWidget {
     required this.onGoogle,
     required this.onApple,
     required this.onBack,
+    required this.onForgot,
   });
 
   final GlobalKey<FormState> formKey;
   final TextEditingController phone;
+  final TextEditingController email;
   final TextEditingController password;
   final _Mode mode;
   final _Step step;
@@ -366,10 +382,12 @@ class _Form extends StatelessWidget {
   final bool adult;
   final bool busy;
   final String? phoneError;
+  final String? emailError;
   final String? passwordError;
   final String? formError;
   final String? formDetail;
   final bool expired;
+  final bool justReset;
   final SignInProviders providers;
   final Widget? googleButton;
   final ValueChanged<_Mode> onMode;
@@ -379,6 +397,7 @@ class _Form extends StatelessWidget {
   final VoidCallback onGoogle;
   final VoidCallback onApple;
   final VoidCallback onBack;
+  final VoidCallback onForgot;
 
   @override
   Widget build(BuildContext context) {
@@ -444,6 +463,15 @@ class _Form extends StatelessWidget {
                 title: 'Your session ended. Sign in again to continue.',
               ),
             ],
+            if (justReset && !phoneStep) ...[
+              const SizedBox(height: Space.lg),
+              const InlineBanner(
+                tone: StatusTone.success,
+                icon: Icons.check_circle_rounded,
+                live: true,
+                title: 'Your password is changed. Sign in with it.',
+              ),
+            ],
             const SizedBox(height: Space.xl),
             if (phoneStep) ...[
               phoneField,
@@ -466,6 +494,23 @@ class _Form extends StatelessWidget {
               ),
               const SizedBox(height: Space.xl),
               phoneField,
+              if (creating) ...[
+                const SizedBox(height: Space.lg),
+                TextFormField(
+                  controller: email,
+                  keyboardType: TextInputType.emailAddress,
+                  autofillHints: const [AutofillHints.email],
+                  autocorrect: false,
+                  textInputAction: TextInputAction.next,
+                  decoration: InputDecoration(
+                    labelText: 'Email address',
+                    helperText: 'For a link if you ever forget your password',
+                    errorText: emailError,
+                    prefixIcon: const Icon(Icons.alternate_email_rounded),
+                  ),
+                  validator: emailFieldError,
+                ),
+              ],
               const SizedBox(height: Space.lg),
               TextFormField(
                 controller: password,
@@ -490,6 +535,10 @@ class _Form extends StatelessWidget {
               if (errorBanner != null) ...[const SizedBox(height: Space.lg), errorBanner],
               const SizedBox(height: Space.xl),
               BusyButton(label: creating ? 'Create account' : 'Sign in', busy: busy, onPressed: onSubmit),
+              if (!creating) ...[
+                const SizedBox(height: Space.sm),
+                TextButton(onPressed: busy ? null : onForgot, child: const Text('Forgotten your password?')),
+              ],
               if (providers.any) ...[
                 const SizedBox(height: Space.xl),
                 const _OrDivider(label: 'or continue with'),

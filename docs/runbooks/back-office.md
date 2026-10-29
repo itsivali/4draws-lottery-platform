@@ -62,6 +62,13 @@ It gives that member a temporary password, re-enables them, ends their sessions 
 administrator (creating the member if none exists). The next sign-in must change the password. The action is audited
 as `staff.emergency_password` by `lotteryctl`. `-password P` is accepted for scripts but lands in the shell history.
 
+## Players who cannot sign in
+
+A player who forgot their password resets it themselves with the "Forgotten your password?" link in the app, which
+emails them (ADR 0021). When that fails them (no email address on the account, or no access to it), the Players page
+→ *Temporary password* gives them one to sign in with once; check the caller against the name and ID shown first and
+tell them the password by phone. The page shows and searches by email address.
+
 ## Setting up Google and Apple (once, by the owner)
 
 These are the back office's own client ids. The player apps' Google and Apple sign-in is a separate set, in

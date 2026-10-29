@@ -98,6 +98,12 @@ class AccountScreen extends ConsumerWidget {
           children: [
             link(Icons.badge_rounded, 'Identity verification', '/account/verify'),
             link(Icons.lock_rounded, 'Change password', '/account/password'),
+            link(
+              Icons.alternate_email_rounded,
+              'Email address',
+              '/account/email',
+              subtitle: account.value?.email ?? 'Add one so you can reset a forgotten password',
+            ),
           ],
         ),
         const SectionHeader(title: 'Play safely'),

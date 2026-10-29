@@ -66,6 +66,14 @@ class FakeBackend {
   /// The Google or Apple ID tokens that already sign in to an account; others get 409 sso-not-linked.
   final ssoAccounts = <String>{};
 
+  /// The account's email address (null for one from before addresses were asked for) and whether it has a password.
+  String? email = 'jane@example.com';
+  bool hasPassword = true;
+
+  /// Whether the "server" can email reset links; the addresses it was asked to email.
+  bool resetsConfigured = true;
+  final resetRequests = <String>[];
+
   final requests = <http.Request>[];
   final _idempotent = <String, http.Response>{};
   int _ids = 0;
@@ -100,6 +108,8 @@ class FakeBackend {
         path == '/v1/auth/signup' ||
         path == '/v1/auth/refresh' ||
         path == '/v1/auth/providers' ||
+        path == '/v1/auth/password/forgot' ||
+        path == '/v1/auth/password/reset' ||
         path.startsWith('/v1/auth/sso/') ||
         (method == 'GET' && path.startsWith('/v1/draws') && !path.endsWith('/mine') && path != '/v1/draws/periods');
     if (!public && r.headers['Authorization'] != 'Bearer $access') {
@@ -139,12 +149,57 @@ class FakeBackend {
         signedIn = true;
         return _ok(tokens);
       case ('POST', '/v1/auth/signup'):
+        if (body['email'] == null) {
+          return _problem(400, 'invalid-email', 'Invalid email address');
+        }
+        if (body['email'] == 'taken@example.com') {
+          return _problem(
+            409,
+            'email-registered',
+            'This email address already has an account',
+            'sign in instead, or use another address',
+          );
+        }
+        email = body['email'] as String;
         signedIn = true;
         return _ok(tokens, 201);
+      case ('POST', '/v1/auth/password/forgot'):
+        if ((body['email'] as String? ?? '').isEmpty) {
+          return _problem(400, 'invalid-email', 'An email address is required');
+        }
+        if (!resetsConfigured) {
+          return _problem(503, 'unavailable', 'Password reset by email is not configured');
+        }
+        resetRequests.add(body['email'] as String);
+        return http.Response('', 202);
+      case ('POST', '/v1/auth/password/reset'):
+        if (body['token'] != 'good-link') {
+          return _problem(410, 'invalid-token', 'This link has expired or was already used', 'ask for a new one');
+        }
+        if ((body['new_password'] as String).length < 8) {
+          return _problem(400, 'weak-password', 'Password too weak', 'too short');
+        }
+        return http.Response('', 204);
+      case ('PUT', '/v1/account/email'):
+        if (hasPassword && body['current_password'] != 'correct horse battery') {
+          return _problem(403, 'wrong-password', 'Current password is incorrect');
+        }
+        if (body['email'] == 'taken@example.com') {
+          return _problem(
+            409,
+            'email-registered',
+            'This email address already has an account',
+            'sign in instead, or use another address',
+          );
+        }
+        email = body['email'] as String;
+        return http.Response('', 204);
       case ('GET', '/v1/auth/providers'):
         return _ok(providers);
       case ('POST', '/v1/auth/sso/google') || ('POST', '/v1/auth/sso/apple'):
-        if (body['nonce'] == null || body['id_token'] == null) return _problem(400, 'invalid-body', 'Invalid body');
+        if (body['nonce'] == null || body['id_token'] == null) {
+          return _problem(400, 'invalid-body', 'Invalid body');
+        }
         if (!ssoAccounts.contains(body['id_token'])) {
           return _problem(
             409,
@@ -156,7 +211,9 @@ class FakeBackend {
         signedIn = true;
         return _ok(tokens);
       case ('POST', '/v1/auth/sso/google/signup') || ('POST', '/v1/auth/sso/apple/signup'):
-        if (body['id_token'] == 'expired-token') return _problem(401, 'invalid-token', 'Invalid token');
+        if (body['id_token'] == 'expired-token') {
+          return _problem(401, 'invalid-token', 'Invalid token');
+        }
         if (ssoAccounts.contains(body['id_token'])) {
           return _problem(409, 'sso-already-linked', 'This identity already signs in to an account');
         }
@@ -176,20 +233,24 @@ class FakeBackend {
         signedIn = true;
         return _ok(tokens, 201);
       case ('POST', '/v1/auth/refresh'):
-        if (refreshFails) return _problem(401, 'invalid-token', 'Invalid token');
+        if (refreshFails) {
+          return _problem(401, 'invalid-token', 'Invalid token');
+        }
         return _ok(tokens);
       case ('POST', '/v1/auth/logout'):
         signedIn = false;
         return http.Response('', 204);
       case ('GET', '/v1/account'):
-        return _ok(
-          accountJson(
+        return _ok({
+          ...accountJson(
             kyc: kyc,
             phoneVerified: phoneVerified,
             restriction: restriction,
             closureRequestedAt: closureRequestedAt,
           ),
-        );
+          'email': email,
+          'has_password': hasPassword,
+        });
       case ('POST', '/v1/account/closure'):
         closureRequestedAt ??= '2026-10-26T12:00:00+03:00';
         return _ok({'closure_requested_at': closureRequestedAt}, 202);
@@ -214,10 +275,14 @@ class FakeBackend {
       case ('GET', '/v1/payments'):
         return _ok({'payments': topUps.values.toList().reversed.toList()});
       case ('POST', '/v1/payments/topups'):
-        if (kyc != 'verified') return _problem(403, 'kyc-required', 'Identity verification required');
+        if (kyc != 'verified') {
+          return _problem(403, 'kyc-required', 'Identity verification required');
+        }
         final id = 'pay-${++_ids}';
         final amount = body['amount_kes']! as int;
-        if (amount < topUpMin) return _problem(400, 'invalid-amount', 'Invalid amount');
+        if (amount < topUpMin) {
+          return _problem(400, 'invalid-amount', 'Invalid amount');
+        }
         topUps[id] = topUpJson(id: id, status: 'pending', amount: amount);
         _topUpPolls[id] = 0;
         return _ok(topUps[id]!, 202);
@@ -225,7 +290,9 @@ class FakeBackend {
         return _ok({'payouts': payouts.values.toList().reversed.toList()});
       case ('POST', '/v1/payouts/withdrawals'):
         final amount = body['amount_kes']! as int;
-        if (amount > balance) return _problem(409, 'insufficient-funds', 'Your balance is below the amount');
+        if (amount > balance) {
+          return _problem(409, 'insufficient-funds', 'Your balance is below the amount');
+        }
         balance -= amount;
         final id = 'po-${++_ids}';
         payouts[id] = payoutJson(id: id, amount: amount);
@@ -265,7 +332,9 @@ class FakeBackend {
     if (method == 'GET' && path.startsWith('/v1/payments/')) {
       final id = path.split('/').last;
       final t = topUps[id];
-      if (t == null) return _problem(404, 'not-found', 'Not found');
+      if (t == null) {
+        return _problem(404, 'not-found', 'Not found');
+      }
       final polls = _topUpPolls[id] = _topUpPolls[id]! + 1;
       if (topUpPendingPolls != null && polls >= topUpPendingPolls! && t['status'] == 'pending') {
         final amount = t['amount_requested_kes']! as int;
@@ -303,7 +372,9 @@ class FakeBackend {
   int _chances() => (const [0, 1, 2, 3, 5][plays]) * (lucky ? 2 : 1);
 
   http.Response _play() {
-    if (restriction != null) return _problem(403, 'restricted', 'Your account is restricted');
+    if (restriction != null) {
+      return _problem(403, 'restricted', 'Your account is restricted');
+    }
     if (kyc != 'verified') return _problem(403, 'kyc-required', 'Identity verification required');
     if (!phoneVerified) {
       return _problem(

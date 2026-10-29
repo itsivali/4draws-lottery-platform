@@ -14,8 +14,29 @@ class AuthRepository {
   final DeviceIdentity _device;
   final DeviceAttestation _attestation;
 
-  Future<Tokens> signUp({required String msisdn, required String password, required String idempotencyKey}) =>
-      _credentials('/v1/auth/signup', msisdn, password, idempotencyKey);
+  Future<Tokens> signUp({
+    required String msisdn,
+    required String email,
+    required String password,
+    required String idempotencyKey,
+  }) => _credentials('/v1/auth/signup', msisdn, password, idempotencyKey, email: email);
+
+  /// Asks for a password-reset link to be emailed. The API answers the same whether or not the address has an account.
+  Future<void> forgotPassword({required String email, required String idempotencyKey}) => _api.post(
+    '/v1/auth/password/forgot',
+    idempotencyKey: idempotencyKey,
+    authenticated: false,
+    body: {'email': email},
+  );
+
+  /// Sets a new password from the token in an emailed link.
+  Future<void> resetPassword({required String token, required String password, required String idempotencyKey}) =>
+      _api.post(
+        '/v1/auth/password/reset',
+        idempotencyKey: idempotencyKey,
+        authenticated: false,
+        body: {'token': token, 'new_password': password},
+      );
 
   Future<Tokens> logIn({required String msisdn, required String password, required String idempotencyKey}) =>
       _credentials('/v1/auth/login', msisdn, password, idempotencyKey);
@@ -50,13 +71,14 @@ class AuthRepository {
     return parse(r, (j) => Tokens.fromJson(j.raw));
   }
 
-  Future<Tokens> _credentials(String path, String msisdn, String password, String key) async {
+  Future<Tokens> _credentials(String path, String msisdn, String password, String key, {String? email}) async {
     final r = await _api.post(
       path,
       idempotencyKey: key,
       authenticated: false,
       body: {
         'msisdn': msisdn,
+        'email': ?email,
         'password': password,
         'device': {..._device.toJson(), ...await _evidence()},
       },

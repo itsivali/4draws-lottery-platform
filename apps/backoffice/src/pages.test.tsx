@@ -179,7 +179,7 @@ describe('passwords and metrics', () => {
 
 describe('players', () => {
   const player = (id: string, status: Player['status'], msisdn: string): Player => ({
-    user_id: id, msisdn, kyc_status: 'verified', status, phone_verified: true, balance_kes: 850, plays: 3,
+    user_id: id, msisdn, email: id === 'u1' ? 'amina@example.com' : null, kyc_status: 'verified', status, phone_verified: true, balance_kes: 850, plays: 3,
     created_at: '2026-10-27T18:04:26Z', last_sign_in_at: '2026-10-28T09:00:00Z', closure_requested_at: null,
     full_name: id === 'u1' ? 'Amina Otieno' : '', national_id: id === 'u1' ? '12345678' : '',
   })
@@ -209,7 +209,7 @@ describe('players', () => {
     expect(within(screen.getByRole('row', { name: /0712 000 002/ })).getByText('No name yet')).toBeInTheDocument()
     expect(within(screen.getByRole('row', { name: /0712 000 002/ })).getByText('closed')).toBeInTheDocument()
     const user = userEvent.setup()
-    await user.type(screen.getByLabelText('Phone number or user id'), '992457')
+    await user.type(screen.getByLabelText('Phone number, email or user id'), '992457')
     await user.click(screen.getByRole('button', { name: 'Search' }))
     await waitFor(() => { expect(asked.at(-1)).toContain('q=992457') })
     expect(screen.queryByRole('row', { name: /0712 000 002/ })).not.toBeInTheDocument()
@@ -233,7 +233,7 @@ describe('players', () => {
 describe('players: temporary passwords', () => {
   it('staff give a player a temporary password with a reason, after being told to check who is asking', async () => {
     const player: Player = {
-      user_id: 'u1', msisdn: '254796992457', kyc_status: 'verified', status: 'active', phone_verified: true, balance_kes: 100, plays: 3,
+      user_id: 'u1', msisdn: '254796992457', email: 'jane@example.com', kyc_status: 'verified', status: 'active', phone_verified: true, balance_kes: 100, plays: 3,
       created_at: '2026-10-26T08:00:00Z', last_sign_in_at: '2026-10-28T08:00:00Z', closure_requested_at: null, full_name: 'Amina Otieno', national_id: '12345678',
     }
     const { fetch } = renderSignedIn(<App />, { roles: ['staff'], path: '/players', route: (method, url) => {

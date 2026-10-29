@@ -105,6 +105,8 @@ func Mount(d Deps) func(chi.Router) {
 			r.Post("/auth/signup", h.signup)
 			r.Post("/auth/login", h.login)
 			r.Post("/auth/refresh", h.refresh)
+			r.Post("/auth/password/forgot", h.forgotPassword)
+			r.Post("/auth/password/reset", h.resetPasswordWithToken)
 			r.Post("/auth/attestation/challenge", h.attestationChallenge)
 			r.Get("/auth/providers", h.signInProviders)
 			r.Post("/auth/sso/{provider}", h.ssoSignIn)
@@ -144,6 +146,7 @@ func Mount(d Deps) func(chi.Router) {
 				r.Get("/wallet", h.getWallet)
 				r.Get("/account", h.getAccount)
 				r.Post("/account/closure", h.requestClosure)
+				r.Put("/account/email", h.setEmail)
 			})
 		})
 	}

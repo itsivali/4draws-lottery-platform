@@ -8,6 +8,7 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -20,6 +21,7 @@ import (
 	"github.com/itsivali/lottery-platform/internal/audit"
 	"github.com/itsivali/lottery-platform/internal/identity"
 	"github.com/itsivali/lottery-platform/internal/platform/clock"
+	"github.com/itsivali/lottery-platform/internal/platform/mail"
 	"github.com/itsivali/lottery-platform/internal/platform/password"
 	"github.com/itsivali/lottery-platform/internal/platform/testpg"
 )
@@ -71,6 +73,10 @@ var seq int
 
 func (e *env) newMSISDN() string { seq++; return fmt.Sprintf("2547%08d", seq) }
 
+var emailSeq int
+
+func (e *env) newEmail() string { emailSeq++; return fmt.Sprintf("player%d@example.com", emailSeq) }
+
 // login signs the number up the first time it is seen and logs it in afterwards, with the standard test password.
 func (e *env) login(t *testing.T, msisdn string, dev identity.Device) identity.Tokens {
 	t.Helper()
@@ -80,7 +86,7 @@ func (e *env) login(t *testing.T, msisdn string, dev identity.Device) identity.T
 	if e.seen[msisdn] {
 		tok, err = e.svc.Login(ctx, msisdn, goodPassword, dev)
 	} else {
-		tok, err = e.svc.Signup(ctx, msisdn, goodPassword, dev)
+		tok, err = e.svc.Signup(ctx, msisdn, e.newEmail(), goodPassword, dev)
 		e.seen[msisdn] = true
 	}
 	if err != nil {
@@ -433,10 +439,10 @@ func TestSignup_CreatesAnUnverifiedAccountWithAHashedPassword(t *testing.T) {
 func TestSignup_RefusesBadNumbersWeakPasswordsAndNumbersAlreadyProved(t *testing.T) {
 	e := setup(t)
 	ctx := context.Background()
-	if _, err := e.svc.Signup(ctx, "12345", goodPassword, phone); !errors.Is(err, identity.ErrInvalidMSISDN) {
+	if _, err := e.svc.Signup(ctx, "12345", e.newEmail(), goodPassword, phone); !errors.Is(err, identity.ErrInvalidMSISDN) {
 		t.Errorf("bad number: %v", err)
 	}
-	if _, err := e.svc.Signup(ctx, e.newMSISDN(), "password", phone); !errors.Is(err, password.ErrWeak) {
+	if _, err := e.svc.Signup(ctx, e.newMSISDN(), e.newEmail(), "password", phone); !errors.Is(err, password.ErrWeak) {
 		t.Errorf("weak password: %v", err)
 	}
 	m := e.newMSISDN()
@@ -444,7 +450,7 @@ func TestSignup_RefusesBadNumbersWeakPasswordsAndNumbersAlreadyProved(t *testing
 	p, _ := e.svc.Authenticate(ctx, tok.Access)
 	e.verifyPhone(t, p.UserID, m)
 	other := identity.Device{Fingerprint: "other-phone", Platform: "android"}
-	if _, err := e.svc.Signup(ctx, m, "another strong one", other); !errors.Is(err, identity.ErrPhoneRegistered) {
+	if _, err := e.svc.Signup(ctx, m, e.newEmail(), "another strong one", other); !errors.Is(err, identity.ErrPhoneRegistered) {
 		t.Errorf("signing up a proved number: %v, want ErrPhoneRegistered", err)
 	}
 }
@@ -486,11 +492,11 @@ func TestClaims_SeveralPeopleMayClaimANumberButOnlyTheOneWhoProvesItKeepsIt(t *t
 	e := setup(t)
 	ctx := context.Background()
 	m := e.newMSISDN()
-	squatter, err := e.svc.Signup(ctx, m, "squatters password 1", identity.Device{Fingerprint: "squatter-phone", Platform: "android"})
+	squatter, err := e.svc.Signup(ctx, m, e.newEmail(), "squatters password 1", identity.Device{Fingerprint: "squatter-phone", Platform: "android"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	owner, err := e.svc.Signup(ctx, m, "the real owners password", identity.Device{Fingerprint: "owner-phone", Platform: "android"})
+	owner, err := e.svc.Signup(ctx, m, e.newEmail(), "the real owners password", identity.Device{Fingerprint: "owner-phone", Platform: "android"})
 	if err != nil {
 		t.Fatalf("a squatter's unverified claim must not block the real owner: %v", err)
 	}
@@ -590,7 +596,7 @@ func TestDevices_ThirdAccountOnTheSameDeviceIsRefused(t *testing.T) {
 	e.login(t, a, dev)
 	e.login(t, b, dev)
 	e.login(t, a, dev) // an existing link is allowed
-	if _, err := e.svc.Signup(ctx, e.newMSISDN(), goodPassword, dev); !errors.Is(err, identity.ErrDeviceCap) {
+	if _, err := e.svc.Signup(ctx, e.newMSISDN(), e.newEmail(), goodPassword, dev); !errors.Is(err, identity.ErrDeviceCap) {
 		t.Fatalf("third account err = %v, want ErrDeviceCap", err)
 	}
 	// the refused signup must not leave an account behind
@@ -603,7 +609,7 @@ func TestDevices_ThirdAccountOnTheSameDeviceIsRefused(t *testing.T) {
 
 func TestDevices_MobileSignupWithoutAFingerprintIsRefused(t *testing.T) {
 	e := setup(t)
-	if _, err := e.svc.Signup(context.Background(), e.newMSISDN(), goodPassword, identity.Device{Platform: "android"}); !errors.Is(err, identity.ErrDeviceRequired) {
+	if _, err := e.svc.Signup(context.Background(), e.newMSISDN(), e.newEmail(), goodPassword, identity.Device{Platform: "android"}); !errors.Is(err, identity.ErrDeviceRequired) {
 		t.Fatalf("err = %v, want ErrDeviceRequired", err)
 	}
 }
@@ -700,7 +706,7 @@ func TestSSO_AnIdentityWithoutAnAccountCreatesOneFromAPhoneNumber(t *testing.T) 
 	if _, err := e.pool.Exec(ctx, `UPDATE identity.users SET msisdn_verified_at = now() WHERE id = $1`, p.UserID); err != nil {
 		t.Fatalf("a password-less account may prove its number: %v", err)
 	}
-	if _, err := e.svc.Signup(ctx, m, goodPassword, phone); !errors.Is(err, identity.ErrPhoneRegistered) {
+	if _, err := e.svc.Signup(ctx, m, e.newEmail(), goodPassword, phone); !errors.Is(err, identity.ErrPhoneRegistered) {
 		t.Fatalf("claiming a proved number by password err = %v", err)
 	}
 	if _, err := e.svc.SignupSSO(ctx, "apple", "ok:new-2", "n1", m, phone); !errors.Is(err, identity.ErrPhoneRegistered) {
@@ -712,5 +718,116 @@ func TestSSO_AnIdentityWithoutAnAccountCreatesOneFromAPhoneNumber(t *testing.T) 
 	}
 	if got, err := e.svc.Login(ctx, m, "temporary pass 2026", phone); err != nil || !got.MustChangePassword {
 		t.Fatalf("login with the temporary password: %+v %v", got, err)
+	}
+}
+
+// outbox records the emails the service would send.
+type outbox struct{ msgs []mail.Message }
+
+func (o *outbox) Send(_ context.Context, m mail.Message) error {
+	o.msgs = append(o.msgs, m)
+	return nil
+}
+
+func TestEmail_SignupNeedsAUniqueAddressAndAForgottenPasswordIsResetThroughALink(t *testing.T) {
+	e := setup(t)
+	ctx := context.Background()
+	sent := &outbox{}
+	e.svc.WithPasswordResets(identity.PasswordResets{Sender: sent, WebAppURL: "https://app.example.com/"})
+	m := e.newMSISDN()
+
+	if _, err := e.svc.Signup(ctx, m, "not an address", goodPassword, phone); !errors.Is(err, identity.ErrInvalidEmail) {
+		t.Fatalf("bad address err = %v", err)
+	}
+	tok, err := e.svc.Signup(ctx, m, " Jane@Example.com ", goodPassword, phone)
+	if err != nil {
+		t.Fatalf("sign-up: %v", err)
+	}
+	p, _ := e.svc.Authenticate(ctx, tok.Access)
+	if _, err := e.svc.Signup(ctx, e.newMSISDN(), "jane@example.com", goodPassword, identity.Device{Fingerprint: "fp-other", Platform: "android"}); !errors.Is(err, identity.ErrEmailRegistered) {
+		t.Fatalf("second account with the address err = %v", err)
+	}
+	a, err := e.svc.Account(ctx, p.UserID)
+	if err != nil || a.Email == nil || *a.Email != "jane@example.com" || !a.HasPassword {
+		t.Fatalf("account: %+v %v", a, err)
+	}
+
+	// an unknown address is answered like a known one, and nothing is sent
+	if err := e.svc.RequestPasswordReset(ctx, "nobody@example.com"); err != nil || len(sent.msgs) != 0 {
+		t.Fatalf("unknown: %v, sent %d", err, len(sent.msgs))
+	}
+	if err := e.svc.RequestPasswordReset(ctx, "JANE@example.com "); err != nil || len(sent.msgs) != 1 || sent.msgs[0].To[0] != "jane@example.com" {
+		t.Fatalf("forgot: %v, sent %+v", err, sent.msgs)
+	}
+	link := regexp.MustCompile(`https://app\.example\.com/#/reset-password\?token=([A-Za-z0-9_-]+)`).FindStringSubmatch(sent.msgs[0].Text)
+	if link == nil {
+		t.Fatalf("no link in:\n%s", sent.msgs[0].Text)
+	}
+	token := link[1]
+	if err := e.svc.ResetPasswordWithToken(ctx, "not-a-token", "a brand new password"); !errors.Is(err, identity.ErrResetLinkInvalid) {
+		t.Fatalf("bad token err = %v", err)
+	}
+	if err := e.svc.ResetPasswordWithToken(ctx, token, "short"); !errors.Is(err, password.ErrWeak) {
+		t.Fatalf("weak err = %v", err)
+	}
+	if err := e.svc.ResetPasswordWithToken(ctx, token, "a brand new password"); err != nil {
+		t.Fatalf("reset: %v", err)
+	}
+	// the link is spent, the old session is over, only the new password works
+	if err := e.svc.ResetPasswordWithToken(ctx, token, "yet another password"); !errors.Is(err, identity.ErrResetLinkInvalid) {
+		t.Fatalf("reused link err = %v", err)
+	}
+	if _, err := e.svc.Authenticate(ctx, tok.Access); err == nil {
+		t.Fatal("the old session survived the reset")
+	}
+	if _, err := e.svc.Login(ctx, m, goodPassword, phone); !errors.Is(err, identity.ErrInvalidCredentials) {
+		t.Fatalf("old password err = %v", err)
+	}
+	if _, err := e.svc.Login(ctx, m, "a brand new password", phone); err != nil {
+		t.Fatalf("new password: %v", err)
+	}
+	// a link runs out after 30 minutes
+	if err := e.svc.RequestPasswordReset(ctx, "jane@example.com"); err != nil || len(sent.msgs) != 2 {
+		t.Fatalf("second link: %v %d", err, len(sent.msgs))
+	}
+	token = regexp.MustCompile(`token=([A-Za-z0-9_-]+)`).FindStringSubmatch(sent.msgs[1].Text)[1]
+	e.clk.Set(start.Add(31 * time.Minute))
+	if err := e.svc.ResetPasswordWithToken(ctx, token, "a third password here"); !errors.Is(err, identity.ErrResetLinkInvalid) {
+		t.Fatalf("expired link err = %v", err)
+	}
+
+	// the address is changed with the password in hand, and cannot be another account's
+	if err := e.svc.SetEmail(ctx, p.UserID, "jane2@example.com", "wrong password"); !errors.Is(err, identity.ErrInvalidCredentials) {
+		t.Fatalf("change without the password err = %v", err)
+	}
+	if err := e.svc.SetEmail(ctx, p.UserID, "Jane2@Example.com", "a brand new password"); err != nil {
+		t.Fatalf("change: %v", err)
+	}
+	if a, _ := e.svc.Account(ctx, p.UserID); a.Email == nil || *a.Email != "jane2@example.com" {
+		t.Fatalf("address after change: %+v", a)
+	}
+	other, _ := e.svc.Signup(ctx, e.newMSISDN(), "other@example.com", goodPassword, identity.Device{Fingerprint: "fp-3", Platform: "android"})
+	op, _ := e.svc.Authenticate(ctx, other.Access)
+	if err := e.svc.SetEmail(ctx, op.UserID, "jane2@example.com", goodPassword); !errors.Is(err, identity.ErrEmailRegistered) {
+		t.Fatalf("taking another account's address err = %v", err)
+	}
+}
+
+func TestEmail_ResetIsOffUntilConfiguredAndAGoogleAccountAddsAnAddressWithoutAPassword(t *testing.T) {
+	e := setup(t)
+	ctx := context.Background()
+	if err := e.svc.RequestPasswordReset(ctx, "jane@example.com"); !errors.Is(err, identity.ErrResetUnavailable) {
+		t.Fatalf("unconfigured err = %v", err)
+	}
+	tok, err := e.svc.SignupSSO(ctx, "google", "ok:g-email", "n1", e.newMSISDN(), phone)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, _ := e.svc.Authenticate(ctx, tok.Access)
+	if a, _ := e.svc.Account(ctx, p.UserID); a.Email != nil || a.HasPassword {
+		t.Fatalf("google account: %+v", a)
+	}
+	if err := e.svc.SetEmail(ctx, p.UserID, "g@example.com", ""); err != nil {
+		t.Fatalf("google account adds an address: %v", err)
 	}
 }

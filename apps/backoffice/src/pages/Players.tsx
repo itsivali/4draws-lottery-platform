@@ -36,9 +36,10 @@ export function PlayersPage() {
 
   const columns = useMemo<ColumnDef<Player>[]>(() => [
     {
-      id: 'player', header: 'Player', accessorFn: (p) => `${p.full_name} ${msisdn(p.msisdn)} ${p.user_id}`,
+      id: 'player', header: 'Player', accessorFn: (p) => `${p.full_name} ${msisdn(p.msisdn)} ${p.email ?? ''} ${p.user_id}`,
       cell: ({ row }) => (
-        <Stack primary={row.original.full_name || <span className="font-normal text-muted-foreground">No name yet</span>} secondary={<span className="tabular-nums">{msisdn(row.original.msisdn)}</span>}>
+        <Stack primary={row.original.full_name || <span className="font-normal text-muted-foreground">No name yet</span>}
+          secondary={<span><span className="tabular-nums">{msisdn(row.original.msisdn)}</span>{row.original.email ? <span className="text-muted-foreground"> · {row.original.email}</span> : null}</span>}>
           <Mono className="text-muted-foreground">{row.original.user_id}</Mono>
         </Stack>
       ),
@@ -126,7 +127,7 @@ export function PlayersPage() {
       <form className="mb-4 flex flex-wrap items-center gap-3" onSubmit={(e) => { e.preventDefault(); setQ(typed.trim()) }}>
         <div className="relative w-full max-w-sm">
           <Search aria-hidden="true" className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input aria-label="Phone number or user id" placeholder="Phone number or user id" value={typed} onChange={(e) => { setTyped(e.target.value) }} className="pl-8" />
+          <Input aria-label="Phone number, email or user id" placeholder="Phone number, email or user id" value={typed} onChange={(e) => { setTyped(e.target.value) }} className="pl-8" />
         </div>
         <Button type="submit" variant="outline">Search</Button>
         {q ? <Button type="button" variant="ghost" onClick={() => { setTyped(''); setQ('') }}>Clear</Button> : null}
@@ -142,7 +143,7 @@ export function PlayersPage() {
           players.length === 0 ? <Empty icon={UserRound}>{q || status ? 'No player matches.' : 'No players yet.'}</Empty> : (
             <>
               <DataTable columns={columns} data={players} rowId={(p) => p.user_id} caption="Players, newest first" filter="Filter these rows" pageSize={25} />
-              {next_before ? <p className="mt-3 text-sm text-muted-foreground">Showing the newest 100. Search by phone number or user id to find an older player.</p> : null}
+              {next_before ? <p className="mt-3 text-sm text-muted-foreground">Showing the newest 100. Search by phone number, email or user id to find an older player.</p> : null}
             </>
           )
         }

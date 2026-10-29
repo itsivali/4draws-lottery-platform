@@ -104,8 +104,9 @@ type Service struct {
 	att       Attestor
 	attOff    bool // ATTESTATION_MODE=off: never ask the attestor
 	cfg       Config
-	pepper    []byte // password pepper, derived from cfg.AuthKey
-	dummyHash string // verified against when no account exists, so unknown numbers cost the same time as wrong passwords
+	resets    *PasswordResets // nil: forgotten passwords are reset by staff only
+	pepper    []byte          // password pepper, derived from cfg.AuthKey
+	dummyHash string          // verified against when no account exists, so unknown numbers cost the same time as wrong passwords
 }
 
 // NewService returns a Service.

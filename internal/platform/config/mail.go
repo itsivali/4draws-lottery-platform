@@ -23,6 +23,9 @@ type Mail struct {
 	KYCReviewTo string
 	// BackOfficeURL is the back office's origin, for the links in notices (https://backoffice.tajirika.co.ke).
 	BackOfficeURL string
+	// WebAppURL is the player web app's origin (https://tajirika.co.ke), for the password-reset links players are
+	// emailed (ADR 0021); unset, players cannot reset a forgotten password themselves.
+	WebAppURL string
 }
 
 // Enabled reports whether real email is sent.
@@ -31,7 +34,8 @@ func (m Mail) Enabled() bool { return m.SMTPHost != "" }
 func loadMail() (Mail, error) {
 	m := Mail{SMTPHost: os.Getenv("SMTP_HOST"), SMTPPort: 587, SMTPUsername: os.Getenv("SMTP_USERNAME"),
 		SMTPPassword: os.Getenv("SMTP_PASSWORD"), From: os.Getenv("SMTP_FROM"),
-		KYCReviewTo: strings.TrimSpace(os.Getenv("KYC_REVIEW_NOTIFY_TO")), BackOfficeURL: strings.TrimRight(os.Getenv("BACKOFFICE_URL"), "/")}
+		KYCReviewTo: strings.TrimSpace(os.Getenv("KYC_REVIEW_NOTIFY_TO")), BackOfficeURL: strings.TrimRight(os.Getenv("BACKOFFICE_URL"), "/"),
+		WebAppURL: strings.TrimRight(os.Getenv("WEB_APP_URL"), "/")}
 	if v := os.Getenv("SMTP_PORT"); v != "" {
 		p, err := strconv.Atoi(v)
 		if err != nil || p <= 0 || p > 65535 {
@@ -42,6 +46,12 @@ func loadMail() (Mail, error) {
 	if m.SMTPHost != "" {
 		if _, err := mail.ParseAddress(m.From); err != nil {
 			return Mail{}, errors.New("config: SMTP_FROM must be an email address when SMTP_HOST is set")
+		}
+	}
+	if m.WebAppURL != "" {
+		u, err := url.Parse(m.WebAppURL)
+		if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" || u.Path != "" {
+			return Mail{}, errors.New("config: WEB_APP_URL must be the player web app's origin (https://host)")
 		}
 	}
 	if m.KYCReviewTo != "" {

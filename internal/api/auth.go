@@ -58,6 +58,14 @@ func authError(w http.ResponseWriter, err error) {
 		httpx.WriteProblem(w, http.StatusUnauthorized, "invalid-credentials", "Invalid phone number or password", "")
 	case errors.Is(err, identity.ErrPhoneRegistered):
 		httpx.WriteProblem(w, http.StatusConflict, "phone-registered", "This number already has an account", "sign in instead")
+	case errors.Is(err, identity.ErrInvalidEmail):
+		httpx.WriteProblem(w, http.StatusBadRequest, "invalid-email", "Invalid email address", "use an address like name@example.com")
+	case errors.Is(err, identity.ErrEmailRegistered):
+		httpx.WriteProblem(w, http.StatusConflict, "email-registered", "This email address already has an account", "sign in instead, or use another address")
+	case errors.Is(err, identity.ErrResetLinkInvalid):
+		httpx.WriteProblem(w, http.StatusGone, "invalid-token", "This link has expired or was already used", "ask for a new one")
+	case errors.Is(err, identity.ErrResetUnavailable):
+		httpx.WriteProblemRetry(w, http.StatusServiceUnavailable, "unavailable", "Password reset by email is not configured", "ask us for a temporary password", 60)
 	case errors.Is(err, identity.ErrTokenReuse), errors.Is(err, identity.ErrTokenInvalid):
 		httpx.WriteProblem(w, http.StatusUnauthorized, "invalid-token", "Invalid token", "")
 	case errors.Is(err, identity.ErrDeviceRequired):
@@ -85,6 +93,7 @@ func authError(w http.ResponseWriter, err error) {
 
 type credentialsJSON struct {
 	MSISDN   string     `json:"msisdn"`
+	Email    string     `json:"email"` // sign-up only (ADR 0021)
 	Password string     `json:"password"`
 	Device   deviceJSON `json:"device"`
 }
@@ -102,7 +111,7 @@ func (h *handlers) signup(w http.ResponseWriter, r *http.Request) {
 	if !h.limit(w, r, "signup:ip:"+h.clientIP(r), 10, time.Hour) || !h.limit(w, r, "signup:msisdn:"+key, 5, 24*time.Hour) {
 		return
 	}
-	t, err := h.Identity.Signup(r.Context(), in.MSISDN, in.Password, h.device(r.Context(), in.Device))
+	t, err := h.Identity.Signup(r.Context(), in.MSISDN, in.Email, in.Password, h.device(r.Context(), in.Device))
 	if err != nil {
 		authError(w, err)
 		return
@@ -149,6 +158,46 @@ func (h *handlers) changePassword(w http.ResponseWriter, r *http.Request) {
 			httpx.WriteProblem(w, http.StatusForbidden, "wrong-password", "Current password is incorrect", "")
 			return
 		}
+		authError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// forgotPassword emails a reset link to an address that has an active account (ADR 0021). It always answers 202, so
+// nobody learns which addresses have accounts; 503 when the api has no web-app address to link to.
+func (h *handlers) forgotPassword(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Email string `json:"email"`
+	}
+	if !httpx.DecodeJSON(w, r, &in) || !h.limit(w, r, "forgot:ip:"+h.clientIP(r), 10, time.Hour) {
+		return
+	}
+	email := strings.ToLower(strings.TrimSpace(in.Email))
+	if email == "" {
+		httpx.WriteProblem(w, http.StatusBadRequest, "invalid-email", "An email address is required", "")
+		return
+	}
+	if !h.limit(w, r, "forgot:email:"+email, 3, time.Hour) {
+		return
+	}
+	if err := h.Identity.RequestPasswordReset(r.Context(), email); err != nil {
+		authError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusAccepted)
+}
+
+// resetPasswordWithToken sets a new password from an emailed link; every session of the account ends.
+func (h *handlers) resetPasswordWithToken(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Token    string `json:"token"`
+		Password string `json:"new_password"`
+	}
+	if !httpx.DecodeJSON(w, r, &in) || !h.limit(w, r, "reset:ip:"+h.clientIP(r), 20, time.Hour) {
+		return
+	}
+	if err := h.Identity.ResetPasswordWithToken(r.Context(), in.Token, in.Password); err != nil {
 		authError(w, err)
 		return
 	}

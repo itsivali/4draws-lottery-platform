@@ -53,11 +53,13 @@ paths:
     post:
       operationId: signup
       tags: [auth]
-      summary: Create an account with a phone number and password
+      summary: Create an account with a phone number, an email address and a password
       description: |
         There is no SMS code. The number is only a claim until the player proves they control it with the M-Pesa
         confirmation of their first top-up, so several people may claim one number; a number that already has a proved
-        owner cannot be claimed (409). Passwords need 8 to 128 characters and must not be common or contain the number.
+        owner cannot be claimed (409 `phone-registered`). The email address is unique among accounts (409
+        `email-registered`) and is how a forgotten password is reset (ADR 0021). Passwords need 8 to 128 characters and
+        must not be common or contain the number.
       security: []
       parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
       requestBody:
@@ -117,6 +119,59 @@ paths:
         "400": { $ref: "#/components/responses/Problem" }
         "401": { $ref: "#/components/responses/Problem" }
         "403": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+  /v1/auth/password/forgot:
+    post:
+      operationId: forgotPassword
+      tags: [auth]
+      summary: Email a password-reset link to a player who forgot theirs
+      description: |
+        ADR 0021. No token needed. Always answers 202, whether or not the address has an account, so addresses stay
+        private. The link opens the web app's reset page (`/#/reset-password?token=…`) and works for 30 minutes. 503
+        when the api has no web-app address configured (staff set a temporary password instead).
+      security: []
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [email]
+              properties:
+                email: { type: string, format: email }
+      responses:
+        "202": { description: "If the address has an account, an email is on its way" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+  /v1/auth/password/reset:
+    post:
+      operationId: resetPasswordWithToken
+      tags: [auth]
+      summary: Set a new password from an emailed reset link
+      description: |
+        No token needed: the one from the link identifies the account. The new password follows the usual rules; every
+        session of the account ends and all its open links are spent. 410 `invalid-token` for an unknown, used or
+        expired link. Audited.
+      security: []
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [token, new_password]
+              properties:
+                token: { type: string }
+                new_password: { type: string, minLength: 8, maxLength: 128 }
+      responses:
+        "204": { description: Password changed }
+        "400": { $ref: "#/components/responses/Problem" }
+        "410": { $ref: "#/components/responses/Problem" }
         "429": { $ref: "#/components/responses/Problem" }
   /v1/auth/refresh:
     post:
@@ -776,6 +831,34 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Account" }
         "401": { $ref: "#/components/responses/Problem" }
+  /v1/account/email:
+    put:
+      operationId: setEmail
+      tags: [account]
+      summary: Change or add the email address
+      description: |
+        ADR 0021. An account with a password must give it (403 `wrong-password`), since the address is a way to reset
+        that password; an account that signs in with Google or Apple only gives none. 409 `email-registered` when
+        another account uses the address. Audited.
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [email]
+              properties:
+                email: { type: string, format: email }
+                current_password: { type: string }
+      responses:
+        "204": { description: Address changed }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
   /v1/account/closure:
     post:
       operationId: requestClosure
@@ -1182,6 +1265,7 @@ paths:
                         last_sign_in_at: { type: [string, "null"], format: date-time }
                         closure_requested_at: { type: [string, "null"], format: date-time }
                         full_name: { type: string, description: From the latest identity submission; empty when none. Each view is audited as unmasked. }
+                        email: { type: [string, "null"], description: "The player's email address (ADR 0021); null for accounts from before." }
                         national_id: { type: string, description: From the latest identity submission; empty when none. }
                   next_before: { type: [string, "null"] }
         "400": { $ref: "#/components/responses/Problem" }
@@ -2720,6 +2804,8 @@ components:
             - { type: "null" }
         closure_requested_at: { type: [string, "null"], format: date-time }
         must_change_password: { type: boolean, description: Staff gave the player a temporary password they have not replaced yet; the app asks for a new one first. }
+        email: { type: [string, "null"], format: email, description: "Null for an account from before addresses were asked for (ADR 0021)." }
+        has_password: { type: boolean, description: "False for an account that signs in with Google or Apple only (ADR 0020)." }
     Problem:
       type: object
       required: [type, title, status]
@@ -2747,6 +2833,7 @@ components:
       required: [msisdn, password, device]
       properties:
         msisdn: { type: string, example: "0712345678" }
+        email: { type: string, format: email, description: "Required at sign-up (ADR 0021); ignored at login." }
         password: { type: string, minLength: 8, maxLength: 128 }
         device: { $ref: "#/components/schemas/Device" }
     PasswordChange:

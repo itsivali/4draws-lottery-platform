@@ -191,6 +191,9 @@ func buildServices(pool *pgxpool.Pool, sh shared) services {
 	if c.Attestation.Mode == "off" {
 		s.identity.WithAttestationOff()
 	}
+	if m := cfg.Mail; m.WebAppURL != "" { // forgotten passwords are reset through an emailed link (ADR 0021)
+		s.identity.WithPasswordResets(identity.PasswordResets{Sender: mailer(m), WebAppURL: m.WebAppURL})
+	}
 	s.rg = rg.NewService(pool, sh.clk, sh.aw, rg.Config{CoolingOff: 24 * time.Hour})
 
 	// Without Daraja configuration the payments service still answers reads but refuses top-ups (fail closed).

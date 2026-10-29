@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/itsivali/lottery-platform/internal/identity"
 	"github.com/itsivali/lottery-platform/internal/payments/daraja"
 	"github.com/itsivali/lottery-platform/internal/platform/httpx"
 	"github.com/itsivali/lottery-platform/internal/wallet"
@@ -102,8 +103,32 @@ func (h *handlers) getAccount(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusOK, map[string]any{
 		"user_id": a.UserID, "msisdn": a.MSISDN, "phone_verified": a.PhoneVerified, "kyc_status": a.KYCStatus, "status": a.Status,
 		"created_at": a.CreatedAt, "restriction": restriction, "closure_requested_at": a.ClosureRequestedAt,
-		"must_change_password": a.MustChangePassword,
+		"must_change_password": a.MustChangePassword, "email": a.Email, "has_password": a.HasPassword,
 	})
+}
+
+// setEmail changes or adds the player's email address; an account with a password must give it (ADR 0021).
+func (h *handlers) setEmail(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Email    string `json:"email"`
+		Password string `json:"current_password"`
+	}
+	if !httpx.DecodeJSON(w, r, &in) {
+		return
+	}
+	p, _ := principalFrom(r.Context())
+	if !h.limit(w, r, "email:user:"+p.UserID, 10, time.Hour) {
+		return
+	}
+	if err := h.Identity.SetEmail(r.Context(), p.UserID, in.Email, in.Password); err != nil {
+		if errors.Is(err, identity.ErrInvalidCredentials) {
+			httpx.WriteProblem(w, http.StatusForbidden, "wrong-password", "Current password is incorrect", "")
+			return
+		}
+		authError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (h *handlers) requestClosure(w http.ResponseWriter, r *http.Request) {

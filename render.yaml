@@ -143,6 +143,9 @@ services:
         value: itsivali@outlook.com
       - key: BACKOFFICE_URL
         value: https://backoffice.tajirika.co.ke
+      # the player web app, for the password-reset links players are emailed (ADR 0021)
+      - key: WEB_APP_URL
+        value: https://tajirika.co.ke
       - key: SMTP_HOST
         sync: false
       - key: SMTP_PORT

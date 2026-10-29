@@ -46,6 +46,14 @@ class AccountRepository {
         body: {'current_password': current, 'new_password': next},
       );
 
+  /// Changes or adds the email address; an account with a password gives it.
+  Future<void> setEmail({required String email, required String currentPassword, required String idempotencyKey}) =>
+      _api.put(
+        '/v1/account/email',
+        idempotencyKey: idempotencyKey,
+        body: {'email': email, 'current_password': currentPassword},
+      );
+
   Future<DateTime> requestClosure({required String idempotencyKey}) async => parse(
     await _api.post('/v1/account/closure', idempotencyKey: idempotencyKey),
     (j) => j.instant('closure_requested_at'),

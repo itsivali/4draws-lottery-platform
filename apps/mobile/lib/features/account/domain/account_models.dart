@@ -36,10 +36,14 @@ class Account {
     required this.restriction,
     required this.closureRequestedAt,
     this.mustChangePassword = false,
+    this.email,
+    this.hasPassword = true,
   });
 
   factory Account.fromJson(JsonObject j) => Account(
     mustChangePassword: j.raw['must_change_password'] == true,
+    email: j.strOrNull('email'),
+    hasPassword: j.raw['has_password'] != false,
     userId: j.str('user_id'),
     msisdn: j.str('msisdn'),
     phoneVerified: j.boolean('phone_verified'),
@@ -68,6 +72,12 @@ class Account {
 
   /// Staff gave the player a temporary password they have not replaced yet.
   final bool mustChangePassword;
+
+  /// Where a forgotten password's reset link goes; null for an account from before addresses were asked for.
+  final String? email;
+
+  /// False for an account that signs in with Google or Apple only.
+  final bool hasPassword;
 }
 
 class DepositLimit {

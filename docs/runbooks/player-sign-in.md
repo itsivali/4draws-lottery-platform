@@ -63,6 +63,15 @@ the iOS URL scheme above is the one thing that needs a build.
 4. Android and Apple: Apple answers in the browser to `POST /auth/apple/android`, which redirects into the app
    (`intent://callback…` for the `sign_in_with_apple` plugin's callback activity). Nothing is verified or stored there.
 
+## Forgotten passwords (ADR 0021)
+
+Players give an email address at sign-up. "Forgotten your password?" on the sign-in screen emails a link to
+`WEB_APP_URL/#/reset-password?token=…` (30 minutes, once) through the same SMTP as the staff notices; the answer is
+the same whether or not the address has an account. `WEB_APP_URL` (`https://tajirika.co.ke`) must be set on
+`lottery-api`, else the app says reset by email is not configured. A player with no address (an account from before,
+or a Google or Apple one) adds one under Account → Email address; until then staff reset them with a temporary
+password (below). The back office's Players page shows the address and searches by it.
+
 ## Operations
 
 - A player who lost access to their Google or Apple account signs in again only with a password: the Players page →

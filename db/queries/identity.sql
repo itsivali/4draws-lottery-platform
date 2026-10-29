@@ -42,9 +42,34 @@ FROM identity.sessions s JOIN identity.devices d ON d.id = s.device_id
 WHERE s.id = $1;
 
 -- name: InsertAccount :one
-INSERT INTO identity.users (msisdn, password_hash, password_changed_at, created_at, updated_at)
-VALUES (sqlc.arg(msisdn), sqlc.arg(password_hash), sqlc.arg(at), sqlc.arg(at), sqlc.arg(at))
+INSERT INTO identity.users (msisdn, email, password_hash, password_changed_at, created_at, updated_at)
+VALUES (sqlc.arg(msisdn), sqlc.narg(email), sqlc.arg(password_hash), sqlc.arg(at), sqlc.arg(at), sqlc.arg(at))
 RETURNING id;
+
+-- name: UserByEmail :one
+SELECT id, msisdn, status FROM identity.users WHERE email = sqlc.arg(email)::text;
+
+-- name: SetUserEmail :exec
+UPDATE identity.users SET email = sqlc.arg(email)::text, updated_at = sqlc.arg(at) WHERE id = sqlc.arg(id);
+
+-- Emailed password-reset links (ADR 0021): the token's SHA-256 only, 30 minutes, used at most once.
+-- name: InsertPlayerPasswordReset :exec
+INSERT INTO identity.password_resets (user_id, token_hash, expires_at, created_at)
+VALUES (sqlc.arg(user_id), sqlc.arg(token_hash), sqlc.arg(expires_at), sqlc.arg(at));
+
+-- name: PlayerPasswordResetByHash :one
+SELECT r.id, r.user_id, r.expires_at, r.used_at, u.msisdn, u.status
+FROM identity.password_resets r JOIN identity.users u ON u.id = r.user_id
+WHERE r.token_hash = $1
+FOR UPDATE OF r;
+
+-- name: UsePlayerPasswordResets :exec
+-- a reset consumes every open link of the player, not only the one used
+UPDATE identity.password_resets SET used_at = sqlc.arg(at) WHERE user_id = sqlc.arg(user_id) AND used_at IS NULL;
+
+-- name: RevokeSessionsForPasswordChange :exec
+UPDATE identity.sessions SET revoked_at = sqlc.arg(at), revoked_reason = 'password_change'
+WHERE user_id = sqlc.arg(user_id) AND revoked_at IS NULL;
 
 -- name: VerifiedAccountExists :one
 SELECT EXISTS (SELECT 1 FROM identity.users WHERE msisdn = $1 AND msisdn_verified_at IS NOT NULL) ::boolean AS exists;
@@ -85,8 +110,8 @@ UPDATE identity.users SET msisdn_verified_at = $2, updated_at = $2 WHERE id = $1
 SELECT id, status, kyc_status FROM identity.users WHERE msisdn = $1 AND msisdn_verified_at IS NOT NULL;
 
 -- name: GetAccount :one
-SELECT u.id, u.msisdn, u.kyc_status, u.status, (u.msisdn_verified_at IS NOT NULL)::boolean AS phone_verified, u.created_at,
-  u.must_change_password, c.requested_at AS closure_requested_at
+SELECT u.id, u.msisdn, u.email, u.kyc_status, u.status, (u.msisdn_verified_at IS NOT NULL)::boolean AS phone_verified, u.created_at,
+  u.must_change_password, (u.password_hash IS NOT NULL)::boolean AS has_password, c.requested_at AS closure_requested_at
 FROM identity.users u LEFT JOIN identity.closure_requests c ON c.user_id = u.id
 WHERE u.id = $1;
 
@@ -128,9 +153,9 @@ FROM identity.users WHERE id = $1 FOR SHARE;
 SELECT 1 FROM identity.users WHERE id = $1 FOR UPDATE;
 
 -- name: ListPlayers :many
--- the back office's player list (ADR 0019): newest first (ids are uuid v7), narrowed by a phone-number fragment and a
--- status; before (a user id) continues a page. Shows each player's balance, plays and last sign-in.
-SELECT u.id, u.msisdn, u.kyc_status, u.status, (u.msisdn_verified_at IS NOT NULL)::boolean AS phone_verified, u.created_at,
+-- the back office's player list (ADR 0019): newest first (ids are uuid v7), narrowed by a phone-number or email
+-- fragment and a status; before (a user id) continues a page. Shows each player's balance, plays and last sign-in.
+SELECT u.id, u.msisdn, u.email, u.kyc_status, u.status, (u.msisdn_verified_at IS NOT NULL)::boolean AS phone_verified, u.created_at,
        coalesce(w.balance_kes, 0)::bigint AS balance_kes,
        (SELECT count(*) FROM tickets.tickets t WHERE t.user_id = u.id AND t.status = 'paid')::bigint AS plays,
        (SELECT max(s.created_at) FROM identity.sessions s WHERE s.user_id = u.id) AS last_sign_in_at,
@@ -138,7 +163,8 @@ SELECT u.id, u.msisdn, u.kyc_status, u.status, (u.msisdn_verified_at IS NOT NULL
 FROM identity.users u
 LEFT JOIN wallet.wallets w ON w.user_id = u.id
 LEFT JOIN identity.closure_requests c ON c.user_id = u.id AND c.closed_at IS NULL
-WHERE (sqlc.narg(q)::text IS NULL OR u.msisdn LIKE '%' || sqlc.narg(q)::text || '%' OR u.id::text = sqlc.narg(q)::text)
+WHERE (sqlc.narg(q)::text IS NULL OR u.msisdn LIKE '%' || sqlc.narg(q)::text || '%' OR u.id::text = sqlc.narg(q)::text
+       OR u.email LIKE '%' || lower(sqlc.narg(q)::text) || '%')
   AND (sqlc.narg(status)::text IS NULL OR u.status = sqlc.narg(status)::text)
   AND (sqlc.narg(before)::uuid IS NULL OR u.id < sqlc.narg(before)::uuid)
 ORDER BY u.id DESC

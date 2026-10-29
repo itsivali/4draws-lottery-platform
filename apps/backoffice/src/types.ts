@@ -89,6 +89,8 @@ export interface Closure { user_id: string; msisdn: string; status: string; requ
 export interface Player {
   user_id: string
   msisdn: string
+  /** where a forgotten password's reset link goes (ADR 0021); null for accounts from before addresses were asked for */
+  email: string | null
   kyc_status: 'none' | 'pending' | 'verified' | 'manual_review' | 'rejected'
   status: 'active' | 'suspended' | 'closed'
   phone_verified: boolean

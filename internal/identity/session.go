@@ -72,11 +72,15 @@ func (s *Service) startSession(ctx context.Context, q *store.Queries, userID str
 // maxPasswordBytes bounds what Login will hash, so a huge "password" cannot be used to burn CPU.
 const maxPasswordBytes = 1024
 
-// Signup creates an account from a phone number and password and signs it in. The number is only a claim until the
-// player proves it with an M-Pesa confirmation, so several people may claim one number; a number that already has a
-// proved owner cannot be claimed again.
-func (s *Service) Signup(ctx context.Context, rawMSISDN, pw string, dev Device) (Tokens, error) {
+// Signup creates an account from a phone number, an email address and a password and signs it in. The number is only
+// a claim until the player proves it with an M-Pesa confirmation, so several people may claim one number; a number
+// that already has a proved owner cannot be claimed again. The address is unique among accounts (ADR 0021).
+func (s *Service) Signup(ctx context.Context, rawMSISDN, rawEmail, pw string, dev Device) (Tokens, error) {
 	msisdn, err := NormalizeMSISDN(rawMSISDN)
+	if err != nil {
+		return Tokens{}, err
+	}
+	email, err := NormalizeEmail(rawEmail)
 	if err != nil {
 		return Tokens{}, err
 	}
@@ -97,9 +101,9 @@ func (s *Service) Signup(ctx context.Context, rawMSISDN, pw string, dev Device) 
 		if taken {
 			return ErrPhoneRegistered
 		}
-		id, err := q.InsertAccount(ctx, store.InsertAccountParams{Msisdn: msisdn, PasswordHash: &hash, At: &now})
+		id, err := q.InsertAccount(ctx, store.InsertAccountParams{Msisdn: msisdn, Email: &email, PasswordHash: &hash, At: &now})
 		if err != nil {
-			return err
+			return emailError(err)
 		}
 		if err := s.audit.Record(ctx, tx, audit.Event{ActorType: audit.System, Action: "user.created", EntityType: "user", EntityID: id}); err != nil {
 			return err

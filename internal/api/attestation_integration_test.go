@@ -35,7 +35,7 @@ func (e *env) phone(t *testing.T, token, challenge string) session {
 	attSeq++
 	m := e.msisdn()
 	fp := fmt.Sprintf("phone-%d", attSeq)
-	r := e.do(t, http.MethodPost, "/v1/auth/signup", "", map[string]any{"msisdn": m, "password": strongPassword,
+	r := e.do(t, http.MethodPost, "/v1/auth/signup", "", map[string]any{"msisdn": m, "email": e.email(), "password": strongPassword,
 		"device": map[string]any{"fingerprint": fp, "platform": "android", "attestation_token": token, "attestation_challenge": challenge}})
 	if r.Code != http.StatusCreated {
 		t.Fatalf("signup: %d %s", r.Code, r.Raw)
@@ -117,7 +117,7 @@ func TestAPI_RequireLetsOnlyAttestedPhonesAndTheWebTransact(t *testing.T) {
 func (e *env) signInWeb(t *testing.T) session {
 	t.Helper()
 	m := e.msisdn()
-	r := e.do(t, http.MethodPost, "/v1/auth/signup", "", map[string]any{"msisdn": m, "password": strongPassword, "device": map[string]any{"platform": "web"}})
+	r := e.do(t, http.MethodPost, "/v1/auth/signup", "", map[string]any{"msisdn": m, "email": e.email(), "password": strongPassword, "device": map[string]any{"platform": "web"}})
 	if r.Code != http.StatusCreated {
 		t.Fatalf("signup: %d %s", r.Code, r.Raw)
 	}

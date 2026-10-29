@@ -98,6 +98,7 @@ services:
       # logged (api logs: "email not sent"). Export SMTP_HOST, SMTP_FROM, SMTP_USERNAME and SMTP_PASSWORD to send real ones.
       KYC_REVIEW_NOTIFY_TO: ada@staff.local
       BACKOFFICE_URL: http://localhost:5173
+      WEB_APP_URL: http://localhost:8088 # players' password-reset links (logged, there being no SMTP locally)
       SMTP_HOST: ${SMTP_HOST:-}
       SMTP_PORT: ${SMTP_PORT:-587}
       SMTP_USERNAME: ${SMTP_USERNAME:-}

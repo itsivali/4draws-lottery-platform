@@ -58,8 +58,8 @@ func (q *Queries) FindAuthIdentity(ctx context.Context, arg FindAuthIdentityPara
 }
 
 const getAccount = `-- name: GetAccount :one
-SELECT u.id, u.msisdn, u.kyc_status, u.status, (u.msisdn_verified_at IS NOT NULL)::boolean AS phone_verified, u.created_at,
-  u.must_change_password, c.requested_at AS closure_requested_at
+SELECT u.id, u.msisdn, u.email, u.kyc_status, u.status, (u.msisdn_verified_at IS NOT NULL)::boolean AS phone_verified, u.created_at,
+  u.must_change_password, (u.password_hash IS NOT NULL)::boolean AS has_password, c.requested_at AS closure_requested_at
 FROM identity.users u LEFT JOIN identity.closure_requests c ON c.user_id = u.id
 WHERE u.id = $1
 `
@@ -67,11 +67,13 @@ WHERE u.id = $1
 type GetAccountRow struct {
 	ID                 string
 	Msisdn             string
+	Email              *string
 	KycStatus          string
 	Status             string
 	PhoneVerified      bool
 	CreatedAt          time.Time
 	MustChangePassword bool
+	HasPassword        bool
 	ClosureRequestedAt *time.Time
 }
 
@@ -81,11 +83,13 @@ func (q *Queries) GetAccount(ctx context.Context, id string) (GetAccountRow, err
 	err := row.Scan(
 		&i.ID,
 		&i.Msisdn,
+		&i.Email,
 		&i.KycStatus,
 		&i.Status,
 		&i.PhoneVerified,
 		&i.CreatedAt,
 		&i.MustChangePassword,
+		&i.HasPassword,
 		&i.ClosureRequestedAt,
 	)
 	return i, err
@@ -198,19 +202,25 @@ func (q *Queries) GetUserForShare(ctx context.Context, id string) (GetUserForSha
 }
 
 const insertAccount = `-- name: InsertAccount :one
-INSERT INTO identity.users (msisdn, password_hash, password_changed_at, created_at, updated_at)
-VALUES ($1, $2, $3, $3, $3)
+INSERT INTO identity.users (msisdn, email, password_hash, password_changed_at, created_at, updated_at)
+VALUES ($1, $2, $3, $4, $4, $4)
 RETURNING id
 `
 
 type InsertAccountParams struct {
 	Msisdn       string
+	Email        *string
 	PasswordHash *string
 	At           *time.Time
 }
 
 func (q *Queries) InsertAccount(ctx context.Context, arg InsertAccountParams) (string, error) {
-	row := q.db.QueryRow(ctx, insertAccount, arg.Msisdn, arg.PasswordHash, arg.At)
+	row := q.db.QueryRow(ctx, insertAccount,
+		arg.Msisdn,
+		arg.Email,
+		arg.PasswordHash,
+		arg.At,
+	)
 	var id string
 	err := row.Scan(&id)
 	return id, err
@@ -228,6 +238,29 @@ type InsertAuthIdentityParams struct {
 
 func (q *Queries) InsertAuthIdentity(ctx context.Context, arg InsertAuthIdentityParams) error {
 	_, err := q.db.Exec(ctx, insertAuthIdentity, arg.UserID, arg.Provider, arg.Subject)
+	return err
+}
+
+const insertPlayerPasswordReset = `-- name: InsertPlayerPasswordReset :exec
+INSERT INTO identity.password_resets (user_id, token_hash, expires_at, created_at)
+VALUES ($1, $2, $3, $4)
+`
+
+type InsertPlayerPasswordResetParams struct {
+	UserID    string
+	TokenHash []byte
+	ExpiresAt time.Time
+	At        time.Time
+}
+
+// Emailed password-reset links (ADR 0021): the token's SHA-256 only, 30 minutes, used at most once.
+func (q *Queries) InsertPlayerPasswordReset(ctx context.Context, arg InsertPlayerPasswordResetParams) error {
+	_, err := q.db.Exec(ctx, insertPlayerPasswordReset,
+		arg.UserID,
+		arg.TokenHash,
+		arg.ExpiresAt,
+		arg.At,
+	)
 	return err
 }
 
@@ -279,7 +312,7 @@ func (q *Queries) InsertSession(ctx context.Context, arg InsertSessionParams) (s
 }
 
 const listPlayers = `-- name: ListPlayers :many
-SELECT u.id, u.msisdn, u.kyc_status, u.status, (u.msisdn_verified_at IS NOT NULL)::boolean AS phone_verified, u.created_at,
+SELECT u.id, u.msisdn, u.email, u.kyc_status, u.status, (u.msisdn_verified_at IS NOT NULL)::boolean AS phone_verified, u.created_at,
        coalesce(w.balance_kes, 0)::bigint AS balance_kes,
        (SELECT count(*) FROM tickets.tickets t WHERE t.user_id = u.id AND t.status = 'paid')::bigint AS plays,
        (SELECT max(s.created_at) FROM identity.sessions s WHERE s.user_id = u.id) AS last_sign_in_at,
@@ -287,7 +320,8 @@ SELECT u.id, u.msisdn, u.kyc_status, u.status, (u.msisdn_verified_at IS NOT NULL
 FROM identity.users u
 LEFT JOIN wallet.wallets w ON w.user_id = u.id
 LEFT JOIN identity.closure_requests c ON c.user_id = u.id AND c.closed_at IS NULL
-WHERE ($1::text IS NULL OR u.msisdn LIKE '%' || $1::text || '%' OR u.id::text = $1::text)
+WHERE ($1::text IS NULL OR u.msisdn LIKE '%' || $1::text || '%' OR u.id::text = $1::text
+       OR u.email LIKE '%' || lower($1::text) || '%')
   AND ($2::text IS NULL OR u.status = $2::text)
   AND ($3::uuid IS NULL OR u.id < $3::uuid)
 ORDER BY u.id DESC
@@ -304,6 +338,7 @@ type ListPlayersParams struct {
 type ListPlayersRow struct {
 	ID                 string
 	Msisdn             string
+	Email              *string
 	KycStatus          string
 	Status             string
 	PhoneVerified      bool
@@ -314,8 +349,8 @@ type ListPlayersRow struct {
 	ClosureRequestedAt *time.Time
 }
 
-// the back office's player list (ADR 0019): newest first (ids are uuid v7), narrowed by a phone-number fragment and a
-// status; before (a user id) continues a page. Shows each player's balance, plays and last sign-in.
+// the back office's player list (ADR 0019): newest first (ids are uuid v7), narrowed by a phone-number or email
+// fragment and a status; before (a user id) continues a page. Shows each player's balance, plays and last sign-in.
 func (q *Queries) ListPlayers(ctx context.Context, arg ListPlayersParams) ([]ListPlayersRow, error) {
 	rows, err := q.db.Query(ctx, listPlayers,
 		arg.Q,
@@ -333,6 +368,7 @@ func (q *Queries) ListPlayers(ctx context.Context, arg ListPlayersParams) ([]Lis
 		if err := rows.Scan(
 			&i.ID,
 			&i.Msisdn,
+			&i.Email,
 			&i.KycStatus,
 			&i.Status,
 			&i.PhoneVerified,
@@ -521,6 +557,36 @@ func (q *Queries) OpenClosureRequests(ctx context.Context, lim int32) ([]OpenClo
 	return items, nil
 }
 
+const playerPasswordResetByHash = `-- name: PlayerPasswordResetByHash :one
+SELECT r.id, r.user_id, r.expires_at, r.used_at, u.msisdn, u.status
+FROM identity.password_resets r JOIN identity.users u ON u.id = r.user_id
+WHERE r.token_hash = $1
+FOR UPDATE OF r
+`
+
+type PlayerPasswordResetByHashRow struct {
+	ID        string
+	UserID    string
+	ExpiresAt time.Time
+	UsedAt    *time.Time
+	Msisdn    string
+	Status    string
+}
+
+func (q *Queries) PlayerPasswordResetByHash(ctx context.Context, tokenHash []byte) (PlayerPasswordResetByHashRow, error) {
+	row := q.db.QueryRow(ctx, playerPasswordResetByHash, tokenHash)
+	var i PlayerPasswordResetByHashRow
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.ExpiresAt,
+		&i.UsedAt,
+		&i.Msisdn,
+		&i.Status,
+	)
+	return i, err
+}
+
 const provedPhoneOwner = `-- name: ProvedPhoneOwner :one
 SELECT id, status, kyc_status FROM identity.users WHERE msisdn = $1 AND msisdn_verified_at IS NOT NULL
 `
@@ -614,6 +680,21 @@ func (q *Queries) RevokeSession(ctx context.Context, arg RevokeSessionParams) er
 	return err
 }
 
+const revokeSessionsForPasswordChange = `-- name: RevokeSessionsForPasswordChange :exec
+UPDATE identity.sessions SET revoked_at = $1, revoked_reason = 'password_change'
+WHERE user_id = $2 AND revoked_at IS NULL
+`
+
+type RevokeSessionsForPasswordChangeParams struct {
+	At     *time.Time
+	UserID string
+}
+
+func (q *Queries) RevokeSessionsForPasswordChange(ctx context.Context, arg RevokeSessionsForPasswordChangeParams) error {
+	_, err := q.db.Exec(ctx, revokeSessionsForPasswordChange, arg.At, arg.UserID)
+	return err
+}
+
 const setPassword = `-- name: SetPassword :exec
 UPDATE identity.users SET password_hash = $2, password_changed_at = $3, must_change_password = false, updated_at = $3 WHERE id = $1
 `
@@ -660,6 +741,21 @@ type SetUserClosedParams struct {
 
 func (q *Queries) SetUserClosed(ctx context.Context, arg SetUserClosedParams) error {
 	_, err := q.db.Exec(ctx, setUserClosed, arg.At, arg.ID)
+	return err
+}
+
+const setUserEmail = `-- name: SetUserEmail :exec
+UPDATE identity.users SET email = $1::text, updated_at = $2 WHERE id = $3
+`
+
+type SetUserEmailParams struct {
+	Email string
+	At    time.Time
+	ID    string
+}
+
+func (q *Queries) SetUserEmail(ctx context.Context, arg SetUserEmailParams) error {
+	_, err := q.db.Exec(ctx, setUserEmail, arg.Email, arg.At, arg.ID)
 	return err
 }
 
@@ -716,6 +812,38 @@ func (q *Queries) UpsertDevice(ctx context.Context, arg UpsertDeviceParams) (str
 	var id string
 	err := row.Scan(&id)
 	return id, err
+}
+
+const usePlayerPasswordResets = `-- name: UsePlayerPasswordResets :exec
+UPDATE identity.password_resets SET used_at = $1 WHERE user_id = $2 AND used_at IS NULL
+`
+
+type UsePlayerPasswordResetsParams struct {
+	At     *time.Time
+	UserID string
+}
+
+// a reset consumes every open link of the player, not only the one used
+func (q *Queries) UsePlayerPasswordResets(ctx context.Context, arg UsePlayerPasswordResetsParams) error {
+	_, err := q.db.Exec(ctx, usePlayerPasswordResets, arg.At, arg.UserID)
+	return err
+}
+
+const userByEmail = `-- name: UserByEmail :one
+SELECT id, msisdn, status FROM identity.users WHERE email = $1::text
+`
+
+type UserByEmailRow struct {
+	ID     string
+	Msisdn string
+	Status string
+}
+
+func (q *Queries) UserByEmail(ctx context.Context, email string) (UserByEmailRow, error) {
+	row := q.db.QueryRow(ctx, userByEmail, email)
+	var i UserByEmailRow
+	err := row.Scan(&i.ID, &i.Msisdn, &i.Status)
+	return i, err
 }
 
 const verifiedAccountExists = `-- name: VerifiedAccountExists :one
