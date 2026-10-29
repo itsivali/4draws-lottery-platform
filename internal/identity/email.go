@@ -44,7 +44,7 @@ func NormalizeEmail(raw string) (string, error) {
 const ResetLinkTTL = 30 * time.Minute
 
 // PasswordResets is how a player who forgot their password gets back in: an emailed link that opens the web app's
-// reset page (WebAppURL/#/reset-password) and works for ResetLinkTTL.
+// reset page (WebAppURL/reset-password) and works for ResetLinkTTL.
 type PasswordResets struct {
 	Sender    mail.Sender
 	WebAppURL string
@@ -94,7 +94,7 @@ func (s *Service) RequestPasswordReset(ctx context.Context, raw string) error {
 	if err != nil {
 		return err
 	}
-	link := strings.TrimRight(s.resets.WebAppURL, "/") + "/#/reset-password?token=" + url.QueryEscape(token)
+	link := strings.TrimRight(s.resets.WebAppURL, "/") + "/reset-password?token=" + url.QueryEscape(token)
 	return s.resets.Sender.Send(ctx, mail.Message{To: []string{email}, Subject: "Tajirika: reset your password", Text: resetText(link, expires)})
 }
 

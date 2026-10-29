@@ -82,7 +82,7 @@ Read this first at the start of every session.
   withdraw. Automating the check means a registry vendor (IPRS through Smile ID or similar, per-check fee) behind
   the kept `KYC_API_URL` gateway: the owner's decision.
 - **Email at sign-up and self-service password reset (owner, 2026-10-29, ADR 0021):** sign-up asks for an email address
-  (unique, unverified); "Forgotten your password?" emails a 30-minute link to the web app's `/#/reset-password` page
+  (unique, unverified); "Forgotten your password?" emails a 30-minute link to the web app's `/reset-password` page
   (`WEB_APP_URL` on `lottery-api`, Resend SMTP); players from before add an address from the account screen; staff's
   temporary password remains the fallback. The Players page shows and searches addresses.
 - **Players sign in with Google or Apple (owner, 2026-10-29, ADR 0020):** the sign-in screen offers both when the API

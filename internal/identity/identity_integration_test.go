@@ -766,7 +766,7 @@ func TestEmail_SignupNeedsAUniqueAddressAndAForgottenPasswordIsResetThroughALink
 	if err := e.svc.RequestPasswordReset(ctx, "JANE@example.com "); err != nil || len(sent.msgs) != 1 || sent.msgs[0].To[0] != "jane@example.com" {
 		t.Fatalf("forgot: %v, sent %+v", err, sent.msgs)
 	}
-	link := regexp.MustCompile(`https://app\.example\.com/#/reset-password\?token=([A-Za-z0-9_-]+)`).FindStringSubmatch(sent.msgs[0].Text)
+	link := regexp.MustCompile(`https://app\.example\.com/reset-password\?token=([A-Za-z0-9_-]+)`).FindStringSubmatch(sent.msgs[0].Text)
 	if link == nil {
 		t.Fatalf("no link in:\n%s", sent.msgs[0].Text)
 	}

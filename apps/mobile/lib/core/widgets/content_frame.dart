@@ -65,14 +65,18 @@ class PageScaffold extends StatelessWidget {
         ),
       ],
     );
-    return Scaffold(
-      appBar: AppBar(
-        title: Semantics(header: true, child: Text(title)),
-        actions: actions,
-      ),
-      body: SafeArea(
-        top: false,
-        child: onRefresh == null ? list : RefreshIndicator(onRefresh: onRefresh!, child: list),
+    return Title(
+      title: '$title · Tajirika',
+      color: context.colors.primary,
+      child: Scaffold(
+        appBar: AppBar(
+          title: Semantics(header: true, child: Text(title)),
+          actions: actions,
+        ),
+        body: SafeArea(
+          top: false,
+          child: onRefresh == null ? list : RefreshIndicator(onRefresh: onRefresh!, child: list),
+        ),
       ),
     );
   }

@@ -8,6 +8,9 @@ MARK=$LOGO/tajirika-mark.svg          # rounded tile: favicons, web icons, Andro
 SQUARE=$LOGO/tajirika-mark-square.svg # full-bleed: iOS (rounds its own corners), maskable web icons
 png() { rsvg-convert -w "$2" -h "$2" "$1" -o "$3"; }
 
+# the share image (Open Graph / Twitter card, 1200x630) for the web app's links
+rsvg-convert -w 1200 -h 630 "$LOGO/tajirika-og.svg" -o apps/mobile/web/og-image.png
+
 # Player web app (Flutter web)
 W=apps/mobile/web
 png "$MARK" 48 "$W/favicon.png"

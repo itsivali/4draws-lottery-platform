@@ -12,6 +12,8 @@ concurrency:
   cancel-in-progress: true
 jobs:
   detect:
+    # CodeQL on a private repository needs GitHub Advanced Security; the repository went private on 2026-10-30
+    if: ${{ !github.event.repository.private }}
     runs-on: ubuntu-24.04
     outputs:
       languages: ${{ steps.d.outputs.languages }}

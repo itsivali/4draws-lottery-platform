@@ -38,7 +38,8 @@ jobs:
         with: { name: android, path: "apps/mobile/build/app/outputs/**/*.a*" }
   ios:
     needs: detect
-    if: needs.detect.outputs.exists == 'true'
+    # macOS minutes cost ten times Linux ones on a private repository (2026-10-30): the iOS build runs for releases only
+    if: needs.detect.outputs.exists == 'true' && startsWith(github.ref, 'refs/tags/v')
     runs-on: macos-15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

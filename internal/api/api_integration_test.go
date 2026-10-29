@@ -902,7 +902,7 @@ func TestAPI_AForgottenPasswordIsResetThroughAnEmailedLinkOnce(t *testing.T) {
 	if len(sent.msgs) != 1 || sent.msgs[0].To[0] != s.email || !strings.Contains(sent.msgs[0].Subject, "reset your password") {
 		t.Fatalf("sent %+v", sent.msgs)
 	}
-	m := regexp.MustCompile(`https://app\.example\.com/#/reset-password\?token=([A-Za-z0-9_-]+)`).FindStringSubmatch(sent.msgs[0].Text)
+	m := regexp.MustCompile(`https://app\.example\.com/reset-password\?token=([A-Za-z0-9_-]+)`).FindStringSubmatch(sent.msgs[0].Text)
 	if m == nil {
 		t.Fatalf("no link in:\n%s", sent.msgs[0].Text)
 	}

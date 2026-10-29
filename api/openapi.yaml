@@ -127,7 +127,7 @@ paths:
       summary: Email a password-reset link to a player who forgot theirs
       description: |
         ADR 0021. No token needed. Always answers 202, whether or not the address has an account, so addresses stay
-        private. The link opens the web app's reset page (`/#/reset-password?token=…`) and works for 30 minutes. 503
+        private. The link opens the web app's reset page (`/reset-password?token=…`) and works for 30 minutes. 503
         when the api has no web-app address configured (staff set a temporary password instead).
       security: []
       parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
