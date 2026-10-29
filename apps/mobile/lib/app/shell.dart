@@ -46,7 +46,9 @@ class AppShell extends StatelessWidget {
         body: body,
         bottomNavigationBar: DecoratedBox(
           decoration: BoxDecoration(
+            color: c.surface,
             border: Border(top: BorderSide(color: c.border)),
+            boxShadow: Elevation.bar(c),
           ),
           child: NavigationBar(
             selectedIndex: shell.currentIndex,

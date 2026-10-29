@@ -55,9 +55,9 @@ export function OverviewPage() {
           const Icon = icons[s.path] ?? Landmark
           return (
             <li key={s.path}>
-              <Link to={s.path} className="group block h-full rounded-xl border bg-card p-4 shadow-card outline-none transition-[transform,box-shadow] hover:-translate-y-0.5 hover:shadow-float focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none">
+              <Link to={s.path} className="group block h-full rounded-2xl border bg-card p-5 shadow-card outline-none transition-[transform,box-shadow] hover:-translate-y-0.5 hover:shadow-float focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none">
                 <div className="flex items-start gap-3">
-                  <span aria-hidden="true" className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary-container text-primary-container-foreground"><Icon className="size-5" /></span>
+                  <span aria-hidden="true" className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary-container text-primary-container-foreground"><Icon className="size-5" /></span>
                   <div className="min-w-0 flex-1">
                     <span className="flex items-center gap-1 font-semibold">{s.label}<ArrowRight aria-hidden="true" className="size-4 opacity-0 transition-opacity group-hover:opacity-100" /></span>
                     <p className="mt-0.5 text-sm text-muted-foreground">{blurbs[s.path]}</p>

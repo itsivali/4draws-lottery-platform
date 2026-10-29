@@ -153,6 +153,7 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
         ),
         AppCard(
           title: 'Activity',
+          icon: Icons.receipt_long_rounded,
           padding: EdgeInsets.zero,
           child: AsyncView(
             value: wallet,

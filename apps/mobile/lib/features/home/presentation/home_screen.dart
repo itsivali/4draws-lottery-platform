@@ -31,6 +31,7 @@ class HomeScreen extends ConsumerWidget {
     final account = ref.watch(accountProvider);
     final wallet = ref.watch(walletStatementProvider);
     final cards = <Widget>[
+      _Greeting(name: account.value?.firstName),
       if (account.value case final a?) ?_nextStep(context, a, wallet.value?.debtKes ?? 0),
       const _BalanceHero(),
       const _TodayCard(),
@@ -202,6 +203,30 @@ class _BalanceHero extends ConsumerWidget {
   }
 }
 
+/// A welcome by name (owner, 2026-10-30): "Karibu" is the welcome, the name the player gave at sign-up.
+class _Greeting extends StatelessWidget {
+  const _Greeting({required this.name});
+
+  final String? name;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context).textTheme;
+    final c = context.colors;
+    return Padding(
+      padding: const EdgeInsets.only(left: Space.xs, top: Space.sm),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Semantics(header: true, child: Text(name == null ? 'Karibu' : 'Karibu, $name', style: t.headlineMedium)),
+          const SizedBox(height: Space.xxs),
+          Text('Your wallet, today\'s plays and the open draws.', style: t.bodyMedium?.copyWith(color: c.inkMuted)),
+        ],
+      ),
+    );
+  }
+}
+
 class _TodayCard extends ConsumerWidget {
   const _TodayCard();
 
@@ -212,6 +237,7 @@ class _TodayCard extends ConsumerWidget {
     final c = context.colors;
     return AppCard(
       title: 'Today',
+      icon: Icons.today_rounded,
       child: AsyncView(
         value: today,
         what: "today's plays",

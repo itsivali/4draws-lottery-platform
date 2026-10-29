@@ -156,6 +156,7 @@ class OpenDrawsCard extends ConsumerWidget {
     final c = context.colors;
     return AppCard(
       title: 'Open draws',
+      icon: Icons.event_rounded,
       trailing: TextButton(onPressed: () => context.go('/draws'), child: const Text('All draws')),
       padding: const EdgeInsets.only(top: Space.lg),
       child: AsyncView(
@@ -198,6 +199,7 @@ class MyPeriodsCard extends ConsumerWidget {
     final c = context.colors;
     return AppCard(
       title: 'Your draw periods',
+      icon: Icons.calendar_month_rounded,
       child: AsyncView(
         value: ref.watch(myPeriodsProvider),
         what: 'your draw periods',

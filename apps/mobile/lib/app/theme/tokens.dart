@@ -170,6 +170,11 @@ abstract final class Elevation {
     BoxShadow(color: c.shadow.withValues(alpha: 0.13), blurRadius: 36, offset: const Offset(0, 14)),
   ];
 
+  /// The bottom navigation bar: a lift upwards, so the bar reads as a surface over the page.
+  static List<BoxShadow> bar(AppColors c) => [
+    BoxShadow(color: c.shadow.withValues(alpha: 0.10), blurRadius: 24, offset: const Offset(0, -8)),
+  ];
+
   static List<BoxShadow> float(AppColors c) => [
     BoxShadow(color: c.shadow.withValues(alpha: 0.22), blurRadius: 56, offset: const Offset(0, 20)),
   ];

@@ -337,6 +337,7 @@ class _PlayPanel extends ConsumerWidget {
           const SizedBox(height: Space.lg),
           AppCard(
             title: "Today's plays",
+            icon: Icons.casino_rounded,
             padding: const EdgeInsets.only(top: Space.lg),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -458,6 +459,7 @@ class _WhatAPlayDoes extends StatelessWidget {
     );
     return AppCard(
       title: 'What a play does',
+      icon: Icons.help_outline_rounded,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

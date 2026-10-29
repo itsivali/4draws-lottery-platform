@@ -73,7 +73,7 @@ export function DataTable<T>({
           <Input aria-label={filter} placeholder={filter} value={globalFilter} onChange={(e) => { setGlobalFilter(e.target.value) }} className="pl-8" />
         </div>
       ) : null}
-      <div className="overflow-hidden rounded-xl border bg-card shadow-card">
+      <div className="overflow-hidden rounded-2xl border bg-card shadow-card">
         <Table>
           <TableCaption className={cn('mt-0 border-b px-4 py-3 text-left text-sm font-medium text-foreground caption-top', !captionVisible && 'sr-only')}>{caption}</TableCaption>
           <TableHeader className="bg-muted/50">
@@ -116,7 +116,7 @@ export function DataTable<T>({
               rows.map((row) => (
                 <TableRow
                   key={row.id}
-                  className={cn('align-top', row.id === highlight && 'bg-pending/10 hover:bg-pending/15')}
+                  className={cn('align-top transition-colors hover:bg-muted/40', row.id === highlight && 'bg-pending/10 hover:bg-pending/15')}
                   ref={row.id === highlight ? (el) => { el?.scrollIntoView({ block: 'center' }) } : undefined}
                 >
                   {row.getVisibleCells().map((cell) => (

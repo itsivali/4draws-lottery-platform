@@ -8,6 +8,7 @@ class AppCard extends StatelessWidget {
   const AppCard({
     super.key,
     this.title,
+    this.icon,
     this.trailing,
     required this.child,
     this.padding = const EdgeInsets.all(Space.xl),
@@ -17,6 +18,9 @@ class AppCard extends StatelessWidget {
   });
 
   final String? title;
+
+  /// An icon in a tinted disc before the title.
+  final IconData? icon;
   final Widget? trailing;
   final Widget child;
   final EdgeInsets padding;
@@ -41,6 +45,17 @@ class AppCard extends StatelessWidget {
               padding: EdgeInsets.symmetric(horizontal: padding.horizontal == 0 ? Space.lg : 0),
               child: Row(
                 children: [
+                  if (icon != null) ...[
+                    ExcludeSemantics(
+                      child: Container(
+                        width: 36,
+                        height: 36,
+                        decoration: BoxDecoration(color: c.primaryContainer, shape: BoxShape.circle),
+                        child: Icon(icon, size: 20, color: c.onPrimaryContainer),
+                      ),
+                    ),
+                    const SizedBox(width: Space.md),
+                  ],
                   Expanded(
                     child: Semantics(header: true, child: Text(title!, style: t.titleMedium)),
                   ),

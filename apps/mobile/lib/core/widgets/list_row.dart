@@ -132,12 +132,20 @@ class SectionHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context).textTheme;
+    final c = context.colors;
     return Padding(
-      padding: const EdgeInsets.only(bottom: Space.sm),
+      padding: const EdgeInsets.only(bottom: Space.sm, left: Space.xs),
       child: Row(
         children: [
           Expanded(
-            child: Semantics(header: true, child: Text(title, style: t.titleMedium)),
+            // an eyebrow: small, spaced capitals in the muted ink (the revamp of 2026-10-30)
+            child: Semantics(
+              header: true,
+              child: Text(
+                title.toUpperCase(),
+                style: t.labelMedium?.copyWith(color: c.inkMuted, letterSpacing: 1.2, fontWeight: FontWeight.w600),
+              ),
+            ),
           ),
           if (action != null) TextButton(onPressed: onAction, child: Text(action!)),
         ],
