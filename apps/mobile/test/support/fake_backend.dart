@@ -68,6 +68,10 @@ class FakeBackend {
 
   /// The account's email address (null for one from before addresses were asked for) and whether it has a password.
   String? email = 'jane@example.com';
+
+  /// The player's names (null for an account from before they were asked for).
+  String? firstName = 'Jane';
+  String? secondName = 'Wanjiru';
   bool hasPassword = true;
 
   /// Whether the "server" can email reset links; the addresses it was asked to email.
@@ -152,6 +156,9 @@ class FakeBackend {
         if (body['email'] == null) {
           return _problem(400, 'invalid-email', 'Invalid email address');
         }
+        if ((body['first_name'] as String? ?? '').isEmpty || (body['second_name'] as String? ?? '').isEmpty) {
+          return _problem(400, 'invalid-name', 'Enter your first and second names');
+        }
         if (body['email'] == 'taken@example.com') {
           return _problem(
             409,
@@ -179,6 +186,13 @@ class FakeBackend {
         if ((body['new_password'] as String).length < 8) {
           return _problem(400, 'weak-password', 'Password too weak', 'too short');
         }
+        return http.Response('', 204);
+      case ('PUT', '/v1/account/name'):
+        if ((body['first_name'] as String? ?? '').isEmpty || (body['second_name'] as String? ?? '').isEmpty) {
+          return _problem(400, 'invalid-name', 'Enter your first and second names');
+        }
+        firstName = body['first_name'] as String;
+        secondName = body['second_name'] as String;
         return http.Response('', 204);
       case ('PUT', '/v1/account/email'):
         if (hasPassword && body['current_password'] != 'correct horse battery') {
@@ -217,6 +231,9 @@ class FakeBackend {
         if (ssoAccounts.contains(body['id_token'])) {
           return _problem(409, 'sso-already-linked', 'This identity already signs in to an account');
         }
+        if ((body['first_name'] as String? ?? '').isEmpty || (body['second_name'] as String? ?? '').isEmpty) {
+          return _problem(400, 'invalid-name', 'Enter your first and second names');
+        }
         final digits = (body['msisdn'] as String? ?? '').replaceAll(' ', '');
         if (!RegExp(r'^(\+?254|0)[17]\d{8}$').hasMatch(digits)) {
           return _problem(
@@ -250,6 +267,8 @@ class FakeBackend {
           ),
           'email': email,
           'has_password': hasPassword,
+          'first_name': firstName,
+          'second_name': secondName,
         });
       case ('POST', '/v1/account/closure'):
         closureRequestedAt ??= '2026-10-26T12:00:00+03:00';

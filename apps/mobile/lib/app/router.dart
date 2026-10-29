@@ -9,6 +9,7 @@ import '../features/account/presentation/closure_screen.dart';
 import '../features/account/presentation/email_screen.dart';
 import '../features/account/presentation/how_it_works_screen.dart';
 import '../features/account/presentation/kyc_screen.dart';
+import '../features/account/presentation/name_screen.dart';
 import '../features/account/presentation/password_screen.dart';
 import '../features/account/presentation/responsible_gaming_screen.dart';
 import '../features/auth/presentation/password_reset_screens.dart';
@@ -118,6 +119,7 @@ final routerProvider = Provider<GoRouter>((ref) {
                   GoRoute(path: 'limits', builder: (_, _) => const ResponsibleGamingScreen()),
                   GoRoute(path: 'password', builder: (_, _) => const PasswordScreen()),
                   GoRoute(path: 'email', builder: (_, _) => const EmailScreen()),
+                  GoRoute(path: 'name', builder: (_, _) => const NameScreen()),
                   GoRoute(path: 'fairness', builder: (_, _) => const FairnessScreen()),
                   GoRoute(path: 'how-it-works', builder: (_, _) => const HowItWorksScreen()),
                   GoRoute(path: 'close', builder: (_, _) => const ClosureScreen()),

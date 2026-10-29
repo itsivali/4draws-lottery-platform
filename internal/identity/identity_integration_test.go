@@ -86,7 +86,7 @@ func (e *env) login(t *testing.T, msisdn string, dev identity.Device) identity.T
 	if e.seen[msisdn] {
 		tok, err = e.svc.Login(ctx, msisdn, goodPassword, dev)
 	} else {
-		tok, err = e.svc.Signup(ctx, msisdn, e.newEmail(), goodPassword, dev)
+		tok, err = e.svc.Signup(ctx, msisdn, e.newEmail(), "Jane", "Wanjiru", goodPassword, dev)
 		e.seen[msisdn] = true
 	}
 	if err != nil {
@@ -446,10 +446,10 @@ func TestSignup_CreatesAnUnverifiedAccountWithAHashedPassword(t *testing.T) {
 func TestSignup_RefusesBadNumbersWeakPasswordsAndNumbersAlreadyProved(t *testing.T) {
 	e := setup(t)
 	ctx := context.Background()
-	if _, err := e.svc.Signup(ctx, "12345", e.newEmail(), goodPassword, phone); !errors.Is(err, identity.ErrInvalidMSISDN) {
+	if _, err := e.svc.Signup(ctx, "12345", e.newEmail(), "Jane", "Wanjiru", goodPassword, phone); !errors.Is(err, identity.ErrInvalidMSISDN) {
 		t.Errorf("bad number: %v", err)
 	}
-	if _, err := e.svc.Signup(ctx, e.newMSISDN(), e.newEmail(), "password", phone); !errors.Is(err, password.ErrWeak) {
+	if _, err := e.svc.Signup(ctx, e.newMSISDN(), e.newEmail(), "Jane", "Wanjiru", "password", phone); !errors.Is(err, password.ErrWeak) {
 		t.Errorf("weak password: %v", err)
 	}
 	m := e.newMSISDN()
@@ -457,7 +457,7 @@ func TestSignup_RefusesBadNumbersWeakPasswordsAndNumbersAlreadyProved(t *testing
 	p, _ := e.svc.Authenticate(ctx, tok.Access)
 	e.verifyPhone(t, p.UserID, m)
 	other := identity.Device{Fingerprint: "other-phone", Platform: "android"}
-	if _, err := e.svc.Signup(ctx, m, e.newEmail(), "another strong one", other); !errors.Is(err, identity.ErrPhoneRegistered) {
+	if _, err := e.svc.Signup(ctx, m, e.newEmail(), "Jane", "Wanjiru", "another strong one", other); !errors.Is(err, identity.ErrPhoneRegistered) {
 		t.Errorf("signing up a proved number: %v, want ErrPhoneRegistered", err)
 	}
 }
@@ -499,11 +499,11 @@ func TestClaims_SeveralPeopleMayClaimANumberButOnlyTheOneWhoProvesItKeepsIt(t *t
 	e := setup(t)
 	ctx := context.Background()
 	m := e.newMSISDN()
-	squatter, err := e.svc.Signup(ctx, m, e.newEmail(), "squatters password 1", identity.Device{Fingerprint: "squatter-phone", Platform: "android"})
+	squatter, err := e.svc.Signup(ctx, m, e.newEmail(), "Jane", "Wanjiru", "squatters password 1", identity.Device{Fingerprint: "squatter-phone", Platform: "android"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	owner, err := e.svc.Signup(ctx, m, e.newEmail(), "the real owners password", identity.Device{Fingerprint: "owner-phone", Platform: "android"})
+	owner, err := e.svc.Signup(ctx, m, e.newEmail(), "Jane", "Wanjiru", "the real owners password", identity.Device{Fingerprint: "owner-phone", Platform: "android"})
 	if err != nil {
 		t.Fatalf("a squatter's unverified claim must not block the real owner: %v", err)
 	}
@@ -603,7 +603,7 @@ func TestDevices_ThirdAccountOnTheSameDeviceIsRefused(t *testing.T) {
 	e.login(t, a, dev)
 	e.login(t, b, dev)
 	e.login(t, a, dev) // an existing link is allowed
-	if _, err := e.svc.Signup(ctx, e.newMSISDN(), e.newEmail(), goodPassword, dev); !errors.Is(err, identity.ErrDeviceCap) {
+	if _, err := e.svc.Signup(ctx, e.newMSISDN(), e.newEmail(), "Jane", "Wanjiru", goodPassword, dev); !errors.Is(err, identity.ErrDeviceCap) {
 		t.Fatalf("third account err = %v, want ErrDeviceCap", err)
 	}
 	// the refused signup must not leave an account behind
@@ -616,7 +616,7 @@ func TestDevices_ThirdAccountOnTheSameDeviceIsRefused(t *testing.T) {
 
 func TestDevices_MobileSignupWithoutAFingerprintIsRefused(t *testing.T) {
 	e := setup(t)
-	if _, err := e.svc.Signup(context.Background(), e.newMSISDN(), e.newEmail(), goodPassword, identity.Device{Platform: "android"}); !errors.Is(err, identity.ErrDeviceRequired) {
+	if _, err := e.svc.Signup(context.Background(), e.newMSISDN(), e.newEmail(), "Jane", "Wanjiru", goodPassword, identity.Device{Platform: "android"}); !errors.Is(err, identity.ErrDeviceRequired) {
 		t.Fatalf("err = %v, want ErrDeviceRequired", err)
 	}
 }
@@ -669,16 +669,16 @@ func TestSSO_AnIdentityWithoutAnAccountCreatesOneFromAPhoneNumber(t *testing.T) 
 	if _, err := e.svc.SignInSSO(ctx, "google", "ok:new-1", "n1", phone); !errors.Is(err, identity.ErrSSONotLinked) {
 		t.Fatalf("unlinked sign-in err = %v", err)
 	}
-	if _, err := e.svc.SignupSSO(ctx, "google", "ok:new-1", "n1", "12345", phone); !errors.Is(err, identity.ErrInvalidMSISDN) {
+	if _, err := e.svc.SignupSSO(ctx, "google", "ok:new-1", "n1", "12345", "Jane", "Wanjiru", phone); !errors.Is(err, identity.ErrInvalidMSISDN) {
 		t.Fatalf("bad number err = %v", err)
 	}
-	if _, err := e.svc.SignupSSO(ctx, "google", "forged", "n1", m, phone); !errors.Is(err, identity.ErrTokenInvalid) {
+	if _, err := e.svc.SignupSSO(ctx, "google", "forged", "n1", m, "Jane", "Wanjiru", phone); !errors.Is(err, identity.ErrTokenInvalid) {
 		t.Fatalf("forged token err = %v", err)
 	}
-	if _, err := e.svc.SignupSSO(ctx, "google", "ok:new-1", "n1", m, identity.Device{Platform: "android"}); !errors.Is(err, identity.ErrDeviceRequired) {
+	if _, err := e.svc.SignupSSO(ctx, "google", "ok:new-1", "n1", m, "Jane", "Wanjiru", identity.Device{Platform: "android"}); !errors.Is(err, identity.ErrDeviceRequired) {
 		t.Fatalf("phone without a fingerprint err = %v", err)
 	}
-	tok, err := e.svc.SignupSSO(ctx, "google", "ok:new-1", "n1", m, phone)
+	tok, err := e.svc.SignupSSO(ctx, "google", "ok:new-1", "n1", m, "Jane", "Wanjiru", phone)
 	if err != nil {
 		t.Fatalf("sign-up: %v", err)
 	}
@@ -702,7 +702,7 @@ func TestSSO_AnIdentityWithoutAnAccountCreatesOneFromAPhoneNumber(t *testing.T) 
 	if q, _ := e.svc.Authenticate(ctx, signed.Access); q.UserID != p.UserID {
 		t.Fatalf("signed in as %s, want %s", q.UserID, p.UserID)
 	}
-	if _, err := e.svc.SignupSSO(ctx, "google", "ok:new-1", "n1", e.newMSISDN(), phone); !errors.Is(err, identity.ErrSSOAlreadyLinked) {
+	if _, err := e.svc.SignupSSO(ctx, "google", "ok:new-1", "n1", e.newMSISDN(), "Jane", "Wanjiru", phone); !errors.Is(err, identity.ErrSSOAlreadyLinked) {
 		t.Fatalf("second account for one identity err = %v", err)
 	}
 	// a password sign-in with that number does not break on the password-less account, and does not let anyone in
@@ -713,10 +713,10 @@ func TestSSO_AnIdentityWithoutAnAccountCreatesOneFromAPhoneNumber(t *testing.T) 
 	if _, err := e.pool.Exec(ctx, `UPDATE identity.users SET msisdn_verified_at = now() WHERE id = $1`, p.UserID); err != nil {
 		t.Fatalf("a password-less account may prove its number: %v", err)
 	}
-	if _, err := e.svc.Signup(ctx, m, e.newEmail(), goodPassword, phone); !errors.Is(err, identity.ErrPhoneRegistered) {
+	if _, err := e.svc.Signup(ctx, m, e.newEmail(), "Jane", "Wanjiru", goodPassword, phone); !errors.Is(err, identity.ErrPhoneRegistered) {
 		t.Fatalf("claiming a proved number by password err = %v", err)
 	}
-	if _, err := e.svc.SignupSSO(ctx, "apple", "ok:new-2", "n1", m, phone); !errors.Is(err, identity.ErrPhoneRegistered) {
+	if _, err := e.svc.SignupSSO(ctx, "apple", "ok:new-2", "n1", m, "Jane", "Wanjiru", phone); !errors.Is(err, identity.ErrPhoneRegistered) {
 		t.Fatalf("claiming a proved number by Apple err = %v", err)
 	}
 	// staff may still give the account a temporary password, after which the number and password sign in
@@ -743,15 +743,15 @@ func TestEmail_SignupNeedsAUniqueAddressAndAForgottenPasswordIsResetThroughALink
 	e.svc.WithPasswordResets(identity.PasswordResets{Sender: sent, WebAppURL: "https://app.example.com/"})
 	m := e.newMSISDN()
 
-	if _, err := e.svc.Signup(ctx, m, "not an address", goodPassword, phone); !errors.Is(err, identity.ErrInvalidEmail) {
+	if _, err := e.svc.Signup(ctx, m, "not an address", "Jane", "Wanjiru", goodPassword, phone); !errors.Is(err, identity.ErrInvalidEmail) {
 		t.Fatalf("bad address err = %v", err)
 	}
-	tok, err := e.svc.Signup(ctx, m, " Jane@Example.com ", goodPassword, phone)
+	tok, err := e.svc.Signup(ctx, m, " Jane@Example.com ", "Jane", "Wanjiru", goodPassword, phone)
 	if err != nil {
 		t.Fatalf("sign-up: %v", err)
 	}
 	p, _ := e.svc.Authenticate(ctx, tok.Access)
-	if _, err := e.svc.Signup(ctx, e.newMSISDN(), "jane@example.com", goodPassword, identity.Device{Fingerprint: "fp-other", Platform: "android"}); !errors.Is(err, identity.ErrEmailRegistered) {
+	if _, err := e.svc.Signup(ctx, e.newMSISDN(), "jane@example.com", "Jane", "Wanjiru", goodPassword, identity.Device{Fingerprint: "fp-other", Platform: "android"}); !errors.Is(err, identity.ErrEmailRegistered) {
 		t.Fatalf("second account with the address err = %v", err)
 	}
 	a, err := e.svc.Account(ctx, p.UserID)
@@ -813,7 +813,7 @@ func TestEmail_SignupNeedsAUniqueAddressAndAForgottenPasswordIsResetThroughALink
 	if a, _ := e.svc.Account(ctx, p.UserID); a.Email == nil || *a.Email != "jane2@example.com" {
 		t.Fatalf("address after change: %+v", a)
 	}
-	other, _ := e.svc.Signup(ctx, e.newMSISDN(), "other@example.com", goodPassword, identity.Device{Fingerprint: "fp-3", Platform: "android"})
+	other, _ := e.svc.Signup(ctx, e.newMSISDN(), "other@example.com", "Jane", "Wanjiru", goodPassword, identity.Device{Fingerprint: "fp-3", Platform: "android"})
 	op, _ := e.svc.Authenticate(ctx, other.Access)
 	if err := e.svc.SetEmail(ctx, op.UserID, "jane2@example.com", goodPassword); !errors.Is(err, identity.ErrEmailRegistered) {
 		t.Fatalf("taking another account's address err = %v", err)
@@ -826,7 +826,7 @@ func TestEmail_ResetIsOffUntilConfiguredAndAGoogleAccountAddsAnAddressWithoutAPa
 	if err := e.svc.RequestPasswordReset(ctx, "jane@example.com"); !errors.Is(err, identity.ErrResetUnavailable) {
 		t.Fatalf("unconfigured err = %v", err)
 	}
-	tok, err := e.svc.SignupSSO(ctx, "google", "ok:g-email", "n1", e.newMSISDN(), phone)
+	tok, err := e.svc.SignupSSO(ctx, "google", "ok:g-email", "n1", e.newMSISDN(), "Jane", "Wanjiru", phone)
 	if err != nil {
 		t.Fatal(err)
 	}

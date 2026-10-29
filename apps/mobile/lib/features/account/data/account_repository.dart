@@ -46,6 +46,10 @@ class AccountRepository {
         body: {'current_password': current, 'new_password': next},
       );
 
+  /// Changes or adds the player's first and second names.
+  Future<void> setName({required String first, required String second, required String idempotencyKey}) =>
+      _api.put('/v1/account/name', idempotencyKey: idempotencyKey, body: {'first_name': first, 'second_name': second});
+
   /// Changes or adds the email address; an account with a password gives it.
   Future<void> setEmail({required String email, required String currentPassword, required String idempotencyKey}) =>
       _api.put(

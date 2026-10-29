@@ -29,6 +29,8 @@ void main() {
     await t.pumpAndSettle();
     await t.enterText(find.widgetWithText(TextFormField, 'M-Pesa phone number'), '0712345678');
     await t.enterText(find.widgetWithText(TextFormField, 'Password'), 'correct horse battery');
+    await t.enterText(find.widgetWithText(TextFormField, 'First name'), 'Jane');
+    await t.enterText(find.widgetWithText(TextFormField, 'Second name'), 'Wanjiru');
     await t.tap(find.text('I am 18 or older'));
     await t.tap(find.widgetWithText(FilledButton, 'Create account'));
     await t.pumpAndSettle();
@@ -48,6 +50,8 @@ void main() {
     await t.enterText(find.widgetWithText(TextFormField, 'M-Pesa phone number'), '0712345678');
     await t.enterText(find.widgetWithText(TextFormField, 'Email address'), 'taken@example.com');
     await t.enterText(find.widgetWithText(TextFormField, 'Password'), 'correct horse battery');
+    await t.enterText(find.widgetWithText(TextFormField, 'First name'), 'Jane');
+    await t.enterText(find.widgetWithText(TextFormField, 'Second name'), 'Wanjiru');
     await t.tap(find.text('I am 18 or older'));
     await t.tap(find.widgetWithText(FilledButton, 'Create account'));
     await t.pumpAndSettle();

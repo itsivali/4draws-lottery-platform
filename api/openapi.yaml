@@ -859,6 +859,29 @@ paths:
         "403": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
         "429": { $ref: "#/components/responses/Problem" }
+  /v1/account/name:
+    put:
+      operationId: setName
+      tags: [account]
+      summary: Change or add the player's first and second names
+      description: What the app calls the player, shown on the account screen; not the legal name (the identity submission's). Audited.
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [first_name, second_name]
+              properties:
+                first_name: { type: string, minLength: 1, maxLength: 40 }
+                second_name: { type: string, minLength: 1, maxLength: 40 }
+      responses:
+        "204": { description: Names changed }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
   /v1/account/closure:
     post:
       operationId: requestClosure
@@ -2806,6 +2829,8 @@ components:
         must_change_password: { type: boolean, description: Staff gave the player a temporary password they have not replaced yet; the app asks for a new one first. }
         email: { type: [string, "null"], format: email, description: "Null for an account from before addresses were asked for (ADR 0021)." }
         has_password: { type: boolean, description: "False for an account that signs in with Google or Apple only (ADR 0020)." }
+        first_name: { type: [string, "null"], description: "What the app calls the player; null for accounts from before names were asked for." }
+        second_name: { type: [string, "null"] }
     Problem:
       type: object
       required: [type, title, status]
@@ -2834,6 +2859,8 @@ components:
       properties:
         msisdn: { type: string, example: "0712345678" }
         email: { type: string, format: email, description: "Required at sign-up (ADR 0021); ignored at login." }
+        first_name: { type: string, maxLength: 40, description: "Required at sign-up; ignored at login." }
+        second_name: { type: string, maxLength: 40, description: "Required at sign-up; ignored at login." }
         password: { type: string, minLength: 8, maxLength: 128 }
         device: { $ref: "#/components/schemas/Device" }
     PasswordChange:
@@ -2868,11 +2895,13 @@ components:
     SsoSignUp:
       type: object
       additionalProperties: false
-      required: [id_token, nonce, msisdn, device]
+      required: [id_token, nonce, msisdn, first_name, second_name, device]
       properties:
         id_token: { type: string }
         nonce: { type: string }
         msisdn: { type: string, example: "0712345678" }
+        first_name: { type: string, maxLength: 40 }
+        second_name: { type: string, maxLength: 40 }
         device: { $ref: "#/components/schemas/Device" }
     SignInProviders:
       type: object

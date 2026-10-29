@@ -38,12 +38,16 @@ class Account {
     this.mustChangePassword = false,
     this.email,
     this.hasPassword = true,
+    this.firstName,
+    this.secondName,
   });
 
   factory Account.fromJson(JsonObject j) => Account(
     mustChangePassword: j.raw['must_change_password'] == true,
     email: j.strOrNull('email'),
     hasPassword: j.raw['has_password'] != false,
+    firstName: j.strOrNull('first_name'),
+    secondName: j.strOrNull('second_name'),
     userId: j.str('user_id'),
     msisdn: j.str('msisdn'),
     phoneVerified: j.boolean('phone_verified'),
@@ -78,6 +82,16 @@ class Account {
 
   /// False for an account that signs in with Google or Apple only.
   final bool hasPassword;
+
+  /// What the app calls the player; null for an account from before names were asked for.
+  final String? firstName;
+  final String? secondName;
+
+  /// "First Second", or null when the account has no names yet.
+  String? get displayName {
+    final parts = [?firstName, ?secondName].where((p) => p.isNotEmpty).toList();
+    return parts.isEmpty ? null : parts.join(' ');
+  }
 }
 
 class DepositLimit {

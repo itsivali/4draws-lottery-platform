@@ -130,7 +130,7 @@ func poll(ctx context.Context, every time.Duration, max int, check func() (bool,
 func journey(ctx context.Context, c client, st *stats) (outcome, error) {
 	var o outcome
 	r, d, err := c.do(ctx, http.MethodPost, "/v1/auth/signup", "", randomKey(), map[string]any{
-		"msisdn": randomMSISDN(), "email": randomKey() + "@load.example", "password": "correct horse battery staple", "device": map[string]any{"platform": "web"}})
+		"msisdn": randomMSISDN(), "email": randomKey() + "@load.example", "first_name": "Load", "second_name": "Tester", "password": "correct horse battery staple", "device": map[string]any{"platform": "web"}})
 	if err != nil {
 		return o, fmt.Errorf("signup: %w", err)
 	}

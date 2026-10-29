@@ -59,7 +59,8 @@ class AccountScreen extends ConsumerWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(formatMsisdn(a.msisdn), style: t.headlineSmall),
+                      Text(a.displayName ?? formatMsisdn(a.msisdn), style: t.headlineSmall),
+                      if (a.displayName != null) Text(formatMsisdn(a.msisdn), style: t.bodySmall),
                       Text('Member since ${formatDay(a.createdAt)} ${a.createdAt.year}', style: t.bodySmall),
                       const SizedBox(height: Space.md),
                       Wrap(
@@ -96,6 +97,12 @@ class AccountScreen extends ConsumerWidget {
         const SectionHeader(title: 'Your account'),
         RowGroup(
           children: [
+            link(
+              Icons.person_rounded,
+              'Your name',
+              '/account/name',
+              subtitle: account.value?.displayName ?? 'Add your first and second names',
+            ),
             link(Icons.badge_rounded, 'Identity verification', '/account/verify'),
             link(Icons.lock_rounded, 'Change password', '/account/password'),
             link(

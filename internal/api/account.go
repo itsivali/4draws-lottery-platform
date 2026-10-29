@@ -104,7 +104,28 @@ func (h *handlers) getAccount(w http.ResponseWriter, r *http.Request) {
 		"user_id": a.UserID, "msisdn": a.MSISDN, "phone_verified": a.PhoneVerified, "kyc_status": a.KYCStatus, "status": a.Status,
 		"created_at": a.CreatedAt, "restriction": restriction, "closure_requested_at": a.ClosureRequestedAt,
 		"must_change_password": a.MustChangePassword, "email": a.Email, "has_password": a.HasPassword,
+		"first_name": a.FirstName, "second_name": a.SecondName,
 	})
+}
+
+// setName changes or adds the player's first and second names.
+func (h *handlers) setName(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		First  string `json:"first_name"`
+		Second string `json:"second_name"`
+	}
+	if !httpx.DecodeJSON(w, r, &in) {
+		return
+	}
+	p, _ := principalFrom(r.Context())
+	if !h.limit(w, r, "name:user:"+p.UserID, 10, time.Hour) {
+		return
+	}
+	if err := h.Identity.SetName(r.Context(), p.UserID, in.First, in.Second); err != nil {
+		authError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // setEmail changes or adds the player's email address; an account with a password must give it (ADR 0021).

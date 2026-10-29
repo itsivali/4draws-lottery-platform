@@ -29,6 +29,8 @@ type Account struct {
 	Email *string
 	// HasPassword is false for an account that signs in with Google or Apple only (ADR 0020).
 	HasPassword bool
+	// FirstName and SecondName are what the app calls the player; nil for accounts from before names were asked for.
+	FirstName, SecondName *string
 }
 
 // Account returns the player's account.
@@ -38,7 +40,8 @@ func (s *Service) Account(ctx context.Context, userID string) (Account, error) {
 		return Account{}, err
 	}
 	return Account{UserID: u.ID, MSISDN: u.Msisdn, PhoneVerified: u.PhoneVerified, KYCStatus: u.KycStatus, Status: u.Status, MustChangePassword: u.MustChangePassword,
-		CreatedAt: u.CreatedAt, ClosureRequestedAt: u.ClosureRequestedAt, Email: u.Email, HasPassword: u.HasPassword}, nil
+		CreatedAt: u.CreatedAt, ClosureRequestedAt: u.ClosureRequestedAt, Email: u.Email, HasPassword: u.HasPassword,
+		FirstName: u.FirstName, SecondName: u.SecondName}, nil
 }
 
 // RequestClosure records that the player wants their account closed and returns when they first asked. Asking again
