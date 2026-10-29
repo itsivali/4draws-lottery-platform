@@ -67,7 +67,7 @@ void main() {
     expect(backend.resetRequests, ['jane@example.com']);
     await t.tap(find.widgetWithText(FilledButton, 'Back to sign in'));
     await t.pumpAndSettle();
-    expect(find.text('Welcome back'), findsOneWidget);
+    expect(find.text('Good to see you'), findsOneWidget);
   });
 
   testWidgets('without email configured on the server, the player is told to ask for a temporary password', (t) async {

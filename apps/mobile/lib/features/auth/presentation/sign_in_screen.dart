@@ -19,6 +19,7 @@ import '../../../core/widgets/content_frame.dart';
 import '../../../core/widgets/failure_text.dart';
 import '../../../core/widgets/hero_card.dart';
 import '../../../core/widgets/inline_banner.dart';
+import '../../../core/widgets/reveal.dart';
 import '../../../core/widgets/status_pill.dart';
 import '../application/auth_providers.dart';
 import '../data/provider_sign_in.dart';
@@ -233,7 +234,6 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
       password: _password,
       mode: _mode,
       step: _step,
-      providerName: _providerToken == null ? null : _providerName(_providerToken!.provider),
       obscure: _obscure,
       adult: _adult,
       busy: _busy,
@@ -255,6 +255,8 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
       onBack: () => setState(_back),
       onForgot: () => context.go('/forgot-password'),
     );
+    final heading = _Heading(step: _step, mode: _mode, providerName: _providerToken?.provider);
+    final card = _FormCard(child: form);
     return Scaffold(
       body: SafeArea(
         child: wide
@@ -266,11 +268,13 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                       child: SingleChildScrollView(
                         padding: const EdgeInsets.all(Space.xxl),
                         child: ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 420),
+                          constraints: const BoxConstraints(maxWidth: 440),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
-                              form,
+                              heading.onPage(context),
+                              const SizedBox(height: Space.xl),
+                              card,
                               const SizedBox(height: Space.lg),
                               const BackOfficeLink(),
                             ],
@@ -281,24 +285,114 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                   ),
                 ],
               )
-            : Center(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(Space.xl),
+            : SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(Space.lg, Space.sm, Space.lg, Space.xl),
+                child: Center(
                   child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 420),
+                    constraints: const BoxConstraints(maxWidth: 440),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        const Align(alignment: Alignment.centerLeft, child: BrandMark(height: 42)),
-                        const SizedBox(height: Space.xxl),
-                        form,
-                        const SizedBox(height: Space.lg),
-                        const BackOfficeLink(),
+                        // the sunset header carries the greeting; the form's card rises into its lower edge
+                        HeroCard(
+                          radius: Radii.xl,
+                          padding: const EdgeInsets.fromLTRB(Space.xl, Space.xl, Space.xl, Space.xxxl + Space.lg),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              BrandMark(height: 36, wordmarkColor: context.colors.onHero),
+                              const SizedBox(height: Space.xl),
+                              heading.onHero(context),
+                            ],
+                          ),
+                        ),
+                        Transform.translate(offset: const Offset(0, -Space.xxxl), child: card),
+                        Transform.translate(offset: const Offset(0, -Space.xl), child: const BackOfficeLink()),
                       ],
                     ),
                   ),
                 ),
               ),
+      ),
+    );
+  }
+}
+
+/// The greeting (owner's copy, 2026-10-29): a welcome for sign-in, the promise for a new account, and the one question
+/// left after Google or Apple. On phones it sits on the sunset header; on wide screens above the card.
+class _Heading {
+  const _Heading({required this.step, required this.mode, required this.providerName});
+
+  final _Step step;
+  final _Mode mode;
+  final String? providerName;
+
+  String get title => switch (step) {
+    _Step.phone => 'Almost there',
+    _Step.form => mode == _Mode.create ? 'Join Tajirika' : 'Good to see you',
+  };
+
+  String get lead => switch (step) {
+    _Step.phone =>
+      'Your ${providerName == 'apple' ? 'Apple' : 'Google'} account is ready to sign in. Add the M-Pesa number you '
+          'will play with: it is confirmed by the M-Pesa prompt of your first top-up — no SMS code.',
+    _Step.form =>
+      mode == _Mode.create
+          ? 'Every draw on the record, every prize paid back to your M-Pesa.'
+          : 'Sign in to your wallet, your plays and your draws.',
+  };
+
+  Widget onHero(BuildContext context) {
+    final t = Theme.of(context).textTheme;
+    final c = context.colors;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Semantics(
+          header: true,
+          child: Text(title, style: t.displaySmall?.copyWith(color: c.onHero)),
+        ),
+        const SizedBox(height: Space.sm),
+        Text(lead, style: t.bodyLarge?.copyWith(color: c.onHeroMuted)),
+      ],
+    );
+  }
+
+  Widget onPage(BuildContext context) {
+    final t = Theme.of(context).textTheme;
+    final c = context.colors;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Semantics(header: true, child: Text(title, style: t.headlineLarge)),
+        const SizedBox(height: Space.sm),
+        Text(lead, style: t.bodyMedium?.copyWith(color: c.inkMuted)),
+      ],
+    );
+  }
+}
+
+/// The form's card: a surface with the float lift and the hero's corner radius, so it reads as one raised sheet.
+class _FormCard extends StatelessWidget {
+  const _FormCard({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return Reveal(
+      child: DecoratedBox(
+        decoration: BoxDecoration(borderRadius: BorderRadius.circular(Radii.xl), boxShadow: Elevation.float(c)),
+        child: Material(
+          color: c.surface,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(Radii.xl),
+            side: BorderSide(color: c.border),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: Padding(padding: const EdgeInsets.all(Space.xl), child: child),
+        ),
       ),
     );
   }
@@ -323,7 +417,7 @@ class _Panel extends StatelessWidget {
             BrandMark(height: 44, wordmarkColor: c.onHero),
             const Spacer(),
             Text(
-              'KES 1 a spin, up to four a day.\nEvery draw on the record.',
+              'KES 1 a spin, up to four a day.\nFair draws, paid to your M-Pesa.',
               style: t.displaySmall?.copyWith(color: c.onHero),
             ),
             const SizedBox(height: Space.lg),
@@ -348,7 +442,6 @@ class _Form extends StatelessWidget {
     required this.password,
     required this.mode,
     required this.step,
-    required this.providerName,
     required this.obscure,
     required this.adult,
     required this.busy,
@@ -377,7 +470,6 @@ class _Form extends StatelessWidget {
   final TextEditingController password;
   final _Mode mode;
   final _Step step;
-  final String? providerName;
   final bool obscure;
   final bool adult;
   final bool busy;
@@ -402,7 +494,6 @@ class _Form extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context).textTheme;
-    final c = context.colors;
     final phoneStep = step == _Step.phone;
     final creating = phoneStep || mode == _Mode.create;
     final phoneField = TextFormField(
@@ -426,7 +517,7 @@ class _Form extends StatelessWidget {
       controlAffinity: ListTileControlAffinity.leading,
       contentPadding: EdgeInsets.zero,
       title: const Text('I am 18 or older'),
-      subtitle: const Text('Your age is checked against your national ID before you can play.'),
+      subtitle: const Text('Your age is checked against your national ID before you can withdraw.'),
     );
     final errorBanner = formError == null
         ? null
@@ -437,42 +528,24 @@ class _Form extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Semantics(
-              header: true,
-              child: Text(
-                phoneStep ? 'Almost there' : (creating ? 'Create your account' : 'Welcome back'),
-                style: t.headlineLarge,
-              ),
-            ),
-            const SizedBox(height: Space.sm),
-            Text(
-              phoneStep
-                  ? 'Your $providerName account is ready to sign in. Add the M-Pesa number you will play with: it is '
-                        'confirmed by the M-Pesa prompt of your first top-up — no SMS code.'
-                  : creating
-                  ? 'Use your M-Pesa number. It is confirmed by the M-Pesa prompt of your first top-up — no SMS code.'
-                  : 'Sign in with your phone number and password.',
-              style: t.bodyMedium?.copyWith(color: c.inkMuted),
-            ),
             if (expired && !phoneStep) ...[
-              const SizedBox(height: Space.lg),
               const InlineBanner(
                 tone: StatusTone.pending,
                 icon: Icons.info_rounded,
                 live: true,
                 title: 'Your session ended. Sign in again to continue.',
               ),
+              const SizedBox(height: Space.xl),
             ],
             if (justReset && !phoneStep) ...[
-              const SizedBox(height: Space.lg),
               const InlineBanner(
                 tone: StatusTone.success,
                 icon: Icons.check_circle_rounded,
                 live: true,
                 title: 'Your password is changed. Sign in with it.',
               ),
+              const SizedBox(height: Space.xl),
             ],
-            const SizedBox(height: Space.xl),
             if (phoneStep) ...[
               phoneField,
               const SizedBox(height: Space.md),

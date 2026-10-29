@@ -1,4 +1,4 @@
-import { CircleX, KeyRound, MailCheck, ShieldCheck } from 'lucide-react'
+import { CircleX, KeyRound, LockKeyhole, Mail, MailCheck, ShieldCheck } from 'lucide-react'
 import { useEffect, useId, useRef, useState } from 'react'
 import { ProblemError, type ApiClient } from './api'
 import { BrandGlyph } from './components/BrandGlyph'
@@ -109,9 +109,17 @@ export function SignIn({ config, api, onSignedIn, providers = realProviders, not
         </div>
         <p className="relative text-xs text-white/60">Staff back office · Nairobi time</p>
       </aside>
-      <div className="flex items-center justify-center p-6 md:p-10">
-        <section className="w-full max-w-[400px]" aria-labelledby="signin-title">
-          <p className="mb-6 flex items-center gap-2 text-sm font-medium text-muted-foreground lg:hidden"><ShieldCheck aria-hidden="true" className="size-4 text-primary" /> Tajirika back office</p>
+      <div className="relative flex items-center justify-center overflow-hidden bg-muted/40 p-6 md:p-10">
+        <div aria-hidden="true" className="pointer-events-none absolute -right-28 -top-28 size-[380px] rounded-full bg-primary-container/70" />
+        <div aria-hidden="true" className="pointer-events-none absolute -bottom-36 -left-28 size-[360px] rounded-full bg-violet-container/80" />
+        <section className="relative w-full max-w-[440px] rounded-3xl border bg-card p-7 shadow-float animate-in fade-in-0 slide-in-from-bottom-4 duration-500 motion-reduce:animate-none md:p-9" aria-labelledby="signin-title">
+          <div className="mb-7 flex items-center gap-3">
+            <span className="flex size-11 items-center justify-center rounded-2xl bg-hero text-white shadow-card"><BrandGlyph className="size-8" /></span>
+            <div className="leading-tight">
+              <p className="font-display text-lg font-extrabold tracking-tight">Tajirika</p>
+              <p className="text-xs text-muted-foreground">Staff back office</p>
+            </div>
+          </div>
           <h1 id="signin-title" className="font-display text-4xl font-extrabold tracking-tight">Sign in</h1>
           <p className="mt-2 text-sm text-muted-foreground">With the email address an administrator invited and your password. Every action you take is recorded under your name.</p>
           {notice ? (
@@ -121,7 +129,7 @@ export function SignIn({ config, api, onSignedIn, providers = realProviders, not
             </Alert>
           ) : null}
           <form
-            className="mt-8 grid gap-4"
+            className="mt-7 grid gap-4"
             onSubmit={(e) => {
               e.preventDefault()
               if (!email.trim() || !password) return
@@ -130,16 +138,22 @@ export function SignIn({ config, api, onSignedIn, providers = realProviders, not
           >
             <div className="grid gap-1.5">
               <Label htmlFor={`${id}-email`}>Email address</Label>
-              <Input id={`${id}-email`} name="username" type="email" inputMode="email" autoComplete="username" required value={email} onChange={(e) => { setEmail(e.target.value) }} />
+              <div className="relative">
+                <Mail aria-hidden="true" className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                <Input id={`${id}-email`} name="username" type="email" inputMode="email" autoComplete="username" required value={email} onChange={(e) => { setEmail(e.target.value) }} className="h-11 rounded-xl bg-muted/40 pl-10 shadow-none" />
+              </div>
             </div>
             <div className="grid gap-1.5">
-              <Label htmlFor={`${id}-password`}>Password</Label>
-              <Input id={`${id}-password`} name="password" type="password" autoComplete="current-password" required value={password} onChange={(e) => { setPassword(e.target.value) }} />
-              {forgot ? null : (
-                <p className="text-xs text-muted-foreground">
-                  <button type="button" className="underline-offset-4 hover:underline" onClick={() => { setForgot(true); setProblem(null) }}>Forgotten it?</button>
-                </p>
-              )}
+              <div className="flex items-baseline justify-between">
+                <Label htmlFor={`${id}-password`}>Password</Label>
+                {forgot ? null : (
+                  <button type="button" className="text-xs font-medium text-primary underline-offset-4 hover:underline" onClick={() => { setForgot(true); setProblem(null) }}>Forgotten it?</button>
+                )}
+              </div>
+              <div className="relative">
+                <LockKeyhole aria-hidden="true" className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                <Input id={`${id}-password`} name="password" type="password" autoComplete="current-password" required value={password} onChange={(e) => { setPassword(e.target.value) }} className="h-11 rounded-xl bg-muted/40 pl-10 shadow-none" />
+              </div>
             </div>
             {forgot ? (
               forgotSent ? (
@@ -149,7 +163,7 @@ export function SignIn({ config, api, onSignedIn, providers = realProviders, not
                   <AlertDescription>It works for 30 minutes. Check the junk folder if nothing arrives.</AlertDescription>
                 </Alert>
               ) : (
-                <div className="grid gap-2 rounded-lg border bg-muted/40 p-3">
+                <div className="grid gap-2 rounded-xl border bg-muted/40 p-3">
                   <p className="text-sm">Enter the email address above and we will email you a link to choose a new password. An administrator can also give you a temporary one.</p>
                   <div className="flex gap-2">
                     <Button type="button" size="sm" variant="outline" disabled={busy || !email.trim()} onClick={() => { void askForLink() }}>Email me a reset link</Button>
@@ -158,7 +172,7 @@ export function SignIn({ config, api, onSignedIn, providers = realProviders, not
                 </div>
               )
             ) : null}
-            <Button type="submit" size="lg" className="h-11 w-full" disabled={busy || !email.trim() || !password}>
+            <Button type="submit" size="lg" className="mt-1 h-12 w-full rounded-xl text-base shadow-card" disabled={busy || !email.trim() || !password}>
               <KeyRound aria-hidden="true" /> {busy ? 'Signing in…' : 'Sign in'}
             </Button>
           </form>
@@ -167,14 +181,14 @@ export function SignIn({ config, api, onSignedIn, providers = realProviders, not
               <p className="flex items-center gap-3 text-xs uppercase tracking-wide text-muted-foreground before:h-px before:flex-1 before:bg-border after:h-px after:flex-1 after:bg-border">or continue with</p>
               {config.google ? <div ref={google} className="min-h-10" /> : null}
               {apple ? (
-                <Button type="button" size="lg" variant="outline" disabled={busy} className="h-11 w-full border-foreground/80 bg-foreground text-background hover:bg-foreground/90 hover:text-background"
+                <Button type="button" size="lg" variant="outline" disabled={busy} className="h-11 w-full rounded-xl border-foreground/80 bg-foreground text-background hover:bg-foreground/90 hover:text-background"
                   onClick={() => { void exchange('apple', () => providers.apple(apple.clientId, apple.redirectUri).then(withToken)) }}>
                   <svg aria-hidden="true" viewBox="0 0 14 17" width="14" height="17"><path fill="currentColor" d="M11.6 9c0-2 1.7-3 1.8-3-1-1.4-2.5-1.6-3-1.6-1.3-.1-2.5.8-3.2.8-.7 0-1.7-.8-2.8-.7C3 3.5 1.7 4.4 1 5.7c-1.5 2.6-.4 6.4 1 8.5.7 1 1.5 2.2 2.6 2.1 1 0 1.4-.7 2.7-.7 1.2 0 1.6.7 2.7.7s1.8-1 2.5-2.1c.8-1.2 1.1-2.3 1.1-2.4 0 0-2.1-.8-2.1-3.2zM9.6 3c.6-.7 1-1.7.9-2.7-.8 0-1.9.6-2.5 1.3-.5.6-1 1.6-.9 2.6.9.1 1.9-.5 2.5-1.2z" /></svg>
                   Sign in with Apple
                 </Button>
               ) : null}
               {dev ? (
-                <Button type="button" variant="outline" size="lg" disabled={busy} className="h-11 w-full" onClick={() => { void exchange('dev', () => providers.dev(dev).then(withToken)) }}>
+                <Button type="button" variant="outline" size="lg" disabled={busy} className="h-11 w-full rounded-xl" onClick={() => { void exchange('dev', () => providers.dev(dev).then(withToken)) }}>
                   Sign in with the local staff realm (development)
                 </Button>
               ) : null}
@@ -188,6 +202,7 @@ export function SignIn({ config, api, onSignedIn, providers = realProviders, not
               {problem.detail ? <AlertDescription>{problem.detail}</AlertDescription> : null}
             </Alert>
           ) : null}
+          <p className="mt-7 text-center text-xs text-muted-foreground">Staff back office · Nairobi time</p>
         </section>
       </div>
     </main>

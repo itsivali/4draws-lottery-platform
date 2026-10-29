@@ -17,7 +17,7 @@ void main() {
 
   testWidgets('Google and Apple are offered beside the form, with the client ids the API gave', (t) async {
     final h = await pumpApp(t, FakeBackend(), signedIn: false);
-    expect(find.text('Welcome back'), findsOneWidget);
+    expect(find.text('Good to see you'), findsOneWidget);
     expect(find.text('OR CONTINUE WITH'), findsOneWidget);
     expect(find.text('Continue with Google'), findsOneWidget);
     expect(find.text('Continue with Apple'), findsOneWidget);
@@ -26,7 +26,7 @@ void main() {
 
   testWidgets('without providers from the API, only the phone-and-password form is shown', (t) async {
     await pumpApp(t, FakeBackend()..providers = {}, signedIn: false);
-    expect(find.text('Welcome back'), findsOneWidget);
+    expect(find.text('Good to see you'), findsOneWidget);
     expect(find.text('Continue with Google'), findsNothing);
     expect(find.text('Continue with Apple'), findsNothing);
   });
@@ -88,7 +88,7 @@ void main() {
     expect(find.text('Sign in with that number and its password instead.'), findsOneWidget);
     await t.tap(find.text('Sign in another way'));
     await t.pumpAndSettle();
-    expect(find.text('Welcome back'), findsOneWidget);
+    expect(find.text('Good to see you'), findsOneWidget);
     expect(find.text('Continue with Google'), findsOneWidget);
   });
 
@@ -100,7 +100,7 @@ void main() {
     await t.tap(find.text('I am 18 or older'));
     await t.tap(find.widgetWithText(FilledButton, 'Create account'));
     await t.pumpAndSettle();
-    expect(find.text('Welcome back'), findsOneWidget);
+    expect(find.text('Good to see you'), findsOneWidget);
     expect(find.text('Your Google sign-in ran out. Start again.'), findsOneWidget);
   });
 }

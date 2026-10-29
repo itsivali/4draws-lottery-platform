@@ -19,6 +19,11 @@ void main() {
     await shot(t, 'sign_in_phone');
   });
 
+  testWidgets('sign in on a desktop browser', (t) async {
+    await pumpApp(t, FakeBackend(), signedIn: false, size: const Size(1440, 900));
+    await shot(t, 'sign_in_desktop');
+  });
+
   testWidgets('sign in with Google: the phone number step', (t) async {
     await pumpApp(t, FakeBackend(), signedIn: false);
     await t.tap(find.widgetWithText(OutlinedButton, 'Continue with Google'));

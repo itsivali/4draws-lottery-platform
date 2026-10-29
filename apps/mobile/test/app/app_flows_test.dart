@@ -28,7 +28,7 @@ void main() {
   testWidgets('signing in lands on Home with the confirmed balance', (t) async {
     final backend = FakeBackend(balance: 1250);
     await pumpApp(t, backend, signedIn: false);
-    expect(find.text('Welcome back'), findsOneWidget);
+    expect(find.text('Good to see you'), findsOneWidget);
     await t.enterText(find.widgetWithText(TextFormField, 'M-Pesa phone number'), '0712345678');
     await t.enterText(find.widgetWithText(TextFormField, 'Password'), 'correct horse battery');
     await t.tap(find.widgetWithText(FilledButton, 'Sign in'));
