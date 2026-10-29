@@ -238,7 +238,14 @@ func (a *App) staff(ctx context.Context, sh shared, base services) (staff.Authen
 		ids = identity.NewOIDCVerifier(clock.Wall{}, sh.hc, providers)
 	}
 	members := staff.NewService(pool, sh.clk, ids, sh.aw, crypto.MAC(sh.cfg.API.AuthKey, "staff-password-pepper"))
-	if c.BootstrapAdmin != "" {
+	switch {
+	case c.BootstrapReset:
+		// the owner's way back in without database access: the bootstrap admin gets the temporary password again
+		if _, err := members.EmergencyPassword(ctx, c.BootstrapAdmin, c.BootstrapPassword, true); err != nil {
+			return nil, api.StaffServices{}, fmt.Errorf("app: staff bootstrap reset: %w", err)
+		}
+		slog.Warn("STAFF_BOOTSTRAP_RESET is on: the bootstrap admin's password was reset to STAFF_BOOTSTRAP_PASSWORD and their sessions ended; remove the variable once they have signed in", "admin", c.BootstrapAdmin)
+	case c.BootstrapAdmin != "":
 		if err := members.Bootstrap(ctx, c.BootstrapAdmin, c.BootstrapPassword); err != nil {
 			return nil, api.StaffServices{}, fmt.Errorf("app: staff bootstrap admin: %w", err)
 		}

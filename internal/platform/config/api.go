@@ -109,7 +109,12 @@ type Staff struct {
 	Dev               *DevOIDC
 	BootstrapAdmin    string
 	BootstrapPassword string // STAFF_BOOTSTRAP_PASSWORD: a secret; set once, changed at the first sign-in
-	DatabaseURL       string
+	// BootstrapReset (STAFF_BOOTSTRAP_RESET=true) is the way back in when the only administrator has lost their
+	// password and nobody can reach the database: every start gives the bootstrap admin STAFF_BOOTSTRAP_PASSWORD again
+	// as a temporary password (changed at their next sign-in), re-enables them and ends their sessions. Set it, deploy,
+	// sign in, choose a password, then remove it; it is logged as a warning on every start while it is on.
+	BootstrapReset bool
+	DatabaseURL    string
 }
 
 // DevOIDC is the local staff realm (Keycloak in compose): never configured in production.
@@ -141,7 +146,7 @@ var emailRE = regexp.MustCompile(`^[^@\s]+@[^@\s]+\.[^@\s]+$`)
 func loadStaff() (Staff, error) {
 	s := Staff{GoogleClientID: os.Getenv("STAFF_GOOGLE_CLIENT_ID"), AppleClientID: os.Getenv("STAFF_APPLE_CLIENT_ID"),
 		BootstrapAdmin: strings.ToLower(strings.TrimSpace(os.Getenv("STAFF_BOOTSTRAP_ADMIN"))), BootstrapPassword: os.Getenv("STAFF_BOOTSTRAP_PASSWORD"),
-		DatabaseURL: os.Getenv("STAFF_DATABASE_URL")}
+		DatabaseURL: os.Getenv("STAFF_DATABASE_URL"), BootstrapReset: os.Getenv("STAFF_BOOTSTRAP_RESET") == "true"}
 	var set, missing []string
 	for _, k := range devOIDCVars {
 		if os.Getenv(k) != "" {
@@ -170,6 +175,9 @@ func loadStaff() (Staff, error) {
 	}
 	if s.BootstrapPassword != "" && s.BootstrapAdmin == "" {
 		return Staff{}, errors.New("config: STAFF_BOOTSTRAP_PASSWORD needs STAFF_BOOTSTRAP_ADMIN")
+	}
+	if s.BootstrapReset && s.BootstrapPassword == "" {
+		return Staff{}, errors.New("config: STAFF_BOOTSTRAP_RESET needs STAFF_BOOTSTRAP_PASSWORD (and STAFF_BOOTSTRAP_ADMIN)")
 	}
 	s.Enabled = true
 	return s, nil

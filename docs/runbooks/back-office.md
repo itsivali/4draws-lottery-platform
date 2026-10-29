@@ -18,6 +18,14 @@ The back office shows each member by **name**, never by email address: an invite
 account menu (*Change name*), and an admin can rename a member on the *Staff* page. Every change is audited
 (`staff.name`).
 
+**Locked out (the only admin has lost their password):** nobody can reset it from the back office, and
+`lotteryctl staff password` needs database access. Without that, set `STAFF_BOOTSTRAP_RESET=true` on the api (Render →
+lottery-api → Environment), with `STAFF_BOOTSTRAP_PASSWORD` set to a fresh temporary password (12 characters or more),
+and deploy. On start the api gives the bootstrap admin that temporary password again, re-enables them and ends their
+sessions (audited as the system). Sign in with it, choose a password, then **remove `STAFF_BOOTSTRAP_RESET`** and
+deploy again: while it is on, every start resets the password and logs a warning. Note that `STAFF_BOOTSTRAP_PASSWORD`
+on its own only applies while the admin has no password at all: changing it after the first sign-in does nothing.
+
 | Role | Can |
 |---|---|
 | `staff` | every operational queue: identity review (each view audited as unmasked; approve or reject with a reason), payments (reconciliations, reversals, unconfirmed top-ups, suspense, paybill re-checks), draws (sign, approve, void with a reason), payouts (approve, reject, settle from the statement, retry prizes), KRA tax (prepare batches, download files, record remittances), alerts (acknowledge), account closures; and the *Finance* dashboard |

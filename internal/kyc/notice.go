@@ -14,10 +14,12 @@ import (
 	"github.com/itsivali/lottery-platform/internal/platform/mail"
 )
 
-// ReviewNotice says that a player's submission waits for a staff decision. It names the account, never the person:
-// the details are shown, and audited, in the back office.
+// ReviewNotice says that a player's submission waits for a staff decision. It carries the name on the submitted ID
+// (owner, 2026-10-29); the ID number and date of birth are shown, and audited, only in the back office.
 type ReviewNotice struct {
-	UserID      string
+	UserID string
+	// FullName is the name as written on the submitted ID.
+	FullName    string
 	SubmittedAt time.Time
 	// Waiting is how many submissions wait in all, this one included.
 	Waiting int64
@@ -49,11 +51,15 @@ func (s *Service) SendReviewNotice(ctx context.Context, checkID, userID string) 
 	if err != nil || last.ID != checkID {
 		return err
 	}
+	name, err := s.kr.Decrypt(last.FullNameEnc, []byte("kyc.full_name"))
+	if err != nil {
+		return err
+	}
 	queue, err := s.ReviewQueue(ctx)
 	if err != nil {
 		return err
 	}
-	return s.notify.NotifyReview(ctx, ReviewNotice{UserID: userID, SubmittedAt: last.CreatedAt, Waiting: queue.Waiting})
+	return s.notify.NotifyReview(ctx, ReviewNotice{UserID: userID, FullName: string(name), SubmittedAt: last.CreatedAt, Waiting: queue.Waiting})
 }
 
 // MailReviewNotifier emails each notice to To, with a link that opens the submission in the back office.
@@ -84,13 +90,17 @@ func reviewSubject(n ReviewNotice) string {
 func reviewText(n ReviewNotice, link string) string {
 	nairobi := time.FixedZone("EAT", 3*60*60)
 	var b strings.Builder
-	b.WriteString("A player submitted their national ID for verification on " + n.SubmittedAt.In(nairobi).Format("Mon 2 Jan 2006 at 15:04 MST") + ".\n\n")
+	who := strings.TrimSpace(n.FullName)
+	if who == "" {
+		who = "A player"
+	}
+	b.WriteString(who + " submitted their national ID for verification on " + n.SubmittedAt.In(nairobi).Format("Mon 2 Jan 2006 at 15:04 MST") + ".\n\n")
 	b.WriteString("Review it in the back office (sign in first):\n" + link + "\n\n")
 	if n.Waiting > 1 {
 		b.WriteString(strconv.FormatInt(n.Waiting, 10) + " submissions are waiting in all.\n")
 	} else {
 		b.WriteString("It is the only submission waiting.\n")
 	}
-	b.WriteString("\nThe player's details are shown only in the back office, where every look is recorded in the audit log.\n")
+	b.WriteString("\nThe ID number and date of birth are shown only in the back office, where every look is recorded in the audit log.\n")
 	return b.String()
 }

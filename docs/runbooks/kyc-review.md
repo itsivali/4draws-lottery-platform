@@ -13,7 +13,7 @@ Reviewers are told two ways:
 - **By email**, the moment a submission starts waiting (a manual submission, or a registry mismatch): the api queues
   a `kyc.review_notice` job with the submission, and the job emails `KYC_REVIEW_NOTIFY_TO` (on Render
   `itsivali@outlook.com`) a link that opens the back office at that submission,
-  `${BACKOFFICE_URL}/kyc?user=<account id>`. The email names no one: it says when the submission arrived and how
+  `${BACKOFFICE_URL}/kyc?user=<account id>`. The email gives the name on the submitted ID (owner, 2026-10-29), when the submission arrived and how
   many are waiting. If the submission was decided before the job ran, nothing is sent. A failed send is retried by
   the queue (8 attempts, backing off).
 

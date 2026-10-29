@@ -537,7 +537,7 @@ func TestManual_ASubmissionTellsTheReviewersOnceWhileItWaits(t *testing.T) {
 	if err := e.svc.SendReviewNotice(ctx, check, u); err != nil {
 		t.Fatal(err)
 	}
-	if len(told.sent) != 1 || told.sent[0].UserID != u || told.sent[0].Waiting != 1 || told.sent[0].SubmittedAt.IsZero() {
+	if len(told.sent) != 1 || told.sent[0].UserID != u || told.sent[0].FullName != "Jane Wanjiru Kamau" || told.sent[0].Waiting != 1 || told.sent[0].SubmittedAt.IsZero() {
 		t.Fatalf("told = %+v", told.sent)
 	}
 	// a second account makes the count two

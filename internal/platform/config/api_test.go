@@ -230,6 +230,21 @@ func TestAPI_StaffSignInIsPasswordWithGoogleAppleOrTheLocalTestRealmOptional(t *
 	if _, err := config.Load(); err == nil || !strings.Contains(err.Error(), "STAFF_BOOTSTRAP_PASSWORD") {
 		t.Fatalf("a bootstrap password without an admin accepted: %v", err)
 	}
+	// the lock-out switch needs the temporary password it hands out
+	t.Setenv("STAFF_BOOTSTRAP_ADMIN", "owner@example.com")
+	t.Setenv("STAFF_BOOTSTRAP_PASSWORD", "")
+	t.Setenv("STAFF_BOOTSTRAP_RESET", "true")
+	if _, err := config.Load(); err == nil || !strings.Contains(err.Error(), "STAFF_BOOTSTRAP_RESET") {
+		t.Fatalf("a reset without a password accepted: %v", err)
+	}
+	t.Setenv("STAFF_BOOTSTRAP_PASSWORD", "a long temporary password")
+	if cfg, err := config.Load(); err != nil || !cfg.API.Staff.BootstrapReset {
+		t.Fatalf("reset: %+v %v", cfg.API.Staff, err)
+	}
+	t.Setenv("STAFF_BOOTSTRAP_RESET", "yes")
+	if cfg, err := config.Load(); err != nil || cfg.API.Staff.BootstrapReset {
+		t.Fatalf("only the word true switches the reset on: %+v %v", cfg.API.Staff, err)
+	}
 	t.Setenv("STAFF_BOOTSTRAP_PASSWORD", "")
 
 	// the local staff realm, for local development and the e2e journey only: all three or none, https except in compose
