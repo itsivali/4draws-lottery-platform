@@ -9,9 +9,10 @@ The player web app (`apps/mobile`, Flutter, served by Render at https://tajirika
   Twitter card tags, the theme colour, the manifest and icon links, a preconnect to the API, and JSON-LD structured
   data (`Organization`, `WebSite`, `WebApplication` with the KES 1 price, and a `FAQPage`). The `<body>` carries a
   **landing** (`#landing`): the headline, how it works, fairness, responsible play and the questions, in plain HTML,
-  which is what a crawler or a slow connection sees; the app hides it the moment it has drawn (`body:has(flutter-view)`).
-  Keep the landing's facts in step with the product (price, plays a day, draws, where prizes go): it is the one page
-  search engines read.
+  which is what the root address shows: the app is not started at `/` (Google's renderer runs JavaScript, and an app
+  drawn on a canvas has no text to index). Every other path starts the app, and "Open Tajirika" leads to `/sign-in`;
+  the installed app opens at `/home` (`manifest.json`'s `start_url`). Keep the landing's facts in step with the
+  product (price, plays a day, draws, where prizes go): it is the one page search engines read.
 - **`og-image.png`:** the 1200x630 share image, rendered by `scripts/gen-icons.sh` from
   `design-system/lottery-platform/logo/tajirika-og.svg`.
 - **`robots.txt`** (allow all but the reset pages) and **`sitemap.xml`** (the root and `/sign-in`).
