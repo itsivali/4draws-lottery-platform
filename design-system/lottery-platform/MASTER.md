@@ -28,14 +28,15 @@ Layouts only give the mark a height.
 
 ## 2. Colour
 
-**One theme: light, on a white page** (owner, 2026-10-28). The palette is “Sunset”: coral leads, violet accents,
+**One theme: light, on a warm near-white page** (owner, 2026-10-28; the page took a linen tint on 2026-10-29 so the
+white cards stand off it). The palette is “Sunset”: coral leads, violet accents,
 peach and lavender tints, warm gold kept for metal. Semantic roles only. Gold is **decorative** (the wheel rim, the
 lucky-slot star, the pointer). Gold is never the colour of an ordinary success, a button or a balance: it must not
 suggest that money was won.
 
 | Role | Value | Use |
 |---|---|---|
-| `background` | `#FFFFFF` white | Page background |
+| `background` | `#FBF6F3` warm linen | Page background (white cards stand off it) |
 | `surface` | `#FFFFFF` | Cards, sheets, bars (a hairline border and a soft lift set them off the page) |
 | `surfaceRaised` | `#FFFAF7` | Inputs and panels that sit on `surface` |
 | `surfaceMuted` | `#FBEEE7` peach | Inset panels, skeletons, chips |
@@ -107,11 +108,12 @@ Touch targets ≥ 48×48 dp, ≥ 8 dp apart. Safe areas respected; the bottom ba
 
 ## 5. Surfaces, elevation, radius
 
-- Cards are `surface` with a 1 dp `border` hairline and a **soft lift** (`Elevation.card`: `0 1 2 / 4%` + `0 8 24 / 6%`
-  plum ink). `flat` cards (inside sheets, nested lists) keep the border and drop the
-  lift; `tinted` cards sit on `primaryContainer` for quiet emphasis.
-- Elevation exists in three steps: `card` (above), `float` (sheets, dialogs, tooltips: `0 12 40 / 14%`) and `hero`
-  (`0 16 40 / 35% heroEnd`). The wheel has its own lighting (see `pages/play.md`).
+- Cards are `surface` (white) on the linen page, with a 1 dp `border` hairline, 24 dp of padding and a **pronounced
+  lift** (`Elevation.card`: `0 1 3 / 6%` + `0 14 36 / 13%` plum ink; raised on 2026-10-29, owner: cards must stand
+  out). `flat` cards (inside sheets, nested lists) keep the border and drop the lift; `tinted` cards sit on
+  `primaryContainer` for quiet emphasis. The primary button carries a coral shadow of its own.
+- Elevation exists in three steps: `card` (above), `float` (sheets, dialogs, tooltips: `0 20 56 / 22%`) and `hero`
+  (`0 22 56 / 48% heroEnd`). The wheel has its own lighting (see `pages/play.md`).
 - **Hero surfaces** (`HeroCard`): the sunset gradient `heroStart → primary → accent → heroEnd` (coral through violet,
   four stops since 2026-10-29 so both ends read) with a radial
   `heroGlow` from the top left; the wheel's stage takes the dusk end only (`heroEnd → shadow`, `Gradients.stage`) so
@@ -119,7 +121,7 @@ Touch targets ≥ 48×48 dp, ≥ 8 dp apart. Safe areas respected; the bottom ba
   the corner rings were removed on 2026-10-29, owner). Exactly two uses: the balance
   (Home, Wallet) and the wheel's stage (Play). On wide screens the sign-in page's brand panel borrows it for words,
   never for money. Nothing else is a hero.
-- Radii: `sm 8` (chips), `md 12` (buttons, inputs), `lg 16` (cards), `xl 24` (hero cards, dialogs), `xxl 28` (sheets'
+- Radii: `sm 8` (chips), `md 12` (buttons, inputs), `lg 20` (cards; 16 until 2026-10-29), `xl 24` (hero cards, dialogs), `xxl 28` (sheets'
   top corners, the wheel's stage), `full` (pills).
 - No glassmorphism, no blur as decoration; no gradients except the hero surfaces and the wheel's rim and hub.
 

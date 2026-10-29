@@ -10,7 +10,7 @@ class AppCard extends StatelessWidget {
     this.title,
     this.trailing,
     required this.child,
-    this.padding = const EdgeInsets.all(Space.lg),
+    this.padding = const EdgeInsets.all(Space.xl),
     this.tinted = false,
     this.flat = false,
     this.onTap,

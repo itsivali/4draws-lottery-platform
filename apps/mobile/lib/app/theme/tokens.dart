@@ -46,7 +46,7 @@ class AppColors {
   /// "Sunset" (MASTER.md §2, owner 2026-10-28): one light theme on a white page. Coral leads, violet accents, gold
   /// stays decorative; status colours all clear 4.5:1 on the page, on cards and on muted panels (tokens_test).
   static const light = AppColors(
-    background: Color(0xFFFFFFFF),
+    background: Color(0xFFFBF6F3), // warm linen: white cards stand off it (owner, 2026-10-29)
     surface: Color(0xFFFFFFFF),
     surfaceRaised: Color(0xFFFFFAF7),
     surfaceMuted: Color(0xFFFBEEE7),
@@ -156,7 +156,7 @@ abstract final class Space {
 abstract final class Radii {
   static const sm = 8.0;
   static const md = 12.0;
-  static const lg = 16.0;
+  static const lg = 20.0; // cards (16 until 2026-10-29)
   static const xl = 24.0;
   static const xxl = 28.0;
   static const full = 999.0;
@@ -164,18 +164,19 @@ abstract final class Radii {
 
 /// Depth in three steps (MASTER.md §5): a card's soft lift, a floating sheet, and the hero surfaces' deep shadow.
 abstract final class Elevation {
+  // raised on 2026-10-29 (owner): cards must stand off the page, so the lift is deeper and the page is warm linen
   static List<BoxShadow> card(AppColors c) => [
-    BoxShadow(color: c.shadow.withValues(alpha: 0.04), blurRadius: 2, offset: const Offset(0, 1)),
-    BoxShadow(color: c.shadow.withValues(alpha: 0.08), blurRadius: 28, offset: const Offset(0, 10)),
+    BoxShadow(color: c.shadow.withValues(alpha: 0.06), blurRadius: 3, offset: const Offset(0, 1)),
+    BoxShadow(color: c.shadow.withValues(alpha: 0.13), blurRadius: 36, offset: const Offset(0, 14)),
   ];
 
   static List<BoxShadow> float(AppColors c) => [
-    BoxShadow(color: c.shadow.withValues(alpha: 0.14), blurRadius: 40, offset: const Offset(0, 12)),
+    BoxShadow(color: c.shadow.withValues(alpha: 0.22), blurRadius: 56, offset: const Offset(0, 20)),
   ];
 
   static List<BoxShadow> hero(AppColors c) => [
-    BoxShadow(color: c.heroEnd.withValues(alpha: 0.42), blurRadius: 48, offset: const Offset(0, 18)),
-    BoxShadow(color: c.heroStart.withValues(alpha: 0.18), blurRadius: 16, offset: const Offset(0, 4)),
+    BoxShadow(color: c.heroEnd.withValues(alpha: 0.48), blurRadius: 56, offset: const Offset(0, 22)),
+    BoxShadow(color: c.heroStart.withValues(alpha: 0.22), blurRadius: 18, offset: const Offset(0, 5)),
   ];
 }
 

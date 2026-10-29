@@ -120,7 +120,8 @@ ThemeData buildTheme() {
         padding: buttonPadding,
         shape: buttonShape,
         textStyle: buttonText,
-        elevation: 0,
+        elevation: 2,
+        shadowColor: c.primary.withValues(alpha: 0.45),
       ),
     ),
     outlinedButtonTheme: OutlinedButtonThemeData(
