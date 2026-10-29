@@ -105,12 +105,21 @@ void main() {
     await t.pumpAndSettle();
   });
 
-  testWidgets('an unverified ID turns the button off and says why', (t) async {
-    await pumpApp(t, FakeBackend(kyc: 'none'));
+  testWidgets('an unconfirmed number turns the button off and says why; an unverified ID does not', (t) async {
+    await pumpApp(t, FakeBackend(phoneVerified: false));
     await goToPlay(t);
-    expect(find.text('Verify your identity to play'), findsOneWidget);
+    expect(find.text('Confirm your number with a first top-up'), findsOneWidget);
     final button = t.widget<FilledButton>(find.widgetWithText(FilledButton, 'Play for KES 100'));
     expect(button.onPressed, isNull);
+  });
+
+  testWidgets('an unverified ID does not stop a play; Home suggests verifying before a withdrawal', (t) async {
+    await pumpApp(t, FakeBackend(kyc: 'none'));
+    expect(find.text('Verify your identity before you withdraw'), findsOneWidget);
+    await goToPlay(t);
+    expect(find.text('Verify your identity to play'), findsNothing);
+    final button = t.widget<FilledButton>(find.widgetWithText(FilledButton, 'Play for KES 100').first);
+    expect(button.onPressed, isNotNull);
   });
 
   testWidgets('after four plays the day is over, and it says when it resets', (t) async {

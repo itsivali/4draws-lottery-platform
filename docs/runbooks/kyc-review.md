@@ -1,8 +1,9 @@
 # Runbook: manual KYC review
 
 Identities are checked by staff (ADR 0009). A player submits national ID number, full name and date of birth; the
-account then waits in `manual_review` and cannot top up until a reviewer decides. Under-18s and IDs already verified
-on another account are refused before they reach the queue.
+account then waits in `manual_review` and cannot withdraw or be paid a prize until a reviewer decides (since ADR 0022
+it may top up and play meanwhile). Under-18s and IDs already verified on another account are refused before they
+reach the queue.
 
 ## Be told when a submission arrives
 

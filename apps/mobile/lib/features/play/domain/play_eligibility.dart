@@ -2,19 +2,7 @@ import '../../account/domain/account_models.dart';
 import '../../wallet/domain/wallet_models.dart';
 import 'play_models.dart';
 
-enum PlayBlockReason {
-  suspended,
-  closed,
-  selfExcluded,
-  timedOut,
-  kycNeeded,
-  kycInReview,
-  kycRejected,
-  phoneNotProved,
-  inDebt,
-  dailyLimit,
-  lowBalance,
-}
+enum PlayBlockReason { suspended, closed, selfExcluded, timedOut, phoneNotProved, inDebt, dailyLimit, lowBalance }
 
 class PlayBlock {
   const PlayBlock(this.reason, {this.until});
@@ -38,16 +26,7 @@ PlayBlock? playBlock({required Account account, required Today today, required W
         ? PlayBlock(PlayBlockReason.selfExcluded, until: r.until)
         : PlayBlock(PlayBlockReason.timedOut, until: r.until);
   }
-  switch (account.kycStatus) {
-    case KycStatus.none:
-      return const PlayBlock(PlayBlockReason.kycNeeded);
-    case KycStatus.pending || KycStatus.manualReview:
-      return const PlayBlock(PlayBlockReason.kycInReview);
-    case KycStatus.rejected:
-      return const PlayBlock(PlayBlockReason.kycRejected);
-    case KycStatus.verified:
-      break;
-  }
+  // the national ID is checked before the first withdrawal (ADR 0022), not before a play
   if (!account.phoneVerified) return const PlayBlock(PlayBlockReason.phoneNotProved);
   if (wallet.debtKes > 0) return const PlayBlock(PlayBlockReason.inDebt);
   if (today.playsLeft <= 0) return const PlayBlock(PlayBlockReason.dailyLimit);

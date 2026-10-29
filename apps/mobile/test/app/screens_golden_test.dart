@@ -57,8 +57,8 @@ void main() {
     await shot(t, 'play_phone_confirm');
   });
 
-  testWidgets('play blocked (ID not verified)', (t) async {
-    await pumpApp(t, FakeBackend(kyc: 'none'));
+  testWidgets('play blocked (number not confirmed)', (t) async {
+    await pumpApp(t, FakeBackend(phoneVerified: false));
     await t.tap(find.text('Play').last);
     await shot(t, 'play_phone_blocked');
   });

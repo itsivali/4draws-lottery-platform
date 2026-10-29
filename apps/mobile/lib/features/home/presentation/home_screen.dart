@@ -72,7 +72,8 @@ class HomeScreen extends ConsumerWidget {
     );
   }
 
-  /// The one thing to do next, if there is one: verify, confirm the number, repay, or wait out a pause.
+  /// The one thing to do next, if there is one: confirm the number, wait out a pause, repay, or verify the ID that
+  /// withdrawals will need (ADR 0022: identity is checked before the first withdrawal, not before a play).
   Widget? _nextStep(BuildContext context, Account a, int debtKes) {
     final paused = a.restriction;
     final (tone, title, body, action, route) = switch (a) {
@@ -83,31 +84,10 @@ class HomeScreen extends ConsumerWidget {
         null,
         null,
       ),
-      Account(kycStatus: KycStatus.none) => (
-        StatusTone.pending,
-        'Verify your identity',
-        'Needed before your first top-up and play.',
-        'Verify my ID',
-        '/account/verify',
-      ),
-      Account(kycStatus: KycStatus.pending || KycStatus.manualReview) => (
-        StatusTone.pending,
-        'Your ID is being checked',
-        'Staff review each ID by hand.',
-        null,
-        null,
-      ),
-      Account(kycStatus: KycStatus.rejected) => (
-        StatusTone.warning,
-        'Your ID was not accepted',
-        'Check the details and submit it again.',
-        'Submit again',
-        '/account/verify',
-      ),
-      Account(phoneVerified: false, kycStatus: KycStatus.verified) => (
+      Account(phoneVerified: false) => (
         StatusTone.pending,
         'Confirm your number',
-        'Your first M-Pesa top-up proves the number is yours.',
+        'Your first M-Pesa top-up proves the number is yours, and lets you play.',
         'Top up',
         '/wallet/top-up',
       ),
@@ -124,6 +104,27 @@ class HomeScreen extends ConsumerWidget {
         '${formatKes(debtKes)} is owed; your next top-up repays it first, then play and withdrawals resume.',
         'Top up',
         '/wallet/top-up',
+      ),
+      Account(kycStatus: KycStatus.none) => (
+        StatusTone.neutral,
+        'Verify your identity before you withdraw',
+        'Winnings are paid out once staff have checked your national ID. You can play in the meantime.',
+        'Verify my ID',
+        '/account/verify',
+      ),
+      Account(kycStatus: KycStatus.pending || KycStatus.manualReview) => (
+        StatusTone.pending,
+        'Your ID is being checked',
+        'Staff review each ID by hand; withdrawals open once it is approved.',
+        null,
+        null,
+      ),
+      Account(kycStatus: KycStatus.rejected) => (
+        StatusTone.warning,
+        'Your ID was not accepted',
+        'Check the details and submit it again before you withdraw.',
+        'Submit again',
+        '/account/verify',
       ),
       _ => (StatusTone.neutral, null, null, null, null),
     };

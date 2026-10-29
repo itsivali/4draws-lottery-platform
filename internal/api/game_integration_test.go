@@ -97,10 +97,7 @@ func TestAPI_PlayJourneyFromTheFirstPlayToTheDailyLimit(t *testing.T) {
 
 func TestAPI_PlayErrorMapping(t *testing.T) {
 	e := setup(t)
-	noKYC := e.signIn(t)
-	if r := e.do(t, http.MethodPost, "/v1/plays", noKYC.access, nil); r.Code != http.StatusForbidden || !hasType(r, "kyc-required") {
-		t.Fatalf("no kyc: %d %s", r.Code, r.Raw)
-	}
+	// an unverified ID does not stop a play (ADR 0022): an unproved phone does
 	noPhone := e.signIn(t)
 	e.verified(t, noPhone)
 	if r := e.do(t, http.MethodPost, "/v1/plays", noPhone.access, nil); r.Code != http.StatusForbidden || !hasType(r, "phone-not-verified") {

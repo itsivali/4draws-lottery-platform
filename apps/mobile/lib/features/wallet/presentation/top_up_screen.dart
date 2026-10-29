@@ -71,27 +71,7 @@ class _TopUpScreenState extends ConsumerState<TopUpScreen> {
           what: 'your account',
           onRetry: () => ref.invalidate(accountProvider),
           data: (a) {
-            if (a.kycStatus != KycStatus.verified) {
-              return switch (a.kycStatus) {
-                KycStatus.none => InlineBanner(
-                  tone: StatusTone.warning,
-                  title: 'Verify your identity first',
-                  message: 'Top-ups need a verified national ID.',
-                  actionLabel: 'Verify my ID',
-                  onAction: () => context.go('/account/verify'),
-                ),
-                KycStatus.rejected => const InlineBanner(
-                  tone: StatusTone.error,
-                  title: 'Your ID was not accepted',
-                  message: 'Top-ups need a verified national ID. Contact support if you think this is a mistake.',
-                ),
-                _ => const InlineBanner(
-                  tone: StatusTone.pending,
-                  title: 'Your ID is being checked',
-                  message: 'Top-ups open once staff have approved it. They review each ID by hand.',
-                ),
-              };
-            }
+            // the national ID is checked before the first withdrawal (ADR 0022), not before a top-up
             return ValueListenableBuilder<SettlementState<TopUp>>(
               valueListenable: m.flow.state,
               builder: (context, s, _) {

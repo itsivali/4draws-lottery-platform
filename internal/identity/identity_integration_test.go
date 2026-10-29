@@ -276,7 +276,7 @@ func TestSSO_SubjectCannotBeLinkedToTwoAccountsAndBadTokensAreRefused(t *testing
 	}
 }
 
-func TestEligibility_TopUpNeedsAVerifiedIDAndPlayAlsoNeedsAProvedPhone(t *testing.T) {
+func TestEligibility_PlayNeedsAProvedPhoneAndOnlyAPayoutNeedsAVerifiedID(t *testing.T) {
 	e := setup(t)
 	ctx := context.Background()
 	m := e.newMSISDN()
@@ -295,26 +295,33 @@ func TestEligibility_TopUpNeedsAVerifiedIDAndPlayAlsoNeedsAProvedPhone(t *testin
 	play := func() error {
 		return pgx.BeginFunc(ctx, e.pool, func(tx pgx.Tx) error { return e.svc.AssertCanPlay(ctx, tx, p.UserID) })
 	}
+	paid := func() error {
+		return pgx.BeginFunc(ctx, e.pool, func(tx pgx.Tx) error { _, err := e.svc.AssertCanBePaid(ctx, tx, p.UserID); return err })
+	}
+	// identity is checked at the first withdrawal (ADR 0022), not before money comes in or a play
 	for _, st := range []string{"none", "pending", "manual_review", "rejected"} {
 		if _, err := e.pool.Exec(ctx, `UPDATE identity.users SET kyc_status = $1 WHERE id = $2`, st, p.UserID); err != nil {
 			t.Fatal(err)
 		}
-		if err := topUp(); !errors.Is(err, identity.ErrKYCRequired) {
-			t.Errorf("kyc %s: top-up err = %v, want ErrKYCRequired", st, err)
+		if err := topUp(); err != nil {
+			t.Errorf("kyc %s: top-up err = %v, want none", st, err)
 		}
-	}
-	if _, err := e.pool.Exec(ctx, `UPDATE identity.users SET kyc_status='verified', national_id_hash='\x02' WHERE id = $1`, p.UserID); err != nil {
-		t.Fatal(err)
-	}
-	if err := topUp(); err != nil {
-		t.Fatalf("a KYC-verified account must be able to start the top-up that proves its phone: %v", err)
 	}
 	if err := play(); !errors.Is(err, identity.ErrPhoneNotVerified) {
 		t.Fatalf("play before the phone is proved: %v, want ErrPhoneNotVerified", err)
 	}
 	e.verifyPhone(t, p.UserID, m)
 	if err := play(); err != nil {
-		t.Fatalf("play after the phone is proved: %v", err)
+		t.Fatalf("play after the phone is proved, before the ID is verified: %v", err)
+	}
+	if err := paid(); !errors.Is(err, identity.ErrKYCRequired) {
+		t.Fatalf("payout before the ID is verified: %v, want ErrKYCRequired", err)
+	}
+	if _, err := e.pool.Exec(ctx, `UPDATE identity.users SET kyc_status='verified', national_id_hash='\x02' WHERE id = $1`, p.UserID); err != nil {
+		t.Fatal(err)
+	}
+	if err := paid(); err != nil {
+		t.Fatalf("payout after the ID is verified: %v", err)
 	}
 	for _, st := range []string{"suspended", "closed"} {
 		if _, err := e.pool.Exec(ctx, `UPDATE identity.users SET status = $1 WHERE id = $2`, st, p.UserID); err != nil {

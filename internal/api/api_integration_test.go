@@ -715,9 +715,6 @@ func TestAPI_TopUpStartsAPushAndOnlyItsOwnerCanSeeIt(t *testing.T) {
 func TestAPI_TopUpErrorMapping(t *testing.T) {
 	e := setup(t)
 	s := e.signIn(t)
-	if r := e.do(t, http.MethodPost, "/v1/payments/topups", s.access, map[string]any{"amount_kes": 100}); r.Code != http.StatusForbidden || !strings.HasSuffix(r.Body["type"].(string), "kyc-required") {
-		t.Fatalf("unverified: %d %s", r.Code, r.Raw)
-	}
 	e.verified(t, s)
 	for _, body := range []any{map[string]any{"amount_kes": 1}, map[string]any{"amount_kes": 250001}, `{"amount_kes":"100"}`, `{"amount_kes":100,"msisdn":"254700000000"}`} {
 		if r := e.do(t, http.MethodPost, "/v1/payments/topups", s.access, body); r.Code != http.StatusBadRequest {

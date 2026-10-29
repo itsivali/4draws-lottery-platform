@@ -58,7 +58,7 @@ export function KycPage() {
               onClick={() => {
                 ask({
                   title: `Approve ${s.full_name}?`,
-                  body: <p>The player becomes verified and can top up and play.</p>,
+                  body: <p>The player becomes verified and can withdraw and be paid prizes.</p>,
                   fields: [{ name: 'reason', label: 'What you checked', required: true, help: 'e.g. ID card seen, details match' }],
                   confirmLabel: 'Approve',
                   success: `${s.full_name} is verified.`,
@@ -77,7 +77,7 @@ export function KycPage() {
               onClick={() => {
                 ask({
                   title: `Reject ${s.full_name}?`,
-                  body: <p>The player cannot top up or play with this ID.</p>,
+                  body: <p>The player cannot withdraw or be paid with this ID; they may still play.</p>,
                   fields: [{ name: 'reason', label: 'Why', required: true }],
                   confirmLabel: 'Reject',
                   danger: true,

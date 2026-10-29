@@ -12,7 +12,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/itsivali/lottery-platform/internal/identity"
 	"github.com/itsivali/lottery-platform/internal/payments"
 	"github.com/itsivali/lottery-platform/internal/payments/darajamock"
 	"github.com/itsivali/lottery-platform/internal/rg"
@@ -135,10 +134,6 @@ func TestC2B_PaymentsThatCannotBeCreditedGoToSuspense(t *testing.T) {
 	if _, err := e.rg.SetLimit(ctx, limited, rg.Daily, 100); err != nil {
 		t.Fatal(err)
 	}
-	unverified, uMSISDN := e.provedPlayer(t)
-	if _, err := e.pool.Exec(ctx, `UPDATE identity.users SET kyc_status = 'pending' WHERE id = $1`, unverified); err != nil {
-		t.Fatal(err)
-	}
 	for _, tc := range []struct {
 		account string
 		amount  int64
@@ -148,7 +143,6 @@ func TestC2B_PaymentsThatCannotBeCreditedGoToSuspense(t *testing.T) {
 		{"not a phone", 100, "unknown_account"},
 		{rMSISDN, 100, "restricted"},
 		{lMSISDN, 150, "over_deposit_limit"},
-		{uMSISDN, 100, "kyc_required"},
 		{lMSISDN, payments.DefaultMinTopUpKES - 1, "bad_amount"},
 	} {
 		receipt := e.payBill(t, tc.amount, tc.account)
@@ -159,13 +153,13 @@ func TestC2B_PaymentsThatCannotBeCreditedGoToSuspense(t *testing.T) {
 			t.Errorf("%s: suspense = %+v", tc.account, s)
 		}
 	}
-	for _, u := range []string{restricted, limited, unverified} {
+	for _, u := range []string{restricted, limited} {
 		if b := e.balance(t, u); b != 0 {
 			t.Errorf("player %s credited %d", u, b)
 		}
 	}
 	r := e.reconcile(t)
-	if !r.OK || r.Totals["suspense_kes"] != 100+100+100+150+100+payments.DefaultMinTopUpKES-1 || len(r.Attention["suspense_open"]) != 6 {
+	if !r.OK || r.Totals["suspense_kes"] != 100+100+100+150+payments.DefaultMinTopUpKES-1 || len(r.Attention["suspense_open"]) != 5 {
 		t.Fatalf("reconciliation = %+v", r)
 	}
 }
@@ -490,12 +484,6 @@ func TestResolveSuspense_RefusesPlayersWhoMayNotReceiveIt(t *testing.T) {
 		t.Fatalf("self-excluded: %v", err)
 	}
 	noKYC, _ := e.player(t)
-	if _, err := e.pool.Exec(ctx, `UPDATE identity.users SET kyc_status = 'pending' WHERE id = $1`, noKYC); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := e.svc.ResolveSuspense(ctx, receipt, noKYC, "operator:test"); !errors.Is(err, identity.ErrKYCRequired) {
-		t.Fatalf("no kyc: %v", err)
-	}
 	if _, err := e.svc.ResolveSuspense(ctx, "NOSUCH0001", noKYC, "operator:test"); !errors.Is(err, payments.ErrNotInSuspense) {
 		t.Fatalf("unknown receipt: %v", err)
 	}

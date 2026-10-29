@@ -43,10 +43,6 @@ void main() {
       block(a: account(restriction: {'kind': 'self_exclusion', 'until': null}))!.reason,
       PlayBlockReason.selfExcluded,
     );
-    expect(block(a: account(kyc: 'none'))!.reason, PlayBlockReason.kycNeeded);
-    expect(block(a: account(kyc: 'pending'))!.reason, PlayBlockReason.kycInReview);
-    expect(block(a: account(kyc: 'manual_review'))!.reason, PlayBlockReason.kycInReview);
-    expect(block(a: account(kyc: 'rejected'))!.reason, PlayBlockReason.kycRejected);
     expect(block(a: account(phone: false))!.reason, PlayBlockReason.phoneNotProved);
     expect(block(w: wallet(debt: 30))!.reason, PlayBlockReason.inDebt);
     expect(block(t: today(plays: 4))!.reason, PlayBlockReason.dailyLimit);

@@ -36,24 +36,6 @@ import '../domain/play_models.dart';
     action: null,
     route: null,
   ),
-  PlayBlockReason.kycNeeded => (
-    title: 'Verify your identity to play',
-    body: 'We check your national ID (and that you are 18 or older) before your first play.',
-    action: 'Verify my ID',
-    route: '/account/verify',
-  ),
-  PlayBlockReason.kycInReview => (
-    title: 'Your ID is being checked',
-    body: 'Staff review each ID by hand. You can play once it is approved.',
-    action: null,
-    route: null,
-  ),
-  PlayBlockReason.kycRejected => (
-    title: 'Your ID could not be verified',
-    body: 'Play is not available. Please contact support if you think this is a mistake.',
-    action: null,
-    route: null,
-  ),
   PlayBlockReason.phoneNotProved => (
     title: 'Confirm your number with a first top-up',
     body: 'Approving the M-Pesa prompt of your first top-up proves the number is yours.',

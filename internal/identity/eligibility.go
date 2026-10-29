@@ -31,10 +31,11 @@ func activeUser(u store.GetUserRow, err error) (store.GetUserRow, error) {
 	return u, nil
 }
 
-// AssertCanTopUp refuses accounts that may not start a top-up: suspended or closed accounts and anyone whose national
-// ID is not verified (which also keeps under-18s out, since they can never be verified). The phone need not be proved
-// yet: the first top-up is what proves it. It returns the number the account claims, which is where the payment
-// prompt must go (never a number the client supplies). Called inside the same transaction as the top-up (invariant 12).
+// AssertCanTopUp refuses accounts that may not start a top-up: suspended or closed ones. The phone need not be proved
+// yet (the first top-up is what proves it) and the national ID need not be verified: since ADR 0022 identity is
+// checked before the first withdrawal, not before money comes in. It returns the number the account claims, which is
+// where the payment prompt must go (never a number the client supplies). Called inside the same transaction as the
+// top-up (invariant 12).
 func (s *Service) AssertCanTopUp(ctx context.Context, tx pgx.Tx, userID string) (string, error) {
 	return canTopUp(s.loadActive(ctx, tx, userID))
 }
@@ -48,9 +49,6 @@ func (s *Service) CanTopUp(ctx context.Context, tx pgx.Tx, userID string) (strin
 func canTopUp(u store.GetUserRow, err error) (string, error) {
 	if err != nil {
 		return "", err
-	}
-	if u.KycStatus != "verified" {
-		return "", ErrKYCRequired
 	}
 	return u.Msisdn, nil
 }
@@ -66,15 +64,12 @@ func (s *Service) ProvedPhoneOwner(ctx context.Context, tx pgx.Tx, msisdn string
 	return u.ID, err
 }
 
-// AssertCanPlay is AssertCanTopUp plus a proved phone number, which is what pays out and receives alerts. Called inside
-// the same transaction as the debit.
+// AssertCanPlay is AssertCanTopUp plus a proved phone number, which is what pays out and receives alerts. The national
+// ID is checked at the first withdrawal (ADR 0022), not here. Called inside the same transaction as the debit.
 func (s *Service) AssertCanPlay(ctx context.Context, tx pgx.Tx, userID string) error {
 	u, err := s.loadActive(ctx, tx, userID)
 	if err != nil {
 		return err
-	}
-	if u.KycStatus != "verified" {
-		return ErrKYCRequired
 	}
 	if !u.PhoneVerified {
 		return ErrPhoneNotVerified
@@ -105,8 +100,9 @@ func (s *Service) AssertDeviceTrusted(ctx context.Context, tx pgx.Tx, sessionID 
 }
 
 // AssertCanBePaid refuses accounts that may not receive a payout: suspended or closed accounts, an unverified national
-// ID, or a phone not yet proved. It returns the proved number, the only one money is sent to (ADR 0005). Called inside
-// the same transaction that records the payout.
+// ID (the one place identity is checked, ADR 0022; it also keeps under-18s from ever being paid), or a phone not yet
+// proved. It returns the proved number, the only one money is sent to (ADR 0005). Called inside the same transaction
+// that records the payout.
 func (s *Service) AssertCanBePaid(ctx context.Context, tx pgx.Tx, userID string) (string, error) {
 	u, err := s.loadActive(ctx, tx, userID)
 	if err != nil {

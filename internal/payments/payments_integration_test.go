@@ -311,7 +311,7 @@ func TestTopUp_IsRefusedUpFrontWhenTheAccountOrAmountDoesNotQualify(t *testing.T
 	if _, err := e.pool.Exec(ctx, `UPDATE identity.users SET kyc_status = 'pending', national_id_hash = NULL WHERE id = $1`, unverified); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := e.svc.StartTopUp(ctx, unverified, 100, "k1"); !errors.Is(err, identity.ErrKYCRequired) {
+	if _, err := e.svc.StartTopUp(ctx, unverified, 100, "k1"); err != nil { // identity is checked at withdrawal (ADR 0022)
 		t.Errorf("unverified: err = %v", err)
 	}
 
@@ -335,8 +335,8 @@ func TestTopUp_IsRefusedUpFrontWhenTheAccountOrAmountDoesNotQualify(t *testing.T
 		t.Errorf("over the limit: err = %v %+v", err, le)
 	}
 
-	if n := len(e.q.take()); n != 1 {
-		t.Fatalf("%d jobs enqueued, want only the one accepted top-up's", n)
+	if n := len(e.q.take()); n != 2 {
+		t.Fatalf("%d jobs enqueued, want only the two accepted top-ups' (the unverified player's and the limited one's)", n)
 	}
 }
 
