@@ -28,9 +28,12 @@ func Open(ctx context.Context, dsn string) (*pgxpool.Pool, error) {
 // RiverSchema is the schema holding River's job tables.
 const RiverSchema = "river"
 
-// MigrateUp applies all pending migrations: goose first (which creates the river schema), then River's own.
+// MigrateUp applies all pending migrations: goose first (which creates the river schema), then River's own. A
+// migration numbered below one already applied is applied too (WithAllowMissing): two branches merged out of
+// number order deploy one after the other, and on 2026-10-29 the api would not start because 00036 (merged first)
+// was live when 00035 arrived. Migrations are written to be independent of each other's order within a release.
 func MigrateUp(ctx context.Context, dsn string) error {
-	if err := withGoose(dsn, func(sdb *sql.DB) error { return goose.UpContext(ctx, sdb, ".") }); err != nil {
+	if err := withGoose(dsn, func(sdb *sql.DB) error { return goose.UpContext(ctx, sdb, ".", goose.WithAllowMissing()) }); err != nil {
 		return err
 	}
 	if err := migrateRiver(ctx, dsn, rivermigrate.DirectionUp); err != nil {
