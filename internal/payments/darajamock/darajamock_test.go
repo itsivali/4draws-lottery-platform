@@ -71,7 +71,7 @@ func setupTill(t *testing.T, till string) env {
 
 func push(t *testing.T, e env, amount int64) daraja.STKPushResult {
 	t.Helper()
-	res, err := e.client.STKPush(context.Background(), daraja.STKPushRequest{MSISDN: "254712345678", AmountKES: amount, AccountRef: "TOPUP"})
+	res, err := e.client.STKPush(context.Background(), daraja.STKPushRequest{MSISDN: "254712345678", AmountKES: amount, AccountRef: "Tajirika"})
 	if err != nil {
 		t.Fatal(err)
 	}

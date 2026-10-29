@@ -298,7 +298,7 @@ func (s *Service) Push(ctx context.Context, paymentID string) error {
 	if p.Status != "initiated" || p.Msisdn == nil {
 		return nil
 	}
-	res, pushErr := s.daraja.STKPush(ctx, daraja.STKPushRequest{MSISDN: *p.Msisdn, AmountKES: p.AmountRequestedKes, AccountRef: "TOPUP", Description: "Wallet top-up"})
+	res, pushErr := s.daraja.STKPush(ctx, daraja.STKPushRequest{MSISDN: *p.Msisdn, AmountKES: p.AmountRequestedKes, AccountRef: "Tajirika", Description: "Tajirika"})
 	return pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		now, err := s.clk.Now(ctx, tx)
 		if err != nil {
