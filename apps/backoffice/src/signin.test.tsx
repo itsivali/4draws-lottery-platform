@@ -49,6 +49,10 @@ describe('sign in', () => {
         ? { status: 201, body: session }
         : { status: 401, body: { type: 'https://lottery.example/problems/invalid-credentials', title: 'Wrong email address or password', status: 401 } }
     })
+    const store = vi.fn(() => Promise.resolve())
+    class PasswordCredential { constructor(public init: { id: string; password: string; name?: string }) {} }
+    Object.assign(window, { PasswordCredential })
+    Object.defineProperty(navigator, 'credentials', { value: { store }, configurable: true })
     const user = userEvent.setup()
     expect(screen.getByRole('button', { name: 'Sign in' })).toBeDisabled()
     await user.type(screen.getByLabelText('Email address'), ' Owner@Example.com ')
@@ -61,6 +65,9 @@ describe('sign in', () => {
     await user.click(screen.getByRole('button', { name: 'Sign in' }))
     expect(onSignedIn).toHaveBeenCalledWith(session)
     expect(attempts).toBe(2)
+    // the browser's password manager is offered the credential once the server accepted it (not after the refusal)
+    expect(store).toHaveBeenCalledTimes(1)
+    expect((store.mock.calls[0] as unknown as [PasswordCredential])[0].init).toEqual({ id: 'Owner@Example.com', password: 'the right one here', name: 'Owner' })
     const [, init] = fetch.mock.calls[1] ?? []
     expect(JSON.parse(init?.body as string)).toEqual({ provider: 'password', email: 'Owner@Example.com', password: 'the right one here' })
   })

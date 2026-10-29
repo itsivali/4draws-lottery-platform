@@ -2,6 +2,7 @@ import { CircleCheck, CircleX } from 'lucide-react'
 import { useId, useState } from 'react'
 import { ProblemError, UncertainError } from '../api'
 import { useSession } from '../context'
+import { rememberCredential } from '../credentials'
 import { characters, MIN_PASSWORD } from './ui'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -14,7 +15,7 @@ import { Label } from '@/components/ui/label'
  * account menu, and as the only thing a member with a temporary password can do.
  */
 export function PasswordForm({ onDone, forced = false }: { onDone: () => void; forced?: boolean }) {
-  const { api } = useSession()
+  const { api, me } = useSession()
   const id = useId()
   const [current, setCurrent] = useState('')
   const [next, setNext] = useState('')
@@ -34,7 +35,7 @@ export function PasswordForm({ onDone, forced = false }: { onDone: () => void; f
         setBusy(true)
         setProblem(null)
         api.put('/v1/staff/password', { current_password: current, new_password: next }).then(
-          () => { setDone(true); setBusy(false); onDone() },
+          () => { rememberCredential(me.email, next, me.name || undefined); setDone(true); setBusy(false); onDone() },
           (err: unknown) => {
             setBusy(false)
             if (err instanceof ProblemError) setProblem({ title: err.title, detail: err.detail })
@@ -46,11 +47,11 @@ export function PasswordForm({ onDone, forced = false }: { onDone: () => void; f
     >
       <div className="grid gap-1.5">
         <Label htmlFor={`${id}-current`}>{forced ? 'Temporary password' : 'Current password'}</Label>
-        <Input id={`${id}-current`} type="password" autoComplete="current-password" value={current} onChange={(e) => { setCurrent(e.target.value) }} />
+        <Input id={`${id}-current`} name="current-password" type="password" autoComplete="current-password" value={current} onChange={(e) => { setCurrent(e.target.value) }} />
       </div>
       <div className="grid gap-1.5">
         <Label htmlFor={`${id}-new`}>New password</Label>
-        <Input id={`${id}-new`} type="password" autoComplete="new-password" required aria-invalid={short || undefined} aria-describedby={`${id}-help`} value={next} onChange={(e) => { setNext(e.target.value) }} />
+        <Input id={`${id}-new`} name="new-password" type="password" autoComplete="new-password" required aria-invalid={short || undefined} aria-describedby={`${id}-help`} value={next} onChange={(e) => { setNext(e.target.value) }} />
         <p id={`${id}-help`} className={short ? 'text-xs text-destructive' : 'text-xs text-muted-foreground'}>
           At least {MIN_PASSWORD} characters. A short sentence you will remember works best; not your email address, nothing common.
         </p>

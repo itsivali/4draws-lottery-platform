@@ -61,6 +61,8 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
               password: _password.text,
               idempotencyKey: newIdempotencyKey(),
             );
+      // the browser's or phone's password manager offers to save what was just typed
+      TextInput.finishAutofillContext();
       await ref.read(sessionManagerProvider).signedIn(tokens);
     } on ApiFailure catch (f) {
       if (!mounted) return;

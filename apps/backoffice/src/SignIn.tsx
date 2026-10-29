@@ -2,6 +2,7 @@ import { CircleX, KeyRound, ShieldCheck } from 'lucide-react'
 import { useEffect, useId, useRef, useState } from 'react'
 import { ProblemError, type ApiClient } from './api'
 import { BrandGlyph } from './components/BrandGlyph'
+import { rememberCredential } from './credentials'
 import type { Config } from './config'
 import { cancelled, renderGoogle, signInWithApple, signInWithDevRealm, type IDToken } from './providers'
 import type { Me } from './types'
@@ -55,7 +56,9 @@ export function SignIn({ config, api, onSignedIn, providers = realProviders, not
         return
       }
       try {
-        onSignedIn(await api.post<StaffSession>('/v1/staff/session', { provider, ...b }))
+        const s = await api.post<StaffSession>('/v1/staff/session', { provider, ...b })
+        if (provider === 'password') rememberCredential(b.email ?? '', b.password ?? '', s.member.name || undefined)
+        onSignedIn(s)
       } catch (e) {
         setProblem(e instanceof ProblemError ? { title: e.title, detail: e.detail } : { title: 'The server could not be reached. Try again.' })
       }
@@ -110,11 +113,11 @@ export function SignIn({ config, api, onSignedIn, providers = realProviders, not
           >
             <div className="grid gap-1.5">
               <Label htmlFor={`${id}-email`}>Email address</Label>
-              <Input id={`${id}-email`} type="email" inputMode="email" autoComplete="username" required value={email} onChange={(e) => { setEmail(e.target.value) }} />
+              <Input id={`${id}-email`} name="username" type="email" inputMode="email" autoComplete="username" required value={email} onChange={(e) => { setEmail(e.target.value) }} />
             </div>
             <div className="grid gap-1.5">
               <Label htmlFor={`${id}-password`}>Password</Label>
-              <Input id={`${id}-password`} type="password" autoComplete="current-password" required value={password} onChange={(e) => { setPassword(e.target.value) }} />
+              <Input id={`${id}-password`} name="password" type="password" autoComplete="current-password" required value={password} onChange={(e) => { setPassword(e.target.value) }} />
               <p className="text-xs text-muted-foreground">Forgotten it? An administrator can give you a temporary one.</p>
             </div>
             <Button type="submit" size="lg" className="h-11 w-full" disabled={busy || !email.trim() || !password}>

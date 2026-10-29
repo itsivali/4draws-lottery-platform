@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -43,6 +44,7 @@ class _PasswordScreenState extends ConsumerState<PasswordScreen> {
       await ref
           .read(accountRepositoryProvider)
           .changePassword(current: _current.text, next: _next.text, idempotencyKey: newIdempotencyKey());
+      TextInput.finishAutofillContext(); // the password manager offers to update the saved password
       if (!mounted) return;
       ScaffoldMessenger.of(context)
           .showSnackBar(const SnackBar(content: Text('Password changed. Other devices are signed out.')));
