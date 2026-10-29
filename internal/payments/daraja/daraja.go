@@ -28,7 +28,9 @@ import (
 
 // Errors returned by the client.
 var (
-	ErrUnavailable    = errors.New("daraja: unavailable")
+	ErrUnavailable = errors.New("daraja: unavailable")
+	// ErrThrottled is an ErrUnavailable of the rate-limiting kind (HTTP 429): asking again soon only prolongs it.
+	ErrThrottled      = fmt.Errorf("%w: throttled", ErrUnavailable)
 	ErrRejected       = errors.New("daraja: rejected")
 	ErrInvalidRequest = errors.New("daraja: invalid request")
 	ErrBadCallback    = errors.New("daraja: malformed callback")
@@ -233,7 +235,10 @@ func (c *Client) classify(path string, status int, raw []byte) error {
 		code = "none"
 	}
 	msg := c.safeMessage(e.ErrorMessage)
-	if status >= 400 && status < 500 && status != http.StatusTooManyRequests {
+	if status == http.StatusTooManyRequests {
+		return fmt.Errorf("%w: %s status %d code %s %q", ErrThrottled, path, status, code, msg)
+	}
+	if status >= 400 && status < 500 {
 		return fmt.Errorf("%w: %s status %d code %s %q", ErrRejected, path, status, code, msg)
 	}
 	return fmt.Errorf("%w: %s status %d code %s %q", ErrUnavailable, path, status, code, msg)

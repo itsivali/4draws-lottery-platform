@@ -136,7 +136,9 @@ class _TopUpScreenState extends ConsumerState<TopUpScreen> {
                         AppCard(
                           child: SettlementStatusView<TopUp>(
                             flow: m.flow,
-                            pendingText: 'Approve the M-Pesa prompt on your phone.',
+                            pendingText:
+                                'Approve the M-Pesa prompt on your phone. M-Pesa then confirms it, usually within a '
+                                'minute; if it takes longer we keep checking for up to 15 minutes.',
                             describe: (x) => switch (x.status) {
                               TopUpStatus.credited => (
                                 StatusTone.success,
@@ -153,7 +155,7 @@ class _TopUpScreenState extends ConsumerState<TopUpScreen> {
                                 'Reversed',
                                 'M-Pesa took this payment back.',
                               ),
-                              TopUpStatus.pending => (StatusTone.pending, 'Pending', ''),
+                              TopUpStatus.pending => (StatusTone.pending, 'Waiting for M-Pesa', ''),
                             },
                             onDone: () {
                               m.flow.reset();

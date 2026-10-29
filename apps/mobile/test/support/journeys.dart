@@ -54,7 +54,7 @@ Future<void> playJourney(WidgetTester t, {Size? size}) async {
   await t.tap(find.widgetWithText(FilledButton, 'Continue'));
   await t.pumpAndSettle();
   await t.tap(find.widgetWithText(FilledButton, 'Send M-Pesa prompt'));
-  await pumpUntilFound(t, find.text('Approve the M-Pesa prompt on your phone.'));
+  await pumpUntilFound(t, find.textContaining('Approve the M-Pesa prompt on your phone.'));
   expect(backend.balance, 100);
   await pumpUntilFound(t, find.text('Credited'), step: const Duration(milliseconds: 500));
 }

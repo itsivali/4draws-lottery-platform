@@ -331,3 +331,24 @@ func TestSTKQuery_AResultCodeOutsideTheInt32RangeIsAnOutageNotAnOutcome(t *testi
 		t.Fatalf("err = %v", err)
 	}
 }
+
+func TestSTKQuery_ThrottlingIsAnOutageOfItsOwnKind(t *testing.T) {
+	status := func(code int) *fakeDaraja {
+		return &fakeDaraja{query: func(w http.ResponseWriter, _ map[string]any) {
+			w.WriteHeader(code)
+			_, _ = w.Write([]byte(`{"errorCode":"500.003.1001","errorMessage":"Spike arrest violation"}`))
+		}}
+	}
+	c, _ := newClient(t, status(http.StatusTooManyRequests))
+	if _, err := c.STKQuery(context.Background(), "ws_CO_1"); !errors.Is(err, daraja.ErrThrottled) || !errors.Is(err, daraja.ErrUnavailable) || errors.Is(err, daraja.ErrRejected) {
+		t.Fatalf("429: err = %v, want throttled (an outage), not a rejection", err)
+	}
+	c, _ = newClient(t, status(http.StatusBadRequest))
+	if _, err := c.STKQuery(context.Background(), "ws_CO_1"); !errors.Is(err, daraja.ErrRejected) || errors.Is(err, daraja.ErrThrottled) {
+		t.Fatalf("400: err = %v, want a rejection", err)
+	}
+	c, _ = newClient(t, status(http.StatusServiceUnavailable))
+	if _, err := c.STKQuery(context.Background(), "ws_CO_1"); !errors.Is(err, daraja.ErrUnavailable) || errors.Is(err, daraja.ErrThrottled) {
+		t.Fatalf("503: err = %v, want a plain outage", err)
+	}
+}

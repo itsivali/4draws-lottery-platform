@@ -327,10 +327,13 @@ func (s *Service) HandleCallback(ctx context.Context, raw []byte) error {
 	if err != nil {
 		return err
 	}
+	// the one trace that M-Pesa answered at all (the amount and receipt stay in the stored callback)
+	slog.InfoContext(ctx, "stk callback received", "checkout", cb.CheckoutRequestID, "result_code", cb.ResultCode)
 	return pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		q := store.New(tx)
 		p, err := q.LockPaymentByCheckout(ctx, &cb.CheckoutRequestID)
 		if errors.Is(err, pgx.ErrNoRows) {
+			slog.WarnContext(ctx, "stk callback for no payment of ours; kept as an orphan", "checkout", cb.CheckoutRequestID)
 			return q.InsertOrphanCallback(ctx, store.InsertOrphanCallbackParams{CheckoutRequestID: cb.CheckoutRequestID, RawPayload: raw})
 		}
 		if err != nil {
@@ -396,8 +399,13 @@ func (s *Service) Verify(ctx context.Context, paymentID string) (time.Duration, 
 		}
 		return 0, s.settleTx(ctx, paymentID, "unconfirmed", "query_rejected", nil)
 	case err != nil && !expired:
-		slog.WarnContext(ctx, "stk status query failed; asking again later", "payment", paymentID, "err", err, "in", s.cfg.VerifyAfter)
-		return s.cfg.VerifyAfter, nil
+		// Daraja throttles status queries (429, routinely in the sandbox): asking again at once only prolongs it
+		wait := s.cfg.VerifyAfter
+		if errors.Is(err, daraja.ErrThrottled) {
+			wait *= 2
+		}
+		slog.WarnContext(ctx, "stk status query failed; asking again later", "payment", paymentID, "err", err, "in", wait)
+		return wait, nil
 	case err != nil:
 		return 0, err
 	}

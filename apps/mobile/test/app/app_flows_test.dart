@@ -146,7 +146,7 @@ void main() {
     await t.tap(find.widgetWithText(FilledButton, 'Send M-Pesa prompt'));
     await t.pump();
     await t.pump();
-    expect(find.text('Approve the M-Pesa prompt on your phone.'), findsOneWidget);
+    expect(find.textContaining('Approve the M-Pesa prompt on your phone.'), findsOneWidget);
     expect(backend.balance, 0, reason: 'nothing is credited before confirmation');
     expect(h.haptics.events, isNot(contains(HapticEvent.confirmed)));
     await pumpUntilFound(t, find.text('Credited'), step: const Duration(milliseconds: 500));

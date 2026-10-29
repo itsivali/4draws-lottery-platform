@@ -727,9 +727,10 @@ func TestVerify_DoesNotAskBeforeTheCustomerCouldHaveAnsweredUnlessACallbackCame(
 	if d, err := e.svc.Verify(context.Background(), tu.ID); err != nil || d != payments.DefaultVerifyAfter-30*time.Second {
 		t.Fatalf("early verify: wait %v err %v", d, err)
 	}
+	// Daraja throttles the query (429): asking again at once only prolongs it, so the wait doubles (2026-10-30)
 	e.clk.Advance(payments.DefaultVerifyAfter)
-	if d, err := e.svc.Verify(context.Background(), tu.ID); err != nil || d != payments.DefaultVerifyAfter {
-		t.Fatalf("throttled: wait %v err %v, want to ask again after the usual interval", d, err)
+	if d, err := e.svc.Verify(context.Background(), tu.ID); err != nil || d != 2*payments.DefaultVerifyAfter {
+		t.Fatalf("throttled: wait %v err %v, want twice the usual interval", d, err)
 	}
 }
 
