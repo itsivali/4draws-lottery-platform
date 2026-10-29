@@ -62,8 +62,8 @@ services:
       # is off. There is no SMS gateway: phone ownership is proved by the first M-Pesa top-up.
       - key: GOOGLE_CLIENT_ID
         sync: false
-      # Browser origins (comma-separated, exact, https): the lottery-web and lottery-backoffice static sites' addresses
-      # (shown in their dashboards once created), and later the Cloudflare domains. The phone apps need no entry.
+      # Browser origins (comma-separated, exact, https): https://tajirika.co.ke and https://backoffice.tajirika.co.ke, plus
+      # the static sites' onrender.com addresses, which keep working. The phone apps need no entry.
       - key: CORS_ALLOWED_ORIGINS
         sync: false
       # Back-office sign-in (ADR 0019): staff sign in with email and password; the bootstrap admin is made an admin
@@ -83,9 +83,12 @@ services:
 
       # M-Pesa (Daraja). Sandbox only until the owner decides otherwise: the production host is refused unless
       # DARAJA_ALLOW_PRODUCTION=true. Credentials are entered in the dashboard; all four unset means top-ups are
-      # refused. The callback URL is RENDER_EXTERNAL_URL + /hooks/mpesa/stk/ + sha256(DARAJA_CALLBACK_TOKEN).
+      # refused. The callback URL is PUBLIC_BASE_URL + /hooks/mpesa/stk/ + sha256(DARAJA_CALLBACK_TOKEN). Paybill (C2B)
+      # URLs are registered once with `lotteryctl payments c2b-register`; ones registered on the onrender.com address keep working.
       - key: DARAJA_BASE_URL
         value: https://sandbox.safaricom.co.ke
+      - key: PUBLIC_BASE_URL
+        value: https://api.tajirika.co.ke
       # Smallest top-up, whole KES (default 10). KES 1 while the owner tests the apps with M-Pesa (owner, 2026-10-26);
       # the apps read it from GET /v1/wallet, so raising it needs no store release. Plays cost KES 1 from 2026-10-26
       # (migration 00028) until a launch price version is added.
@@ -132,7 +135,7 @@ services:
       - key: KYC_REVIEW_NOTIFY_TO
         value: itsivali@outlook.com
       - key: BACKOFFICE_URL
-        value: https://lottery-backoffice.onrender.com
+        value: https://backoffice.tajirika.co.ke
       - key: SMTP_HOST
         sync: false
       - key: SMTP_PORT
@@ -144,7 +147,8 @@ services:
       - key: SMTP_FROM
         sync: false
 
-  # The player web app (Flutter web), built against the Render api until the Cloudflare domain is set up. Free static
+  # The player web app (Flutter web) at https://tajirika.co.ke (www redirects there), against https://api.tajirika.co.ke.
+  # Free static
   # site: Render's build image has no Flutter, so the build fetches the pinned SDK (mise.toml) the first time and reuses
   # it from the build cache afterwards (a second clone into the cached directory fails).
   - type: web
@@ -157,10 +161,10 @@ services:
     staticPublishPath: apps/mobile/build/web
     envVars:
       - key: API_BASE_URL
-        value: https://lottery-api-4u9g.onrender.com
-      # the staff back office the web app links to (its Render static site; the Cloudflare domain later)
+        value: https://api.tajirika.co.ke
+      # the staff back office the web app links to
       - key: BACKOFFICE_URL
-        value: https://lottery-backoffice.onrender.com
+        value: https://backoffice.tajirika.co.ke
     routes:
       - type: rewrite
         source: /*
@@ -170,7 +174,7 @@ services:
         name: X-Frame-Options
         value: DENY
 
-  # The staff back office (React), against the Render api until the Cloudflare domain is set up. Staff sign in with
+  # The staff back office (React) at https://backoffice.tajirika.co.ke, against https://api.tajirika.co.ke. Staff sign in with
   # Google or Apple: the same client ids as the api's STAFF_GOOGLE_CLIENT_ID / STAFF_APPLE_CLIENT_ID.
   - type: web
     name: lottery-backoffice
@@ -179,7 +183,7 @@ services:
     staticPublishPath: apps/backoffice/dist
     envVars:
       - key: VITE_API_BASE_URL
-        value: https://lottery-api-4u9g.onrender.com
+        value: https://api.tajirika.co.ke
       - key: VITE_GOOGLE_CLIENT_ID
         sync: false
       - key: VITE_APPLE_CLIENT_ID

@@ -28,6 +28,11 @@ Read this first at the start of every session.
   free, Oregon) builds from `main` (repository reconnected by the owner on 2026-10-24); migrations at version 17;
   sandbox top-ups and paybill on (`payments=true paybill=true`, shortcode 600992); client address from
   `CF-Connecting-IP`. Free Postgres `lottery-db` (PG 18) and Key Value `lottery-cache`.
+- **Domain and plans (2026-10-29):** the product is **Tajirika** and lives at `tajirika.co.ke` (registered with
+  Safaricom, DNS there): https://tajirika.co.ke (web app; www redirects), https://api.tajirika.co.ke and
+  https://backoffice.tajirika.co.ke, with Render certificates; the onrender.com addresses keep working. `lottery-api`
+  runs on the paid `0.5c-512mb` plan and `lottery-db` on `0.1c-256mb` (recreated empty on 2026-10-28); the free-database
+  rotation is off.
 - **Keys:** `DATA_KEY` and `IDENTITY_KEY` were handed to the owner for the password manager; save `AUTH_KEY` too.
 
 ## Before the API is exposed to players
@@ -61,7 +66,7 @@ Read this first at the start of every session.
 - **Look (owner, 2026-10-28):** colourful, premium and light only, on a white background, in the player apps and the
   back office: the "Sunset" palette (coral primary, violet accents, gold decorative; `design-system/lottery-platform/
   MASTER.md` v2.1). Dark mode is gone. The web app links to the back office (`BACKOFFICE_URL` dart-define; Render
-  `lottery-web` points at `https://lottery-backoffice.onrender.com`, to confirm once the back office site exists).
+  `lottery-web` points at `https://backoffice.tajirika.co.ke`).
 - **Staff (owner, 2026-10-28, ADR 0019; was ADR 0018):** two roles, `admin` (everything, staff management, app
   metrics) and `staff` (every operational queue and the finance dashboard). Staff sign in with email and password
   (temporary ones set by admins, changed at the first sign-in); Google and Apple are optional. itsivali@gmail.com is
@@ -75,8 +80,7 @@ Read this first at the start of every session.
 - **Testing with real M-Pesa (owner, 2026-10-26):** top-ups from KES 1 (`TOP_UP_MIN_KES=1` on Render and in compose;
   the apps read the top-up and withdrawal bounds from `GET /v1/wallet`) and plays at KES 1 from 2026-10-26 (migration 00028). Before launch:
   set `TOP_UP_MIN_KES` and add an odds/price version with the launch price from the launch date. The apps point at
-  `https://lottery-api-4u9g.onrender.com` (repo variable `MOBILE_API_BASE_URL`; Render static site `lottery-web`)
-  until the Cloudflare domain is set up.
+  `https://api.tajirika.co.ke` (repo variable `MOBILE_API_BASE_URL`; Render static site `lottery-web`).
 - **Deposit excise (owner, 2026-10-26, ADR 0016): paid by the operator**; the player is credited in full and taxed only
   on winnings (from 2026-10-22 it was deducted from the deposit). Rate version to load: `deposit_excise` 5% `half_up` effective 2025-07-01 (owner's choice, based on the Finance
   Act 2025; to be confirmed with a tax adviser before production).

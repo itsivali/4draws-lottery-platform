@@ -21,7 +21,7 @@ type Mail struct {
 	From string
 	// KYCReviewTo is who is emailed when an identity submission waits for review; empty means nobody.
 	KYCReviewTo string
-	// BackOfficeURL is the back office's origin, for the links in notices (https://lottery-backoffice.onrender.com).
+	// BackOfficeURL is the back office's origin, for the links in notices (https://backoffice.tajirika.co.ke).
 	BackOfficeURL string
 }
 

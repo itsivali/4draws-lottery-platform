@@ -170,11 +170,13 @@ sandbox cannot prompt the seeded number). Its identity submission then waits in 
 
 | Service | Address | Sign-in |
 |---|---|---|
-| `lottery-api` | https://lottery-api-4u9g.onrender.com | the API |
-| `lottery-web` | the player web app (Render static site) | players' own accounts |
-| `lottery-backoffice` | the back office (Render static site) | **itsivali@gmail.com** is the bootstrap administrator; their first password is `STAFF_BOOTSTRAP_PASSWORD` (a Render secret, changed at the first sign-in). Google and Apple sign-in work once the client ids are configured (`docs/runbooks/back-office.md`). |
+| `lottery-api` | https://api.tajirika.co.ke | the API |
+| `lottery-web` | https://tajirika.co.ke (www redirects there): the player web app | players' own accounts |
+| `lottery-backoffice` | https://backoffice.tajirika.co.ke: the back office | **itsivali@gmail.com** is the bootstrap administrator; their first password is `STAFF_BOOTSTRAP_PASSWORD` (a Render secret, changed at the first sign-in). Google and Apple sign-in work once the client ids are configured (`docs/runbooks/back-office.md`). |
 
-Deployment is described by `render.yaml` (a Blueprint). Secrets are set in the Render dashboard, never in the
+The domain `tajirika.co.ke` is registered with Safaricom, whose DNS holds the records (an A record for the bare domain,
+CNAMEs for `www`, `api` and `backoffice` to the services' onrender.com addresses, which keep working). Deployment is
+described by `render.yaml` (a Blueprint). Secrets are set in the Render dashboard, never in the
 repository; `docs/ci-secrets.md` lists what CI needs.
 
 Every identity submission emails **itsivali@outlook.com** (`KYC_REVIEW_NOTIFY_TO`) a link into the back office once
