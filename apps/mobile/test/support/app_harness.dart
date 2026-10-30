@@ -68,6 +68,7 @@ Future<AppHarness> pumpApp(
   bool reduceMotion = false,
   bool signedIn = true,
   bool hapticsOn = true,
+  String? storedRefresh, // a refresh token kept from an earlier run (signedIn: false restores it)
 }) async {
   tester.view.physicalSize = size * 2;
   tester.view.devicePixelRatio = 2;
@@ -85,7 +86,7 @@ Future<AppHarness> pumpApp(
     overrides: [
       appConfigProvider.overrideWithValue(AppConfig(apiBaseUrl: Uri.parse('https://api.test'))),
       httpClientProvider.overrideWithValue(backend.client),
-      tokenStoreProvider.overrideWithValue(MemoryTokenStore()),
+      tokenStoreProvider.overrideWithValue(MemoryTokenStore()..value = storedRefresh),
       deviceIdentityProvider.overrideWithValue(const DeviceIdentity(platform: 'android', fingerprint: 'fp-test')),
       pendingPlayStoreProvider.overrideWithValue(pending),
       providerSignInProvider.overrideWithValue(providerSignIn),

@@ -19,6 +19,7 @@ import (
 	"github.com/itsivali/lottery-platform/internal/identity"
 	"github.com/itsivali/lottery-platform/internal/kyc"
 	"github.com/itsivali/lottery-platform/internal/metrics"
+	"github.com/itsivali/lottery-platform/internal/oversight"
 	"github.com/itsivali/lottery-platform/internal/payments"
 	"github.com/itsivali/lottery-platform/internal/payouts"
 	"github.com/itsivali/lottery-platform/internal/platform/httpx"
@@ -44,6 +45,8 @@ type StaffServices struct {
 	Members  *staff.Service   // sign-in, sessions and members (ADR 0018, 0019)
 	Finance  *finance.Service // the financial dashboard
 	Metrics  *metrics.Service // the app metrics (admins)
+	// Oversight reads plays, top-ups, the audit trail and the system's state for the back office.
+	Oversight *oversight.Service
 }
 
 type staffKey struct{}
@@ -188,6 +191,11 @@ func (h *handlers) mountStaff(r chi.Router) {
 
 	r.With(anyStaff).Get("/closures", h.staffClosures)
 	r.With(anyStaff).Post("/closures/{user}/close", h.staffClose)
+
+	r.With(anyStaff).Get("/plays", h.needs(h.StaffServices.Oversight != nil, "Plays", h.staffPlays))
+	r.With(anyStaff).Get("/topups", h.needs(h.StaffServices.Oversight != nil, "Top-ups", h.staffTopUps))
+	r.With(anyStaff).Get("/system", h.needs(h.StaffServices.Oversight != nil, "System status", h.staffSystem))
+	r.With(admin).Get("/activity", h.needs(h.StaffServices.Oversight != nil, "Activity log", h.staffActivity))
 
 	r.With(anyStaff).Get("/players", h.staffPlayers)
 	r.With(anyStaff).Post("/players/{user}/suspend", h.staffSuspend(true))

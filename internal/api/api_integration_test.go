@@ -32,6 +32,7 @@ import (
 	"github.com/itsivali/lottery-platform/internal/kyc"
 	"github.com/itsivali/lottery-platform/internal/ledger"
 	"github.com/itsivali/lottery-platform/internal/metrics"
+	"github.com/itsivali/lottery-platform/internal/oversight"
 	"github.com/itsivali/lottery-platform/internal/payments"
 	"github.com/itsivali/lottery-platform/internal/payments/daraja"
 	"github.com/itsivali/lottery-platform/internal/payments/darajamock"
@@ -192,15 +193,16 @@ func setupWith(t *testing.T, mutate func(*apiDeps)) *env {
 	})
 	sRG := rg.NewService(staffPool, clk, aw, rg.Config{CoolingOff: 24 * time.Hour})
 	staffServices := api.StaffServices{
-		Identity: sIDs,
-		KYC:      kyc.NewService(staffPool, clk, mock, kr, []byte("0123456789abcdef0123456789abcdef"), aw, enq),
-		Payments: payments.NewService(staffPool, clk, dc, pay, sIDs, sRG, wallet.NewService(ls), ls, aw, payments.Config{}),
-		Draws:    draws.NewService(staffPool, clk, kr, drawBeacon{}, ls),
-		Payouts:  payouts.NewService(staffPool, clk, dc, payoutQueue{pay}, sIDs, wallet.NewService(ls), ls, aw, payouts.Config{}, wallet.ErrInsufficientFunds),
-		Game:     game.NewService(staffPool, clk, sIDs, sRG, wallet.NewService(ls), kr, wallet.ErrInsufficientFunds),
-		Members:  staff.NewService(staffPool, clk, staffIDTokens{}, aw, []byte("staff-pepper")),
-		Metrics:  metrics.NewService(staffPool, clk),
-		Finance:  finance.NewService(staffPool, clk),
+		Identity:  sIDs,
+		KYC:       kyc.NewService(staffPool, clk, mock, kr, []byte("0123456789abcdef0123456789abcdef"), aw, enq),
+		Payments:  payments.NewService(staffPool, clk, dc, pay, sIDs, sRG, wallet.NewService(ls), ls, aw, payments.Config{}),
+		Draws:     draws.NewService(staffPool, clk, kr, drawBeacon{}, ls),
+		Payouts:   payouts.NewService(staffPool, clk, dc, payoutQueue{pay}, sIDs, wallet.NewService(ls), ls, aw, payouts.Config{}, wallet.ErrInsufficientFunds),
+		Game:      game.NewService(staffPool, clk, sIDs, sRG, wallet.NewService(ls), kr, wallet.ErrInsufficientFunds),
+		Members:   staff.NewService(staffPool, clk, staffIDTokens{}, aw, []byte("staff-pepper")),
+		Metrics:   metrics.NewService(staffPool, clk),
+		Finance:   finance.NewService(staffPool, clk),
+		Oversight: oversight.NewService(staffPool, clk, oversight.Settings{Daraja: "sandbox", SandboxSettlement: true}),
 	}
 	staffAuth := &fakeStaff{members: map[string]staff.Member{}}
 	deps := api.Deps{

@@ -181,3 +181,82 @@ export interface FinanceSummary {
   }
   activity: { signups: number; plays: number; players: number }
 }
+
+/** One paid play (GET /v1/staff/plays). */
+export interface PlayRow {
+  ticket_id: string
+  user_id: string
+  msisdn: string
+  full_name: string | null
+  play_date: string
+  seq: number
+  price_kes: number
+  status: 'paid' | 'refunded'
+  slot: number | null
+  lucky: boolean | null
+  created_at: string
+}
+
+/** One top-up (GET /v1/staff/topups). */
+export interface TopUpRow {
+  id: string
+  user_id: string
+  msisdn: string
+  full_name: string | null
+  channel: 'stk' | 'c2b'
+  amount_requested_kes: number
+  amount_confirmed_kes: number | null
+  status: string
+  failure_reason: string | null
+  result_code: number | null
+  receipt: string | null
+  sandbox: boolean
+  created_at: string
+  updated_at: string
+}
+
+/** One audit record (GET /v1/staff/activity). */
+export interface AuditEvent {
+  id: string
+  at: string
+  actor_type: 'system' | 'player' | 'staff'
+  actor_id: string | null
+  action: string
+  entity_type: string
+  entity_id: string | null
+  details: Record<string, unknown>
+}
+
+/** The system's state (GET /v1/staff/system). */
+export interface SystemState {
+  now: string
+  settings: {
+    daraja: string
+    sandbox_settlement: boolean
+    top_up_min_kes: number
+    top_up_cooldown_s: number
+    buy_goods: boolean
+    paybill: boolean
+    payouts: boolean
+    email: boolean
+    google_sign_in: boolean
+    apple_sign_in: boolean
+    attestation: string
+    kyc_registry: boolean
+    alerts_delivery: string
+    heartbeat: boolean
+    workers: string
+    started_at: string
+    version?: string
+    play_price_kes: number | null
+    wheel_slots: number | null
+    wheel_lucky_slots: number | null
+  }
+  jobs: { kind: string; state: string; count: number }[]
+  failed_jobs: { id: number; kind: string; state: string; attempt: number; last_error: string; at: string }[]
+  reconciliations: { area: string; ran_at: string | null; ok: boolean | null }[]
+  open_alerts: number
+  players: number
+  plays_today: number
+  top_ups_pending: number
+}

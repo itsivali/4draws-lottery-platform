@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { ApiClient } from './api'
 import { loadConfig } from './config'
+import { TIMED_OUT } from './sessionNotices'
 import { SignIn, type Providers } from './SignIn'
 
 describe('config', () => {
@@ -112,5 +113,13 @@ describe('sign in', () => {
     await userEvent.setup().click(screen.getByRole('button', { name: 'Sign in with Apple' }))
     expect(fetch).not.toHaveBeenCalled()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+})
+
+describe('a session that timed out', () => {
+  it('the sign-in page says so (owner, 2026-10-30)', () => {
+    const api = new ApiClient('https://api.test', () => Promise.resolve(null), vi.fn<typeof globalThis.fetch>())
+    render(<SignIn config={{ apiBaseUrl: 'https://api.test' }} api={api} onSignedIn={vi.fn()} notice={TIMED_OUT} />)
+    expect(screen.getByRole('status')).toHaveTextContent('Your session timed out. For your security, sign in again to continue.')
   })
 })

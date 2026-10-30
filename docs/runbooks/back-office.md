@@ -124,6 +124,20 @@ starting the stack and `VITE_GOOGLE_CLIENT_ID` in `apps/backoffice/.env.local`.
 - **Tax:** prepare a batch, file it with KRA, then a second officer records the remittance with its PRN.
 - **Closures:** close accounts on request once the balance is paid out; the API refuses while money is in the
   account or moving and says why.
+- **Plays** (owner, 2026-10-30): every play, newest first, with the player's name (from their identity submission),
+  number, time, price and where the wheel stopped; search by number or player id, or pick a play date. Viewing it is
+  audited, because it unmasks names.
+- **Top-ups:** every M-Pesa prompt and paybill payment with its outcome in words (M-Pesa's result code, the failure
+  reason) and receipt. *Sandbox* marks a top-up credited by sandbox settlement: no money moved.
+- **System status:** the settings the api runs with (sandbox or production M-Pesa, sandbox settlement, the top-up
+  cooldown, price of a play, which sign-ins and integrations are on; never a secret), failing background jobs with
+  their last error, the last run of each reconciliation, and counts that link to their pages.
+- **Alerts on every page:** the sidebar counts open alerts; a paging alert, or one that froze payouts, is shown at the
+  top of every page until someone acknowledges it on *Alerts*. Polled every minute.
+- **Activity log** (administrators): the audit trail, newest first, searchable by action, id or actor and filtered by
+  who acted. It cannot be changed or deleted.
+- **Session timeouts:** a session that lapses (with the tab open, or while it was closed) or that the server ends
+  sends the member to sign in with *Your session timed out*; the player app says the same when its session ends.
 
 The draw entry list (which ties entries to players) is not in the back office: it is for the regulator
 (`lotteryctl draws entries`).

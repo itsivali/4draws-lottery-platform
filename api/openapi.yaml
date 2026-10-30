@@ -1231,6 +1231,190 @@ paths:
         "404": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
+  /v1/staff/plays:
+    get:
+      operationId: staffPlays
+      tags: [back-office]
+      summary: Every play, newest first, with the player's name, number and time
+      description: |
+        Role: `staff` (admins too). Narrow with `q` (a fragment of the phone number or a user id) and `day` (a Nairobi
+        play date). Names come from the players' identity submissions; each view is audited as unmasking them.
+      security: [{ staffBearer: [] }]
+      parameters:
+        - { name: q, in: query, required: false, schema: { type: string } }
+        - { name: day, in: query, required: false, schema: { type: string, format: date } }
+        - { name: limit, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+        - { name: before, in: query, required: false, schema: { type: string }, description: "`next_before` of the previous page." }
+      responses:
+        "200":
+          description: The page
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [plays, next_before]
+                properties:
+                  plays:
+                    type: array
+                    items:
+                      type: object
+                      required: [ticket_id, user_id, msisdn, full_name, play_date, seq, price_kes, status, slot, lucky, created_at]
+                      properties:
+                        ticket_id: { type: string }
+                        user_id: { type: string }
+                        msisdn: { type: string }
+                        full_name: { type: [string, "null"] }
+                        play_date: { type: string, format: date }
+                        seq: { type: integer }
+                        price_kes: { type: integer }
+                        status: { type: string, enum: [paid, refunded] }
+                        slot: { type: [integer, "null"] }
+                        lucky: { type: [boolean, "null"] }
+                        created_at: { type: string, format: date-time }
+                  next_before: { type: [string, "null"] }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+  /v1/staff/topups:
+    get:
+      operationId: staffTopUps
+      tags: [back-office]
+      summary: Every top-up, newest first, with the player, amount, outcome and receipt
+      description: |
+        Role: `staff` (admins too). Narrow with `q` (a fragment of the phone number, a user id or a receipt) and
+        `status` (an internal status). `sandbox` marks a top-up credited by sandbox settlement (receipt `SANDBOX-`).
+      security: [{ staffBearer: [] }]
+      parameters:
+        - { name: q, in: query, required: false, schema: { type: string } }
+        - name: status
+          in: query
+          required: false
+          schema: { type: string, enum: [initiated, stk_sent, callback_received, verified, credited, failed, cancelled, expired, unconfirmed, reversed] }
+        - { name: limit, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+        - { name: before, in: query, required: false, schema: { type: string }, description: "`next_before` of the previous page." }
+      responses:
+        "200":
+          description: The page
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [topups, next_before]
+                properties:
+                  topups:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, user_id, msisdn, full_name, channel, amount_requested_kes, amount_confirmed_kes, status, failure_reason, result_code, receipt, sandbox, created_at, updated_at]
+                      properties:
+                        id: { type: string }
+                        user_id: { type: string }
+                        msisdn: { type: string }
+                        full_name: { type: [string, "null"] }
+                        channel: { type: string, enum: [stk, c2b] }
+                        amount_requested_kes: { type: integer }
+                        amount_confirmed_kes: { type: [integer, "null"] }
+                        status: { type: string }
+                        failure_reason: { type: [string, "null"] }
+                        result_code: { type: [integer, "null"] }
+                        receipt: { type: [string, "null"] }
+                        sandbox: { type: boolean }
+                        created_at: { type: string, format: date-time }
+                        updated_at: { type: string, format: date-time }
+                  next_before: { type: [string, "null"] }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+  /v1/staff/activity:
+    get:
+      operationId: staffActivity
+      tags: [back-office]
+      summary: The audit trail, newest first
+      description: |
+        Role: `admin`. Narrow with `q` (a fragment of the action, entity type, entity id or actor) and `actor_type`.
+      security: [{ staffBearer: [] }]
+      parameters:
+        - { name: q, in: query, required: false, schema: { type: string } }
+        - { name: actor_type, in: query, required: false, schema: { type: string, enum: [system, player, staff] } }
+        - { name: limit, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+        - { name: before, in: query, required: false, schema: { type: string }, description: "`next_before` of the previous page." }
+      responses:
+        "200":
+          description: The page
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [events, next_before]
+                properties:
+                  events:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, at, actor_type, actor_id, action, entity_type, entity_id, details]
+                      properties:
+                        id: { type: string }
+                        at: { type: string, format: date-time }
+                        actor_type: { type: string, enum: [system, player, staff] }
+                        actor_id: { type: [string, "null"] }
+                        action: { type: string }
+                        entity_type: { type: string }
+                        entity_id: { type: [string, "null"] }
+                        details: { type: object }
+                  next_before: { type: [string, "null"] }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+  /v1/staff/system:
+    get:
+      operationId: staffSystem
+      tags: [back-office]
+      summary: The system's state - settings, background jobs, last reconciliations and counts
+      description: "Role: `staff` (admins too). Settings carry no secrets: only which integrations are on and the limits in force."
+      security: [{ staffBearer: [] }]
+      responses:
+        "200":
+          description: The state now
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [now, settings, jobs, failed_jobs, reconciliations, open_alerts, players, plays_today, top_ups_pending]
+                properties:
+                  now: { type: string, format: date-time }
+                  settings: { type: object, additionalProperties: true }
+                  jobs:
+                    type: array
+                    items: { type: object, properties: { kind: { type: string }, state: { type: string }, count: { type: integer } } }
+                  failed_jobs:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: integer }
+                        kind: { type: string }
+                        state: { type: string }
+                        attempt: { type: integer }
+                        last_error: { type: string }
+                        at: { type: string, format: date-time }
+                  reconciliations:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        area: { type: string, enum: [payments, game, draws, payouts] }
+                        ran_at: { type: [string, "null"], format: date-time }
+                        ok: { type: [boolean, "null"] }
+                  open_alerts: { type: integer }
+                  players: { type: integer }
+                  plays_today: { type: integer }
+                  top_ups_pending: { type: integer }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
   /v1/staff/players:
     get:
       operationId: staffPlayers

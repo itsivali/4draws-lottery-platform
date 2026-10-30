@@ -529,11 +529,13 @@ class _Form extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             if (expired && !phoneStep) ...[
+              // the session timed out (owner, 2026-10-30: say so on the sign-in screen)
               const InlineBanner(
                 tone: StatusTone.pending,
-                icon: Icons.info_rounded,
+                icon: Icons.timer_off_rounded,
                 live: true,
-                title: 'Your session ended. Sign in again to continue.',
+                title: 'Your session timed out',
+                message: 'For your security, sign in again to continue. Your balance and plays are safe.',
               ),
               const SizedBox(height: Space.xl),
             ],

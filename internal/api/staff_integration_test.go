@@ -7,6 +7,7 @@ import (
 	"crypto/rand"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"testing"
@@ -101,6 +102,10 @@ var staffRoutes = []staffRoute{
 	{http.MethodPost, "/v1/staff/alerts/0192f000-0000-7000-8000-000000000001/acknowledge", staff.Staff},
 	{http.MethodGet, "/v1/staff/closures", staff.Staff},
 	{http.MethodPost, "/v1/staff/closures/0192f000-0000-7000-8000-000000000001/close", staff.Staff},
+	{http.MethodGet, "/v1/staff/plays", staff.Staff},
+	{http.MethodGet, "/v1/staff/topups", staff.Staff},
+	{http.MethodGet, "/v1/staff/system", staff.Staff},
+	{http.MethodGet, "/v1/staff/activity", staff.Admin},
 	{http.MethodGet, "/v1/staff/players", staff.Staff},
 	{http.MethodPost, "/v1/staff/players/0192f000-0000-7000-8000-000000000001/suspend", staff.Staff},
 	{http.MethodPost, "/v1/staff/players/0192f000-0000-7000-8000-000000000001/reinstate", staff.Staff},
@@ -516,5 +521,76 @@ func TestStaffAPI_PlayersAreListedSearchedAndSuspended(t *testing.T) {
 	var audited int
 	if err := e.pool.QueryRow(context.Background(), `SELECT count(*) FROM audit.audit_log WHERE action IN ('identity.players_viewed','identity.account_suspended','identity.account_reinstated')`).Scan(&audited); err != nil || audited < 6 {
 		t.Fatalf("audited %d (%v)", audited, err)
+	}
+}
+
+// The back office sees every play and top-up by player name and time, the system's state, and (administrators) the
+// audit trail (owner, 2026-10-30).
+func TestStaffAPI_PlaysTopUpsSystemAndActivity(t *testing.T) {
+	e := setup(t)
+	s := e.signIn(t)
+	if r := e.do(t, http.MethodPost, "/v1/kyc", s.access, map[string]any{"national_id": "24681357", "full_name": "Amina Otieno", "date_of_birth": "1992-03-04"}); r.Code != http.StatusAccepted {
+		t.Fatalf("kyc: %d %s", r.Code, r.Raw)
+	}
+	e.canPlay(t, s, 1000)
+	for i := range 2 {
+		if r := e.doKey(t, http.MethodPost, "/v1/plays", s.access, fmt.Sprint("p-", i), nil); r.Code != http.StatusCreated {
+			t.Fatalf("play: %d %s", r.Code, r.Raw)
+		}
+	}
+	if r := e.do(t, http.MethodPost, "/v1/payments/topups", s.access, map[string]any{"amount_kes": 50}); r.Code != http.StatusAccepted {
+		t.Fatalf("top-up: %d %s", r.Code, r.Raw)
+	}
+	tok := e.member(staff.Staff)
+
+	r := e.do(t, http.MethodGet, "/v1/staff/plays?limit=1", tok, nil)
+	plays, _ := r.Body["plays"].([]any)
+	if r.Code != http.StatusOK || len(plays) != 1 || r.Body["next_before"] == nil {
+		t.Fatalf("plays page 1: %d %s", r.Code, r.Raw)
+	}
+	first := plays[0].(map[string]any)
+	if first["full_name"] != "Amina Otieno" || first["msisdn"] != s.msisdn || first["seq"] != float64(2) || first["slot"] == nil ||
+		first["created_at"] == nil || first["price_kes"] == nil {
+		t.Fatalf("a play: %v", first)
+	}
+	next := e.do(t, http.MethodGet, "/v1/staff/plays?limit=1&before="+url.QueryEscape(r.Body["next_before"].(string)), tok, nil)
+	if p := next.Body["plays"].([]any); next.Code != http.StatusOK || len(p) != 1 || p[0].(map[string]any)["seq"] != float64(1) {
+		t.Fatalf("plays page 2: %d %s", next.Code, next.Raw)
+	}
+	if r := e.do(t, http.MethodGet, "/v1/staff/plays?q=0799999999", tok, nil); len(r.Body["plays"].([]any)) != 0 {
+		t.Fatalf("another number: %s", r.Raw)
+	}
+	if r := e.do(t, http.MethodGet, "/v1/staff/plays?before=nonsense", tok, nil); r.Code != http.StatusBadRequest {
+		t.Fatalf("bad cursor: %d", r.Code)
+	}
+
+	r = e.do(t, http.MethodGet, "/v1/staff/topups?q="+s.msisdn[3:], tok, nil)
+	topups, _ := r.Body["topups"].([]any)
+	if r.Code != http.StatusOK || len(topups) < 1 {
+		t.Fatalf("top-ups: %d %s", r.Code, r.Raw)
+	}
+	latest := topups[0].(map[string]any)
+	if latest["full_name"] != "Amina Otieno" || latest["amount_requested_kes"] != float64(50) || latest["status"] != "initiated" || latest["sandbox"] != false {
+		t.Fatalf("a top-up: %v", latest)
+	}
+	if r := e.do(t, http.MethodGet, "/v1/staff/topups?status=bogus", tok, nil); r.Code != http.StatusBadRequest {
+		t.Fatalf("bad status: %d", r.Code)
+	}
+
+	r = e.do(t, http.MethodGet, "/v1/staff/system", tok, nil)
+	settings, _ := r.Body["settings"].(map[string]any)
+	if r.Code != http.StatusOK || settings["daraja"] != "sandbox" || settings["sandbox_settlement"] != true ||
+		r.Body["plays_today"] == nil || len(r.Body["reconciliations"].([]any)) != 4 || settings["play_price_kes"] == nil {
+		t.Fatalf("system: %d %s", r.Code, r.Raw)
+	}
+
+	admin := e.member(staff.Admin)
+	r = e.do(t, http.MethodGet, "/v1/staff/activity?q=payment.topup", admin, nil)
+	events, _ := r.Body["events"].([]any)
+	if r.Code != http.StatusOK || len(events) == 0 || events[0].(map[string]any)["action"] != "payment.topup.started" {
+		t.Fatalf("activity: %d %s", r.Code, r.Raw)
+	}
+	if r := e.do(t, http.MethodGet, "/v1/staff/activity?actor_type=robot", admin, nil); r.Code != http.StatusBadRequest {
+		t.Fatalf("bad actor: %d", r.Code)
 	}
 }

@@ -10,6 +10,7 @@ import { NameForm } from './components/NameDialog'
 import { PasswordForm } from './components/PasswordDialog'
 import { ResetPassword } from './ResetPassword'
 import { SignIn, type StaffSession } from './SignIn'
+import { ENDED, TIMED_OUT } from './sessionNotices'
 import type { Me } from './types'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { TooltipProvider } from '@/components/ui/tooltip'
@@ -19,19 +20,22 @@ import './index.css'
 // back-office session (ADR 0018); the Google or Apple ID token is used once, to open it.
 const KEY = 'backoffice.session'
 
-function stored(): StaffSession | null {
+function stored(): { session: StaffSession | null; timedOut: boolean } {
   try {
     const raw = sessionStorage.getItem(KEY)
     const s = raw ? (JSON.parse(raw) as StaffSession) : null
-    return s && new Date(s.expires_at) > new Date() ? s : null
+    if (s && new Date(s.expires_at) > new Date()) return { session: s, timedOut: false }
+    if (s) sessionStorage.removeItem(KEY) // it lapsed while the tab was away: say so on the sign-in page
+    return { session: null, timedOut: s !== null }
   } catch {
-    return null
+    return { session: null, timedOut: false }
   }
 }
 
 function Root({ config }: { config: Config }) {
-  const [current, setCurrent] = useState<StaffSession | null>(stored)
-  const [notice, setNotice] = useState<string | undefined>()
+  const [initial] = useState(stored)
+  const [current, setCurrent] = useState<StaffSession | null>(initial.session)
+  const [notice, setNotice] = useState<string | undefined>(initial.timedOut ? TIMED_OUT : undefined)
   const location = useLocation()
   const navigate = useNavigate()
 
@@ -43,7 +47,7 @@ function Root({ config }: { config: Config }) {
 
   const api = useMemo(
     () => new ApiClient(config.apiBaseUrl, () => Promise.resolve(current?.token ?? null), undefined,
-      current ? () => { end('Your session ended. Sign in again.') } : undefined),
+      current ? () => { end(ENDED) } : undefined),
     [config.apiBaseUrl, current, end],
   )
 
@@ -51,7 +55,7 @@ function Root({ config }: { config: Config }) {
   useEffect(() => {
     if (!current) return
     const left = new Date(current.expires_at).getTime() - Date.now()
-    const timer = setTimeout(() => { end('Your session ended. Sign in again.') }, Math.max(0, Math.min(left, 2 ** 31 - 1)))
+    const timer = setTimeout(() => { end(TIMED_OUT) }, Math.max(0, Math.min(left, 2 ** 31 - 1)))
     return () => { clearTimeout(timer) }
   }, [current, end])
 

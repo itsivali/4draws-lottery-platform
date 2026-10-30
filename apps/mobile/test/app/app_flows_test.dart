@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:lottery_mobile/app/providers.dart';
 import 'package:lottery_mobile/app/router.dart';
 import 'package:lottery_mobile/core/platform/haptics.dart';
 import 'package:lottery_mobile/features/wallet/application/wallet_providers.dart';
@@ -319,7 +320,21 @@ void main() {
     backend.refreshFails = true;
     await t.tap(find.text('Wallet').last);
     await t.pumpAndSettle();
-    expect(find.text('Your session ended. Sign in again to continue.'), findsOneWidget);
+    expect(find.text('Your session timed out'), findsOneWidget);
+    expect(find.textContaining('For your security, sign in again'), findsOneWidget);
+  });
+
+  testWidgets('a session that lapsed while the app was closed is explained on opening it', (t) async {
+    final backend = FakeBackend()..refreshFails = true;
+    await pumpApp(t, backend, signedIn: false, storedRefresh: 'refresh-old');
+    expect(find.text('Your session timed out'), findsOneWidget);
+  });
+
+  testWidgets('signing out on purpose shows no timeout message', (t) async {
+    final h = await pumpApp(t, FakeBackend());
+    await h.container.read(sessionManagerProvider).signOut();
+    await t.pumpAndSettle();
+    expect(find.text('Your session timed out'), findsNothing);
   });
 
   testWidgets('the withdrawal range comes from the server: a KES 20 minimum shows as a quick pick', (t) async {

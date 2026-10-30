@@ -1,5 +1,6 @@
 import {
-  Banknote, Bell, ChartSpline, ChevronsUpDown, IdCard, KeyRound, Landmark, LayoutDashboard, LogOut, Receipt, Search, Ticket, UserPen, UserRound, UserX, Users, Wallet,
+  Banknote, Bell, ChartSpline, ChevronsUpDown, Dices, Gauge, History, IdCard, KeyRound, Landmark, LayoutDashboard, LogOut, Receipt, Search, Siren, Smartphone, Ticket,
+  UserPen, UserRound, UserX, Users, Wallet,
 } from 'lucide-react'
 import { useEffect, useState, type ComponentType } from 'react'
 import { BrandGlyph } from './components/BrandGlyph'
@@ -7,7 +8,9 @@ import { NameDialog } from './components/NameDialog'
 import { PasswordDialog } from './components/PasswordDialog'
 import { MetricsPage } from './pages/Metrics'
 import { Link, NavLink, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
+import { AlertWatchProvider, useAlertWatch } from './alertWatch'
 import { useSession } from './context'
+import { ActivityPage } from './pages/Activity'
 import { AlertsPage } from './pages/Alerts'
 import { ClosuresPage } from './pages/Closures'
 import { DrawsPage } from './pages/Draws'
@@ -17,8 +20,11 @@ import { OverviewPage } from './pages/Overview'
 import { PaymentsPage } from './pages/Payments'
 import { PayoutsPage } from './pages/Payouts'
 import { PlayersPage } from './pages/Players'
+import { PlaysPage } from './pages/Plays'
 import { StaffPage } from './pages/Staff'
+import { SystemPage } from './pages/System'
 import { TaxPage } from './pages/Tax'
+import { TopUpsPage } from './pages/TopUps'
 import { ReviewQueueProvider, useReviewQueue } from './reviewQueue'
 import { roleLabels, visibleSections, type Section } from './roles'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -37,6 +43,10 @@ const pages: Record<string, () => React.JSX.Element> = {
   '/metrics': MetricsPage,
   '/staff': StaffPage,
   '/players': PlayersPage,
+  '/plays': PlaysPage,
+  '/topups': TopUpsPage,
+  '/system': SystemPage,
+  '/activity': ActivityPage,
   '/kyc': KycPage,
   '/draws': DrawsPage,
   '/payouts': PayoutsPage,
@@ -50,6 +60,10 @@ const icons: Record<string, ComponentType<{ className?: string }>> = {
   '/finance': Landmark,
   '/metrics': ChartSpline,
   '/players': UserRound,
+  '/plays': Dices,
+  '/topups': Smartphone,
+  '/system': Gauge,
+  '/activity': History,
   '/kyc': IdCard,
   '/draws': Ticket,
   '/payouts': Banknote,
@@ -62,20 +76,22 @@ const icons: Record<string, ComponentType<{ className?: string }>> = {
 
 /** The navigation's groups, in order; a section appears under the first group that lists it. */
 const groups: { label: string; paths: string[] }[] = [
-  { label: 'Money', paths: ['/finance', '/payments', '/payouts', '/tax'] },
+  { label: 'Money', paths: ['/finance', '/topups', '/payments', '/payouts', '/tax'] },
   { label: 'Apps', paths: ['/metrics'] },
-  { label: 'Players', paths: ['/players', '/kyc', '/closures'] },
-  { label: 'Operations', paths: ['/draws', '/alerts'] },
-  { label: 'Administration', paths: ['/staff'] },
+  { label: 'Players', paths: ['/players', '/plays', '/kyc', '/closures'] },
+  { label: 'Operations', paths: ['/draws', '/alerts', '/system'] },
+  { label: 'Administration', paths: ['/staff', '/activity'] },
 ]
 
 /** The signed-in back office: only the sections the member's roles allow are linked or routed. */
 export function App() {
   return (
     <ReviewQueueProvider>
-      <SidebarProvider>
-        <Layout />
-      </SidebarProvider>
+      <AlertWatchProvider>
+        <SidebarProvider>
+          <Layout />
+        </SidebarProvider>
+      </AlertWatchProvider>
     </ReviewQueueProvider>
   )
 }
@@ -83,8 +99,11 @@ export function App() {
 function Layout() {
   const { me } = useSession()
   const { arrived, dismiss } = useReviewQueue()
+  const { open: openAlerts } = useAlertWatch()
   const sections = visibleSections(me.roles)
   const { pathname } = useLocation()
+  // a paging alert (or one that freezes payouts) is shown on every page until someone acknowledges it
+  const critical = (openAlerts ?? []).filter((a) => a.severity === 'page' || a.freezes_payouts)
   const current = sections.find((s) => pathname === s.path || pathname.startsWith(`${s.path}/`))
   return (
     <>
@@ -122,6 +141,16 @@ function Layout() {
               </AlertDescription>
             </Alert>
           ) : null}
+          {critical.length > 0 && pathname !== '/alerts' ? (
+            <Alert role="alert" className="mb-6 border-destructive/40 bg-destructive/10 [&>svg]:text-destructive">
+              <Siren />
+              <AlertTitle>{critical.length === 1 ? critical[0]?.summary : `${critical.length} urgent alerts need attention.`}</AlertTitle>
+              <AlertDescription className="flex flex-wrap items-center gap-2">
+                {critical.some((a) => a.freezes_payouts) ? <span>Payouts are frozen until it is acknowledged.</span> : null}
+                <Button asChild size="sm" variant="destructive"><Link to="/alerts">Open alerts</Link></Button>
+              </AlertDescription>
+            </Alert>
+          ) : null}
           <Routes>
             <Route path="/" element={<OverviewPage />} />
             {sections.map((s) => {
@@ -139,6 +168,8 @@ function Layout() {
 function AppSidebar({ sections }: { sections: Section[] }) {
   const { me, signOut, updateMe } = useSession()
   const { queue } = useReviewQueue()
+  const { open: openAlerts } = useAlertWatch()
+  const alerting = openAlerts?.length ?? 0
   const { pathname } = useLocation()
   const { isMobile, setOpenMobile } = useSidebar()
   const close = () => { if (isMobile) setOpenMobile(false) }
@@ -197,10 +228,14 @@ function AppSidebar({ sections }: { sections: Section[] }) {
                               <Icon />
                               <span>{s.label}</span>
                               {s.path === '/kyc' && waiting > 0 ? <span className="sr-only">, {waiting} waiting</span> : null}
+                              {s.path === '/alerts' && alerting > 0 ? <span className="sr-only">, {alerting} open</span> : null}
                             </NavLink>
                           </SidebarMenuButton>
                           {s.path === '/kyc' && waiting > 0 ? (
                             <SidebarMenuBadge aria-hidden="true" className="rounded-full bg-primary px-1.5 text-primary-foreground">{waiting}</SidebarMenuBadge>
+                          ) : null}
+                          {s.path === '/alerts' && alerting > 0 ? (
+                            <SidebarMenuBadge aria-hidden="true" className="rounded-full bg-destructive px-1.5 text-white">{alerting}</SidebarMenuBadge>
                           ) : null}
                         </SidebarMenuItem>
                       )

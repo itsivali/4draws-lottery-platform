@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
+	"os"
 	"slices"
 	"strings"
 	"time"
@@ -32,6 +34,7 @@ import (
 	"github.com/itsivali/lottery-platform/internal/kyc"
 	"github.com/itsivali/lottery-platform/internal/ledger"
 	"github.com/itsivali/lottery-platform/internal/metrics"
+	"github.com/itsivali/lottery-platform/internal/oversight"
 	"github.com/itsivali/lottery-platform/internal/payments"
 	"github.com/itsivali/lottery-platform/internal/payments/daraja"
 	"github.com/itsivali/lottery-platform/internal/payouts"
@@ -262,7 +265,42 @@ func (a *App) staff(ctx context.Context, sh shared, base services) (staff.Authen
 	return members, api.StaffServices{
 		Identity: svc.identity, KYC: svc.kyc, Payments: svc.payments, Draws: svc.draws, Payouts: svc.payouts, Game: svc.game,
 		Alerts: a.alertsOn(pool, svc.draws), Members: members, Finance: finance.NewService(pool, sh.clk), Metrics: metrics.NewService(pool, sh.clk),
+		Oversight: oversight.NewService(pool, sh.clk, oversightSettings(sh.cfg)),
 	}, nil
+}
+
+// started is when this process started, for the back office's System page.
+var started = time.Now() //nolint:forbidigo // the process's own start, not business time
+
+// oversightSettings is what the back office's System page says about the configuration: no secrets, only what is on.
+func oversightSettings(cfg config.Config) oversight.Settings {
+	c, p := cfg.API, cfg.Payments
+	daraja := ""
+	if p.Enabled {
+		switch u, _ := url.Parse(p.BaseURL); {
+		case u != nil && u.Hostname() == "api.safaricom.co.ke":
+			daraja = "production"
+		case strings.TrimRight(p.BaseURL, "/") == config.SandboxURL:
+			daraja = "sandbox"
+		default:
+			daraja = p.BaseURL
+		}
+	}
+	delivery := "log"
+	if cfg.Alerts.WebhookURL != "" {
+		delivery = "webhook"
+	}
+	workers := "separate worker"
+	if cfg.WorkersInProcess {
+		workers = "in-process"
+	}
+	return oversight.Settings{
+		Daraja: daraja, SandboxSettlement: p.SandboxSettle, TopUpMinKES: p.MinTopUpKES, TopUpCooldownS: int64(p.TopUpCooldown.Seconds()),
+		BuyGoods: p.TillNumber != "", Paybill: p.C2BEnabled(), Payouts: p.B2CEnabled(), Email: cfg.Mail.Enabled(),
+		GoogleSignIn: c.SignIn.Google(), AppleSignIn: c.SignIn.Apple(), Attestation: c.Attestation.Mode, KYCRegistry: c.KYCURL != "",
+		AlertsDelivery: delivery, Heartbeat: cfg.Alerts.HeartbeatURL != "", Workers: workers,
+		StartedAt: started.UTC().Format(time.RFC3339), Version: os.Getenv("RENDER_GIT_COMMIT"),
+	}
 }
 
 // staffProviders are the ID-token issuers staff may sign in with (ADR 0018): the back office's own Google and Apple
