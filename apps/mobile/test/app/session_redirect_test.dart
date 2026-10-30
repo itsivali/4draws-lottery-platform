@@ -3,6 +3,17 @@ import 'package:lottery_mobile/app/router.dart';
 import 'package:lottery_mobile/core/auth/session_manager.dart';
 
 void main() {
+  group('the create-account address (2026-10-30)', () {
+    test('a signed-out player may be there, and is not sent to sign-in', () {
+      expect(sessionRedirect(SessionStatus.signedOut, Uri.parse('/create-account')), isNull);
+    });
+
+    test('a signed-in player is sent home from it, as from sign-in', () {
+      expect(sessionRedirect(SessionStatus.signedIn, Uri.parse('/create-account')), '/home');
+      expect(sessionRedirect(SessionStatus.signedIn, Uri.parse('/create-account?from=%2Fwallet')), '/wallet');
+    });
+  });
+
   group('a temporary password holds the player on the password screen', () {
     test('every destination becomes the required password screen', () {
       for (final where in ['/home', '/play', '/wallet/top-up', '/account', '/']) {

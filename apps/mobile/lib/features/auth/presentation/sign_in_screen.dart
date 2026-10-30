@@ -34,7 +34,11 @@ enum _Mode { signIn, create }
 enum _Step { form, phone }
 
 class SignInScreen extends ConsumerStatefulWidget {
-  const SignInScreen({super.key});
+  const SignInScreen({super.key, this.create = false});
+
+  /// Opened at `/create-account`: the form starts on creating an account (its own address, so search engines can
+  /// list it beside sign-in).
+  final bool create;
 
   @override
   ConsumerState<SignInScreen> createState() => _SignInScreenState();
@@ -49,7 +53,7 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
   final _firstName = TextEditingController();
   final _secondName = TextEditingController();
   final _nationalId = TextEditingController();
-  var _mode = _Mode.signIn;
+  late var _mode = widget.create ? _Mode.create : _Mode.signIn;
   var _step = _Step.form;
   var _obscure = true;
   var _adult = false;
@@ -277,62 +281,66 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
     );
     final heading = _Heading(step: _step, mode: _mode, providerName: _providerToken?.provider);
     final card = _FormCard(child: form);
-    return Scaffold(
-      body: SafeArea(
-        child: wide
-            ? Row(
-                children: [
-                  const Expanded(child: _Panel()),
-                  Expanded(
-                    child: Center(
-                      child: SingleChildScrollView(
-                        padding: const EdgeInsets.all(Space.xxl),
-                        child: ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 440),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              heading.onPage(context),
-                              const SizedBox(height: Space.xl),
-                              card,
-                              const SizedBox(height: Space.lg),
-                              const BackOfficeLink(),
-                            ],
+    return Title(
+      title: '${_mode == _Mode.create ? 'Create account' : 'Sign in'} · Tajirika',
+      color: context.colors.primary,
+      child: Scaffold(
+        body: SafeArea(
+          child: wide
+              ? Row(
+                  children: [
+                    const Expanded(child: _Panel()),
+                    Expanded(
+                      child: Center(
+                        child: SingleChildScrollView(
+                          padding: const EdgeInsets.all(Space.xxl),
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 440),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                heading.onPage(context),
+                                const SizedBox(height: Space.xl),
+                                card,
+                                const SizedBox(height: Space.lg),
+                                const BackOfficeLink(),
+                              ],
+                            ),
                           ),
                         ),
                       ),
                     ),
-                  ),
-                ],
-              )
-            : SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(Space.lg, Space.sm, Space.lg, Space.xl),
-                child: Center(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 440),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        // the sunset header carries the greeting; the form's card rises into its lower edge
-                        HeroCard(
-                          radius: Radii.xl,
-                          padding: const EdgeInsets.fromLTRB(Space.xl, Space.xl, Space.xl, Space.xxxl + Space.lg),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              BrandMark(height: 36, wordmarkColor: context.colors.onHero),
-                              const SizedBox(height: Space.xl),
-                              heading.onHero(context),
-                            ],
+                  ],
+                )
+              : SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(Space.lg, Space.sm, Space.lg, Space.xl),
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 440),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          // the sunset header carries the greeting; the form's card rises into its lower edge
+                          HeroCard(
+                            radius: Radii.xl,
+                            padding: const EdgeInsets.fromLTRB(Space.xl, Space.xl, Space.xl, Space.xxxl + Space.lg),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                BrandMark(height: 36, wordmarkColor: context.colors.onHero),
+                                const SizedBox(height: Space.xl),
+                                heading.onHero(context),
+                              ],
+                            ),
                           ),
-                        ),
-                        Transform.translate(offset: const Offset(0, -Space.xxxl), child: card),
-                        Transform.translate(offset: const Offset(0, -Space.xl), child: const BackOfficeLink()),
-                      ],
+                          Transform.translate(offset: const Offset(0, -Space.xxxl), child: card),
+                          Transform.translate(offset: const Offset(0, -Space.xl), child: const BackOfficeLink()),
+                        ],
+                      ),
                     ),
                   ),
                 ),
-              ),
+        ),
       ),
     );
   }

@@ -25,10 +25,10 @@ import '../features/wallet/presentation/withdraw_screen.dart';
 import 'providers.dart';
 import 'shell.dart';
 
-const _sessionRoutes = {'/sign-in', '/forgot-password', '/reset-password', '/starting', '/offline'};
+const _sessionRoutes = {'/sign-in', '/create-account', '/forgot-password', '/reset-password', '/starting', '/offline'};
 
 /// Where a signed-out player may be besides sign-in: asking for, and using, a password-reset link (ADR 0021).
-const _signedOutRoutes = {'/sign-in', '/forgot-password', '/reset-password'};
+const _signedOutRoutes = {'/sign-in', '/create-account', '/forgot-password', '/reset-password'};
 
 /// Where the session says the player may be: nowhere but sign-in while signed out; never on sign-in while signed in.
 /// Deep links survive the detour through sign-in (`from`).
@@ -68,6 +68,8 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/starting', builder: (_, _) => const StartingScreen()),
       GoRoute(path: '/offline', builder: (_, _) => const OfflineScreen()),
       GoRoute(path: '/sign-in', builder: (_, _) => const SignInScreen()),
+      // its own address, so search engines can list "Create account" beside "Sign in" (2026-10-30)
+      GoRoute(path: '/create-account', builder: (_, _) => const SignInScreen(create: true)),
       GoRoute(path: '/forgot-password', builder: (_, _) => const ForgotPasswordScreen()),
       GoRoute(
         path: '/reset-password',

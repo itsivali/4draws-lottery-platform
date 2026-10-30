@@ -56,9 +56,11 @@
   <meta name="apple-mobile-web-app-title" content="Tajirika">
   <link rel="apple-touch-icon" href="icons/Icon-192.png">
 
-  <!-- Favicon -->
-  <link rel="icon" type="image/svg+xml" href="favicon.svg"/>
-  <link rel="icon" type="image/png" href="favicon.png"/>
+  <!-- Favicon: Google's result icon wants a square ICO/PNG of 48px or more, so those come first (SVG is not in its list) -->
+  <link rel="icon" href="favicon.ico" sizes="48x48 32x32 16x16">
+  <link rel="icon" type="image/png" sizes="48x48" href="favicon.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/Icon-192.png">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
   <link rel="manifest" href="manifest.json">
 
   <!-- the API, reached by the first request the app makes -->
@@ -190,7 +192,7 @@
       </section>
     </main>
     <footer>
-      <p>Tajirika · Nairobi, Kenya · <a href="/sign-in">Sign in</a> · <a href="/sign-in">Create account</a> · Play responsibly · 18+</p>
+      <p>Tajirika · Nairobi, Kenya · <a href="/sign-in">Sign in</a> · <a href="/create-account">Create account</a> · Play responsibly · 18+</p>
     </footer>
   </div>
   <noscript>

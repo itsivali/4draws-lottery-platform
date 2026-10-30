@@ -15,8 +15,14 @@ The player web app (`apps/mobile`, Flutter, served by Render at https://tajirika
   product (price, plays a day, draws, where prizes go): it is the one page search engines read.
 - **`og-image.png`:** the 1200x630 share image, rendered by `scripts/gen-icons.sh` from
   `design-system/lottery-platform/logo/tajirika-og.svg`.
-- **`robots.txt`** (allow all but the reset pages) and **`sitemap.xml`** (the root and `/sign-in`).
+- **`robots.txt`** (allow all but the reset pages) and **`sitemap.xml`** (the root, `/sign-in` and `/create-account`).
 - **`manifest.json`:** the installable app's name, description, colours and categories.
+- **Favicon** (the icon beside the result in Google): `favicon.ico` (48/32/16, made with
+  `magick icons/Icon-512.png -background none -define icon:auto-resize=48,32,16 favicon.ico`), `favicon.png` (48) and
+  `icons/Icon-192.png` are linked first; Google wants a square ICO or PNG of 48 px or more and does not list SVG, so
+  `favicon.svg` comes last. Render serves a file that exists before rewriting to `index.html`, so `/favicon.ico` is
+  the icon, not the page. Google picks the icon up when it next crawls the home page: days to weeks, sooner after
+  "Request indexing" in Search Console. It shows one icon per hostname.
 - **Addresses:** the app uses path URLs (`/sign-in`, `/reset-password?token=…`), not `/#/…`, since 2026-10-30
   (`usePathUrlStrategy` in `main.dart`; Render rewrites every path to `index.html`). Each screen sets the document
   title ("Wallet · Tajirika") through `PageScaffold`.
@@ -34,6 +40,10 @@ The player web app (`apps/mobile`, Flutter, served by Render at https://tajirika
 
 ## What to expect
 
-Only the landing is indexable; every other screen is behind sign-in and should stay that way. Ranking for "lottery
+Only the landing is indexable; every other screen is behind sign-in and should stay that way. **Sitelinks** (the
+"Sign in", "Create account"… links Google shows under a brand result) cannot be requested: Google builds them from the
+site's own link structure when it judges them useful, usually once a site has some history and traffic. What helps is
+what is in place: distinct addresses with their own titles (`/sign-in` "Sign in · Tajirika", `/create-account`
+"Create account · Tajirika"), short relevant anchor text from the landing, and the sitemap listing them. Ranking for "lottery
 Kenya" and "M-Pesa lottery" depends on links and reputation more than on tags; the tags make sure what appears is
 right and the share cards look like the brand.
