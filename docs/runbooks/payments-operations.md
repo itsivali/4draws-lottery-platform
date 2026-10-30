@@ -45,22 +45,29 @@ answered prompt, or nothing, and throttles queries routinely.
 
 ### Sandbox settlement (`DARAJA_SANDBOX_SETTLE=true`)
 
-So the apps can always be tested against the sandbox (owner, 2026-10-30), `DARAJA_SANDBOX_SETTLE=true` settles
-top-ups from the callback alone and never asks the status query:
+The Daraja sandbox carries real M-Pesa payments: an approved prompt deducts the money, M-Pesa sends its usual
+confirmation SMS with a real receipt, and Safaricom reverses the payment a few hours later (owner, 2026-10-30;
+Daisy Irungu's KES 1 on 2026-10-29, receipt UJT6YBR9IQ). It throttles the status query (429), so with
+`DARAJA_SANDBOX_SETTLE=true` a top-up is settled from Safaricom's callback without asking, and only real payments are
+credited:
 
 | Callback | Settled as |
 | --- | --- |
-| paid (0) | credited with the callback's amount and receipt; proves the phone, as in production |
-| cancelled by the customer (1032) | cancelled: cancel the prompt to test a failed top-up |
-| anything else (1037 timeout, 2001 wrong PIN, malformed) | credited the amount requested, receipt `SANDBOX-<payment id>` |
-| none within 2 minutes | credited the amount requested, receipt `SANDBOX-<payment id>` |
+| paid (0) | credited with the callback's amount and Safaricom's receipt; proves the number, as in production |
+| cancelled by the customer (1032) | cancelled |
+| any other code (1037 the phone did not answer, 2001 wrong PIN, 1 insufficient balance...) | failed, nothing credited |
+| none, or malformed | the status query decides, as without the setting (credited only with a callback's receipt) |
 
-Such credits log `sandbox settlement: crediting the amount requested`, carry `sandbox_settlement` in their audit
-record and prove the account's number as a paid prompt would, so the account can play. A number is only ever proved by a top-up; migration 00040 proved the numbers of accounts whose sandbox top-ups were
-credited before that (2026-10-30, between #102 and #103). It is set in render.yaml and in docker-compose.sandbox.yml; the api logs
-`sandbox_settle=true` at start. **No real money moves in the sandbox, and the api refuses to start with this set and
-production Daraja** (`DARAJA_ALLOW_PRODUCTION` or `api.safaricom.co.ke`): delete the key from render.yaml and the
-dashboard when switching to production.
+Safaricom's later reversal of a sandbox payment is not reported to the platform: the wallet keeps the credit. Before
+2026-10-30 afternoon, sandbox settlement also credited timed-out prompts under a `SANDBOX-<payment id>` receipt; those
+rows stay, marked *Sandbox* on the back office's Top-ups page, and migration 00040 proved those accounts' numbers.
+
+It is set in render.yaml and docker-compose.sandbox.yml; the api logs `sandbox_settle=true` at start. **The api refuses
+to start with it and production Daraja** (`DARAJA_ALLOW_PRODUCTION` or `api.safaricom.co.ke`), where the status query
+confirms every payment: delete the key from render.yaml and the dashboard when switching to production.
+
+If every prompt to one number times out (1037) about 26 seconds after the PIN, with no deduction and no SMS, the PIN
+is not reaching M-Pesa: check that the line is the phone's M-Pesa SIM, try another number, or ask Safaricom (100).
 
 ## Resolve an unconfirmed top-up from the statement
 

@@ -66,7 +66,9 @@ export function TopUpsPage() {
       cell: ({ row }) => {
         const t = row.original
         const [tone, text] = label[t.status] ?? ['neutral', t.status]
-        const why = [t.result_code !== null ? (resultCodes[t.result_code] ?? `M-Pesa code ${t.result_code}`) : null, t.failure_reason?.replaceAll('_', ' ')].filter(Boolean).join(' · ')
+        // a sandbox placeholder credit was never paid: M-Pesa's answer was not a payment, whatever code was stored
+        const code = t.sandbox ? 'credited without M-Pesa’s confirmation (sandbox, before 30 Oct)' : t.result_code !== null ? (resultCodes[t.result_code] ?? `M-Pesa code ${t.result_code}`) : null
+        const why = [code, t.failure_reason?.replaceAll('_', ' ')].filter(Boolean).join(' · ')
         return (
           <div className="grid justify-items-start gap-1">
             <div className="flex flex-wrap gap-1"><Pill tone={tone}>{text}</Pill>{t.sandbox ? <Pill tone="pending">Sandbox</Pill> : null}</div>
@@ -84,8 +86,8 @@ export function TopUpsPage() {
   return (
     <section>
       <PageHeader title="Top-ups">
-        Every top-up, newest first, with how it ended. “Sandbox” marks a top-up credited by sandbox settlement while
-        payments are tested against the Daraja sandbox: no money moved.
+        Every top-up, newest first, with how it ended. “Sandbox” marks a top-up credited without a payment while the
+        Daraja sandbox was being tested (30 October); since then only real M-Pesa payments are credited.
       </PageHeader>
       <form className="mb-4 flex flex-wrap items-center gap-3" onSubmit={(e) => { e.preventDefault(); setQ(typed.trim()) }}>
         <div className="relative w-full max-w-sm">

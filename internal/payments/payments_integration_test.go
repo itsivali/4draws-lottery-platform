@@ -1030,18 +1030,18 @@ func sandbox(t *testing.T) *env {
 	return setupWith(t, true, payments.Config{SandboxSettle: true, ThrottleWaits: []time.Duration{time.Millisecond, time.Millisecond, time.Millisecond}})
 }
 
-func TestSandboxSettle_SettlesFromTheCallbackAloneAndNeverAsksTheStatusQuery(t *testing.T) {
+func TestSandboxSettle_CreditsOnlyRealPaymentsFromTheCallbackAndNeverAsksTheStatusQuery(t *testing.T) {
 	cases := map[string]struct {
 		fault       darajamock.Fault
 		wantStatus  string
 		wantBalance int64
-		wantSandbox bool // credited the amount requested under a SANDBOX- receipt
-		wantProved  bool // the account's number is proved, so it can play (owner, 2026-10-30)
+		wantProved  bool
 	}{
-		// 2026-10-30: the owner's answered sandbox prompt called back 1037 after 26 seconds
-		"timeout callback":   {fault: darajamock.Fault{ResultCode: 1037}, wantStatus: "credited", wantBalance: 100, wantSandbox: true, wantProved: true},
-		"wrong pin":          {fault: darajamock.Fault{ResultCode: 2001}, wantStatus: "credited", wantBalance: 100, wantSandbox: true, wantProved: true},
-		"paid":               {fault: darajamock.Fault{PaidAmountKES: 90}, wantStatus: "credited", wantBalance: 90, wantProved: true},
+		// a real sandbox payment (2026-10-29: Daisy Irungu's, receipt UJT6YBR9IQ) credits with Safaricom's receipt
+		"paid": {fault: darajamock.Fault{PaidAmountKES: 90}, wantStatus: "credited", wantBalance: 90, wantProved: true},
+		// owner, 2026-10-30: only real payments are credited; a prompt that timed out moved no money
+		"timeout callback":   {fault: darajamock.Fault{ResultCode: 1037}, wantStatus: "failed"},
+		"wrong pin":          {fault: darajamock.Fault{ResultCode: 2001}, wantStatus: "failed"},
 		"cancelled by payer": {fault: darajamock.Fault{ResultCode: 1032}, wantStatus: "cancelled"},
 	}
 	for name, tc := range cases {
@@ -1057,10 +1057,8 @@ func TestSandboxSettle_SettlesFromTheCallbackAloneAndNeverAsksTheStatusQuery(t *
 			if b := e.balance(t, user); b != tc.wantBalance {
 				t.Fatalf("balance = %d, want %d", b, tc.wantBalance)
 			}
-			if tc.wantStatus == "credited" {
-				if got := strings.HasPrefix(e.receipt(t, tu.ID), payments.SandboxReceiptPrefix); got != tc.wantSandbox {
-					t.Fatalf("receipt %q: sandbox = %v, want %v", e.receipt(t, tu.ID), got, tc.wantSandbox)
-				}
+			if tc.wantStatus == "credited" && strings.HasPrefix(e.receipt(t, tu.ID), "SANDBOX-") {
+				t.Fatalf("receipt %q is not Safaricom's", e.receipt(t, tu.ID))
 			}
 			if e.phoneVerified(t, user) != tc.wantProved {
 				t.Fatalf("phone proved = %v, want %v", !tc.wantProved, tc.wantProved)
@@ -1072,21 +1070,28 @@ func TestSandboxSettle_SettlesFromTheCallbackAloneAndNeverAsksTheStatusQuery(t *
 	}
 }
 
-func TestSandboxSettle_APromptThatNeverCallsBackIsCreditedOnceTheWaitIsOver(t *testing.T) {
+func TestSandboxSettle_WithoutACallbackTheStatusQueryDecidesAndNothingIsCreditedWithoutAReceipt(t *testing.T) {
 	e := sandbox(t)
 	user, tu := e.startPushed(t, darajamock.Fault{DropCallback: true})
 	if d, err := e.svc.Verify(context.Background(), tu.ID); err != nil || d != payments.DefaultVerifyAfter {
 		t.Fatalf("before the wait: retry %v err %v", d, err)
 	}
 	e.clk.Advance(payments.DefaultVerifyAfter)
-	if d, err := e.svc.Verify(context.Background(), tu.ID); err != nil || d != 0 {
-		t.Fatalf("after the wait: retry %v err %v", d, err)
+	if _, err := e.svc.Verify(context.Background(), tu.ID); err != nil {
+		t.Fatal(err)
 	}
-	if st, _ := e.status(t, tu.ID); st != "credited" || e.balance(t, user) != 100 || !e.phoneVerified(t, user) {
-		t.Fatalf("status %s balance %d proved %v", st, e.balance(t, user), e.phoneVerified(t, user))
+	if n := e.mock.Queries(); n == 0 {
+		t.Fatal("without a callback the status query was not asked")
 	}
-	if n := e.mock.Queries(); n != 0 {
-		t.Fatalf("%d status queries in sandbox settlement", n)
+	if b := e.balance(t, user); b != 0 {
+		t.Fatalf("credited %d without Safaricom's receipt", b)
+	}
+	e.clk.Advance(payments.DefaultExpiry)
+	if _, err := e.svc.Verify(context.Background(), tu.ID); err != nil {
+		t.Fatal(err)
+	}
+	if st, _ := e.status(t, tu.ID); st != "unconfirmed" || e.balance(t, user) != 0 {
+		t.Fatalf("status = %s, balance %d: want unconfirmed and nothing credited (resolved from the statement, as in production)", st, e.balance(t, user))
 	}
 }
 

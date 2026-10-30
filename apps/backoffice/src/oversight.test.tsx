@@ -57,7 +57,7 @@ describe('top-ups', () => {
     const table = await screen.findByRole('table', { name: /Top-ups, newest first/ })
     expect(within(table).getByText('Credited')).toBeInTheDocument()
     expect(within(table).getByText('Sandbox')).toBeInTheDocument()
-    expect(within(table).getByText(/phone did not answer/)).toBeInTheDocument()
+    expect(within(table).getByText(/credited without M-Pesa’s confirmation/)).toBeInTheDocument()
     expect(within(table).getByText('SANDBOX-p-1')).toBeInTheDocument()
   })
 })

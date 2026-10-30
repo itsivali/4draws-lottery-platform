@@ -101,10 +101,9 @@ services:
       # (migration 00036; the owner's choice, so a shilling is enough to play).
       - key: TOP_UP_MIN_KES
         value: '1'
-      # Sandbox settlement (owner, 2026-10-30): the sandbox often calls back "timeout" (1037) for an answered prompt and
-      # throttles the status query, so top-ups are settled from the callback alone and credit the amount requested
-      # unless the prompt was cancelled. Receipts start SANDBOX-. The API refuses to start with this set and production
-      # Daraja: delete it when switching (docs/runbooks/payments-operations.md).
+      # Sandbox settlement (owner, 2026-10-30): the sandbox throttles the status query, so top-ups are settled from
+      # Safaricom's callback; only real payments (paid, with Safaricom's receipt) are credited. The API refuses to start
+      # with this set and production Daraja: delete it when switching (docs/runbooks/payments-operations.md).
       - key: DARAJA_SANDBOX_SETTLE
         value: 'true'
       - key: DARAJA_CALLBACK_TOKEN

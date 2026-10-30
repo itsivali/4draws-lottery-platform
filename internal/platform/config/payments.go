@@ -40,9 +40,8 @@ type Payments struct {
 
 	MinTopUpKES int64 // TOP_UP_MIN_KES; 0 leaves the payments default
 
-	// SandboxSettle (DARAJA_SANDBOX_SETTLE=true) settles top-ups from the callback alone and credits the amount
-	// requested when the sandbox reports a timeout or never calls back (payments.Config.SandboxSettle). Refused with
-	// production Daraja.
+	// SandboxSettle (DARAJA_SANDBOX_SETTLE=true) settles top-ups from Safaricom's callback without the status query;
+	// only real payments are credited (payments.Config.SandboxSettle). Refused with production Daraja.
 	SandboxSettle bool
 
 	// TopUpCooldown (TOP_UP_COOLDOWN, a Go duration, default 2m; 0 turns it off) is the least time between two M-Pesa
@@ -153,7 +152,7 @@ func loadPayments(api API) (Payments, error) {
 	}
 	if p.SandboxSettle = os.Getenv("DARAJA_SANDBOX_SETTLE") == "true"; p.SandboxSettle {
 		if u, _ := url.Parse(p.BaseURL); p.AllowProduction || u.Hostname() == "api.safaricom.co.ke" {
-			return Payments{}, errors.New("config: DARAJA_SANDBOX_SETTLE credits top-ups M-Pesa did not confirm; it is refused with production Daraja")
+			return Payments{}, errors.New("config: DARAJA_SANDBOX_SETTLE settles top-ups without the status query; it is for the sandbox and refused with production Daraja")
 		}
 	}
 	p.C2BShortCode, p.B2CShortCode = os.Getenv("DARAJA_C2B_SHORTCODE"), os.Getenv("DARAJA_B2C_SHORTCODE")

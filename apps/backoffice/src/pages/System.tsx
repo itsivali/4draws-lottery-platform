@@ -85,7 +85,7 @@ export function SystemPage() {
                       <Row label="M-Pesa (Daraja)">
                         {st.daraja === '' ? <Pill tone="error">Top-ups off</Pill> : st.daraja === 'production' ? <Pill tone="success">Production</Pill> : <Pill tone="warning">{st.daraja === 'sandbox' ? 'Sandbox' : st.daraja}</Pill>}
                       </Row>
-                      <Row label="Sandbox settlement" help={st.sandbox_settlement ? 'top-ups credit without M-Pesa’s confirmation' : undefined}><On on={st.sandbox_settlement} /></Row>
+                      <Row label="Sandbox settlement" help={st.sandbox_settlement ? 'settled from Safaricom’s callback; only real payments credit' : undefined}><On on={st.sandbox_settlement} /></Row>
                       <Row label="Smallest top-up">{st.top_up_min_kes > 0 ? kes(st.top_up_min_kes) : 'default'}</Row>
                       <Row label="Top-up cooldown">{minutes(st.top_up_cooldown_s)}</Row>
                       <Row label="Prompt pays">{st.buy_goods ? 'a till (Buy Goods)' : 'the paybill'}</Row>

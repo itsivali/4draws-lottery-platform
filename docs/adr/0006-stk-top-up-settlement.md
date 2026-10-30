@@ -30,12 +30,12 @@ proves a phone the player does not hold.
 - **A throttled push is asked again** (2026-10-30): HTTP 429 is Daraja's spike arrest, which refuses the request before
   any prompt is sent, so the double-charge risk above does not apply. Three more attempts after 2, 4 and 8 seconds,
   then `push_throttled`.
-- **Sandbox settlement** (`DARAJA_SANDBOX_SETTLE`, owner, 2026-10-30): for testing against the Daraja sandbox, which
-  calls back timeouts (1037) for answered prompts and throttles the status query, top-ups settle from the callback
-  alone: paid credits as usual, 1032 stays cancelled, anything else or no callback within `VerifyAfter` credits the
-  amount requested under a `SANDBOX-` receipt and proves the account's number (so a test account can play). It breaks "a callback alone never moves money" on
-  purpose, which is acceptable only because no real money moves in the sandbox; the configuration refuses it with
-  production Daraja.
+- **Sandbox settlement** (`DARAJA_SANDBOX_SETTLE`, owner, 2026-10-30): the Daraja sandbox carries real M-Pesa
+  payments (Safaricom reverses them later) but throttles the status query, so a top-up settles from Safaricom's
+  callback alone: paid credits with its receipt, 1032 is cancelled, any other code fails; without a usable callback
+  the status query decides. Nothing is credited without Safaricom's receipt. (For a few hours on 2026-10-30 timed-out
+  prompts were also credited under `SANDBOX-` receipts; the owner chose real payments only.) Refused with production
+  Daraja, where the query confirms every callback.
 - **The callback URL's secret segment is sha256(DARAJA_CALLBACK_TOKEN) in hex**, because a Render-generated base64 secret
   may contain `/`. The route lives outside `/v1` (no token, no Idempotency-Key) and compares in constant time.
 - **Limits count top-ups in flight**, under a per-player advisory lock, so parallel requests cannot pass a deposit limit.
