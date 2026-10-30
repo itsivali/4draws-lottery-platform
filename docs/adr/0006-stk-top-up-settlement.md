@@ -33,7 +33,7 @@ proves a phone the player does not hold.
 - **Sandbox settlement** (`DARAJA_SANDBOX_SETTLE`, owner, 2026-10-30): for testing against the Daraja sandbox, which
   calls back timeouts (1037) for answered prompts and throttles the status query, top-ups settle from the callback
   alone: paid credits as usual, 1032 stays cancelled, anything else or no callback within `VerifyAfter` credits the
-  amount requested under a `SANDBOX-` receipt that proves no phone. It breaks "a callback alone never moves money" on
+  amount requested under a `SANDBOX-` receipt and proves the account's number (so a test account can play). It breaks "a callback alone never moves money" on
   purpose, which is acceptable only because no real money moves in the sandbox; the configuration refuses it with
   production Daraja.
 - **The callback URL's secret segment is sha256(DARAJA_CALLBACK_TOKEN) in hex**, because a Render-generated base64 secret

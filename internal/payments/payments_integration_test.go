@@ -1036,11 +1036,11 @@ func TestSandboxSettle_SettlesFromTheCallbackAloneAndNeverAsksTheStatusQuery(t *
 		wantStatus  string
 		wantBalance int64
 		wantSandbox bool // credited the amount requested under a SANDBOX- receipt
-		wantProved  bool
+		wantProved  bool // the account's number is proved, so it can play (owner, 2026-10-30)
 	}{
 		// 2026-10-30: the owner's answered sandbox prompt called back 1037 after 26 seconds
-		"timeout callback":   {fault: darajamock.Fault{ResultCode: 1037}, wantStatus: "credited", wantBalance: 100, wantSandbox: true},
-		"wrong pin":          {fault: darajamock.Fault{ResultCode: 2001}, wantStatus: "credited", wantBalance: 100, wantSandbox: true},
+		"timeout callback":   {fault: darajamock.Fault{ResultCode: 1037}, wantStatus: "credited", wantBalance: 100, wantSandbox: true, wantProved: true},
+		"wrong pin":          {fault: darajamock.Fault{ResultCode: 2001}, wantStatus: "credited", wantBalance: 100, wantSandbox: true, wantProved: true},
 		"paid":               {fault: darajamock.Fault{PaidAmountKES: 90}, wantStatus: "credited", wantBalance: 90, wantProved: true},
 		"cancelled by payer": {fault: darajamock.Fault{ResultCode: 1032}, wantStatus: "cancelled"},
 	}
@@ -1082,8 +1082,8 @@ func TestSandboxSettle_APromptThatNeverCallsBackIsCreditedOnceTheWaitIsOver(t *t
 	if d, err := e.svc.Verify(context.Background(), tu.ID); err != nil || d != 0 {
 		t.Fatalf("after the wait: retry %v err %v", d, err)
 	}
-	if st, _ := e.status(t, tu.ID); st != "credited" || e.balance(t, user) != 100 {
-		t.Fatalf("status %s balance %d", st, e.balance(t, user))
+	if st, _ := e.status(t, tu.ID); st != "credited" || e.balance(t, user) != 100 || !e.phoneVerified(t, user) {
+		t.Fatalf("status %s balance %d proved %v", st, e.balance(t, user), e.phoneVerified(t, user))
 	}
 	if n := e.mock.Queries(); n != 0 {
 		t.Fatalf("%d status queries in sandbox settlement", n)

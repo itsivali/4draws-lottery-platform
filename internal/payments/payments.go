@@ -155,8 +155,9 @@ type Config struct {
 	// SandboxSettle settles top-ups without the status query, for testing against the Daraja sandbox, whose callbacks
 	// often report a timeout (1037) for a prompt that was answered and whose status query is throttled (429). A paid
 	// callback credits as usual and a cancelled prompt (1032) stays cancelled; any other outcome, including no callback
-	// within VerifyAfter, credits the amount requested under a SandboxReceiptPrefix receipt. The configuration refuses
-	// it with production Daraja; no real money moves in the sandbox.
+	// within VerifyAfter, credits the amount requested under a SandboxReceiptPrefix receipt and proves the account's
+	// number, so the account can play. The configuration refuses it with production Daraja; no real money moves in the
+	// sandbox.
 	SandboxSettle bool
 }
 
@@ -586,7 +587,8 @@ type creditInput struct {
 	// channel is "c2b" for a paybill payment, which proves no phone (anyone can pay into any account number);
 	// otherwise an STK top-up, whose approved prompt proves the target.
 	channel string
-	// sandbox, when set, is why sandbox settlement credited a top-up M-Pesa did not confirm; it proves no phone.
+	// sandbox, when set, is why sandbox settlement credited a top-up M-Pesa did not confirm. It proves the push target
+	// as a paid prompt would, so a sandbox account can play.
 	sandbox string
 }
 
@@ -619,8 +621,9 @@ func (s *Service) creditPayment(ctx context.Context, tx pgx.Tx, in creditInput) 
 	case in.channel == "c2b":
 		ev.Action = "payment.c2b.credited"
 	case in.sandbox != "":
+		// the prompt went to the account's own number; a sandbox test account must be able to play (owner, 2026-10-30)
 		ev.Details["sandbox_settlement"] = in.sandbox
-		ev.Details["phone_proof"] = "not_proved_sandbox"
+		ev.Details["phone_proof"] = s.provePhone(ctx, tx, in.user, in.target, in.payer)
 	default:
 		ev.Details["phone_proof"] = s.provePhone(ctx, tx, in.user, in.target, in.payer)
 	}

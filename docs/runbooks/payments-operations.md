@@ -56,7 +56,8 @@ top-ups from the callback alone and never asks the status query:
 | none within 2 minutes | credited the amount requested, receipt `SANDBOX-<payment id>` |
 
 Such credits log `sandbox settlement: crediting the amount requested`, carry `sandbox_settlement` in their audit
-record and prove no phone. It is set in render.yaml and in docker-compose.sandbox.yml; the api logs
+record and prove the account's number as a paid prompt would, so the account can play. A number is only ever proved by a top-up; migration 00040 proved the numbers of accounts whose sandbox top-ups were
+credited before that (2026-10-30, between #102 and #103). It is set in render.yaml and in docker-compose.sandbox.yml; the api logs
 `sandbox_settle=true` at start. **No real money moves in the sandbox, and the api refuses to start with this set and
 production Daraja** (`DARAJA_ALLOW_PRODUCTION` or `api.safaricom.co.ke`): delete the key from render.yaml and the
 dashboard when switching to production.
