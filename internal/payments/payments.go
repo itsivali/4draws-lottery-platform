@@ -361,7 +361,9 @@ func (s *Service) Push(ctx context.Context, paymentID string) error {
 	if p.Status != "initiated" || p.Msisdn == nil {
 		return nil
 	}
-	req := daraja.STKPushRequest{MSISDN: *p.Msisdn, AmountKES: p.AmountRequestedKes, AccountRef: "Tajirika", Description: "Tajirika"}
+	// the prompt text from before 2026-10-29 22:28 (#87), when sandbox prompts last completed: the owner tests whether
+	// "Tajirika" there is why every prompt since times out (1037), 2026-10-30
+	req := daraja.STKPushRequest{MSISDN: *p.Msisdn, AmountKES: p.AmountRequestedKes, AccountRef: "TOPUP", Description: "Wallet top-up"}
 	res, pushErr := s.daraja.STKPush(ctx, req)
 	for _, wait := range s.cfg.ThrottleWaits {
 		if !errors.Is(pushErr, daraja.ErrThrottled) {
