@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import '../support/app_harness.dart';
 import '../support/fake_backend.dart';
 import '../support/fonts.dart';
+import '../support/journeys.dart';
 
 /// Signing in with Google or Apple (ADR 0020): the buttons appear when the API offers them, an identity without an
 /// account is asked for its M-Pesa number and nothing else, and one with an account goes straight in.
@@ -35,6 +36,7 @@ void main() {
     final backend = FakeBackend(balance: 1250);
     final h = await pumpApp(t, backend, signedIn: false);
     await tapGoogle(t);
+    await fillIdentity(t);
     expect(h.providerSignIn.opened, 1);
     expect(find.text('Almost there'), findsOneWidget);
     expect(find.textContaining('Your Google account is ready'), findsOneWidget);
@@ -57,6 +59,8 @@ void main() {
     expect(signup.body, contains('"id_token":"google-id-token"'));
     expect(signup.body, contains('"nonce":"n1"'));
     expect(signup.body, contains('"msisdn":"0712 345 678"'));
+    expect(signup.body, contains('"first_name":"Jane"'), reason: 'names and ID number go with the sign-up');
+    expect(signup.body, contains('"national_id":"12345678"'));
     expect(backend.ssoAccounts, contains('google-id-token'));
   });
 
@@ -80,6 +84,7 @@ void main() {
   testWidgets('a number with an account already is refused, with a way back to the form', (t) async {
     await pumpApp(t, FakeBackend(), signedIn: false);
     await tapGoogle(t);
+    await fillIdentity(t);
     await t.enterText(find.widgetWithText(TextFormField, 'M-Pesa phone number'), '0712999999');
     await t.tap(find.text('I am 18 or older'));
     await t.tap(find.widgetWithText(FilledButton, 'Create account'));
@@ -96,6 +101,7 @@ void main() {
     final h = await pumpApp(t, FakeBackend(), signedIn: false);
     h.providerSignIn.nextToken = 'expired-token';
     await tapGoogle(t);
+    await fillIdentity(t);
     await t.enterText(find.widgetWithText(TextFormField, 'M-Pesa phone number'), '0712345678');
     await t.tap(find.text('I am 18 or older'));
     await t.tap(find.widgetWithText(FilledButton, 'Create account'));

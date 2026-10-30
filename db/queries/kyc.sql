@@ -55,3 +55,12 @@ FROM identity.users u
 JOIN LATERAL (SELECT k.status, k.id_number_enc, k.full_name_enc FROM kyc.kyc_checks k
               WHERE k.user_id = u.id ORDER BY k.created_at DESC, k.id DESC LIMIT 1) c ON true
 WHERE u.id = ANY(sqlc.arg(user_ids)::uuid[]);
+
+-- The first name, second name and ID number an account gave at sign-up (migration 00041).
+-- name: InsertDeclaredIdentity :exec
+INSERT INTO kyc.declared_identities (user_id, first_name_enc, second_name_enc, id_number_enc, id_number_hash, created_at)
+VALUES ($1, $2, $3, $4, $5, $6);
+
+-- name: DeclaredIdentitiesFor :many
+SELECT user_id, first_name_enc, second_name_enc, id_number_enc FROM kyc.declared_identities
+WHERE user_id = ANY(sqlc.arg(user_ids)::uuid[]);

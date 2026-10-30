@@ -66,9 +66,18 @@ void main() {
       tokens: NoTokens(),
     );
     final repo = AuthRepository(api, const DeviceIdentity(platform: 'web'));
-    await repo.signUp(msisdn: '0712345678', email: 'jane@example.com', password: 'pw-pw-pw-pw', idempotencyKey: 'k');
+    await repo.signUp(
+      msisdn: '0712345678',
+      email: 'jane@example.com',
+      password: 'pw-pw-pw-pw',
+      identity: const SignUpIdentity(firstName: ' Jane ', secondName: 'Wanjiru', nationalId: '12345678'),
+      idempotencyKey: 'k',
+    );
     expect(seen, hasLength(1));
-    final device = (jsonDecode(seen.single.body) as Map<String, Object?>)['device']! as Map<String, Object?>;
+    final sent = jsonDecode(seen.single.body) as Map<String, Object?>;
+    // the names and ID number go with the sign-up, trimmed (owner, 2026-10-30)
+    expect([sent['first_name'], sent['second_name'], sent['national_id']], ['Jane', 'Wanjiru', '12345678']);
+    final device = sent['device']! as Map<String, Object?>;
     expect(device.containsKey('attestation_token'), isFalse);
   });
 

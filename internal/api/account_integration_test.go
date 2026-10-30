@@ -10,6 +10,7 @@ import (
 
 	"github.com/itsivali/lottery-platform/internal/payments"
 	"github.com/itsivali/lottery-platform/internal/payouts"
+	"github.com/itsivali/lottery-platform/internal/staff"
 )
 
 // sameInstant compares an RFC 3339 value from a response with want, whatever offset it was written in.
@@ -174,5 +175,62 @@ func TestAPI_ATopUpWithinTheCooldownIsRefusedWithHowLongToWait(t *testing.T) {
 	e.clk.Advance(70 * time.Second)
 	if r := e.do(t, http.MethodPost, "/v1/payments/topups", s.access, map[string]any{"amount_kes": 50}); r.Code != http.StatusAccepted {
 		t.Fatalf("after the cooldown: %d %s", r.Code, r.Raw)
+	}
+}
+
+// A new account gives its first name, second name and ID number at sign-up (owner, 2026-10-30); its account shows the
+// names, and verification before the first cash-out starts from them without a date of birth.
+func TestAPI_SignUpTakesNamesAndIDNumberThatVerificationStartsFrom(t *testing.T) {
+	e := setup(t)
+	dev := map[string]any{"fingerprint": "fp-names", "platform": "android"}
+	base := map[string]any{"msisdn": e.msisdn(), "email": e.email(), "password": strongPassword, "device": dev}
+	for name, extra := range map[string]map[string]any{
+		"no names":         {"national_id": "24681357"},
+		"no ID number":     {"first_name": "Amina", "second_name": "Otieno"},
+		"bad ID number":    {"first_name": "Amina", "second_name": "Otieno", "national_id": "12"},
+		"a name of digits": {"first_name": "4mina", "second_name": "Otieno", "national_id": "24681357"},
+	} {
+		body := map[string]any{}
+		for k, v := range base {
+			body[k] = v
+		}
+		for k, v := range extra {
+			body[k] = v
+		}
+		if r := e.do(t, http.MethodPost, "/v1/auth/signup", "", body); r.Code != http.StatusBadRequest || !hasType(r, "invalid-identity") {
+			t.Fatalf("%s: %d %s", name, r.Code, r.Raw)
+		}
+	}
+	var n int
+	if err := e.pool.QueryRow(context.Background(), `SELECT count(*) FROM identity.users WHERE msisdn = $1`, "254"+base["msisdn"].(string)[1:]).Scan(&n); err != nil || n != 0 {
+		t.Fatalf("a refused sign-up left %d accounts (%v)", n, err)
+	}
+	body := map[string]any{"first_name": " Amina ", "second_name": "Otieno", "national_id": "24681357"}
+	for k, v := range base {
+		body[k] = v
+	}
+	r := e.do(t, http.MethodPost, "/v1/auth/signup", "", body)
+	if r.Code != http.StatusCreated {
+		t.Fatalf("signup: %d %s", r.Code, r.Raw)
+	}
+	tok := r.Body["access_token"].(string)
+	if a := e.do(t, http.MethodGet, "/v1/account", tok, nil); a.Body["first_name"] != "Amina" || a.Body["second_name"] != "Otieno" {
+		t.Fatalf("account: %s", a.Raw)
+	}
+	k := e.do(t, http.MethodGet, "/v1/kyc", tok, nil)
+	declared, _ := k.Body["declared"].(map[string]any)
+	if k.Code != http.StatusOK || k.Body["status"] != "none" || declared["first_name"] != "Amina" || declared["national_id"] != "24681357" {
+		t.Fatalf("kyc status: %s", k.Raw)
+	}
+	// the back office shows the names and ID number given at sign-up until the player submits
+	pl := e.do(t, http.MethodGet, "/v1/staff/players", e.member(staff.Staff), nil)
+	players, _ := pl.Body["players"].([]any)
+	if len(players) != 1 || players[0].(map[string]any)["full_name"] != "Amina Otieno" || players[0].(map[string]any)["national_id"] != "24681357" {
+		t.Fatalf("players: %s", pl.Raw)
+	}
+	// left out, the name and ID number are the ones from sign-up (this deployment's registry also wants the date of
+	// birth; under manual review it may be left out too: kyc tests)
+	if s := e.do(t, http.MethodPost, "/v1/kyc", tok, map[string]any{"date_of_birth": "1992-03-04"}); s.Code != http.StatusAccepted {
+		t.Fatalf("submit from sign-up: %d %s", s.Code, s.Raw)
 	}
 }

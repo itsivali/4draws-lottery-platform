@@ -58,6 +58,43 @@ func (q *Queries) AwaitingReview(ctx context.Context) ([]AwaitingReviewRow, erro
 	return items, nil
 }
 
+const declaredIdentitiesFor = `-- name: DeclaredIdentitiesFor :many
+SELECT user_id, first_name_enc, second_name_enc, id_number_enc FROM kyc.declared_identities
+WHERE user_id = ANY($1::uuid[])
+`
+
+type DeclaredIdentitiesForRow struct {
+	UserID        string
+	FirstNameEnc  []byte
+	SecondNameEnc []byte
+	IDNumberEnc   []byte
+}
+
+func (q *Queries) DeclaredIdentitiesFor(ctx context.Context, userIds []string) ([]DeclaredIdentitiesForRow, error) {
+	rows, err := q.db.Query(ctx, declaredIdentitiesFor, userIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []DeclaredIdentitiesForRow
+	for rows.Next() {
+		var i DeclaredIdentitiesForRow
+		if err := rows.Scan(
+			&i.UserID,
+			&i.FirstNameEnc,
+			&i.SecondNameEnc,
+			&i.IDNumberEnc,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getKYCCheck = `-- name: GetKYCCheck :one
 SELECT id, user_id, status, id_number_enc, id_number_hash, full_name_enc, date_of_birth_enc, provider, supersedes_id
 FROM kyc.kyc_checks WHERE id = $1
@@ -117,6 +154,33 @@ func (q *Queries) IDHashOwner(ctx context.Context, arg IDHashOwnerParams) (strin
 	var id string
 	err := row.Scan(&id)
 	return id, err
+}
+
+const insertDeclaredIdentity = `-- name: InsertDeclaredIdentity :exec
+INSERT INTO kyc.declared_identities (user_id, first_name_enc, second_name_enc, id_number_enc, id_number_hash, created_at)
+VALUES ($1, $2, $3, $4, $5, $6)
+`
+
+type InsertDeclaredIdentityParams struct {
+	UserID        string
+	FirstNameEnc  []byte
+	SecondNameEnc []byte
+	IDNumberEnc   []byte
+	IDNumberHash  []byte
+	CreatedAt     time.Time
+}
+
+// The first name, second name and ID number an account gave at sign-up (migration 00041).
+func (q *Queries) InsertDeclaredIdentity(ctx context.Context, arg InsertDeclaredIdentityParams) error {
+	_, err := q.db.Exec(ctx, insertDeclaredIdentity,
+		arg.UserID,
+		arg.FirstNameEnc,
+		arg.SecondNameEnc,
+		arg.IDNumberEnc,
+		arg.IDNumberHash,
+		arg.CreatedAt,
+	)
+	return err
 }
 
 const insertKYCCheck = `-- name: InsertKYCCheck :one

@@ -40,7 +40,11 @@ export function KycPage() {
       ),
     },
     { id: 'id', header: 'ID number', accessorFn: (s) => s.national_id, cell: ({ row }) => <Mono>{row.original.national_id}</Mono> },
-    { id: 'born', header: 'Born', accessorFn: (s) => s.date_of_birth },
+    {
+      id: 'born', header: 'Born', accessorFn: (s) => s.date_of_birth,
+      // not asked since 2026-10-30: the M-Pesa line is registered to an adult; check the name against the ID instead
+      cell: ({ row }) => row.original.date_of_birth || <span className="text-sm text-muted-foreground">Not asked</span>,
+    },
     { id: 'phone', header: 'Phone', accessorFn: (s) => msisdn(s.msisdn), cell: ({ row }) => <span className="tabular-nums">{msisdn(row.original.msisdn)}</span> },
     { id: 'submitted', header: 'Submitted', accessorFn: (s) => s.submitted_at, cell: ({ row }) => <span className="text-muted-foreground">{eat(row.original.submitted_at)}</span> },
     {

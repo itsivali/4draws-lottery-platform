@@ -475,8 +475,9 @@ func TestStaffAPI_PlayersAreListedSearchedAndSuspended(t *testing.T) {
 	if older["msisdn"] != a.msisdn || older["plays"] != float64(1) || older["balance_kes"] != float64(850) || older["kyc_status"] != "verified" || older["phone_verified"] != true {
 		t.Fatalf("second page: %v", older)
 	}
-	if older["full_name"] != "Amina Otieno" || older["national_id"] != "12345678" || newest["full_name"] != "" || newest["national_id"] != "" {
-		t.Fatalf("names and ids follow the identity submission: %v / %v", older, newest)
+	// the identity submission once there is one, else what the account gave at sign-up (owner, 2026-10-30)
+	if older["full_name"] != "Amina Otieno" || older["national_id"] != "12345678" || newest["full_name"] != "Amina Otieno" || newest["national_id"] != "24681357" {
+		t.Fatalf("names and ids follow the identity submission, else sign-up: %v / %v", older, newest)
 	}
 	// a fragment of the number, as a player would read it out, and the local form of it
 	for _, q := range []string{a.msisdn[len(a.msisdn)-6:], "0" + a.msisdn[3:]} {

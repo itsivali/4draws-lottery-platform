@@ -19,6 +19,11 @@ move to the point where money leaves: the first withdrawal.
 - The app no longer blocks the Play and Top up screens on the ID; the Home screen suggests verification as the thing
   to do before withdrawing, after the number is confirmed. Paybill payments into an unverified account are credited
   (the `kyc_required` suspense reason is gone).
+- **A new account gives its first name, second name and national ID number at sign-up** (owner, 2026-10-30;
+  `kyc.declared_identities`, encrypted, migration 00041). They are shown back to the player and to staff, and the
+  verification before the first withdrawal starts from them. **No date of birth is asked under manual review**: an
+  M-Pesa line is registered to an adult against their ID, so reviewers check that the name matches the ID number (and
+  the name M-Pesa shows for the number). A registry, if one is configured, still needs the date of birth.
 - The review itself (ADR 0009, the back office's Identity review queue) is unchanged. Linking a Google or Apple
   identity to an existing account (ADR 0005) still requires a verified ID; signing up with one does not (ADR 0020).
 

@@ -14,3 +14,8 @@ final accountProvider = FutureProvider<Account>((ref) async {
 });
 
 final limitsProvider = FutureProvider<Map<String, LimitState>>((ref) => ref.watch(accountRepositoryProvider).limits());
+
+/// The names and ID number the player gave at sign-up (null for accounts from before 2026-10-30).
+final declaredIdentityProvider = FutureProvider<DeclaredIdentity?>(
+  (ref) => ref.watch(accountRepositoryProvider).declaredIdentity(),
+);

@@ -260,6 +260,15 @@ type IdentityUser struct {
 	Email              *string
 }
 
+type KycDeclaredIdentity struct {
+	UserID        string
+	FirstNameEnc  []byte
+	SecondNameEnc []byte
+	IDNumberEnc   []byte
+	IDNumberHash  []byte
+	CreatedAt     time.Time
+}
+
 type KycKycCheck struct {
 	ID             string
 	UserID         string

@@ -9,8 +9,10 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/itsivali/lottery-platform/internal/identity"
+	"github.com/itsivali/lottery-platform/internal/kyc"
 	"github.com/itsivali/lottery-platform/internal/platform/httpx"
 	"github.com/itsivali/lottery-platform/internal/platform/password"
 )
@@ -96,6 +98,29 @@ type credentialsJSON struct {
 	Email    string     `json:"email"` // sign-up only (ADR 0021)
 	Password string     `json:"password"`
 	Device   deviceJSON `json:"device"`
+	declaredJSON
+}
+
+// declaredJSON is what a new account gives about itself at sign-up (owner, 2026-10-30), verified at the first cash-out.
+type declaredJSON struct {
+	FirstName  string `json:"first_name"`
+	SecondName string `json:"second_name"`
+	NationalID string `json:"national_id"`
+}
+
+// declaration checks what a new account gave about itself and returns what stores it with the account. Without the
+// identity service (a deployment with no KYC) nothing is asked.
+func (h *handlers) declaration(w http.ResponseWriter, in declaredJSON) ([]identity.Created, bool) {
+	if h.KYC == nil {
+		return nil, true
+	}
+	d, err := kyc.Declaration{FirstName: in.FirstName, SecondName: in.SecondName, IDNumber: in.NationalID}.Normalized()
+	if err != nil {
+		httpx.WriteProblem(w, http.StatusBadRequest, "invalid-identity", "Check your names and ID number",
+			"give your first and second names as on your national ID, and the ID number (7 to 9 digits)")
+		return nil, false
+	}
+	return []identity.Created{func(ctx context.Context, tx pgx.Tx, userID string) error { return h.KYC.Declare(ctx, tx, userID, d) }}, true
 }
 
 func (h *handlers) signup(w http.ResponseWriter, r *http.Request) {
@@ -111,7 +136,11 @@ func (h *handlers) signup(w http.ResponseWriter, r *http.Request) {
 	if !h.limit(w, r, "signup:ip:"+h.clientIP(r), 10, time.Hour) || !h.limit(w, r, "signup:msisdn:"+key, 5, 24*time.Hour) {
 		return
 	}
-	t, err := h.Identity.Signup(r.Context(), in.MSISDN, in.Email, in.Password, h.device(r.Context(), in.Device))
+	created, ok := h.declaration(w, in.declaredJSON)
+	if !ok {
+		return
+	}
+	t, err := h.Identity.Signup(r.Context(), in.MSISDN, in.Email, in.Password, h.device(r.Context(), in.Device), created...)
 	if err != nil {
 		authError(w, err)
 		return
@@ -296,6 +325,7 @@ func (h *handlers) ssoSignup(w http.ResponseWriter, r *http.Request) {
 		Nonce   string     `json:"nonce"`
 		MSISDN  string     `json:"msisdn"`
 		Device  deviceJSON `json:"device"`
+		declaredJSON
 	}
 	if !httpx.DecodeJSON(w, r, &in) {
 		return
@@ -307,7 +337,11 @@ func (h *handlers) ssoSignup(w http.ResponseWriter, r *http.Request) {
 	if !h.limit(w, r, "signup:ip:"+h.clientIP(r), 10, time.Hour) || !h.limit(w, r, "signup:msisdn:"+key, 5, 24*time.Hour) {
 		return
 	}
-	t, err := h.Identity.SignupSSO(r.Context(), provider, in.IDToken, in.Nonce, in.MSISDN, h.device(r.Context(), in.Device))
+	created, ok := h.declaration(w, in.declaredJSON)
+	if !ok {
+		return
+	}
+	t, err := h.Identity.SignupSSO(r.Context(), provider, in.IDToken, in.Nonce, in.MSISDN, h.device(r.Context(), in.Device), created...)
 	if err != nil {
 		authError(w, err)
 		return

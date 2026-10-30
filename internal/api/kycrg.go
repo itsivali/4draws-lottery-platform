@@ -23,7 +23,17 @@ func (h *handlers) kycStatus(w http.ResponseWriter, r *http.Request) {
 		internalError(w, err)
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, map[string]string{"status": string(st)})
+	out := map[string]any{"status": string(st), "declared": nil}
+	// what the player gave at sign-up, their own data, to start the verification form from
+	d, err := h.KYC.Declared(r.Context(), []string{p.UserID})
+	if err != nil {
+		internalError(w, err)
+		return
+	}
+	if v, ok := d[p.UserID]; ok {
+		out["declared"] = declaredJSON{FirstName: v.FirstName, SecondName: v.SecondName, NationalID: v.IDNumber}
+	}
+	httpx.WriteJSON(w, http.StatusOK, out)
 }
 
 func (h *handlers) kycSubmit(w http.ResponseWriter, r *http.Request) {
@@ -36,6 +46,22 @@ func (h *handlers) kycSubmit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	p, _ := principalFrom(r.Context())
+	// left out, the name and ID number are the ones given at sign-up (owner, 2026-10-30)
+	if in.NationalID == "" || in.FullName == "" {
+		d, err := h.KYC.Declared(r.Context(), []string{p.UserID})
+		if err != nil {
+			internalError(w, err)
+			return
+		}
+		if v, ok := d[p.UserID]; ok {
+			if in.NationalID == "" {
+				in.NationalID = v.IDNumber
+			}
+			if in.FullName == "" {
+				in.FullName = v.Full()
+			}
+		}
+	}
 	st, err := h.KYC.Submit(r.Context(), p.UserID, kyc.Submission{IDNumber: in.NationalID, FullName: in.FullName, DateOfBirth: in.DateOfBirth})
 	switch {
 	case err == nil:

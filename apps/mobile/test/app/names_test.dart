@@ -31,10 +31,18 @@ void main() {
     expect(find.text('Your name'), findsNothing);
   });
 
-  testWidgets('sign-up asks for no name', (t) async {
+  // owner, 2026-10-30: a new account gives its first name, second name, then its national ID number (this replaces
+  // 2026-10-30's "names come from the identity submission only")
+  testWidgets('sign-up asks for the first name, second name, then the ID number', (t) async {
     await pumpApp(t, FakeBackend(), signedIn: false);
     await t.tap(find.text('Create account').first);
     await t.pumpAndSettle();
-    expect(find.widgetWithText(TextFormField, 'First name'), findsNothing);
+    final first = t.getTopLeft(find.widgetWithText(TextFormField, 'First name')).dy;
+    final second = t.getTopLeft(find.widgetWithText(TextFormField, 'Second name')).dy;
+    final id = t.getTopLeft(find.widgetWithText(TextFormField, 'National ID number')).dy;
+    expect(first < second && second < id, isTrue, reason: 'in that order');
+    await t.tap(find.text('Sign in').first);
+    await t.pumpAndSettle();
+    expect(find.widgetWithText(TextFormField, 'First name'), findsNothing, reason: 'signing in asks for none of it');
   });
 }

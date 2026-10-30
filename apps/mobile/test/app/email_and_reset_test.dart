@@ -6,6 +6,7 @@ import 'package:lottery_mobile/core/auth/session_manager.dart';
 import '../support/app_harness.dart';
 import '../support/fake_backend.dart';
 import '../support/fonts.dart';
+import '../support/journeys.dart';
 
 /// Email addresses and self-service password resets (ADR 0021).
 void main() {
@@ -27,14 +28,15 @@ void main() {
     await pumpApp(t, backend, signedIn: false);
     await t.tap(find.text('Create account').first);
     await t.pumpAndSettle();
+    await fillIdentity(t);
     await t.enterText(find.widgetWithText(TextFormField, 'M-Pesa phone number'), '0712345678');
     await t.enterText(find.widgetWithText(TextFormField, 'Password'), 'correct horse battery');
-    await t.tap(find.text('I am 18 or older'));
-    await t.tap(find.widgetWithText(FilledButton, 'Create account'));
+    await tapVisible(t, find.text('I am 18 or older'));
+    await tapVisible(t, find.widgetWithText(FilledButton, 'Create account'));
     await t.pumpAndSettle();
     expect(find.text('Enter an email address such as name@example.com.'), findsOneWidget);
     await t.enterText(find.widgetWithText(TextFormField, 'Email address'), 'Jane@Example.com');
-    await t.tap(find.widgetWithText(FilledButton, 'Create account'));
+    await tapVisible(t, find.widgetWithText(FilledButton, 'Create account'));
     await t.pumpAndSettle();
     expect(find.text('Confirmed balance'), findsOneWidget);
     final signup = backend.requests.lastWhere((r) => r.url.path == '/v1/auth/signup');
@@ -45,11 +47,12 @@ void main() {
     await pumpApp(t, FakeBackend(), signedIn: false);
     await t.tap(find.text('Create account').first);
     await t.pumpAndSettle();
+    await fillIdentity(t);
     await t.enterText(find.widgetWithText(TextFormField, 'M-Pesa phone number'), '0712345678');
     await t.enterText(find.widgetWithText(TextFormField, 'Email address'), 'taken@example.com');
     await t.enterText(find.widgetWithText(TextFormField, 'Password'), 'correct horse battery');
-    await t.tap(find.text('I am 18 or older'));
-    await t.tap(find.widgetWithText(FilledButton, 'Create account'));
+    await tapVisible(t, find.text('I am 18 or older'));
+    await tapVisible(t, find.widgetWithText(FilledButton, 'Create account'));
     await t.pumpAndSettle();
     expect(find.textContaining('This email address already has an account'), findsOneWidget);
   });

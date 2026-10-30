@@ -11,19 +11,30 @@ class AccountRepository {
 
   Future<KycStatus> kyc() async => parse(await _api.get('/v1/kyc'), (j) => kycStatusFrom(j.str('status')));
 
+  /// The names and ID number the player gave at sign-up, to start the verification from (null for older accounts).
+  Future<DeclaredIdentity?> declaredIdentity() async => parse(
+    await _api.get('/v1/kyc'),
+    (j) => switch (j.objectOrNull('declared')) {
+      final d? => DeclaredIdentity(
+        firstName: d.str('first_name'),
+        secondName: d.str('second_name'),
+        nationalId: d.str('national_id'),
+      ),
+      null => null,
+    },
+  );
+
+  /// Submits the ID for verification. No date of birth is asked (owner, 2026-10-30): the M-Pesa line is registered to
+  /// an adult against their ID, so staff check the name against the ID number.
   Future<KycStatus> submitKyc({
     required String nationalId,
     required String fullName,
-    required DateTime dateOfBirth,
     required String idempotencyKey,
   }) async {
-    final dob =
-        '${dateOfBirth.year.toString().padLeft(4, '0')}-${dateOfBirth.month.toString().padLeft(2, '0')}-'
-        '${dateOfBirth.day.toString().padLeft(2, '0')}';
     final r = await _api.post(
       '/v1/kyc',
       idempotencyKey: idempotencyKey,
-      body: {'national_id': nationalId, 'full_name': fullName, 'date_of_birth': dob},
+      body: {'national_id': nationalId, 'full_name': fullName},
     );
     return parse(r, (j) => kycStatusFrom(j.str('status')));
   }

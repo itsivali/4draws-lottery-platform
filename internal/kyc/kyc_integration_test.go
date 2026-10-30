@@ -3,6 +3,7 @@
 package kyc_test
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"errors"
@@ -660,5 +661,50 @@ func TestManual_StaffSeeTheDetailsAuditedAndDecide(t *testing.T) {
 	}
 	if list, err := e.svc.AwaitingReview(ctx, "operator:alice"); err != nil || len(list) != 0 {
 		t.Fatalf("after decisions: %+v %v", list, err)
+	}
+}
+
+// Sign-up's names and ID number (owner, 2026-10-30): kept encrypted with the account, shown to the player, and the start
+// of the verification before the first cash-out, where an M-Pesa line stands for the adult's age.
+func TestDeclared_SignUpNamesAndIDAreKeptAndManualReviewNeedsNoDateOfBirth(t *testing.T) {
+	e := manualSetup(t)
+	ctx := context.Background()
+	u := e.user(t)
+	for _, bad := range []kyc.Declaration{
+		{FirstName: "A", SecondName: "Otieno", IDNumber: "24681357"},
+		{FirstName: "Amina", SecondName: "0tieno7", IDNumber: "24681357"},
+		{FirstName: "Amina", SecondName: "Otieno", IDNumber: "2468"},
+	} {
+		if _, err := bad.Normalized(); !errors.Is(err, kyc.ErrInvalidInput) {
+			t.Fatalf("%+v: err = %v", bad, err)
+		}
+	}
+	if err := pgx.BeginFunc(ctx, e.pool, func(tx pgx.Tx) error {
+		return e.svc.Declare(ctx, tx, u, kyc.Declaration{FirstName: "  Amina ", SecondName: "Otieno", IDNumber: " 24681357"})
+	}); err != nil {
+		t.Fatal(err)
+	}
+	var raw []byte
+	if err := e.pool.QueryRow(ctx, `SELECT id_number_enc FROM kyc.declared_identities WHERE user_id = $1`, u).Scan(&raw); err != nil || bytes.Contains(raw, []byte("24681357")) {
+		t.Fatalf("stored in clear or missing: %v", err)
+	}
+	d, err := e.svc.Declared(ctx, []string{u})
+	if err != nil || d[u] != (kyc.Declaration{FirstName: "Amina", SecondName: "Otieno", IDNumber: "24681357"}) {
+		t.Fatalf("declared = %+v, %v", d, err)
+	}
+	if name, err := e.svc.OwnName(ctx, u); err != nil || name != "Amina Otieno" {
+		t.Fatalf("own name = %q, %v", name, err)
+	}
+	if who, err := e.svc.Identities(ctx, []string{u}, "staff-1"); err != nil || who[u].FullName != "Amina Otieno" || who[u].Status != "declared" {
+		t.Fatalf("identities = %+v, %v", who, err)
+	}
+	st, err := e.svc.Submit(ctx, u, kyc.Submission{IDNumber: "24681357", FullName: "Amina Otieno"})
+	if err != nil || st != kyc.ManualReview {
+		t.Fatalf("submit without a date of birth under manual review = %q, %v", st, err)
+	}
+	// a registry matches the date of birth, so it is still needed there
+	r := setup(t)
+	if _, err := r.svc.Submit(ctx, r.user(t), kyc.Submission{IDNumber: "24681358", FullName: "Amina Otieno"}); !errors.Is(err, kyc.ErrInvalidInput) {
+		t.Fatalf("registry without a date of birth: %v", err)
 	}
 }

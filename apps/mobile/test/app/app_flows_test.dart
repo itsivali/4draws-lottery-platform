@@ -9,6 +9,7 @@ import 'package:lottery_mobile/features/wallet/application/wallet_providers.dart
 import '../support/app_harness.dart';
 import '../support/fake_backend.dart';
 import '../support/fonts.dart';
+import '../support/journeys.dart';
 
 Future<void> goToPlay(WidgetTester t) async {
   await t.tap(find.text('Play').last);
@@ -335,6 +336,24 @@ void main() {
     await h.container.read(sessionManagerProvider).signOut();
     await t.pumpAndSettle();
     expect(find.text('Your session timed out'), findsNothing);
+  });
+
+  testWidgets('verification starts from the names and ID number given at sign-up, with no date of birth', (t) async {
+    final backend = FakeBackend(kyc: 'none');
+    final h = await pumpApp(t, backend);
+    h.container.read(routerProvider).go('/account/verify');
+    await t.pumpAndSettle();
+    expect(find.text('Date of birth'), findsNothing, reason: 'an M-Pesa line is an adult’s: no date of birth is asked');
+    final id = t.widget<TextFormField>(find.widgetWithText(TextFormField, 'National ID number'));
+    final name = t.widget<TextFormField>(find.widgetWithText(TextFormField, 'Full name'));
+    expect(id.controller!.text, '12345678');
+    expect(name.controller!.text, 'Jane Wanjiru');
+    await tapVisible(t, find.widgetWithText(FilledButton, 'Submit for verification'));
+    await t.pumpAndSettle();
+    final sent = backend.requests.lastWhere((r) => r.method == 'POST' && r.url.path == '/v1/kyc');
+    expect(sent.body, contains('"national_id":"12345678"'));
+    expect(sent.body, contains('"full_name":"Jane Wanjiru"'));
+    expect(sent.body, isNot(contains('date_of_birth')));
   });
 
   testWidgets('the withdrawal range comes from the server: a KES 20 minimum shows as a quick pick', (t) async {

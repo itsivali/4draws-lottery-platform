@@ -22,6 +22,7 @@ import '../../../core/widgets/inline_banner.dart';
 import '../../../core/widgets/reveal.dart';
 import '../../../core/widgets/status_pill.dart';
 import '../application/auth_providers.dart';
+import '../data/auth_repository.dart';
 import '../data/provider_sign_in.dart';
 import '../data/sign_in_providers.dart';
 import 'email_rules.dart';
@@ -44,6 +45,10 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
   final _phone = TextEditingController();
   final _email = TextEditingController();
   final _password = TextEditingController();
+  // what a new account gives about itself (owner, 2026-10-30): the names and number on the national ID
+  final _firstName = TextEditingController();
+  final _secondName = TextEditingController();
+  final _nationalId = TextEditingController();
   var _mode = _Mode.signIn;
   var _step = _Step.form;
   var _obscure = true;
@@ -53,7 +58,7 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
   var _prepared = false;
   ProviderToken? _providerToken;
   StreamSubscription<ProviderToken>? _tokens;
-  String? _phoneError, _emailError, _passwordError, _formError, _formDetail;
+  String? _phoneError, _emailError, _passwordError, _identityError, _formError, _formDetail;
 
   @override
   void initState() {
@@ -67,10 +72,16 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
     _phone.dispose();
     _email.dispose();
     _password.dispose();
+    _firstName.dispose();
+    _secondName.dispose();
+    _nationalId.dispose();
     super.dispose();
   }
 
-  void _clearErrors() => _phoneError = _emailError = _passwordError = _formError = _formDetail = null;
+  void _clearErrors() => _phoneError = _emailError = _passwordError = _identityError = _formError = _formDetail = null;
+
+  SignUpIdentity get _identity =>
+      SignUpIdentity(firstName: _firstName.text, secondName: _secondName.text, nationalId: _nationalId.text);
 
   Future<void> _submit() async {
     setState(_clearErrors);
@@ -88,6 +99,7 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
               msisdn: _phone.text.trim(),
               email: _email.text.trim(),
               password: _password.text,
+              identity: _identity,
               idempotencyKey: newIdempotencyKey(),
             );
       // the browser's or phone's password manager offers to save what was just typed
@@ -103,6 +115,8 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
             _emailError = detail == null ? title : '$title: $detail';
           case ProblemFailure(slug: 'weak-password', :final title, :final detail):
             _passwordError = detail == null ? title : '$title: $detail';
+          case ProblemFailure(slug: 'invalid-identity', :final title, :final detail):
+            _identityError = detail == null ? title : '$title: $detail';
           default:
             final d = describeFailure(f);
             _formError = d.title;
@@ -185,7 +199,7 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
     try {
       final tokens = await ref
           .read(authRepositoryProvider)
-          .signUpWithProvider(t, msisdn: _phone.text.trim(), idempotencyKey: newIdempotencyKey());
+          .signUpWithProvider(t, msisdn: _phone.text.trim(), identity: _identity, idempotencyKey: newIdempotencyKey());
       await ref.read(sessionManagerProvider).signedIn(tokens);
     } on ApiFailure catch (f) {
       if (!mounted) return;
@@ -196,6 +210,8 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
           case ProblemFailure(slug: 'phone-registered', :final title):
             _formError = title;
             _formDetail = 'Sign in with that number and its password instead.';
+          case ProblemFailure(slug: 'invalid-identity', :final title, :final detail):
+            _identityError = detail == null ? title : '$title: $detail';
           case ProblemFailure(slug: 'invalid-token' || 'sso-already-linked'):
             // the provider's token ran out (they are short-lived) or was used meanwhile: start again
             _back();
@@ -232,6 +248,10 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
       phone: _phone,
       email: _email,
       password: _password,
+      firstName: _firstName,
+      secondName: _secondName,
+      nationalId: _nationalId,
+      identityError: _identityError,
       mode: _mode,
       step: _step,
       obscure: _obscure,
@@ -334,8 +354,9 @@ class _Heading {
 
   String get lead => switch (step) {
     _Step.phone =>
-      'Your ${providerName == 'apple' ? 'Apple' : 'Google'} account is ready to sign in. Add the M-Pesa number you '
-          'will play with: it is confirmed by the M-Pesa prompt of your first top-up — no SMS code.',
+      'Your ${providerName == 'apple' ? 'Apple' : 'Google'} account is ready to sign in. Add your names and ID '
+          'number as on your ID, and the M-Pesa number you will play with: it is confirmed by the M-Pesa prompt of '
+          'your first top-up — no SMS code.',
     _Step.form =>
       mode == _Mode.create
           ? 'Every draw on the record, every prize paid back to your M-Pesa.'
@@ -440,6 +461,10 @@ class _Form extends StatelessWidget {
     required this.phone,
     required this.email,
     required this.password,
+    required this.firstName,
+    required this.secondName,
+    required this.nationalId,
+    required this.identityError,
     required this.mode,
     required this.step,
     required this.obscure,
@@ -468,6 +493,10 @@ class _Form extends StatelessWidget {
   final TextEditingController phone;
   final TextEditingController email;
   final TextEditingController password;
+  final TextEditingController firstName;
+  final TextEditingController secondName;
+  final TextEditingController nationalId;
+  final String? identityError;
   final _Mode mode;
   final _Step step;
   final bool obscure;
@@ -499,7 +528,9 @@ class _Form extends StatelessWidget {
     final phoneField = TextFormField(
       controller: phone,
       keyboardType: TextInputType.phone,
-      autofillHints: const [AutofillHints.telephoneNumber],
+      // the phone number is the account's username: password managers save it with the password, and a browser signed
+      // in to a profile offers to generate a strong password for a new account (owner, 2026-10-30)
+      autofillHints: const [AutofillHints.username],
       textInputAction: phoneStep ? TextInputAction.done : TextInputAction.next,
       onFieldSubmitted: phoneStep ? (_) => onSubmit() : null,
       inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9+ ]'))],
@@ -517,7 +548,13 @@ class _Form extends StatelessWidget {
       controlAffinity: ListTileControlAffinity.leading,
       contentPadding: EdgeInsets.zero,
       title: const Text('I am 18 or older'),
-      subtitle: const Text('Your age is checked against your national ID before you can withdraw.'),
+      subtitle: const Text('Your M-Pesa number is registered to you as an adult, against your ID.'),
+    );
+    final identityFields = _IdentityFields(
+      firstName: firstName,
+      secondName: secondName,
+      nationalId: nationalId,
+      error: identityError,
     );
     final errorBanner = formError == null
         ? null
@@ -549,6 +586,8 @@ class _Form extends StatelessWidget {
               const SizedBox(height: Space.xl),
             ],
             if (phoneStep) ...[
+              identityFields,
+              const SizedBox(height: Space.lg),
               phoneField,
               const SizedBox(height: Space.md),
               adultTile,
@@ -568,6 +607,7 @@ class _Form extends StatelessWidget {
                 onSelectionChanged: busy ? null : (s) => onMode(s.first),
               ),
               const SizedBox(height: Space.xl),
+              if (creating) ...[identityFields, const SizedBox(height: Space.lg)],
               phoneField,
               if (creating) ...[
                 const SizedBox(height: Space.lg),
@@ -774,4 +814,67 @@ class _GoogleMarkPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+/// First name, second name, then the national ID number (owner, 2026-10-30): asked of every new account, kept, and
+/// checked against the ID before the first withdrawal.
+class _IdentityFields extends StatelessWidget {
+  const _IdentityFields({required this.firstName, required this.secondName, required this.nationalId, this.error});
+
+  final TextEditingController firstName;
+  final TextEditingController secondName;
+  final TextEditingController nationalId;
+  final String? error;
+
+  static final _name = RegExp(r"^\p{L}[\p{L} .'-]{1,99}$", unicode: true);
+
+  static String? _nameError(String? v, String which) {
+    final s = (v ?? '').trim().replaceAll(RegExp(r'\s+'), ' ');
+    if (s.isEmpty) return 'Enter your $which name as on your ID.';
+    return _name.hasMatch(s) ? null : 'Use the letters of your $which name as on your ID.';
+  }
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      TextFormField(
+        controller: firstName,
+        autofillHints: const [AutofillHints.givenName],
+        textCapitalization: TextCapitalization.words,
+        textInputAction: TextInputAction.next,
+        decoration: const InputDecoration(labelText: 'First name', prefixIcon: Icon(Icons.badge_rounded)),
+        validator: (v) => _nameError(v, 'first'),
+      ),
+      const SizedBox(height: Space.lg),
+      TextFormField(
+        controller: secondName,
+        autofillHints: const [AutofillHints.familyName],
+        textCapitalization: TextCapitalization.words,
+        textInputAction: TextInputAction.next,
+        decoration: const InputDecoration(
+          labelText: 'Second name',
+          helperText: 'Both names as on your ID, as M-Pesa shows them',
+          prefixIcon: Icon(Icons.badge_outlined),
+        ),
+        validator: (v) => _nameError(v, 'second'),
+      ),
+      const SizedBox(height: Space.lg),
+      TextFormField(
+        controller: nationalId,
+        keyboardType: TextInputType.number,
+        textInputAction: TextInputAction.next,
+        inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(9)],
+        decoration: InputDecoration(
+          labelText: 'National ID number',
+          helperText: 'Checked before your first withdrawal',
+          errorText: error,
+          errorMaxLines: 3,
+          prefixIcon: const Icon(Icons.credit_card_rounded),
+        ),
+        validator: (v) =>
+            RegExp(r'^[0-9]{7,9}$').hasMatch((v ?? '').trim()) ? null : 'Enter the 7 to 9 digits of your ID number.',
+      ),
+    ],
+  );
 }

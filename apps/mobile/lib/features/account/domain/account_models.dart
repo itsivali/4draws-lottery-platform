@@ -131,3 +131,14 @@ Map<String, LimitState> limitsFromJson(JsonObject j) {
         ),
   };
 }
+
+/// What a player gave about themself at sign-up (owner, 2026-10-30).
+class DeclaredIdentity {
+  const DeclaredIdentity({required this.firstName, required this.secondName, required this.nationalId});
+
+  final String firstName;
+  final String secondName;
+  final String nationalId;
+
+  String get fullName => '$firstName $secondName';
+}

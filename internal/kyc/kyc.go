@@ -131,20 +131,25 @@ func (s *Service) Submit(ctx context.Context, userID string, in Submission) (Sta
 	if !idPattern.MatchString(in.IDNumber) || utf8.RuneCountInString(name) < 2 || !namePattern.MatchString(name) {
 		return "", ErrInvalidInput
 	}
-	dob, err := time.Parse(time.DateOnly, in.DateOfBirth)
-	if err != nil || dob.Year() < 1900 {
-		return "", ErrInvalidInput
-	}
+	_, manual := s.prov.(ManualProvider)
 	now, err := s.clk.Now(ctx, s.pool)
 	if err != nil {
 		return "", err
 	}
-	today := clock.InNairobi(now)
-	if dob.After(time.Date(today.Year(), today.Month(), today.Day(), 0, 0, 0, 0, time.UTC)) {
-		return "", ErrInvalidInput
-	}
-	if age(dob, time.Date(today.Year(), today.Month(), today.Day(), 0, 0, 0, 0, time.UTC)) < 18 {
-		return "", ErrUnderage
+	// The date of birth may be left out under manual review (owner, 2026-10-30): an M-Pesa line is registered to an
+	// adult against their ID, so staff check the name against the ID number. A registry needs it to match.
+	if in.DateOfBirth != "" || !manual {
+		dob, err := time.Parse(time.DateOnly, in.DateOfBirth)
+		if err != nil || dob.Year() < 1900 {
+			return "", ErrInvalidInput
+		}
+		today := clock.InNairobi(now)
+		if dob.After(time.Date(today.Year(), today.Month(), today.Day(), 0, 0, 0, 0, time.UTC)) {
+			return "", ErrInvalidInput
+		}
+		if age(dob, time.Date(today.Year(), today.Month(), today.Day(), 0, 0, 0, 0, time.UTC)) < 18 {
+			return "", ErrUnderage
+		}
 	}
 
 	q := store.New(s.pool)
@@ -169,7 +174,6 @@ func (s *Service) Submit(ctx context.Context, userID string, in Submission) (Sta
 	if err != nil {
 		return "", err
 	}
-	_, manual := s.prov.(ManualProvider)
 	rec.hash, rec.adult, rec.provider, rec.status = hash, true, s.prov.Name(), "pending"
 	outcome := Pending
 	if manual { // no registry: the submission waits for a staff decision, no job
@@ -307,17 +311,45 @@ func (s *Service) Identities(ctx context.Context, userIDs []string, viewer strin
 				return err
 			}
 		}
+		// accounts that have not submitted yet show what they gave at sign-up
+		var rest []string
+		for _, id := range userIDs {
+			if _, ok := out[id]; !ok {
+				rest = append(rest, id)
+			}
+		}
+		declared, err := s.Declared(ctx, rest)
+		if err != nil {
+			return err
+		}
+		for id, d := range declared {
+			out[id] = Identity{FullName: d.Full(), IDNumber: d.IDNumber, Status: "declared"}
+			if err := s.audit.Record(ctx, tx, audit.Event{ActorType: audit.Staff, ActorID: viewer, Action: "kyc.unmask",
+				EntityType: "user", EntityID: id, Details: map[string]any{"purpose": "player list", "source": "sign-up"}}); err != nil {
+				return err
+			}
+		}
 		return nil
 	})
 	return out, err
 }
 
-// OwnName is the full name a player gave on their latest identity submission, for the player themself (their own
-// data, so no unmasking is audited); "" for an account that never submitted.
+// OwnName is the full name a player gave on their latest identity submission, else at sign-up, for the player themself
+// (their own data, so no unmasking is audited); "" for an account that gave neither.
 func (s *Service) OwnName(ctx context.Context, userID string) (string, error) {
 	rows, err := store.New(s.pool).LatestChecksFor(ctx, []string{userID})
-	if err != nil || len(rows) == 0 {
+	if err != nil {
 		return "", err
+	}
+	if len(rows) == 0 { // not submitted yet: the names given at sign-up
+		d, err := s.Declared(ctx, []string{userID})
+		if err != nil {
+			return "", err
+		}
+		if v, ok := d[userID]; ok {
+			return v.Full(), nil
+		}
+		return "", nil
 	}
 	nm, err := s.kr.Decrypt(rows[0].FullNameEnc, []byte("kyc.full_name"))
 	if err != nil {

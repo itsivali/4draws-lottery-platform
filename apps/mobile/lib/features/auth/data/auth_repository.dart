@@ -14,12 +14,15 @@ class AuthRepository {
   final DeviceIdentity _device;
   final DeviceAttestation _attestation;
 
+  /// Creates an account. A new account gives its names and national ID number (owner, 2026-10-30): stored, and verified
+  /// before the first withdrawal.
   Future<Tokens> signUp({
     required String msisdn,
     required String email,
     required String password,
+    required SignUpIdentity identity,
     required String idempotencyKey,
-  }) => _credentials('/v1/auth/signup', msisdn, password, idempotencyKey, email: email);
+  }) => _credentials('/v1/auth/signup', msisdn, password, idempotencyKey, email: email, identity: identity);
 
   /// Asks for a password-reset link to be emailed. The API answers the same whether or not the address has an account.
   Future<void> forgotPassword({required String email, required String idempotencyKey}) => _api.post(
@@ -53,10 +56,14 @@ class AuthRepository {
       _provider('/v1/auth/sso/${t.provider}', t, idempotencyKey);
 
   /// Creates the account for a Google or Apple identity from the player's phone number, and signs it in.
-  Future<Tokens> signUpWithProvider(ProviderToken t, {required String msisdn, required String idempotencyKey}) =>
-      _provider('/v1/auth/sso/${t.provider}/signup', t, idempotencyKey, msisdn: msisdn);
+  Future<Tokens> signUpWithProvider(
+    ProviderToken t, {
+    required String msisdn,
+    required SignUpIdentity identity,
+    required String idempotencyKey,
+  }) => _provider('/v1/auth/sso/${t.provider}/signup', t, idempotencyKey, msisdn: msisdn, identity: identity);
 
-  Future<Tokens> _provider(String path, ProviderToken t, String key, {String? msisdn}) async {
+  Future<Tokens> _provider(String path, ProviderToken t, String key, {String? msisdn, SignUpIdentity? identity}) async {
     final r = await _api.post(
       path,
       idempotencyKey: key,
@@ -65,13 +72,21 @@ class AuthRepository {
         'id_token': t.idToken,
         'nonce': t.nonce,
         'msisdn': ?msisdn,
+        ...?identity?.toJson(),
         'device': {..._device.toJson(), ...await _evidence()},
       },
     );
     return parse(r, (j) => Tokens.fromJson(j.raw));
   }
 
-  Future<Tokens> _credentials(String path, String msisdn, String password, String key, {String? email}) async {
+  Future<Tokens> _credentials(
+    String path,
+    String msisdn,
+    String password,
+    String key, {
+    String? email,
+    SignUpIdentity? identity,
+  }) async {
     final r = await _api.post(
       path,
       idempotencyKey: key,
@@ -79,6 +94,7 @@ class AuthRepository {
       body: {
         'msisdn': msisdn,
         'email': ?email,
+        ...?identity?.toJson(),
         'password': password,
         'device': {..._device.toJson(), ...await _evidence()},
       },
@@ -103,4 +119,19 @@ class AuthRepository {
       return const {};
     }
   }
+}
+
+/// What a new account gives about itself (owner, 2026-10-30): the names and number on the player's national ID.
+class SignUpIdentity {
+  const SignUpIdentity({required this.firstName, required this.secondName, required this.nationalId});
+
+  final String firstName;
+  final String secondName;
+  final String nationalId;
+
+  Map<String, Object?> toJson() => {
+    'first_name': firstName.trim(),
+    'second_name': secondName.trim(),
+    'national_id': nationalId.trim(),
+  };
 }

@@ -75,7 +75,7 @@ const maxPasswordBytes = 1024
 // Signup creates an account from a phone number, an email address and a password and signs it in. The number is only
 // a claim until the player proves it with an M-Pesa confirmation, so several people may claim one number; a number
 // that already has a proved owner cannot be claimed again. The address is unique among accounts (ADR 0021).
-func (s *Service) Signup(ctx context.Context, rawMSISDN, rawEmail, pw string, dev Device) (Tokens, error) {
+func (s *Service) Signup(ctx context.Context, rawMSISDN, rawEmail, pw string, dev Device, created ...Created) (Tokens, error) {
 	msisdn, err := NormalizeMSISDN(rawMSISDN)
 	if err != nil {
 		return Tokens{}, err
@@ -105,6 +105,11 @@ func (s *Service) Signup(ctx context.Context, rawMSISDN, rawEmail, pw string, de
 		if err != nil {
 			return emailError(err)
 		}
+		for _, c := range created {
+			if err := c(ctx, tx, id); err != nil {
+				return err
+			}
+		}
 		if err := s.audit.Record(ctx, tx, audit.Event{ActorType: audit.System, Action: "user.created", EntityType: "user", EntityID: id}); err != nil {
 			return err
 		}
@@ -113,6 +118,10 @@ func (s *Service) Signup(ctx context.Context, rawMSISDN, rawEmail, pw string, de
 	})
 	return tokens, err
 }
+
+// Created runs in the transaction that creates an account, with its id: what else must exist with the account (the
+// names and ID number given at sign-up, kyc.Service.Declare). An error undoes the account.
+type Created func(ctx context.Context, tx pgx.Tx, userID string) error
 
 // Login checks a phone number and password. Every failure to authenticate returns the same error and costs the same
 // time, so the response does not reveal whether a number has an account.

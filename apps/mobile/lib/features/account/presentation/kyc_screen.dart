@@ -5,7 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../app/theme/tokens.dart';
 import '../../../core/api/api_failure.dart';
 import '../../../core/api/idempotency.dart';
-import '../../../core/formatting/dates.dart';
 import '../../../core/widgets/app_card.dart';
 import '../../../core/widgets/async_view.dart';
 import '../../../core/widgets/busy_button.dart';
@@ -28,7 +27,7 @@ class _KycScreenState extends ConsumerState<KycScreen> {
   final _form = GlobalKey<FormState>();
   final _id = TextEditingController();
   final _name = TextEditingController();
-  DateTime? _dob;
+  var _prefilled = false;
   var _busy = false;
   String? _error;
   String? _key;
@@ -41,40 +40,18 @@ class _KycScreenState extends ConsumerState<KycScreen> {
     super.dispose();
   }
 
-  Future<void> _pickDob() async {
-    final now = DateTime.now();
-    final d = await showDatePicker(
-      context: context,
-      initialDate: _dob ?? DateTime(now.year - 25),
-      firstDate: DateTime(now.year - 110),
-      lastDate: now,
-      helpText: 'Date of birth (as on your ID)',
-      initialEntryMode: DatePickerEntryMode.input,
-    );
-    if (d != null && mounted) setState(() => _dob = d);
-  }
-
   Future<void> _submit() async {
     setState(() => _error = null);
     if (!_form.currentState!.validate()) return;
-    if (_dob == null) {
-      setState(() => _error = 'Enter your date of birth.');
-      return;
-    }
     setState(() => _busy = true);
-    final body = '${_id.text.trim()}|${_name.text.trim()}|${_dob!.toIso8601String()}';
+    final body = '${_id.text.trim()}|${_name.text.trim()}';
     if (_sentBody != body) _key = null;
     _sentBody = body;
     _key ??= newIdempotencyKey(); // the same key on a retry after a lost answer
     try {
       await ref
           .read(accountRepositoryProvider)
-          .submitKyc(
-            nationalId: _id.text.trim(),
-            fullName: _name.text.trim(),
-            dateOfBirth: _dob!,
-            idempotencyKey: _key!,
-          );
+          .submitKyc(nationalId: _id.text.trim(), fullName: _name.text.trim(), idempotencyKey: _key!);
       _key = null;
       ref.invalidate(accountProvider);
     } on ApiFailure catch (f) {
@@ -94,6 +71,13 @@ class _KycScreenState extends ConsumerState<KycScreen> {
   @override
   Widget build(BuildContext context) {
     final account = ref.watch(accountProvider);
+    // start from the names and ID number given at sign-up (owner, 2026-10-30)
+    final declared = ref.watch(declaredIdentityProvider).value;
+    if (declared != null && !_prefilled) {
+      _prefilled = true;
+      if (_id.text.isEmpty) _id.text = declared.nationalId;
+      if (_name.text.isEmpty) _name.text = declared.fullName;
+    }
     final t = Theme.of(context).textTheme;
     final c = context.colors;
     return PageScaffold(
@@ -130,8 +114,9 @@ class _KycScreenState extends ConsumerState<KycScreen> {
                         const SizedBox(width: Space.md),
                         Expanded(
                           child: Text(
-                            'We verify your Kenyan national ID once, to confirm who you are and that you are 18 or '
-                            'older. Your details are stored encrypted.',
+                            'We verify your Kenyan national ID once, before your first withdrawal. Your name must '
+                            'match your ID and the name M-Pesa shows for your number. Your details are stored '
+                            'encrypted.',
                             style: t.bodyMedium?.copyWith(color: c.inkMuted),
                           ),
                         ),
@@ -151,14 +136,11 @@ class _KycScreenState extends ConsumerState<KycScreen> {
                       controller: _name,
                       textCapitalization: TextCapitalization.words,
                       autofillHints: const [AutofillHints.name],
-                      decoration: const InputDecoration(labelText: 'Full name', helperText: 'Exactly as on your ID'),
+                      decoration: const InputDecoration(
+                        labelText: 'Full name',
+                        helperText: 'Exactly as on your ID: first and second name',
+                      ),
                       validator: (v) => (v ?? '').trim().length < 2 ? 'Enter your full name.' : null,
-                    ),
-                    const SizedBox(height: Space.lg),
-                    OutlinedButton.icon(
-                      onPressed: _pickDob,
-                      icon: const Icon(Icons.calendar_month_rounded),
-                      label: Text(_dob == null ? 'Date of birth' : 'Born ${formatDay(_dob!)} ${_dob!.year}'),
                     ),
                     if (_error != null) ...[
                       const SizedBox(height: Space.lg),

@@ -79,7 +79,7 @@ func (s *Service) LinkSSO(ctx context.Context, userID, provider, idToken, nonce 
 // links the identity and signs the account in (ADR 0020). The account has no password: the identity is how it signs
 // in (staff may still give it a temporary one). As with Signup, the number is a claim until the first top-up proves it,
 // and a number with a proved owner cannot be claimed.
-func (s *Service) SignupSSO(ctx context.Context, provider, idToken, nonce, rawMSISDN string, dev Device) (Tokens, error) {
+func (s *Service) SignupSSO(ctx context.Context, provider, idToken, nonce, rawMSISDN string, dev Device, created ...Created) (Tokens, error) {
 	msisdn, err := NormalizeMSISDN(rawMSISDN)
 	if err != nil {
 		return Tokens{}, err
@@ -106,6 +106,11 @@ func (s *Service) SignupSSO(ctx context.Context, provider, idToken, nonce, rawMS
 		id, err := q.InsertAccount(ctx, store.InsertAccountParams{Msisdn: msisdn, At: &now})
 		if err != nil {
 			return err
+		}
+		for _, c := range created {
+			if err := c(ctx, tx, id); err != nil {
+				return err
+			}
 		}
 		if err := q.InsertAuthIdentity(ctx, store.InsertAuthIdentityParams{UserID: id, Provider: provider, Subject: sub}); err != nil {
 			var pe *pgconn.PgError

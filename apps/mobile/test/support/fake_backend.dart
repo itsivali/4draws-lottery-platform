@@ -46,6 +46,12 @@ class FakeBackend {
   final spins = <int>[];
 
   /// The next play commits but its answer is lost (the client sees a dropped connection).
+  /// What the account gave at sign-up (owner, 2026-10-30), as GET /v1/kyc reports it.
+  Map<String, Object?>? declared = {'first_name': 'Jane', 'second_name': 'Wanjiru', 'national_id': '12345678'};
+
+  static bool _identityMissing(Map<String, Object?> body) =>
+      [body['first_name'], body['second_name'], body['national_id']].any((v) => v is! String || v.trim().isEmpty);
+
   bool loseNextPlayAnswer = false;
 
   /// Every request fails as if offline.
@@ -164,6 +170,7 @@ class FakeBackend {
         signedIn = true;
         return _ok(tokens);
       case ('POST', '/v1/auth/signup'):
+        if (_identityMissing(body)) return _problem(400, 'invalid-identity', 'Check your names and ID number');
         if (body['email'] == null) {
           return _problem(400, 'invalid-email', 'Invalid email address');
         }
@@ -232,6 +239,7 @@ class FakeBackend {
         if (ssoAccounts.contains(body['id_token'])) {
           return _problem(409, 'sso-already-linked', 'This identity already signs in to an account');
         }
+        if (_identityMissing(body)) return _problem(400, 'invalid-identity', 'Check your names and ID number');
         final digits = (body['msisdn'] as String? ?? '').replaceAll(' ', '');
         if (!RegExp(r'^(\+?254|0)[17]\d{8}$').hasMatch(digits)) {
           return _problem(
@@ -272,7 +280,7 @@ class FakeBackend {
         closureRequestedAt ??= '2026-10-26T12:00:00+03:00';
         return _ok({'closure_requested_at': closureRequestedAt}, 202);
       case ('GET', '/v1/kyc'):
-        return _ok({'status': kyc});
+        return _ok({'status': kyc, 'declared': declared});
       case ('POST', '/v1/kyc'):
         kyc = 'manual_review';
         return _ok({'status': kyc}, 202);
