@@ -443,7 +443,13 @@ paths:
           content:
             application/problem+json:
               schema: { $ref: "#/components/schemas/Problem" }
-        "429": { $ref: "#/components/responses/Problem" }
+        "429":
+          description: |
+            Too many requests, or asked within the top-up cooldown of the last prompt (`top-up-cooldown`; `Retry-After`
+            gives the seconds left and the detail says it in minutes).
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
   /v1/payments:
     get:
@@ -2560,6 +2566,8 @@ components:
         lucky: { type: boolean }
         chances: { type: integer, description: "Draw chances from the tier for today's plays, doubled on a lucky day." }
         price_kes: { type: integer }
+        slots: { type: integer, description: "Today's wheel: how many slots it has, so the app can number them before the first spin." }
+        lucky_slots: { type: integer, description: "Slots 0 to lucky_slots-1 are lucky." }
         tickets: { type: array, items: { $ref: "#/components/schemas/Play" } }
     PlayResult:
       type: object
@@ -2750,12 +2758,17 @@ components:
           type: [integer, "null"]
           description: What the player actually paid (credited gross, before excise); null until credited.
         created_at: { type: string, format: date-time }
+        next_top_up_in_s:
+          type: integer
+          description: On a new top-up only, seconds until another prompt may be asked for (the top-up cooldown).
     MoneyBounds:
       type: object
       required: [min_kes, max_kes]
       properties:
         min_kes: { type: integer }
         max_kes: { type: integer }
+        wait_s: { type: integer, description: "Top-ups only: seconds until another M-Pesa prompt may be asked for (0: now)." }
+        cooldown_s: { type: integer, description: "Top-ups only: the least time between two prompts, in seconds (0: none)." }
     Wallet:
       type: object
       required: [balance_kes, debt_kes, transactions, next_before, top_up, withdraw]

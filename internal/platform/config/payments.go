@@ -9,6 +9,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Payments configures M-Pesa top-ups through Daraja. Like the API it is all-or-nothing: with no Daraja credentials
@@ -43,7 +44,14 @@ type Payments struct {
 	// requested when the sandbox reports a timeout or never calls back (payments.Config.SandboxSettle). Refused with
 	// production Daraja.
 	SandboxSettle bool
+
+	// TopUpCooldown (TOP_UP_COOLDOWN, a Go duration, default 2m; 0 turns it off) is the least time between two M-Pesa
+	// prompts for one player.
+	TopUpCooldown time.Duration
 }
+
+// DefaultTopUpCooldown spaces one player's prompts by the time Daraja takes to answer one (owner, 2026-10-30).
+const DefaultTopUpCooldown = 2 * time.Minute
 
 // C2BEnabled reports whether paybill payments are configured.
 func (p Payments) C2BEnabled() bool { return p.C2BShortCode != "" }
@@ -157,6 +165,14 @@ func loadPayments(api API) (Payments, error) {
 		return Payments{}, fmt.Errorf("config: %s set but neither DARAJA_C2B_SHORTCODE nor DARAJA_B2C_SHORTCODE", strings.Join(initSet, ", "))
 	}
 	p.Initiator, p.SecurityCredential = os.Getenv("DARAJA_INITIATOR_NAME"), os.Getenv("DARAJA_SECURITY_CREDENTIAL")
+	p.TopUpCooldown = DefaultTopUpCooldown
+	if v := os.Getenv("TOP_UP_COOLDOWN"); v != "" {
+		d, err := time.ParseDuration(v)
+		if err != nil || d < 0 || d > time.Hour {
+			return Payments{}, errors.New("config: TOP_UP_COOLDOWN must be a duration from 0s to 1h, such as 2m")
+		}
+		p.TopUpCooldown = d
+	}
 	if v := os.Getenv("TOP_UP_MIN_KES"); v != "" {
 		n, err := strconv.ParseInt(v, 10, 64)
 		if err != nil || n < 1 || n > maxSTKKES {

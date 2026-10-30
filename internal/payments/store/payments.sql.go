@@ -420,6 +420,20 @@ func (q *Queries) InsertUnmatched(ctx context.Context, arg InsertUnmatchedParams
 	return id, err
 }
 
+const lastTopUpAt = `-- name: LastTopUpAt :one
+SELECT created_at FROM payments.payments
+WHERE user_id = $1 AND channel = 'stk'
+ORDER BY created_at DESC LIMIT 1
+`
+
+// When the player last asked for an M-Pesa prompt (the top-up cooldown counts from it).
+func (q *Queries) LastTopUpAt(ctx context.Context, userID string) (time.Time, error) {
+	row := q.db.QueryRow(ctx, lastTopUpAt, userID)
+	var created_at time.Time
+	err := row.Scan(&created_at)
+	return created_at, err
+}
+
 const listPayments = `-- name: ListPayments :many
 SELECT id, status, amount_requested_kes, amount_confirmed_kes, created_at
 FROM payments.payments

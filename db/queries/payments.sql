@@ -272,3 +272,9 @@ ORDER BY created_at DESC, id DESC LIMIT sqlc.arg(lim);
 -- Top-ups of the player still being settled (an account cannot be closed while one may still credit it).
 SELECT count(*)::int FROM payments.payments
 WHERE user_id = sqlc.arg(user_id) AND status IN ('initiated','stk_sent','callback_received','verified','unconfirmed');
+
+-- When the player last asked for an M-Pesa prompt (the top-up cooldown counts from it).
+-- name: LastTopUpAt :one
+SELECT created_at FROM payments.payments
+WHERE user_id = $1 AND channel = 'stk'
+ORDER BY created_at DESC LIMIT 1;

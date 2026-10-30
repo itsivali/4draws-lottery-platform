@@ -149,3 +149,30 @@ func TestAPI_TopUpHistoryListsOnlyTheOwnersTopUpsNewestFirst(t *testing.T) {
 		t.Fatalf("another player's top-ups: %s", r.Raw)
 	}
 }
+
+func TestAPI_ATopUpWithinTheCooldownIsRefusedWithHowLongToWait(t *testing.T) {
+	e := setupWith(t, func(d *apiDeps) { d.Payments = d.Payments.WithTopUpCooldown(2 * time.Minute) })
+	s := e.signIn(t)
+	e.verified(t, s)
+	if r := e.do(t, http.MethodGet, "/v1/wallet", s.access, nil); r.Body["top_up"].(map[string]any)["wait_s"] != float64(0) ||
+		r.Body["top_up"].(map[string]any)["cooldown_s"] != float64(120) {
+		t.Fatalf("wallet before: %s", r.Raw)
+	}
+	first := e.do(t, http.MethodPost, "/v1/payments/topups", s.access, map[string]any{"amount_kes": 50})
+	if first.Code != http.StatusAccepted || first.Body["next_top_up_in_s"] != float64(120) {
+		t.Fatalf("first: %d %s", first.Code, first.Raw)
+	}
+	e.clk.Advance(50 * time.Second)
+	again := e.do(t, http.MethodPost, "/v1/payments/topups", s.access, map[string]any{"amount_kes": 50})
+	if again.Code != http.StatusTooManyRequests || !hasType(again, "top-up-cooldown") || again.Header.Get("Retry-After") != "70" ||
+		again.Body["detail"] != "you can top up again in 2 minutes" {
+		t.Fatalf("too soon: %d %v %s", again.Code, again.Header.Get("Retry-After"), again.Raw)
+	}
+	if r := e.do(t, http.MethodGet, "/v1/wallet", s.access, nil); r.Body["top_up"].(map[string]any)["wait_s"] != float64(70) {
+		t.Fatalf("wallet during the cooldown: %s", r.Raw)
+	}
+	e.clk.Advance(70 * time.Second)
+	if r := e.do(t, http.MethodPost, "/v1/payments/topups", s.access, map[string]any{"amount_kes": 50}); r.Code != http.StatusAccepted {
+		t.Fatalf("after the cooldown: %d %s", r.Code, r.Raw)
+	}
+}

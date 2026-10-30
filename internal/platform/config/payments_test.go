@@ -3,6 +3,7 @@ package config_test
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/itsivali/lottery-platform/internal/platform/config"
 )
@@ -23,6 +24,7 @@ func fullPaymentsEnv(t *testing.T) {
 	t.Setenv("RENDER_EXTERNAL_URL", "https://lottery-api.onrender.com")
 	t.Setenv("TOP_UP_MIN_KES", "")
 	t.Setenv("DARAJA_SANDBOX_SETTLE", "")
+	t.Setenv("TOP_UP_COOLDOWN", "")
 	for _, k := range allInitiatorVars {
 		t.Setenv(k, "")
 	}
@@ -243,5 +245,24 @@ func TestPayments_SandboxSettlementIsOptInAndRefusedWithProductionDaraja(t *test
 	t.Setenv("DARAJA_ALLOW_PRODUCTION", "true")
 	if _, err := config.Load(); err == nil || !strings.Contains(err.Error(), "DARAJA_SANDBOX_SETTLE") {
 		t.Fatalf("production: err = %v, want a refusal", err)
+	}
+}
+
+func TestPayments_TopUpCooldownDefaultsToTwoMinutesAndCanBeChangedOrTurnedOff(t *testing.T) {
+	fullPaymentsEnv(t)
+	if cfg, err := config.Load(); err != nil || cfg.Payments.TopUpCooldown != config.DefaultTopUpCooldown {
+		t.Fatalf("default: %v err %v", cfg.Payments.TopUpCooldown, err)
+	}
+	for v, want := range map[string]time.Duration{"90s": 90 * time.Second, "0": 0} {
+		t.Setenv("TOP_UP_COOLDOWN", v)
+		if cfg, err := config.Load(); err != nil || cfg.Payments.TopUpCooldown != want {
+			t.Fatalf("%s: %v err %v", v, cfg.Payments.TopUpCooldown, err)
+		}
+	}
+	for _, v := range []string{"two minutes", "-1m", "2h"} {
+		t.Setenv("TOP_UP_COOLDOWN", v)
+		if _, err := config.Load(); err == nil {
+			t.Fatalf("%s: accepted", v)
+		}
 	}
 }

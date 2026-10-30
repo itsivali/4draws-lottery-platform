@@ -82,6 +82,10 @@ func TestAPI_PlayJourneyFromTheFirstPlayToTheDailyLimit(t *testing.T) {
 		len(today.Body["tickets"].([]any)) != 4 {
 		t.Fatalf("today: %d %s", today.Code, today.Raw)
 	}
+	// today's wheel travels with the day, so the app numbers it before the first spin (owner, 2026-10-30)
+	if today.Body["slots"] != today.Body["tickets"].([]any)[0].(map[string]any)["spin"].(map[string]any)["slots"] || today.Body["lucky_slots"] == nil {
+		t.Fatalf("today's wheel: %s", today.Raw)
+	}
 	chances := today.Body["chances"].(float64)
 	if (today.Body["lucky"] == true && chances != 10) || (today.Body["lucky"] == false && chances != 5) {
 		t.Fatalf("chances %v lucky %v", chances, today.Body["lucky"])

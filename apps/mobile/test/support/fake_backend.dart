@@ -19,6 +19,17 @@ class FakeBackend {
   /// The smallest top-up the "server" accepts (TOP_UP_MIN_KES; KES 1 while testing with real money).
   int topUpMin = 10;
 
+  /// The least seconds between two prompts (TOP_UP_COOLDOWN; 0: none), counted from the last top-up started.
+  int topUpCooldownS = 0;
+  DateTime? _lastTopUp;
+
+  int get _topUpWaitS {
+    final last = _lastTopUp;
+    if (topUpCooldownS == 0 || last == null) return 0;
+    final left = last.add(Duration(seconds: topUpCooldownS)).difference(DateTime.now()).inMilliseconds;
+    return left <= 0 ? 0 : (left / 1000).ceil();
+  }
+
   /// The withdrawal range, or null while the "server" has no M-Pesa B2C (withdrawals unavailable).
   Map<String, Object?>? withdrawBounds = {'min_kes': 50, 'max_kes': 150000};
   Map<String, Object?>? restriction;
@@ -275,7 +286,7 @@ class FakeBackend {
           'debt_kes': debt,
           'transactions': txs.reversed.toList(),
           'next_before': null,
-          'top_up': {'min_kes': topUpMin, 'max_kes': 250000},
+          'top_up': {'min_kes': topUpMin, 'max_kes': 250000, 'wait_s': _topUpWaitS, 'cooldown_s': topUpCooldownS},
           'withdraw': withdrawBounds,
         });
       case ('GET', '/v1/payments'):
@@ -289,6 +300,10 @@ class FakeBackend {
         if (amount < topUpMin) {
           return _problem(400, 'invalid-amount', 'Invalid amount');
         }
+        if (_topUpWaitS > 0) {
+          return _problem(429, 'top-up-cooldown', 'Wait a moment before topping up again');
+        }
+        _lastTopUp = DateTime.now();
         topUps[id] = topUpJson(id: id, status: 'pending', amount: amount);
         _topUpPolls[id] = 0;
         return _ok(topUps[id]!, 202);
@@ -372,6 +387,8 @@ class FakeBackend {
     'lucky': lucky,
     'chances': _chances(),
     'price_kes': 100,
+    'slots': 12,
+    'lucky_slots': 1,
     'tickets': tickets,
   };
 

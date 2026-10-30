@@ -13,6 +13,12 @@ const _studRadius = 0.86;
 const _labelRadius = 0.70;
 const _hubRadius = 0.24;
 
+/// Proportions the animated layers share with the static ones (see wheel_fx_painters.dart).
+const wheelRimInner = _rimInner;
+const wheelHubRadius = _hubRadius;
+const wheelCheckerInner = _checkerInner;
+const wheelCheckerOuter = _checkerOuter;
+
 // Each segment is two-tone (owner, 2026-10-28): a solid outer band carries the number; from the hub's fading circle out
 // to _checkerOuter the segment is a checker of white and its own colour.
 const _checkerInner = _hubRadius + 0.01;
@@ -21,6 +27,34 @@ const _checkerCellsAcross = 3;
 
 Offset _polar(Offset c, double r, double wheelAngle) =>
     c + Offset(cos(wheelAngle - pi / 2), sin(wheelAngle - pi / 2)) * r;
+
+/// One square of a segment's checker band: [ring] counts outwards from the hub, [column] across the segment.
+typedef CheckerCell = ({Path path, int ring, int column, bool white});
+
+/// The checker squares of the segment starting at wheel angle [start] and [sweep] wide, on a wheel of radius [r]
+/// centred on [c]: cells near-square, white where ring + column is even.
+List<CheckerCell> checkerCells(Offset c, double r, double start, double sweep) {
+  final inner = r * _checkerInner, outer = r * _checkerOuter;
+  final cellAngle = sweep / _checkerCellsAcross;
+  final cellArc = (inner + outer) / 2 * cellAngle;
+  final rings = max(2, ((outer - inner) / cellArc).round());
+  final ringDepth = (outer - inner) / rings;
+  final cells = <CheckerCell>[];
+  for (var j = 0; j < rings; j++) {
+    for (var k = 0; k < _checkerCellsAcross; k++) {
+      final r0 = inner + j * ringDepth, r1 = r0 + ringDepth;
+      final a0 = start + k * cellAngle - pi / 2, a1 = a0 + cellAngle;
+      final path = Path()
+        ..moveTo(c.dx + cos(a0) * r0, c.dy + sin(a0) * r0)
+        ..arcTo(Rect.fromCircle(center: c, radius: r0), a0, cellAngle, false)
+        ..lineTo(c.dx + cos(a1) * r1, c.dy + sin(a1) * r1)
+        ..arcTo(Rect.fromCircle(center: c, radius: r1), a1, -cellAngle, false)
+        ..close();
+      cells.add((path: path, ring: j, column: k, white: (j + k).isEven));
+    }
+  }
+  return cells;
+}
 
 /// The rotating disc: segments, slot numbers, the lucky star and the boundary studs. It paints once per geometry;
 /// rotation is applied by a transform above it, so spinning does not repaint it.
@@ -80,25 +114,9 @@ class WheelDiscPainter extends CustomPainter {
   /// White squares over the inner band of one segment: cells near-square, alternating with the segment's own colour,
   /// which shows through where nothing is drawn.
   void _paintChecker(Canvas canvas, Offset c, double r, double start, double sweep) {
-    final inner = r * _checkerInner, outer = r * _checkerOuter;
-    final cellAngle = sweep / _checkerCellsAcross;
-    final cellArc = (inner + outer) / 2 * cellAngle;
-    final rings = max(2, ((outer - inner) / cellArc).round());
-    final ringDepth = (outer - inner) / rings;
     final white = Paint()..color = colors.wheelChecker;
-    for (var j = 0; j < rings; j++) {
-      for (var k = 0; k < _checkerCellsAcross; k++) {
-        if ((j + k).isOdd) continue;
-        final r0 = inner + j * ringDepth, r1 = r0 + ringDepth;
-        final a0 = start + k * cellAngle - pi / 2, a1 = a0 + cellAngle;
-        final cell = Path()
-          ..moveTo(c.dx + cos(a0) * r0, c.dy + sin(a0) * r0)
-          ..arcTo(Rect.fromCircle(center: c, radius: r0), a0, cellAngle, false)
-          ..lineTo(c.dx + cos(a1) * r1, c.dy + sin(a1) * r1)
-          ..arcTo(Rect.fromCircle(center: c, radius: r1), a1, -cellAngle, false)
-          ..close();
-        canvas.drawPath(cell, white);
-      }
+    for (final cell in checkerCells(c, r, start, sweep)) {
+      if (cell.white) canvas.drawPath(cell.path, white);
     }
   }
 
@@ -278,28 +296,6 @@ class WheelFramePainter extends CustomPainter {
           ],
         ).createShader(hub),
     );
-
-    // pointer: fixed at 12 o'clock, its tip just inside the rim
-    final tip = Offset(c.dx, c.dy - r * (_rimInner - 0.07));
-    final w = r * 0.085;
-    final top = c.dy - r - r * 0.05;
-    final pointer = Path()
-      ..moveTo(tip.dx, tip.dy)
-      ..quadraticBezierTo(c.dx - w * 0.55, top + r * 0.12, c.dx - w, top + r * 0.035)
-      ..arcToPoint(Offset(c.dx + w, top + r * 0.035), radius: Radius.circular(w * 1.05))
-      ..quadraticBezierTo(c.dx + w * 0.55, top + r * 0.12, tip.dx, tip.dy)
-      ..close();
-    canvas.drawShadow(pointer, colors.shadow, r * 0.025, false);
-    canvas.drawPath(
-      pointer,
-      Paint()
-        ..shader = LinearGradient(
-          begin: Alignment.centerLeft,
-          end: Alignment.centerRight,
-          colors: [colors.wheelRimLight, colors.gold, colors.wheelRimDark],
-        ).createShader(Rect.fromLTRB(c.dx - w, top, c.dx + w, tip.dy)),
-    );
-    canvas.drawCircle(Offset(c.dx, top + r * 0.045), w * 0.32, Paint()..color = colors.wheelRimDark);
   }
 
   @override

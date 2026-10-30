@@ -1128,3 +1128,29 @@ func TestPush_APushThrottledEveryTimeFailsWithoutAPrompt(t *testing.T) {
 		t.Fatalf("%d prompts sent", n)
 	}
 }
+
+func TestTopUp_ANewPromptWaitsOutTheCooldownAndSaysHowLong(t *testing.T) {
+	e := setupWith(t, true, payments.Config{TopUpCooldown: 2 * time.Minute})
+	ctx := context.Background()
+	user, _ := e.player(t)
+	if w, err := e.svc.TopUpWait(ctx, user); err != nil || w != 0 {
+		t.Fatalf("before any top-up: wait %v err %v", w, err)
+	}
+	e.topUp(t, user, 100)
+	e.clk.Advance(30 * time.Second)
+	if w, err := e.svc.TopUpWait(ctx, user); err != nil || w != 90*time.Second {
+		t.Fatalf("30 s later: wait %v err %v, want 1m30s", w, err)
+	}
+	_, err := e.svc.StartTopUp(ctx, user, 100, "too-soon")
+	var ce *payments.CooldownError
+	if !errors.As(err, &ce) || ce.Wait != 90*time.Second {
+		t.Fatalf("err = %v, want a cooldown of 1m30s", err)
+	}
+	other, _ := e.player(t) // another player is not held back
+	e.topUp(t, other, 100)
+	e.clk.Advance(90 * time.Second)
+	if w, _ := e.svc.TopUpWait(ctx, user); w != 0 {
+		t.Fatalf("after the cooldown: wait %v", w)
+	}
+	e.topUp(t, user, 100)
+}

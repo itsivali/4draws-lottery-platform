@@ -17,10 +17,12 @@ import '../../account/application/account_providers.dart';
 import '../../account/domain/account_models.dart';
 import '../application/money_flows.dart';
 import '../application/settlement_flow.dart';
+import '../application/top_up_cooldown.dart';
 import '../application/wallet_providers.dart';
 import '../domain/wallet_models.dart';
 import 'amount_form.dart';
 import 'money_flow_view.dart';
+import 'top_up_cooldown_note.dart';
 
 class TopUpScreen extends ConsumerStatefulWidget {
   const TopUpScreen({super.key});
@@ -61,6 +63,7 @@ class _TopUpScreenState extends ConsumerState<TopUpScreen> {
     final topUps = ref.watch(topUpsProvider);
     final bounds = ref.watch(walletStatementProvider).value?.topUp ?? TopUpBounds.fallback;
     final m = ref.watch(topUpFlowProvider);
+    final readyAt = ref.watch(topUpCooldownProvider);
     final t = Theme.of(context).textTheme;
     final c = context.colors;
     return PageScaffold(
@@ -127,7 +130,21 @@ class _TopUpScreenState extends ConsumerState<TopUpScreen> {
                               enabled: !started,
                             ),
                             const SizedBox(height: Space.xl),
-                            if (!started) BusyButton(label: 'Continue', busy: false, onPressed: () => _submit(a, m)),
+                            if (!started)
+                              TopUpCooldownGate(
+                                readyAt: readyAt,
+                                builder: (context, ready, note) => Column(
+                                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                                  children: [
+                                    BusyButton(
+                                      label: 'Continue',
+                                      busy: false,
+                                      onPressed: ready ? () => _submit(a, m) : null,
+                                    ),
+                                    if (note != null) ...[const SizedBox(height: Space.sm), note],
+                                  ],
+                                ),
+                              ),
                           ],
                         ),
                       ),
@@ -162,6 +179,16 @@ class _TopUpScreenState extends ConsumerState<TopUpScreen> {
                               context.go('/wallet');
                             },
                           ),
+                        ),
+                        // after a prompt, how long until the next one may be asked for
+                        TopUpCooldownGate(
+                          readyAt: readyAt,
+                          builder: (context, ready, note) => note == null
+                              ? const SizedBox.shrink()
+                              : Padding(
+                                  padding: const EdgeInsets.only(top: Space.md),
+                                  child: note,
+                                ),
                         ),
                       ],
                     ],

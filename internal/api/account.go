@@ -2,6 +2,7 @@ package api
 
 import (
 	"errors"
+	"math"
 	"net/http"
 	"strconv"
 	"strings"
@@ -68,7 +69,14 @@ func (h *handlers) getWallet(w http.ResponseWriter, r *http.Request) {
 	// money flow is unavailable: payments not configured, B2C not configured)
 	var topUp, withdraw map[string]int64
 	if h.Payments != nil {
-		topUp = map[string]int64{"min_kes": h.Payments.MinTopUpKES(), "max_kes": daraja.MaxSTKAmountKES}
+		// wait_s: seconds until the player may ask for another M-Pesa prompt (the top-up cooldown; 0 means now)
+		wait, err := h.Payments.TopUpWait(r.Context(), p.UserID)
+		if err != nil {
+			internalError(w, err)
+			return
+		}
+		topUp = map[string]int64{"min_kes": h.Payments.MinTopUpKES(), "max_kes": daraja.MaxSTKAmountKES,
+			"wait_s": int64(math.Ceil(wait.Seconds())), "cooldown_s": int64(h.Payments.TopUpCooldown().Seconds())}
 	}
 	if h.Payouts != nil && h.Payouts.Enabled() {
 		lo, hi := h.Payouts.WithdrawalBounds()

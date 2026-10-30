@@ -7,6 +7,7 @@ import '../../../../app/theme/tokens.dart';
 import '../../application/spin_haptics.dart';
 import '../../domain/wheel_geometry.dart';
 import '../../domain/wheel_motion.dart';
+import 'wheel_fx_painters.dart';
 import 'wheel_painters.dart';
 
 /// What the wheel should be doing, derived from the play's state. The wheel never chooses anything: it spins without
@@ -57,15 +58,29 @@ class LotteryWheel extends StatefulWidget {
   final double maxDiameter;
   final SpinTiming timing;
 
+  /// Whether the wheel's lights shimmer and chase while it is at rest (they always do while it spins, unless the
+  /// platform asks for reduced motion). Tests that wait for the screen to settle turn it off.
+  @visibleForTesting
+  static bool ambientAnimation = true;
+
   @override
   State<LotteryWheel> createState() => LotteryWheelState();
 }
 
-class LotteryWheelState extends State<LotteryWheel> with SingleTickerProviderStateMixin {
+class LotteryWheelState extends State<LotteryWheel> with TickerProviderStateMixin {
   static final _decorative = WheelGeometry(slots: 12);
+  static const _ambientPeriod = Duration(milliseconds: 2600);
 
   late final Ticker _ticker = createTicker(_onTick);
   final _rotation = ValueNotifier<double>(0);
+  final _fx = WheelFx();
+  late final AnimationController _ambient = AnimationController(vsync: this, duration: _ambientPeriod)
+    ..addListener(() => _fx.update(phase: _ambient.value));
+  late final AnimationController _celebrate = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1600),
+  )..addListener(() => _fx.update(celebrate: _celebrate.value));
+  int? _landingSlot;
 
   WheelMotion? _motion;
   String? _activeSpin;
@@ -85,12 +100,27 @@ class LotteryWheelState extends State<LotteryWheel> with SingleTickerProviderSta
   WheelGeometry get _geometry => _spinGeometry ?? widget.restingGeometry ?? _decorative;
   bool get _labelled => _spinGeometry != null || widget.restingGeometry != null;
 
+  /// The animated layers' state (for tests).
+  @visibleForTesting
+  WheelFx get fx => _fx;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _apply();
     });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final ambient = LotteryWheel.ambientAnimation && !context.reduceMotion;
+    if (ambient && !_ambient.isAnimating) {
+      _ambient.repeat();
+    } else if (!ambient && _ambient.isAnimating) {
+      _ambient.stop();
+    }
   }
 
   @override
@@ -125,6 +155,7 @@ class LotteryWheelState extends State<LotteryWheel> with SingleTickerProviderSta
     }
     if (s.slot != null && _landedSpin != s.spinId) {
       _landedSpin = s.spinId;
+      _landingSlot = s.slot;
       final g = s.geometry ?? _geometry;
       if (g != _spinGeometry) setState(() => _spinGeometry = g);
       if (reduce) {
@@ -160,6 +191,12 @@ class LotteryWheelState extends State<LotteryWheel> with SingleTickerProviderSta
     _elapsed = elapsed;
     final r = m.rotationAt(elapsed);
     _rotation.value = r;
+    _fx.update(
+      rotation: r,
+      energy: (m.velocityAt(elapsed) / m.timing.peakVelocity).clamp(0.0, 1.0),
+      // without the ambient loop (tests) the lights still run with the spin, as a function of its time
+      phase: _ambient.isAnimating ? null : (elapsed.inMicroseconds / _ambientPeriod.inMicroseconds) % 1,
+    );
     widget.haptics.onFrame(
       at: elapsed,
       geometry: _geometry,
@@ -177,13 +214,21 @@ class LotteryWheelState extends State<LotteryWheel> with SingleTickerProviderSta
     if (!mounted || _settledSpin == _activeSpin) return;
     _settledSpin = _activeSpin;
     widget.haptics.onSettled(hasOutcome: hasOutcome);
+    _fx.update(energy: 0, rotation: _rotation.value);
+    if (hasOutcome && !context.reduceMotion) {
+      _fx.update(landedSlot: _landingSlot, clearSlot: _landingSlot == null);
+      _celebrate.forward(from: 0);
+    }
     if (hasOutcome) widget.onSettled();
   }
 
   @override
   void dispose() {
     _ticker.dispose();
+    _ambient.dispose();
+    _celebrate.dispose();
     _rotation.dispose();
+    _fx.dispose();
     super.dispose();
   }
 
@@ -210,24 +255,46 @@ class LotteryWheelState extends State<LotteryWheel> with SingleTickerProviderSta
                 ValueListenableBuilder<double>(
                   valueListenable: _rotation,
                   builder: (_, angle, child) => Transform.rotate(angle: angle, child: child),
-                  child: RepaintBoundary(
-                    child: AnimatedSwitcher(
-                      duration: Motion.standard,
-                      child: SizedBox.expand(
-                        key: ValueKey((_geometry.slots, _geometry.luckySlots, _labelled)),
-                        child: CustomPaint(
-                          painter: WheelDiscPainter(
-                            geometry: _geometry,
-                            colors: c,
-                            labelled: _labelled,
-                            textScaler: scaler,
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      RepaintBoundary(
+                        child: AnimatedSwitcher(
+                          duration: Motion.standard,
+                          child: SizedBox.expand(
+                            key: ValueKey((_geometry.slots, _geometry.luckySlots, _labelled)),
+                            child: CustomPaint(
+                              painter: WheelDiscPainter(
+                                geometry: _geometry,
+                                colors: c,
+                                labelled: _labelled,
+                                textScaler: scaler,
+                              ),
+                            ),
                           ),
                         ),
                       ),
-                    ),
+                      // the shimmer, twinkle and landing glow turn with the disc
+                      if (!context.reduceMotion)
+                        RepaintBoundary(
+                          child: CustomPaint(
+                            painter: WheelDiscFxPainter(fx: _fx, geometry: _geometry, colors: c),
+                          ),
+                        ),
+                    ],
                   ),
                 ),
                 RepaintBoundary(child: CustomPaint(painter: WheelFramePainter(c))),
+                RepaintBoundary(
+                  child: CustomPaint(
+                    painter: WheelFrameFxPainter(fx: _fx, colors: c),
+                  ),
+                ),
+                RepaintBoundary(
+                  child: CustomPaint(
+                    painter: WheelPointerPainter(fx: _fx, colors: c, geometry: _geometry),
+                  ),
+                ),
                 if (waiting && context.reduceMotion)
                   Center(
                     child: SizedBox.square(

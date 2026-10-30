@@ -83,6 +83,8 @@ class Today {
     required this.chances,
     required this.priceKes,
     required this.tickets,
+    this.slots,
+    this.luckySlots = 0,
   });
 
   factory Today.fromJson(JsonObject j) => Today(
@@ -93,9 +95,21 @@ class Today {
     chances: j.integer('chances'),
     priceKes: j.integer('price_kes'),
     tickets: j.list('tickets', Play.fromJson),
+    slots: switch (j.raw['slots']) {
+      final int n when n >= 2 => n,
+      _ => null,
+    },
+    luckySlots: switch (j.raw['lucky_slots']) {
+      final int n when n >= 0 => n,
+      _ => 0,
+    },
   );
 
   final DateTime playDate;
+
+  /// Today's wheel, so its numbers show before the first spin (null from a server that does not say).
+  final int? slots;
+  final int luckySlots;
   final int plays;
   final int playsLeft;
 

@@ -32,6 +32,13 @@ var (
 	ErrNotFound      = errors.New("payments: not found")
 )
 
+// CooldownError refuses a top-up asked for too soon after the last one (Config.TopUpCooldown).
+type CooldownError struct {
+	Wait time.Duration // until another top-up may be asked for
+}
+
+func (e *CooldownError) Error() string { return "payments: top-up cooldown, wait " + e.Wait.String() }
+
 // Bounds and timings. DefaultMinTopUpKES applies unless Config.MinTopUpKES sets another (TOP_UP_MIN_KES: KES 1 while
 // the owner tests with real money).
 const (
@@ -150,6 +157,9 @@ type Config struct {
 	VerifyAfter time.Duration
 	Expiry      time.Duration
 	MinTopUpKES int64 // 0: DefaultMinTopUpKES
+	// TopUpCooldown is the least time between two M-Pesa prompts for one player (owner, 2026-10-30: the app says how
+	// long, so prompts are not asked for faster than Daraja answers and get throttled). Zero turns it off.
+	TopUpCooldown time.Duration
 	// ThrottleWaits are the pauses between push attempts Daraja throttled; nil takes DefaultThrottleWaits.
 	ThrottleWaits []time.Duration
 	// SandboxSettle settles top-ups without the status query, for testing against the Daraja sandbox, whose callbacks
@@ -231,6 +241,11 @@ func (s *Service) StartTopUp(ctx context.Context, userID string, amount int64, k
 		if err := s.rg.AssertNotRestricted(ctx, tx, userID); err != nil {
 			return err
 		}
+		if wait, err := s.topUpWait(ctx, q, userID, now); err != nil {
+			return err
+		} else if wait > 0 {
+			return &CooldownError{Wait: wait}
+		}
 		if _, err := s.rules.ActiveRule(ctx, tx, exciseCode, now); errors.Is(err, ledger.ErrNoTaxRule) {
 			return ErrUnavailable
 		} else if err != nil {
@@ -254,6 +269,37 @@ func (s *Service) StartTopUp(ctx context.Context, userID string, amount int64, k
 		return TopUp{}, err
 	}
 	return s.Get(ctx, userID, id)
+}
+
+// WithTopUpCooldown sets Config.TopUpCooldown and returns s.
+func (s *Service) WithTopUpCooldown(d time.Duration) *Service {
+	s.cfg.TopUpCooldown = d
+	return s
+}
+
+// TopUpCooldown is the least time between two M-Pesa prompts for one player (zero: no cooldown).
+func (s *Service) TopUpCooldown() time.Duration { return s.cfg.TopUpCooldown }
+
+// TopUpWait is how long the player must wait before asking for another M-Pesa prompt (zero: now).
+func (s *Service) TopUpWait(ctx context.Context, userID string) (time.Duration, error) {
+	now, err := s.clk.Now(ctx, s.pool)
+	if err != nil {
+		return 0, err
+	}
+	return s.topUpWait(ctx, store.New(s.pool), userID, now)
+}
+
+func (s *Service) topUpWait(ctx context.Context, q *store.Queries, userID string, now time.Time) (time.Duration, error) {
+	if s.cfg.TopUpCooldown <= 0 {
+		return 0, nil
+	}
+	last, err := q.LastTopUpAt(ctx, userID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return 0, nil
+	} else if err != nil {
+		return 0, err
+	}
+	return max(0, last.Add(s.cfg.TopUpCooldown).Sub(now)), nil
 }
 
 // Get returns one of the player's payments. Another player's payment is ErrNotFound.

@@ -174,6 +174,34 @@ void main() {
     expect(backend.balance, 1);
   });
 
+  testWidgets('after a top-up the next one waits out the cooldown, and the app says how long', (t) async {
+    final backend = FakeBackend(balance: 0)
+      ..topUpMin = 1
+      ..topUpPendingPolls = 1
+      ..topUpCooldownS = 120;
+    await pumpApp(t, backend);
+    await t.tap(find.text('Wallet').last);
+    await t.pumpAndSettle();
+    await t.tap(find.widgetWithText(FilledButton, 'Top up'));
+    await t.pumpAndSettle();
+    expect(find.textContaining('You can top up again'), findsNothing, reason: 'no wait before the first prompt');
+    await t.tap(find.widgetWithText(ActionChip, 'KES 1'));
+    await t.tap(find.widgetWithText(FilledButton, 'Continue'));
+    await t.pumpAndSettle();
+    await t.tap(find.widgetWithText(FilledButton, 'Send M-Pesa prompt'));
+    await t.pump();
+    await t.pump();
+    expect(find.textContaining('You can top up again in 2 minutes'), findsOneWidget);
+    await pumpUntilFound(t, find.text('Credited'), step: const Duration(milliseconds: 500));
+    await t.tap(find.widgetWithText(FilledButton, 'Back to wallet'));
+    await t.pumpAndSettle();
+    await t.tap(find.widgetWithText(FilledButton, 'Top up'));
+    await t.pumpAndSettle();
+    expect(find.textContaining(RegExp(r'You can top up again in \d')), findsOneWidget);
+    final cont = t.widget<FilledButton>(find.widgetWithText(FilledButton, 'Continue'));
+    expect(cont.onPressed, isNull, reason: 'Continue waits out the cooldown');
+  });
+
   testWidgets('below the server minimum the form refuses before sending', (t) async {
     await pumpApp(t, FakeBackend());
     await t.tap(find.text('Wallet').last);

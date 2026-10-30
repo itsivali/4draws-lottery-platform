@@ -46,11 +46,11 @@ void main() {
     });
   }
 
-  test('a quick answer still gives a full spin of about four to six seconds', () {
+  test('a quick answer gives a brisk spin of about two to three and a half seconds (owner, 2026-10-30)', () {
     for (var slot = 0; slot < 12; slot++) {
       final m = WheelMotion.start(rotation: 0, at: Duration.zero, timing: timing);
       m.land(at: ms(150), geometry: g, slot: slot, within: landingFraction('t$slot'));
-      expect(m.settlesAt!.inMilliseconds, inInclusiveRange(4000, 6000), reason: 'slot $slot');
+      expect(m.settlesAt!.inMilliseconds, inInclusiveRange(2000, 3500), reason: 'slot $slot');
     }
   });
 
@@ -62,7 +62,7 @@ void main() {
     final before = m.rotationAt(ms(6999));
     final after = m.rotationAt(ms(7001));
     expect(after - before, closeTo(timing.peakVelocity * 0.002, 1e-3), reason: 'no jump at the hand-off');
-    expect(m.velocityAt(ms(7001)), closeTo(timing.peakVelocity, 0.01));
+    expect(m.velocityAt(ms(7001)), closeTo(timing.peakVelocity, timing.peakVelocity * 0.002));
     expect(g.segmentAtPointer(m.rotationAt(m.settlesAt!)), 4);
   });
 
@@ -75,7 +75,11 @@ void main() {
       expect(r, greaterThanOrEqualTo(prev - 1e-12), reason: 'at $t ms');
       prev = r;
       if (t > 10 && t < m.settlesAt!.inMilliseconds - 10) {
-        expect(m.velocityAt(ms(t)), closeTo(numericVelocity(m, ms(t)), 2e-3), reason: 'velocity continuous at $t ms');
+        expect(
+          m.velocityAt(ms(t)),
+          closeTo(numericVelocity(m, ms(t)), 2.5e-4 * timing.peakVelocity),
+          reason: 'velocity continuous at $t ms',
+        );
       }
     }
   });
@@ -118,7 +122,7 @@ void main() {
     }
   });
 
-  test('the peak speed stays readable (no more than about two turns a second)', () {
-    expect(timing.peakVelocity, lessThanOrEqualTo(2.2 * 2 * pi));
+  test('the peak speed is brisk but bounded (no more than about three turns a second; owner, 2026-10-30)', () {
+    expect(timing.peakVelocity, lessThanOrEqualTo(3.2 * 2 * pi));
   });
 }

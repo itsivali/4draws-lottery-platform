@@ -46,9 +46,20 @@ class MoneyBounds {
 
 /// The top-up range (KES 1 while testing with real money).
 class TopUpBounds extends MoneyBounds {
-  const TopUpBounds({required super.minKes, required super.maxKes});
+  const TopUpBounds({required super.minKes, required super.maxKes, this.waitS = 0, this.cooldownS = 0});
 
-  factory TopUpBounds.fromJson(JsonObject j) => TopUpBounds(minKes: j.integer('min_kes'), maxKes: j.integer('max_kes'));
+  factory TopUpBounds.fromJson(JsonObject j) => TopUpBounds(
+    minKes: j.integer('min_kes'),
+    maxKes: j.integer('max_kes'),
+    waitS: j.intOrNull('wait_s') ?? 0,
+    cooldownS: j.intOrNull('cooldown_s') ?? 0,
+  );
+
+  /// Seconds, when the wallet was read, until another M-Pesa prompt may be asked for (0: now).
+  final int waitS;
+
+  /// The least time between two prompts, in seconds (0: none).
+  final int cooldownS;
 
   /// Used until the wallet has loaded; the server checks every amount anyway.
   static const fallback = TopUpBounds(minKes: 10, maxKes: 250000);

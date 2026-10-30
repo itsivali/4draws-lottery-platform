@@ -99,7 +99,10 @@ type Today struct {
 	Lucky     bool
 	Chances   int
 	PriceKES  int64
-	Tickets   []Play
+	// Slots and LuckySlots are today's wheel, so the app can draw its numbers before the first spin (owner, 2026-10-30).
+	Slots      int
+	LuckySlots int
+	Tickets    []Play
 }
 
 // Result is what a play returns: the play, the day after it and the new balance.
@@ -311,7 +314,8 @@ func (s *Service) today(ctx context.Context, q *store.Queries, userID string, da
 	} else if err != nil {
 		return Today{}, err
 	}
-	t := Today{PlayDate: day, PriceKES: odds.PriceKes, PlaysLeft: DailyPlays, Tickets: []Play{}}
+	t := Today{PlayDate: day, PriceKES: odds.PriceKes, PlaysLeft: DailyPlays, Tickets: []Play{},
+		Slots: int(odds.SlotCount), LuckySlots: int(odds.LuckySlots)}
 	pd, err := q.GetPlayerDay(ctx, store.GetPlayerDayParams{UserID: userID, PlayDate: day})
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return Today{}, err

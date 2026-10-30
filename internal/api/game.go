@@ -35,13 +35,16 @@ type playJSON struct {
 }
 
 type todayJSON struct {
-	PlayDate  string     `json:"play_date"`
-	Plays     int        `json:"plays"`
-	PlaysLeft int        `json:"plays_left"`
-	Lucky     bool       `json:"lucky"`
-	Chances   int        `json:"chances"`
-	PriceKES  int64      `json:"price_kes"`
-	Tickets   []playJSON `json:"tickets"`
+	PlayDate  string `json:"play_date"`
+	Plays     int    `json:"plays"`
+	PlaysLeft int    `json:"plays_left"`
+	Lucky     bool   `json:"lucky"`
+	Chances   int    `json:"chances"`
+	PriceKES  int64  `json:"price_kes"`
+	// today's wheel, so the app shows its numbers before the first spin
+	Slots      int        `json:"slots"`
+	LuckySlots int        `json:"lucky_slots"`
+	Tickets    []playJSON `json:"tickets"`
 }
 
 func toPlayJSON(p game.Play) playJSON {
@@ -53,7 +56,7 @@ func toPlayJSON(p game.Play) playJSON {
 
 func toTodayJSON(t game.Today) todayJSON {
 	out := todayJSON{PlayDate: t.PlayDate.Format(time.DateOnly), Plays: t.Plays, PlaysLeft: t.PlaysLeft, Lucky: t.Lucky,
-		Chances: t.Chances, PriceKES: t.PriceKES, Tickets: make([]playJSON, 0, len(t.Tickets))}
+		Chances: t.Chances, PriceKES: t.PriceKES, Slots: t.Slots, LuckySlots: t.LuckySlots, Tickets: make([]playJSON, 0, len(t.Tickets))}
 	for _, p := range t.Tickets {
 		out.Tickets = append(out.Tickets, toPlayJSON(p))
 	}

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"math"
 	"net/http"
 	"strconv"
 	"time"
@@ -25,6 +26,8 @@ type topUpJSON struct {
 	AmountRequestedKES int64     `json:"amount_requested_kes"`
 	AmountConfirmedKES *int64    `json:"amount_confirmed_kes"`
 	CreatedAt          time.Time `json:"created_at"`
+	// NextTopUpInS, on a new top-up, is how long until the player may ask for another prompt (the cooldown)
+	NextTopUpInS int64 `json:"next_top_up_in_s,omitempty"`
 }
 
 func toTopUpJSON(t payments.TopUp) topUpJSON {
@@ -52,10 +55,23 @@ func (h *handlers) startTopUp(w http.ResponseWriter, r *http.Request) {
 	t, err := h.Payments.StartTopUp(r.Context(), p.UserID, in.AmountKES, r.Header.Get("Idempotency-Key"))
 	var le *rg.LimitError
 	var re *rg.RestrictedError
+	var ce *payments.CooldownError
 	switch {
 	case err == nil:
 		// the prompt is sent in the background; the app watches GET /v1/payments/events (or polls GET /v1/payments/{id})
-		httpx.WriteJSON(w, http.StatusAccepted, toTopUpJSON(t))
+		out := toTopUpJSON(t)
+		out.NextTopUpInS = int64(h.Payments.TopUpCooldown().Seconds())
+		httpx.WriteJSON(w, http.StatusAccepted, out)
+	case errors.As(err, &ce):
+		// one prompt at a time is what Daraja answers without throttling; the app counts this down
+		secs := int64(math.Ceil(ce.Wait.Seconds()))
+		mins := (secs + 59) / 60
+		unit := " minutes"
+		if mins == 1 {
+			unit = " minute"
+		}
+		httpx.WriteProblemRetry(w, http.StatusTooManyRequests, "top-up-cooldown", "Wait a moment before topping up again",
+			"you can top up again in "+strconv.FormatInt(mins, 10)+unit, int(secs))
 	case errors.Is(err, payments.ErrInvalidAmount):
 		httpx.WriteProblem(w, http.StatusBadRequest, "invalid-amount", "Invalid amount",
 			"top-ups are between KES "+strconv.FormatInt(h.Payments.MinTopUpKES(), 10)+" and KES "+strconv.Itoa(daraja.MaxSTKAmountKES))

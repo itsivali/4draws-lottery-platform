@@ -22,9 +22,11 @@ import '../../../core/widgets/status_pill.dart';
 import '../../account/application/account_providers.dart';
 import '../../account/domain/account_models.dart';
 import '../../wallet/application/money_flows.dart';
+import '../../wallet/application/top_up_cooldown.dart';
 import '../../wallet/application/wallet_providers.dart';
 import '../../wallet/domain/wallet_models.dart';
 import '../../wallet/presentation/money_flow_view.dart';
+import '../../wallet/presentation/top_up_cooldown_note.dart';
 import '../application/pay_and_play.dart';
 import '../application/play_controller.dart';
 import '../application/play_providers.dart';
@@ -118,9 +120,15 @@ class _PlayScreenState extends ConsumerState<PlayScreen> {
     final wallet = ref.watch(walletStatementProvider);
     final ctl = ref.read(playControllerProvider.notifier);
 
-    // the wheel at rest shows the server's own wheel once a play today has described it
+    // the wheel at rest shows the server's own wheel: from the last play, else from today's odds, so the numbers show
+    // before the first spin (owner, 2026-10-30)
     final last = (flow.result?.play ?? today.value?.tickets.lastOrNull)?.spin;
-    final resting = last == null ? null : WheelGeometry(slots: last.slots, luckySlots: last.luckySlots);
+    final day = today.value;
+    final resting = last != null
+        ? WheelGeometry(slots: last.slots, luckySlots: last.luckySlots)
+        : day?.slots != null && day!.luckySlots <= day.slots!
+        ? WheelGeometry(slots: day.slots!, luckySlots: day.luckySlots)
+        : null;
 
     final wheel = LotteryWheel(
       spin: _spinFor(flow),
@@ -299,22 +307,36 @@ class _PlayPanel extends ConsumerWidget {
           _BlockNotice(block: block, priceKes: day.priceKes, dailyCap: cap),
           const SizedBox(height: Space.lg),
         ],
-        PressScale(
-          enabled: (block == null || payInstead) && !busy,
-          child: BusyButton(
-            label: payInstead
-                ? 'Pay ${formatKes(day.priceKes)} with M-Pesa and spin'
-                : 'Play for ${formatKes(day.priceKes)}',
-            icon: payInstead ? Icons.phone_iphone_rounded : Icons.donut_large_rounded,
-            busy: flow.stage == PlayStage.submitting || paying == PayAndPlayStage.paying,
-            semanticsLabel: payInstead
-                ? 'Pay ${formatKes(day.priceKes)} with M-Pesa and spin. ${day.playsLeft} of $cap plays left today.'
-                : 'Play for ${formatKes(day.priceKes)}. ${day.playsLeft} of $cap plays left today.',
-            onPressed: busy || (block != null && !payInstead)
-                ? null
-                : payInstead
-                ? () => onPayAndPlay(day, a)
-                : () => onPlay(day, WalletStatement(balanceKes: balance, debtKes: w.debtKes, transactions: const [])),
+        // paying with M-Pesa waits out the top-up cooldown, and says how long (owner, 2026-10-30)
+        TopUpCooldownGate(
+          readyAt: payInstead && !busy ? ref.watch(topUpCooldownProvider) : null,
+          what: 'pay with M-Pesa',
+          builder: (context, ready, note) => Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              PressScale(
+                enabled: (block == null || payInstead) && !busy && ready,
+                child: BusyButton(
+                  label: payInstead
+                      ? 'Pay ${formatKes(day.priceKes)} with M-Pesa and spin'
+                      : 'Play for ${formatKes(day.priceKes)}',
+                  icon: payInstead ? Icons.phone_iphone_rounded : Icons.donut_large_rounded,
+                  busy: flow.stage == PlayStage.submitting || paying == PayAndPlayStage.paying,
+                  semanticsLabel: payInstead
+                      ? 'Pay ${formatKes(day.priceKes)} with M-Pesa and spin. ${day.playsLeft} of $cap plays left today.'
+                      : 'Play for ${formatKes(day.priceKes)}. ${day.playsLeft} of $cap plays left today.',
+                  onPressed: busy || !ready || (block != null && !payInstead)
+                      ? null
+                      : payInstead
+                      ? () => onPayAndPlay(day, a)
+                      : () => onPlay(
+                          day,
+                          WalletStatement(balanceKes: balance, debtKes: w.debtKes, transactions: const []),
+                        ),
+                ),
+              ),
+              if (note != null) ...[const SizedBox(height: Space.sm), note],
+            ],
           ),
         ),
         const SizedBox(height: Space.sm),

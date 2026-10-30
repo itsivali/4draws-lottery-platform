@@ -2,14 +2,15 @@ import 'dart:math';
 
 import 'wheel_geometry.dart';
 
-/// The shape of a spin. Tuned on devices; change here, nowhere else.
+/// The shape of a spin. Tuned on devices; change here, nowhere else. Quicker since 2026-10-30 (owner): about two and
+/// a half seconds from the tap to rest when the answer is quick, at a higher top speed.
 class SpinTiming {
   const SpinTiming({
-    this.accelerate = const Duration(milliseconds: 600),
-    this.minCruise = const Duration(milliseconds: 1200),
-    this.decelerate = const Duration(milliseconds: 3000),
-    this.abort = const Duration(milliseconds: 900),
-    this.peakTurnsPerSecond = 2.0,
+    this.accelerate = const Duration(milliseconds: 350),
+    this.minCruise = const Duration(milliseconds: 500),
+    this.decelerate = const Duration(milliseconds: 1800),
+    this.abort = const Duration(milliseconds: 700),
+    this.peakTurnsPerSecond = 3.0,
   });
 
   /// From rest to cruising speed (velocity follows a smoothstep, so there is no jolt at either end).

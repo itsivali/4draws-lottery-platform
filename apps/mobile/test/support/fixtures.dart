@@ -34,6 +34,8 @@ Map<String, Object?> todayJson({
   'lucky': lucky,
   'chances': chances,
   'price_kes': 100,
+  'slots': 12,
+  'lucky_slots': 1,
   'tickets': tickets ?? <Object>[],
 };
 

@@ -5,6 +5,7 @@ import 'package:lottery_mobile/core/platform/haptics.dart';
 import 'package:lottery_mobile/features/play/application/spin_haptics.dart';
 import 'package:lottery_mobile/features/play/domain/wheel_geometry.dart';
 import 'package:lottery_mobile/features/play/presentation/widgets/lottery_wheel.dart';
+import 'package:lottery_mobile/features/play/presentation/widgets/wheel_fx_painters.dart';
 
 import '../../../support/fonts.dart';
 
@@ -245,6 +246,77 @@ void main() {
     );
     expect(find.bySemanticsLabel(RegExp('.')), findsNothing);
     h.dispose();
+  });
+
+  group('animation (owner, 2026-10-30)', () {
+    testWidgets('the lights run hot while spinning, cool at rest, and the landed slot glows once', (t) async {
+      var settled = 0;
+      final haptics = SpinHaptics(Recorder());
+      await t.pumpWidget(
+        host(spin: const WheelSpin.idle(), haptics: haptics, onSettled: () => settled++, resting: server),
+      );
+      await t.pumpWidget(
+        host(
+          spin: const WheelSpin(spinId: 's'),
+          haptics: haptics,
+          onSettled: () => settled++,
+        ),
+      );
+      await t.pump(const Duration(milliseconds: 600));
+      expect(wheel(t).fx.energy, greaterThan(0.9), reason: 'full speed: the lights race');
+      final phase = wheel(t).fx.phase;
+      await t.pump(const Duration(milliseconds: 200));
+      expect(wheel(t).fx.phase, isNot(phase), reason: 'the lights move with the spin even without the idle loop');
+      await t.pumpWidget(
+        host(
+          spin: WheelSpin(spinId: 's', slot: 5, geometry: server),
+          haptics: haptics,
+          onSettled: () => settled++,
+        ),
+      );
+      await t.pump(const Duration(seconds: 4));
+      await t.pump(const Duration(milliseconds: 400));
+      expect(settled, 1);
+      expect(wheel(t).fx.energy, 0);
+      expect(wheel(t).fx.landedSlot, 5);
+      expect(wheel(t).fx.celebrate, inExclusiveRange(0, 1), reason: 'the landing glow is under way');
+      await t.pumpAndSettle();
+      expect(wheel(t).fx.celebrate, 1, reason: 'and it ends, so the screen settles');
+    });
+
+    testWidgets('the pointer flicks as a stud passes, only while the wheel turns', (t) async {
+      final sweep = server.sweep;
+      expect(WheelPointerPainter.kick(rotation: 0, energy: 1, sweep: sweep), lessThan(-0.3), reason: 'on a stud');
+      expect(
+        WheelPointerPainter.kick(rotation: -sweep / 2, energy: 1, sweep: sweep),
+        0,
+        reason: 'mid-segment',
+      );
+      expect(WheelPointerPainter.kick(rotation: 0, energy: 0, sweep: sweep), 0, reason: 'at rest');
+    });
+
+    testWidgets('at rest the lights drift on their own, unless the platform asks for reduced motion', (t) async {
+      LotteryWheel.ambientAnimation = true;
+      addTearDown(() => LotteryWheel.ambientAnimation = false);
+      await t.pumpWidget(
+        host(spin: const WheelSpin.idle(), haptics: SpinHaptics(Recorder()), onSettled: () {}, resting: server),
+      );
+      final before = wheel(t).fx.phase;
+      await t.pump(const Duration(milliseconds: 500));
+      expect(wheel(t).fx.phase, isNot(before));
+      await t.pumpWidget(
+        host(
+          spin: const WheelSpin.idle(),
+          haptics: SpinHaptics(Recorder()),
+          onSettled: () {},
+          resting: server,
+          reduceMotion: true,
+        ),
+      );
+      final still = wheel(t).fx.phase;
+      await t.pump(const Duration(milliseconds: 500));
+      expect(wheel(t).fx.phase, still);
+    });
   });
 
   group('golden', () {

@@ -62,8 +62,10 @@ void main() {
     final h = simulate(slot: 7);
     final ticks = h.events.where((e) => e.$1 == HapticEvent.tick).toList();
     expect(ticks, isNotEmpty);
-    // every tick comes after slowing began (the answer arrives at 300 ms; slowing starts at 1.8 s at the earliest)
-    expect(ticks.every((e) => e.$2! > const Duration(milliseconds: 1800)), isTrue);
+    // every tick comes after slowing began (the answer arrives at 300 ms; slowing starts after the acceleration and
+    // the least cruise at the earliest)
+    const timing = SpinTiming();
+    expect(ticks.every((e) => e.$2! > timing.accelerate + timing.minCruise), isTrue);
   });
 
   test('ticks are spaced and capped so the motor never buzzes', () {
