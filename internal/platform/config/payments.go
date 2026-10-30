@@ -38,6 +38,11 @@ type Payments struct {
 	SecurityCredential string // the initiator's password encrypted with Safaricom's certificate, from the Daraja portal
 
 	MinTopUpKES int64 // TOP_UP_MIN_KES; 0 leaves the payments default
+
+	// SandboxSettle (DARAJA_SANDBOX_SETTLE=true) settles top-ups from the callback alone and credits the amount
+	// requested when the sandbox reports a timeout or never calls back (payments.Config.SandboxSettle). Refused with
+	// production Daraja.
+	SandboxSettle bool
 }
 
 // C2BEnabled reports whether paybill payments are configured.
@@ -137,6 +142,11 @@ func loadPayments(api API) (Payments, error) {
 	}
 	if u, _ := url.Parse(p.BaseURL); u.Hostname() == "api.safaricom.co.ke" && !p.AllowProduction {
 		return Payments{}, errors.New("config: DARAJA_BASE_URL is production; set DARAJA_ALLOW_PRODUCTION=true only when that is intended")
+	}
+	if p.SandboxSettle = os.Getenv("DARAJA_SANDBOX_SETTLE") == "true"; p.SandboxSettle {
+		if u, _ := url.Parse(p.BaseURL); p.AllowProduction || u.Hostname() == "api.safaricom.co.ke" {
+			return Payments{}, errors.New("config: DARAJA_SANDBOX_SETTLE credits top-ups M-Pesa did not confirm; it is refused with production Daraja")
+		}
 	}
 	p.C2BShortCode, p.B2CShortCode = os.Getenv("DARAJA_C2B_SHORTCODE"), os.Getenv("DARAJA_B2C_SHORTCODE")
 	initSet, initMissing := partly(initiatorSettings)

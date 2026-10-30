@@ -6,6 +6,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/riverqueue/river"
+	"github.com/riverqueue/river/rivertype"
 )
 
 // PushArgs sends the STK prompt for a payment.
@@ -16,9 +17,11 @@ type PushArgs struct {
 // Kind implements river.JobArgs.
 func (PushArgs) Kind() string { return "payments.stk_push" }
 
-// VerifyArgs settles a payment from the status query.
+// VerifyArgs settles a payment from the status query. A payment has one verify job at a time, whatever asked for it:
+// before 2026-10-30 the push, the callback and the sweep each ran their own, tripling the status queries Daraja
+// throttles.
 type VerifyArgs struct {
-	PaymentID string       `json:"payment_id"`
+	PaymentID string       `json:"payment_id" river:"unique"`
 	Source    VerifySource `json:"source"`
 }
 
@@ -60,10 +63,18 @@ func (e *RiverEnqueuer) EnqueuePush(ctx context.Context, tx pgx.Tx, paymentID st
 	return err
 }
 
-// EnqueueVerify implements Enqueuer.
+// EnqueueVerify implements Enqueuer. A callback brings forward the payment's verify job that is already waiting
+// (snoozed or backing off), so the customer is not kept waiting for its next turn.
 func (e *RiverEnqueuer) EnqueueVerify(ctx context.Context, tx pgx.Tx, paymentID string, source VerifySource) error {
-	_, err := e.client.InsertTx(ctx, tx, VerifyArgs{PaymentID: paymentID, Source: source},
+	res, err := e.client.InsertTx(ctx, tx, VerifyArgs{PaymentID: paymentID, Source: source},
 		&river.InsertOpts{MaxAttempts: verifyMaxAttempts, UniqueOpts: river.UniqueOpts{ByArgs: true}})
+	if err != nil || source != AfterCallback || !res.UniqueSkippedAsDuplicate {
+		return err
+	}
+	switch res.Job.State {
+	case rivertype.JobStateScheduled, rivertype.JobStateRetryable:
+		_, err = e.client.JobRetryTx(ctx, tx, res.Job.ID)
+	}
 	return err
 }
 

@@ -245,6 +245,18 @@ func TestSTKPush_TokenFailureIsAnOutage(t *testing.T) {
 	}
 }
 
+func TestSTKPush_AThrottledTokenRequestIsThrottlingSoThePushCanBeAskedAgain(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusTooManyRequests) }))
+	defer srv.Close()
+	c, err := daraja.New(testConfig(srv.URL), srv.Client(), clock.NewManual(at))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.STKPush(context.Background(), daraja.STKPushRequest{MSISDN: "254712345678", AmountKES: 10, AccountRef: "A"}); !errors.Is(err, daraja.ErrThrottled) {
+		t.Fatalf("err = %v, want throttled", err)
+	}
+}
+
 func TestSTKQuery_MapsTheResultCode(t *testing.T) {
 	var got map[string]any
 	cases := map[string]struct {

@@ -22,6 +22,7 @@ func fullPaymentsEnv(t *testing.T) {
 	t.Setenv("PUBLIC_BASE_URL", "")
 	t.Setenv("RENDER_EXTERNAL_URL", "https://lottery-api.onrender.com")
 	t.Setenv("TOP_UP_MIN_KES", "")
+	t.Setenv("DARAJA_SANDBOX_SETTLE", "")
 	for _, k := range allInitiatorVars {
 		t.Setenv(k, "")
 	}
@@ -226,5 +227,21 @@ func TestPayments_TheTopUpMinimumIsSetByTheServerWithinWhatMPesaAccepts(t *testi
 		if _, err := config.Load(); err == nil || !strings.Contains(err.Error(), "TOP_UP_MIN_KES") {
 			t.Fatalf("%q accepted (%v)", bad, err)
 		}
+	}
+}
+
+func TestPayments_SandboxSettlementIsOptInAndRefusedWithProductionDaraja(t *testing.T) {
+	fullPaymentsEnv(t)
+	if cfg, err := config.Load(); err != nil || cfg.Payments.SandboxSettle {
+		t.Fatalf("default: settle=%v err=%v", cfg.Payments.SandboxSettle, err)
+	}
+	t.Setenv("DARAJA_SANDBOX_SETTLE", "true")
+	if cfg, err := config.Load(); err != nil || !cfg.Payments.SandboxSettle {
+		t.Fatalf("sandbox: settle=%v err=%v", cfg.Payments.SandboxSettle, err)
+	}
+	t.Setenv("DARAJA_BASE_URL", "https://api.safaricom.co.ke")
+	t.Setenv("DARAJA_ALLOW_PRODUCTION", "true")
+	if _, err := config.Load(); err == nil || !strings.Contains(err.Error(), "DARAJA_SANDBOX_SETTLE") {
+		t.Fatalf("production: err = %v, want a refusal", err)
 	}
 }

@@ -157,6 +157,9 @@ func (c *Client) accessToken(ctx context.Context, force bool) (string, error) {
 		return "", fmt.Errorf("%w: token endpoint unreachable", ErrUnavailable)
 	}
 	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode == http.StatusTooManyRequests {
+		return "", fmt.Errorf("%w: token endpoint returned status %d", ErrThrottled, resp.StatusCode)
+	}
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("%w: token endpoint returned status %d", ErrUnavailable, resp.StatusCode)
 	}

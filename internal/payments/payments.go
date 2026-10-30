@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -138,11 +139,25 @@ type Ledger interface {
 	Post(ctx context.Context, tx pgx.Tx, j ledger.Journal) (string, error)
 }
 
+// DefaultThrottleWaits are the pauses before asking Daraja again to send a prompt it refused with HTTP 429.
+var DefaultThrottleWaits = []time.Duration{2 * time.Second, 4 * time.Second, 8 * time.Second}
+
+// SandboxReceiptPrefix starts the receipt of a top-up credited by sandbox settlement; M-Pesa never issued it.
+const SandboxReceiptPrefix = "SANDBOX-"
+
 // Config tunes the service; zero values take the defaults.
 type Config struct {
 	VerifyAfter time.Duration
 	Expiry      time.Duration
 	MinTopUpKES int64 // 0: DefaultMinTopUpKES
+	// ThrottleWaits are the pauses between push attempts Daraja throttled; nil takes DefaultThrottleWaits.
+	ThrottleWaits []time.Duration
+	// SandboxSettle settles top-ups without the status query, for testing against the Daraja sandbox, whose callbacks
+	// often report a timeout (1037) for a prompt that was answered and whose status query is throttled (429). A paid
+	// callback credits as usual and a cancelled prompt (1032) stays cancelled; any other outcome, including no callback
+	// within VerifyAfter, credits the amount requested under a SandboxReceiptPrefix receipt. The configuration refuses
+	// it with production Daraja; no real money moves in the sandbox.
+	SandboxSettle bool
 }
 
 // Service runs top-ups.
@@ -170,6 +185,9 @@ func NewService(pool *pgxpool.Pool, clk clock.Clock, d Daraja, enq Enqueuer, ids
 	}
 	if cfg.MinTopUpKES <= 0 {
 		cfg.MinTopUpKES = DefaultMinTopUpKES
+	}
+	if cfg.ThrottleWaits == nil {
+		cfg.ThrottleWaits = DefaultThrottleWaits
 	}
 	return &Service{pool: pool, clk: clk, daraja: d, enq: enq, ids: ids, rg: r, wallet: w, rules: rules, audit: a, cfg: cfg}
 }
@@ -284,9 +302,11 @@ func (s *Service) Recent(ctx context.Context, userID string) ([]TopUp, error) {
 	return out, nil
 }
 
-// Push sends the STK prompt for a recorded top-up. It never retries: a push whose outcome is unknown (a timeout,
-// a 5xx) may still have reached the customer, and a second prompt could take a second payment we would not know
-// about. Such a payment fails; any callback it later produces is kept as an orphan for reconciliation.
+// Push sends the STK prompt for a recorded top-up. A push whose outcome is unknown (a timeout, a 5xx) is never
+// retried: it may still have reached the customer, and a second prompt could take a second payment we would not know
+// about. Such a payment fails; any callback it later produces is kept as an orphan for reconciliation. A throttled
+// push (HTTP 429, Daraja's spike arrest, routine in the sandbox) is refused at Safaricom's gateway before any prompt
+// is sent, so it is asked again after each of ThrottleWaits while the customer waits.
 func (s *Service) Push(ctx context.Context, paymentID string) error {
 	if s.daraja == nil {
 		return ErrUnavailable
@@ -298,7 +318,22 @@ func (s *Service) Push(ctx context.Context, paymentID string) error {
 	if p.Status != "initiated" || p.Msisdn == nil {
 		return nil
 	}
-	res, pushErr := s.daraja.STKPush(ctx, daraja.STKPushRequest{MSISDN: *p.Msisdn, AmountKES: p.AmountRequestedKes, AccountRef: "Tajirika", Description: "Tajirika"})
+	req := daraja.STKPushRequest{MSISDN: *p.Msisdn, AmountKES: p.AmountRequestedKes, AccountRef: "Tajirika", Description: "Tajirika"}
+	res, pushErr := s.daraja.STKPush(ctx, req)
+	for _, wait := range s.cfg.ThrottleWaits {
+		if !errors.Is(pushErr, daraja.ErrThrottled) {
+			break
+		}
+		slog.WarnContext(ctx, "stk push throttled; asking again", "payment", paymentID, "in", wait)
+		t := time.NewTimer(wait)
+		select {
+		case <-ctx.Done():
+			t.Stop()
+			return ctx.Err() // the job is retried only by hand; nothing was sent
+		case <-t.C:
+		}
+		res, pushErr = s.daraja.STKPush(ctx, req)
+	}
 	return pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		now, err := s.clk.Now(ctx, tx)
 		if err != nil {
@@ -307,8 +342,11 @@ func (s *Service) Push(ctx context.Context, paymentID string) error {
 		q := store.New(tx)
 		if pushErr != nil {
 			reason := "push_outcome_unknown"
-			if errors.Is(pushErr, daraja.ErrRejected) || errors.Is(pushErr, daraja.ErrInvalidRequest) {
+			switch {
+			case errors.Is(pushErr, daraja.ErrRejected) || errors.Is(pushErr, daraja.ErrInvalidRequest):
 				reason = "push_rejected"
+			case errors.Is(pushErr, daraja.ErrThrottled): // refused before sending: no prompt went out
+				reason = "push_throttled"
 			}
 			slog.WarnContext(ctx, "stk push failed; the top-up fails", "payment", paymentID, "reason", reason, "err", pushErr)
 			return s.settle(ctx, tx, p.UserID, paymentID, "failed", reason, nil, now)
@@ -360,6 +398,8 @@ func (s *Service) HandleCallback(ctx context.Context, raw []byte) error {
 // answered the prompt yet, and Daraja throttles early queries (HTTP 429, seen live 2026-10-24). A query that finds
 // Daraja throttling or unavailable is asked again after VerifyAfter until the payment expires; after that the outage
 // is returned so the job keeps retrying with backoff.
+//
+// With Config.SandboxSettle it settles from the callback alone instead of asking (settleSandbox).
 func (s *Service) Verify(ctx context.Context, paymentID string) (time.Duration, error) {
 	p, err := store.New(s.pool).GetPayment(ctx, paymentID)
 	if err != nil {
@@ -390,6 +430,9 @@ func (s *Service) Verify(ctx context.Context, paymentID string) (time.Duration, 
 			return s.cfg.VerifyAfter, nil
 		}
 		return 0, s.settleTx(ctx, paymentID, "failed", "push_outcome_unknown", nil)
+	}
+	if s.cfg.SandboxSettle {
+		return s.settleSandbox(ctx, paymentID, p.RawCallback, *p.CheckoutRequestID)
 	}
 	st, err := s.daraja.STKQuery(ctx, *p.CheckoutRequestID)
 	switch {
@@ -424,6 +467,49 @@ func (s *Service) Verify(ctx context.Context, paymentID string) (time.Duration, 
 		return 0, s.settleTx(ctx, paymentID, status, "", &code)
 	}
 	return s.credit(ctx, paymentID, expired)
+}
+
+// settleSandbox settles a pushed top-up from its callback alone (Config.SandboxSettle). It runs once a callback has
+// come or VerifyAfter has passed without one, and never asks the status query.
+func (s *Service) settleSandbox(ctx context.Context, paymentID string, raw []byte, checkoutID string) (time.Duration, error) {
+	if raw == nil {
+		orphan, err := store.New(s.pool).OrphanCallback(ctx, checkoutID)
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return 0, err
+		}
+		raw = orphan
+	}
+	reason := "no_callback"
+	if raw != nil {
+		cb, err := daraja.ParseSTKCallback(raw)
+		switch {
+		case err != nil:
+			reason = "malformed_callback"
+		case cb.Paid():
+			return s.credit(ctx, paymentID, false)
+		case cb.ResultCode == 1032: // the customer cancelled: kept, so the cancel path can be tested
+			code := cb.ResultCode
+			return 0, s.settleTx(ctx, paymentID, "cancelled", "", &code)
+		default:
+			reason = "result_code_" + strconv.Itoa(int(cb.ResultCode))
+		}
+	}
+	return 0, pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+		p, err := store.New(tx).LockPayment(ctx, paymentID)
+		if err != nil {
+			return err
+		}
+		if final(p.Status) {
+			return nil
+		}
+		now, err := s.clk.Now(ctx, tx)
+		if err != nil {
+			return err
+		}
+		slog.WarnContext(ctx, "sandbox settlement: crediting the amount requested", "payment", paymentID, "reason", reason)
+		return s.creditPayment(ctx, tx, creditInput{paymentID: paymentID, user: p.UserID, target: *p.Msisdn, amount: p.AmountRequestedKes,
+			receipt: SandboxReceiptPrefix + paymentID, now: now, actor: audit.Event{ActorType: audit.System}, sandbox: reason})
+	})
 }
 
 // calledBack reports whether Daraja has sent a callback for the payment, including one kept as an orphan because it
@@ -500,6 +586,8 @@ type creditInput struct {
 	// channel is "c2b" for a paybill payment, which proves no phone (anyone can pay into any account number);
 	// otherwise an STK top-up, whose approved prompt proves the target.
 	channel string
+	// sandbox, when set, is why sandbox settlement credited a top-up M-Pesa did not confirm; it proves no phone.
+	sandbox string
 }
 
 // creditPayment posts a confirmed top-up: the deposit and the excise the operator owes on it, recovery of any debt the player owes, the payment
@@ -527,9 +615,13 @@ func (s *Service) creditPayment(ctx context.Context, tx pgx.Tx, in creditInput) 
 	ev := in.actor
 	ev.Action, ev.EntityType, ev.EntityID = "payment.topup.credited", "payment", in.paymentID
 	ev.Details = map[string]any{"amount_kes": in.amount, "receipt": in.receipt, "debt_recovered_kes": recovered}
-	if in.channel == "c2b" {
+	switch {
+	case in.channel == "c2b":
 		ev.Action = "payment.c2b.credited"
-	} else {
+	case in.sandbox != "":
+		ev.Details["sandbox_settlement"] = in.sandbox
+		ev.Details["phone_proof"] = "not_proved_sandbox"
+	default:
 		ev.Details["phone_proof"] = s.provePhone(ctx, tx, in.user, in.target, in.payer)
 	}
 	return s.audit.Record(ctx, tx, ev)

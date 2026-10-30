@@ -32,6 +32,8 @@ type Fault struct {
 	DuplicateCallback bool  `json:"duplicate_callback"` // call back twice with the same body
 	MaskPhone         bool  `json:"mask_phone"`         // report the payer as a masked number
 	PendingAs4999     bool  `json:"pending_as_4999"`    // answer queries before completion as the sandbox does: 200, ResultCode 4999
+	// ThrottlePushes answers this many push attempts with 429 (the sandbox's spike arrest) before accepting one
+	ThrottlePushes int `json:"throttle_pushes"`
 }
 
 // Push is a push the mock accepted.
@@ -73,6 +75,7 @@ type Server struct {
 
 	mu        sync.Mutex
 	seq       int
+	queries   int
 	next      Fault
 	txns      map[string]*txn
 	order     []string
@@ -130,6 +133,13 @@ func (s *Server) AutoComplete(ctx context.Context, delay time.Duration) {
 	s.mu.Unlock()
 }
 
+// Queries returns how many STK status queries the mock has answered.
+func (s *Server) Queries() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.queries
+}
+
 // Pushes returns the accepted pushes in order.
 func (s *Server) Pushes() []Push {
 	s.mu.Lock()
@@ -176,6 +186,12 @@ func (s *Server) authed(h func(http.ResponseWriter, *http.Request, map[string]an
 func (s *Server) push(w http.ResponseWriter, _ *http.Request, body map[string]any) {
 	s.mu.Lock()
 	f := s.next
+	if f.ThrottlePushes > 0 { // refused at the gateway: no prompt is sent and the fault stays for the next attempt
+		s.next.ThrottlePushes--
+		s.mu.Unlock()
+		writeErr(w, http.StatusTooManyRequests, "", "Spike arrest violation")
+		return
+	}
 	s.next = Fault{}
 	if f.PushStatus != 0 {
 		s.mu.Unlock()
@@ -226,6 +242,7 @@ func (s *Server) push(w http.ResponseWriter, _ *http.Request, body map[string]an
 func (s *Server) query(w http.ResponseWriter, _ *http.Request, body map[string]any) {
 	id, _ := body["CheckoutRequestID"].(string)
 	s.mu.Lock()
+	s.queries++
 	t, ok := s.txns[id]
 	var f Fault
 	var done bool

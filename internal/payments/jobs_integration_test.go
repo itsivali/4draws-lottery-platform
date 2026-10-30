@@ -124,3 +124,39 @@ func TestJobs_ATopUpIsSettledByTheQueueAlone(t *testing.T) {
 		return swept >= 1
 	})
 }
+
+// One verify job per payment, whatever asked for it; a callback brings the waiting one forward (2026-10-30: three
+// chains per payment tripled the status queries Daraja throttles).
+func TestJobs_APaymentHasOneVerifyJobAndACallbackBringsItForward(t *testing.T) {
+	ctx := context.Background()
+	pool := testpg.Pool(t, "app_worker")
+	rc, err := river.NewClient(riverpgxv5.New(pool), &river.Config{Schema: db.RiverSchema})
+	if err != nil {
+		t.Fatal(err)
+	}
+	enq := payments.NewRiverEnqueuer(rc)
+	const id = "01a19000-0000-7000-8000-000000000001"
+	in := func(f func(tx pgx.Tx) error) {
+		t.Helper()
+		if err := pgx.BeginFunc(ctx, pool, f); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// the verify job after the push, snoozed until the customer could have answered
+	in(func(tx pgx.Tx) error {
+		_, err := rc.InsertTx(ctx, tx, payments.VerifyArgs{PaymentID: id, Source: payments.AfterPush},
+			&river.InsertOpts{ScheduledAt: time.Now().Add(time.Hour), UniqueOpts: river.UniqueOpts{ByArgs: true}}) //nolint:forbidigo // river schedules by wall time
+		return err
+	})
+	in(func(tx pgx.Tx) error { return enq.EnqueueVerify(ctx, tx, id, payments.FromSweep) })
+	in(func(tx pgx.Tx) error { return enq.EnqueueVerify(ctx, tx, id, payments.AfterCallback) })
+	var n int
+	var due bool
+	if err := pool.QueryRow(ctx, `SELECT count(*), bool_and(scheduled_at <= now()) FROM river.river_job
+		WHERE kind = 'payments.stk_verify' AND args->>'payment_id' = $1`, id).Scan(&n, &due); err != nil {
+		t.Fatal(err)
+	}
+	if n != 1 || !due {
+		t.Fatalf("%d verify jobs, due now = %v; want one, brought forward by the callback", n, due)
+	}
+}

@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -1021,4 +1022,109 @@ func (e *env) account(t *testing.T, code string) int64 {
 		t.Fatal(err)
 	}
 	return n
+}
+
+// sandbox settles from the callback alone and retries throttled pushes without pausing.
+func sandbox(t *testing.T) *env {
+	t.Helper()
+	return setupWith(t, true, payments.Config{SandboxSettle: true, ThrottleWaits: []time.Duration{time.Millisecond, time.Millisecond, time.Millisecond}})
+}
+
+func TestSandboxSettle_SettlesFromTheCallbackAloneAndNeverAsksTheStatusQuery(t *testing.T) {
+	cases := map[string]struct {
+		fault       darajamock.Fault
+		wantStatus  string
+		wantBalance int64
+		wantSandbox bool // credited the amount requested under a SANDBOX- receipt
+		wantProved  bool
+	}{
+		// 2026-10-30: the owner's answered sandbox prompt called back 1037 after 26 seconds
+		"timeout callback":   {fault: darajamock.Fault{ResultCode: 1037}, wantStatus: "credited", wantBalance: 100, wantSandbox: true},
+		"wrong pin":          {fault: darajamock.Fault{ResultCode: 2001}, wantStatus: "credited", wantBalance: 100, wantSandbox: true},
+		"paid":               {fault: darajamock.Fault{PaidAmountKES: 90}, wantStatus: "credited", wantBalance: 90, wantProved: true},
+		"cancelled by payer": {fault: darajamock.Fault{ResultCode: 1032}, wantStatus: "cancelled"},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			e := sandbox(t)
+			user, _ := e.player(t)
+			e.mock.SetNextFault(tc.fault)
+			tu := e.topUp(t, user, 100)
+			e.pushAndComplete(t)
+			if st, _ := e.status(t, tu.ID); st != tc.wantStatus {
+				t.Fatalf("status = %s, want %s", st, tc.wantStatus)
+			}
+			if b := e.balance(t, user); b != tc.wantBalance {
+				t.Fatalf("balance = %d, want %d", b, tc.wantBalance)
+			}
+			if tc.wantStatus == "credited" {
+				if got := strings.HasPrefix(e.receipt(t, tu.ID), payments.SandboxReceiptPrefix); got != tc.wantSandbox {
+					t.Fatalf("receipt %q: sandbox = %v, want %v", e.receipt(t, tu.ID), got, tc.wantSandbox)
+				}
+			}
+			if e.phoneVerified(t, user) != tc.wantProved {
+				t.Fatalf("phone proved = %v, want %v", !tc.wantProved, tc.wantProved)
+			}
+			if n := e.mock.Queries(); n != 0 {
+				t.Fatalf("%d status queries in sandbox settlement", n)
+			}
+		})
+	}
+}
+
+func TestSandboxSettle_APromptThatNeverCallsBackIsCreditedOnceTheWaitIsOver(t *testing.T) {
+	e := sandbox(t)
+	user, tu := e.startPushed(t, darajamock.Fault{DropCallback: true})
+	if d, err := e.svc.Verify(context.Background(), tu.ID); err != nil || d != payments.DefaultVerifyAfter {
+		t.Fatalf("before the wait: retry %v err %v", d, err)
+	}
+	e.clk.Advance(payments.DefaultVerifyAfter)
+	if d, err := e.svc.Verify(context.Background(), tu.ID); err != nil || d != 0 {
+		t.Fatalf("after the wait: retry %v err %v", d, err)
+	}
+	if st, _ := e.status(t, tu.ID); st != "credited" || e.balance(t, user) != 100 {
+		t.Fatalf("status %s balance %d", st, e.balance(t, user))
+	}
+	if n := e.mock.Queries(); n != 0 {
+		t.Fatalf("%d status queries in sandbox settlement", n)
+	}
+}
+
+func TestSandboxSettle_IsOffByDefault(t *testing.T) {
+	e := setup(t)
+	user, _ := e.player(t)
+	e.mock.SetNextFault(darajamock.Fault{ResultCode: 1037})
+	tu := e.topUp(t, user, 100)
+	e.pushAndComplete(t)
+	if st, _ := e.status(t, tu.ID); st != "failed" || e.balance(t, user) != 0 {
+		t.Fatalf("a timed-out prompt was settled %s with balance %d", st, e.balance(t, user))
+	}
+}
+
+func TestPush_AThrottledPushIsAskedAgainBecauseNoPromptWasSent(t *testing.T) {
+	e := sandbox(t)
+	user, _ := e.player(t)
+	e.mock.SetNextFault(darajamock.Fault{ThrottlePushes: 2})
+	tu := e.topUp(t, user, 100)
+	e.run(t)
+	if st, _ := e.status(t, tu.ID); st != "stk_sent" {
+		t.Fatalf("status = %s", st)
+	}
+	if n := len(e.mock.Pushes()); n != 1 {
+		t.Fatalf("%d prompts sent, want 1", n)
+	}
+}
+
+func TestPush_APushThrottledEveryTimeFailsWithoutAPrompt(t *testing.T) {
+	e := sandbox(t)
+	user, _ := e.player(t)
+	e.mock.SetNextFault(darajamock.Fault{ThrottlePushes: 10})
+	tu := e.topUp(t, user, 100)
+	e.run(t)
+	if st, reason := e.status(t, tu.ID); st != "failed" || reason == nil || *reason != "push_throttled" {
+		t.Fatalf("status = %s %v", st, reason)
+	}
+	if n := len(e.mock.Pushes()); n != 0 {
+		t.Fatalf("%d prompts sent", n)
+	}
 }

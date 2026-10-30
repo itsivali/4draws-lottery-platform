@@ -23,8 +23,19 @@ proves a phone the player does not hold.
   callback reports that differs from it is treated as suspicious and proves nothing; a masked or missing one is
   ignored. A failure to prove (number already proved by another account) never undoes the credit; it runs in a
   savepoint.
-- **Verification jobs are unique per (payment, source)** — `push`, `callback`, `sweep` — so duplicate callbacks and
-  repeated sweeps collapse, while a callback is never held back behind a snoozed safety-net job.
+- **Verification jobs are unique per payment** (since 2026-10-30; before, per payment and source — `push`,
+  `callback`, `sweep` — which ran up to three status-query chains per payment and fed Daraja's throttling). A callback
+  brings the payment's waiting job forward (River `JobRetry`), so it is still never held back behind a snoozed
+  safety-net job.
+- **A throttled push is asked again** (2026-10-30): HTTP 429 is Daraja's spike arrest, which refuses the request before
+  any prompt is sent, so the double-charge risk above does not apply. Three more attempts after 2, 4 and 8 seconds,
+  then `push_throttled`.
+- **Sandbox settlement** (`DARAJA_SANDBOX_SETTLE`, owner, 2026-10-30): for testing against the Daraja sandbox, which
+  calls back timeouts (1037) for answered prompts and throttles the status query, top-ups settle from the callback
+  alone: paid credits as usual, 1032 stays cancelled, anything else or no callback within `VerifyAfter` credits the
+  amount requested under a `SANDBOX-` receipt that proves no phone. It breaks "a callback alone never moves money" on
+  purpose, which is acceptable only because no real money moves in the sandbox; the configuration refuses it with
+  production Daraja.
 - **The callback URL's secret segment is sha256(DARAJA_CALLBACK_TOKEN) in hex**, because a Render-generated base64 secret
   may contain `/`. The route lives outside `/v1` (no token, no Idempotency-Key) and compares in constant time.
 - **Limits count top-ups in flight**, under a per-player advisory lock, so parallel requests cannot pass a deposit limit.

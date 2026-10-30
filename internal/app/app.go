@@ -148,7 +148,7 @@ func New(ctx context.Context, cfg config.Config, pool *pgxpool.Pool) (*App, erro
 	})
 	slog.InfoContext(ctx, "v1 API enabled", "trusted_proxy_header", c.TrustedProxyHeader, "trusted_proxy_hops", c.TrustedProxyHops,
 		"kyc_registry", c.KYCURL != "", "google", c.SignIn.Google(), "apple", c.SignIn.Apple(),
-		"payments", cfg.Payments.Enabled, "buy_goods", cfg.Payments.TillNumber != "", "paybill", cfg.Payments.C2BEnabled(), "payouts", cfg.Payments.B2CEnabled(), "daraja", cfg.Payments.BaseURL, "cors_origins", len(c.CORSOrigins), "staff", c.Staff.Enabled, "staff_pool", c.Staff.DatabaseURL != "",
+		"payments", cfg.Payments.Enabled, "buy_goods", cfg.Payments.TillNumber != "", "paybill", cfg.Payments.C2BEnabled(), "payouts", cfg.Payments.B2CEnabled(), "daraja", cfg.Payments.BaseURL, "sandbox_settle", cfg.Payments.SandboxSettle, "cors_origins", len(c.CORSOrigins), "staff", c.Staff.Enabled, "staff_pool", c.Staff.DatabaseURL != "",
 		"attestation", c.Attestation.Mode, "app_attest", c.Attestation.AppID != "", "play_integrity", c.Attestation.PlayPackage != "")
 	return a, nil
 }
@@ -203,7 +203,7 @@ func buildServices(pool *pgxpool.Pool, sh shared) services {
 	}
 	ls := ledger.NewStore()
 	s.payments = payments.NewService(pool, sh.clk, dc, payments.NewRiverEnqueuer(sh.insertOnly), s.identity, s.rg, wallet.NewService(ls), ls, sh.aw,
-		payments.Config{MinTopUpKES: cfg.Payments.MinTopUpKES})
+		payments.Config{MinTopUpKES: cfg.Payments.MinTopUpKES, SandboxSettle: cfg.Payments.SandboxSettle})
 	if p := cfg.Payments; p.C2BEnabled() {
 		s.payments.WithC2B(sh.daraja, payments.C2BConfig{ShortCode: p.C2BShortCode})
 	}

@@ -21,17 +21,6 @@ logged: `ERROR payments reconciliation found mismatches` or `WARN ... items need
   - `unconfirmed`: the status query said paid but no receipt arrived. Find the payment on the M-Pesa statement (same
     phone number, amount, time) and resolve it (below). If it is not on the statement, leave it and note why.
   - `overdue_pending`: pending past the expiry window: the sweep should settle these; persistent ones are a bug.
-
-### A top-up that stays "Waiting for M-Pesa"
-
-After the customer's PIN, Daraja confirms in one of two ways: its callback to `/hooks/mpesa/stk/…` (logged as
-`stk callback received` with the checkout id and result code since 2026-10-30; an orphan, one for a payment we do
-not know, is logged as a warning) or, failing that, the api's status query every `VerifyAfter` (2 minutes) until the
-payment expires (15 minutes), after which it is settled `unconfirmed`. Daraja throttles status queries (HTTP 429,
-`daraja: unavailable: throttled`); since 2026-10-30 a throttled query waits twice as long before asking again. The
-**sandbox** is where this is seen: it sends real prompts but confirms slowly or not at all, and throttles queries
-routinely; production Daraja answers within seconds. Two top-ups on 2026-10-29 (20:52 and 02:26 EAT) sat in this
-state on the sandbox.
   - `orphan_callbacks`: callbacks for pushes we never recorded. Check the statement for a matching receipt.
   - `players_in_debt`: players who owe after a reversal; recovered automatically from their next top-ups.
   - `suspense_open`: paybill payments Daraja confirmed that could not be credited (see below).
@@ -40,6 +29,37 @@ state on the sandbox.
   - `c2b_overdue`: paybill confirmations still being verified after an hour: Transaction Status is not answering.
   - `c2b_conflict_after_credit`: a second, different confirmation arrived for a receipt already credited. Possible
     forgery: compare with the statement, reverse if credited to the wrong player, and rotate `DARAJA_CALLBACK_TOKEN`.
+
+### A top-up that stays "Waiting for M-Pesa"
+
+After the customer's PIN, Daraja confirms in one of two ways: its callback to `/hooks/mpesa/stk/…` (logged as
+`stk callback received` with the checkout id and result code since 2026-10-30; an orphan, one for a payment we do
+not know, is logged as a warning) or, failing that, the api's status query every `VerifyAfter` (2 minutes) until the
+payment expires (15 minutes), after which it is settled `unconfirmed`. A payment has one verify job at a time
+(before 2026-10-30 the push, the callback and the sweep each ran one, tripling the queries); a callback brings it
+forward. Daraja throttles status queries (HTTP 429, `daraja: unavailable: throttled`); a throttled query waits twice
+as long before asking again. A throttled push (`stk push throttled; asking again`) is refused before any prompt is
+sent, so it is asked again after 2, 4 and 8 seconds; after that the top-up fails as `push_throttled`. Production
+Daraja answers within seconds; the **sandbox** sends real prompts but often calls back a timeout (1037) for an
+answered prompt, or nothing, and throttles queries routinely.
+
+### Sandbox settlement (`DARAJA_SANDBOX_SETTLE=true`)
+
+So the apps can always be tested against the sandbox (owner, 2026-10-30), `DARAJA_SANDBOX_SETTLE=true` settles
+top-ups from the callback alone and never asks the status query:
+
+| Callback | Settled as |
+| --- | --- |
+| paid (0) | credited with the callback's amount and receipt; proves the phone, as in production |
+| cancelled by the customer (1032) | cancelled: cancel the prompt to test a failed top-up |
+| anything else (1037 timeout, 2001 wrong PIN, malformed) | credited the amount requested, receipt `SANDBOX-<payment id>` |
+| none within 2 minutes | credited the amount requested, receipt `SANDBOX-<payment id>` |
+
+Such credits log `sandbox settlement: crediting the amount requested`, carry `sandbox_settlement` in their audit
+record and prove no phone. It is set in render.yaml and in docker-compose.sandbox.yml; the api logs
+`sandbox_settle=true` at start. **No real money moves in the sandbox, and the api refuses to start with this set and
+production Daraja** (`DARAJA_ALLOW_PRODUCTION` or `api.safaricom.co.ke`): delete the key from render.yaml and the
+dashboard when switching to production.
 
 ## Resolve an unconfirmed top-up from the statement
 
