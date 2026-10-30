@@ -158,6 +158,32 @@ void main() {
     expect(find.text('KES 500'), findsWidgets, reason: 'the whole top-up is credited');
   });
 
+  testWidgets('a top-up M-Pesa never confirms says so, is not left "waiting", and credits nothing', (t) async {
+    // 2026-10-30: a real KES 1 sandbox payment sat on "pending" after the M-Pesa message arrived
+    final backend = FakeBackend(balance: 0)
+      ..topUpPendingPolls = 2
+      ..topUpOutcome = 'unconfirmed';
+    final h = await pumpApp(t, backend);
+    await t.tap(find.text('Wallet').last);
+    await t.pumpAndSettle();
+    await t.tap(find.widgetWithText(FilledButton, 'Top up'));
+    await t.pumpAndSettle();
+    await t.enterText(find.widgetWithText(TextFormField, 'Amount'), '500');
+    await t.tap(find.widgetWithText(FilledButton, 'Continue'));
+    await t.pumpAndSettle();
+    await t.tap(find.widgetWithText(FilledButton, 'Send M-Pesa prompt'));
+    await pumpUntilFound(t, find.text('Not confirmed yet'), step: const Duration(milliseconds: 500));
+    expect(find.textContaining('If you got an M-Pesa message for it'), findsOneWidget);
+    expect(find.textContaining('Waiting for M-Pesa'), findsNothing);
+    expect(find.textContaining('nothing was taken'), findsNothing, reason: 'the money may well have been taken');
+    expect(backend.balance, 0);
+    expect(h.haptics.events, isNot(contains(HapticEvent.confirmed)));
+    await t.tap(find.widgetWithText(FilledButton, 'Back to wallet'));
+    await t.pumpAndSettle();
+    expect(find.text('Not confirmed yet · being checked'), findsOneWidget, reason: 'the history says the same');
+    expect(find.text('Pending M-Pesa confirmation'), findsNothing);
+  });
+
   testWidgets('the top-up minimum and its quick pick come from the server: KES 1 while testing', (t) async {
     final backend = FakeBackend(balance: 0)
       ..topUpMin = 1

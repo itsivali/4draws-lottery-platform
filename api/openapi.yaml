@@ -2937,8 +2937,13 @@ components:
         id: { type: string }
         status:
           type: string
-          enum: [pending, credited, failed, reversed]
-          description: "`reversed`: M-Pesa took the payment back; what the player received was taken back (or is owed)."
+          enum: [pending, credited, failed, unconfirmed, reversed]
+          description: |
+            `pending`: still being settled (the app keeps asking). `unconfirmed`: settlement gave up without M-Pesa's
+            confirmation (the callback never came, or the prompt was never answered); the payment may have been
+            taken and an operator credits it from the statement, so the app tells the player so instead of
+            "waiting" or "nothing was taken". `reversed`: M-Pesa took the payment back; what the player received
+            was taken back (or is owed).
         amount_requested_kes: { type: integer }
         amount_confirmed_kes:
           type: [integer, "null"]

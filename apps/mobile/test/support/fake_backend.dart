@@ -59,6 +59,9 @@ class FakeBackend {
 
   /// How many status checks a top-up stays pending for before it is credited (null: stays pending).
   int? topUpPendingPolls = 2;
+
+  /// How a top-up ends after [topUpPendingPolls]: `credited` (default) or `unconfirmed` (M-Pesa never confirmed it).
+  String topUpOutcome = 'credited';
   final topUps = <String, Map<String, Object?>>{};
   final _topUpPolls = <String, int>{};
   final payouts = <String, Map<String, Object?>>{};
@@ -367,9 +370,13 @@ class FakeBackend {
       final polls = _topUpPolls[id] = _topUpPolls[id]! + 1;
       if (topUpPendingPolls != null && polls >= topUpPendingPolls! && t['status'] == 'pending') {
         final amount = t['amount_requested_kes']! as int;
-        topUps[id] = topUpJson(id: id, status: 'credited', amount: amount, confirmed: amount);
-        balance += amount; // the operator pays the deposit excise
-        phoneVerified = true;
+        if (topUpOutcome == 'unconfirmed') {
+          topUps[id] = topUpJson(id: id, status: 'unconfirmed', amount: amount);
+        } else {
+          topUps[id] = topUpJson(id: id, status: 'credited', amount: amount, confirmed: amount);
+          balance += amount; // the operator pays the deposit excise
+          phoneVerified = true;
+        }
       }
       return _ok(topUps[id]!);
     }

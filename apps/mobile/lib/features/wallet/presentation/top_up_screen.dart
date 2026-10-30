@@ -167,6 +167,13 @@ class _TopUpScreenState extends ConsumerState<TopUpScreen> {
                                 'Not completed',
                                 'M-Pesa did not confirm a payment, so nothing was taken. You can try again.',
                               ),
+                              TopUpStatus.unconfirmed => (
+                                StatusTone.warning,
+                                'Not confirmed yet',
+                                'M-Pesa has not confirmed this payment to us. If you got an M-Pesa message for it, '
+                                    'the money was taken and we credit it once we have checked the statement; you '
+                                    'will not be charged again. If no money left your M-Pesa, nothing was paid.',
+                              ),
                               TopUpStatus.reversed => (
                                 StatusTone.warning,
                                 'Reversed',

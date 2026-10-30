@@ -109,6 +109,10 @@ void main() {
     expect(t.status, TopUpStatus.pending);
     expect(t.status.settled, isFalse);
     expect(t.amountConfirmedKes, isNull);
+    final u = TopUp.fromJson(JsonObject(topUpJson(status: 'unconfirmed')));
+    expect(u.status, TopUpStatus.unconfirmed);
+    expect(u.status.settled, isTrue, reason: 'the server has given up: nothing more comes from polling');
+    expect(u.amountConfirmedKes, isNull);
     final c = TopUp.fromJson(JsonObject(topUpJson(status: 'credited', confirmed: 500)));
     expect(c.status.settled, isTrue);
     expect(c.amountConfirmedKes, 500);

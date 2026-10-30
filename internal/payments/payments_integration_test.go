@@ -472,6 +472,11 @@ func TestTopUp_APaidPromptWhoseCallbackIsLostBecomesUnconfirmedNotCredited(t *te
 	if st, _ := e.status(t, tu.ID); st != "unconfirmed" {
 		t.Fatalf("status = %s, want unconfirmed", st)
 	}
+	// the player is told it is unconfirmed, not that M-Pesa is still being waited for (2026-10-30: a KES 1 sandbox
+	// payment sat on "pending" after the SMS arrived)
+	if shown, err := e.svc.Get(context.Background(), user, tu.ID); err != nil || shown.Status != payments.StatusUnconfirmed {
+		t.Fatalf("shown to the player: %+v %v, want %s", shown, err, payments.StatusUnconfirmed)
+	}
 	if e.balance(t, user) != 0 {
 		t.Fatal("credited without a receipt")
 	}

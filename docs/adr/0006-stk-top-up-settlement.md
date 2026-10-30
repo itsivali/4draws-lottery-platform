@@ -43,6 +43,8 @@ proves a phone the player does not hold.
   2026-10-22); since 2026-10-26 the operator pays it and the player is credited in full (ADR 0016).
 
 ## Consequences
-- A lost callback delays a real payment until reconciliation (slice 4) supplies the receipt. Players see `pending`.
+- A lost callback delays a real payment until an operator supplies the receipt from the statement. Players see `pending`
+  while settlement is still trying and `unconfirmed` once it has given up (2026-10-30), so they are neither told to keep
+  waiting on M-Pesa nor that nothing was taken.
 - A push outage costs the player a retry rather than risking a double charge.
 - Without Daraja credentials or an excise version in force, top-ups are refused (503) rather than credited untaxed.

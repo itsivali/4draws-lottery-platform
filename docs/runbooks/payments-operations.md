@@ -35,7 +35,9 @@ logged: `ERROR payments reconciliation found mismatches` or `WARN ... items need
 After the customer's PIN, Daraja confirms in one of two ways: its callback to `/hooks/mpesa/stk/…` (logged as
 `stk callback received` with the checkout id and result code since 2026-10-30; an orphan, one for a payment we do
 not know, is logged as a warning) or, failing that, the api's status query every `VerifyAfter` (2 minutes) until the
-payment expires (15 minutes), after which it is settled `unconfirmed`. A payment has one verify job at a time
+payment expires (15 minutes), after which it is settled `unconfirmed`. The player app shows `pending` as "Waiting for
+M-Pesa" and `unconfirmed` as "Not confirmed yet" with what to expect (credited from the statement if M-Pesa took the
+money; nothing paid otherwise), so nobody is left waiting on a prompt that will not answer. A payment has one verify job at a time
 (before 2026-10-30 the push, the callback and the sweep each ran one, tripling the queries); a callback brings it
 forward. Daraja throttles status queries (HTTP 429, `daraja: unavailable: throttled`); a throttled query waits twice
 as long before asking again. A throttled push (`stk push throttled; asking again`) is refused before any prompt is

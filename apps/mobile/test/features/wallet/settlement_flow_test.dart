@@ -40,6 +40,23 @@ void main() {
     fetches = 0;
   });
 
+  test('an unconfirmed top-up is settled: the server has given up, so polling stops', () {
+    fakeAsync((async) {
+      final f = flow();
+      sendAnswers.add(topUp('pending'));
+      statusAnswers.addAll([topUp('pending'), topUp('unconfirmed')]);
+      f.submit();
+      async.flushMicrotasks();
+      async.elapse(const Duration(seconds: 6));
+      expect(f.state.value.stage, SettlementStage.settled);
+      expect(f.state.value.item!.status, TopUpStatus.unconfirmed);
+      final n = fetches;
+      async.elapse(const Duration(minutes: 5));
+      expect(fetches, n);
+      f.dispose();
+    });
+  });
+
   test('a top-up is pending until the server says credited; nothing is assumed from time passing', () {
     fakeAsync((async) {
       final f = flow();

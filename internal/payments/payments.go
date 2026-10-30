@@ -55,6 +55,10 @@ const (
 	StatusPending  = "pending"
 	StatusCredited = "credited"
 	StatusFailed   = "failed"
+	// StatusUnconfirmed: the payment is no longer being settled automatically but may have been paid (the status
+	// query said so, or nothing answered before expiry); an operator credits it from the statement, so the player
+	// must not be told to keep waiting on M-Pesa, nor that nothing was taken.
+	StatusUnconfirmed = "unconfirmed"
 )
 
 // TopUp is what the player sees of a payment.
@@ -74,7 +78,9 @@ func publicStatus(s string) string {
 		return StatusReversed
 	case "failed", "cancelled", "expired":
 		return StatusFailed
-	default: // initiated, stk_sent, callback_received, verified, unconfirmed: still being settled
+	case "unconfirmed":
+		return StatusUnconfirmed
+	default: // initiated, stk_sent, callback_received, verified: still being settled
 		return StatusPending
 	}
 }

@@ -18,6 +18,7 @@ String txLabel(String kind) => switch (kind) {
   TopUpStatus.pending => (StatusTone.pending, 'Pending M-Pesa confirmation'),
   TopUpStatus.credited => (StatusTone.success, 'Credited'),
   TopUpStatus.failed => (StatusTone.error, 'Not completed'),
+  TopUpStatus.unconfirmed => (StatusTone.warning, 'Not confirmed yet · being checked'),
   TopUpStatus.reversed => (StatusTone.warning, 'Reversed by M-Pesa'),
 };
 

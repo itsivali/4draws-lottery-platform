@@ -295,6 +295,12 @@ class _PlayPanel extends ConsumerWidget {
               describe: (t) => switch (t.status) {
                 TopUpStatus.credited => (StatusTone.success, 'Paid', 'M-Pesa confirmed it. Spinning.'),
                 TopUpStatus.failed => (StatusTone.error, 'Not paid', 'M-Pesa did not pay it. Nothing was played.'),
+                TopUpStatus.unconfirmed => (
+                  StatusTone.warning,
+                  'Not confirmed',
+                  'M-Pesa has not confirmed it to us. If it took the money, we credit your wallet once we have checked '
+                      'the statement. Nothing was played.',
+                ),
                 TopUpStatus.reversed => (StatusTone.error, 'Reversed', 'M-Pesa took it back. Nothing was played.'),
                 TopUpStatus.pending => (StatusTone.pending, 'Waiting', ''),
               },

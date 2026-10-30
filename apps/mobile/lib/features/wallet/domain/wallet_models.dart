@@ -123,6 +123,10 @@ enum TopUpStatus {
   pending,
   credited,
   failed,
+
+  /// Settlement gave up without M-Pesa's confirmation: the payment may have been taken (the player has an M-Pesa
+  /// message) and an operator credits it from the statement. Final for the app: nothing more comes from polling.
+  unconfirmed,
   reversed;
 
   bool get settled => this != pending;
