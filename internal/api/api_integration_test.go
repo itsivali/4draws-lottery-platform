@@ -23,6 +23,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/itsivali/lottery-platform/internal/alerts"
 	"github.com/itsivali/lottery-platform/internal/api"
 	"github.com/itsivali/lottery-platform/internal/audit"
 	"github.com/itsivali/lottery-platform/internal/draws"
@@ -206,6 +207,14 @@ func setupWith(t *testing.T, mutate func(*apiDeps)) *env {
 		Metrics:   metrics.NewService(staffPool, clk),
 		Finance:   finance.NewService(staffPool, clk, aw),
 		Oversight: oversight.NewService(staffPool, clk, oversight.Settings{Daraja: "sandbox", SandboxSettlement: true}),
+		// the alert watch as the worker runs it, without a channel: tests raise alerts through Watch and read them back
+		Alerts: alerts.NewService(staffPool, clk, nil, aw, alerts.Config{},
+			alerts.TopUpsCheck(staffPool, clk, payments.DefaultExpiry, alerts.DefaultThresholds()),
+			alerts.PaybillCheck(staffPool, clk, alerts.DefaultThresholds()),
+			alerts.PayoutsCheck(staffPool, clk, alerts.DefaultThresholds()),
+			alerts.JobsCheck(staffPool, clk, alerts.DefaultThresholds()),
+			alerts.KYCQueueCheck(staffPool, clk, alerts.DefaultThresholds()),
+			alerts.ClosuresCheck(staffPool, clk, alerts.DefaultThresholds())),
 	}
 	staffAuth := &fakeStaff{members: map[string]staff.Member{}}
 	deps := api.Deps{

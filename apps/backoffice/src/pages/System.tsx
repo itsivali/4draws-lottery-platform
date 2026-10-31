@@ -5,6 +5,8 @@ import { useSession } from '../context'
 import { eat, kes } from '../format'
 import { useLoad } from '../hooks'
 import type { SystemState } from '../types'
+
+const channelNames: Record<string, string> = { webhook: 'Webhook', email: 'Email' }
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 
@@ -114,7 +116,9 @@ export function SystemPage() {
                   <CardContent>
                     <dl className="m-0">
                       <Row label="Email">{st.email ? <Pill tone="success">Sending</Pill> : <Pill tone="error">Not configured</Pill>}</Row>
-                      <Row label="Alerts go to">{st.alerts_delivery === 'webhook' ? <Pill tone="success">Webhook</Pill> : <Pill tone="warning">Logs only</Pill>}</Row>
+                      <Row label="Alerts go to">{st.alerts_delivery === 'log' || !st.alerts_delivery ? <Pill tone="warning">Logs only</Pill> : (
+                        <span className="flex flex-wrap gap-1">{st.alerts_delivery.split(',').map((c) => c.trim()).filter(Boolean).map((c) => <Pill key={c} tone="success">{channelNames[c] ?? c}</Pill>)}</span>
+                      )}</Row>
                       <Row label="Heartbeat"><On on={st.heartbeat} yes="Pinged" no="Not set" /></Row>
                       <Row label="Workers"><span className="capitalize">{st.workers}</span></Row>
                     </dl>

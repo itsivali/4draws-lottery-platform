@@ -2749,11 +2749,19 @@ paths:
     get:
       operationId: staffAlerts
       tags: [back-office]
-      summary: Open alerts (all with all=true)
-      description: "Role: `staff` (admins too)."
+      summary: Alerts, newest first, by kind, severity and state, with the open count per kind
+      description: |
+        Role: `staff` (admins too). `state` is `open` (not resolved, acknowledged or not; the default), `acknowledged`,
+        `resolved` or `all`; `all=true` means `state=all` (older clients). Answers `{alerts, next_before, kinds}`:
+        `next_before` continues the listing (pass it as `before`), `kinds` lists every kind with its open count.
       security: [{ staffBearer: [] }]
       parameters:
         - { name: all, in: query, required: false, schema: { type: boolean } }
+        - { name: kind, in: query, required: false, schema: { type: string } }
+        - { name: severity, in: query, required: false, schema: { type: string, enum: [page, warn] } }
+        - { name: state, in: query, required: false, schema: { type: string, enum: [open, acknowledged, resolved, all] } }
+        - { name: limit, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 200, default: 100 } }
+        - { name: before, in: query, required: false, schema: { type: string }, description: next_before of the previous page }
       responses:
         "200":
           description: Done
@@ -3140,6 +3148,26 @@ paths:
                   ResultDesc: { type: string }
         "400": { $ref: "#/components/responses/Problem" }
         "404": { $ref: "#/components/responses/Problem" }
+  /v1/staff/alerts/{id}:
+    get:
+      operationId: staffAlert
+      tags: [back-office]
+      summary: One alert with its history (raised, escalated, acknowledged, resolved) and the check that owns it
+      description: "Role: `staff` (admins too)."
+      security: [{ staffBearer: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Done
+          content:
+            application/json:
+              schema: { type: object }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
 components:
   securitySchemes:
     bearer:

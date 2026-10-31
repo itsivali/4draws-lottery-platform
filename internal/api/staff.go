@@ -198,6 +198,7 @@ func (h *handlers) mountStaff(r chi.Router) {
 	r.With(anyStaff).Post("/tax/batches/{no}/remit", h.staffTaxRemit)
 
 	r.With(anyStaff).Get("/alerts", h.staffAlerts)
+	r.With(anyStaff).Get("/alerts/{id}", h.staffAlert)
 	r.With(anyStaff).Post("/alerts/{id}/acknowledge", h.staffAlertAck)
 
 	r.With(anyStaff).Get("/closures", h.staffClosures)
@@ -842,20 +843,68 @@ func (h *handlers) staffTaxRemit(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusOK, b)
 }
 
+// staffAlerts lists alerts, newest first, by kind, severity and state (open unless said otherwise; all=true is
+// state=all, kept for older clients), with the open count per kind for the filter bar.
 func (h *handlers) staffAlerts(w http.ResponseWriter, r *http.Request) {
 	if h.StaffServices.Alerts == nil {
 		unavailable(w, "Alerts")
 		return
 	}
-	list, err := h.StaffServices.Alerts.List(r.Context(), r.URL.Query().Get("all") == "true", 100)
+	qs := r.URL.Query()
+	f := alerts.Filter{Kind: qs.Get("kind"), Before: qs.Get("before"), Limit: 100}
+	state, ok := alerts.ParseState(qs.Get("state"))
+	if !ok {
+		httpx.WriteProblem(w, http.StatusBadRequest, "invalid-state", "Invalid state", "use open, acknowledged, resolved or all")
+		return
+	}
+	if qs.Get("all") == "true" && qs.Get("state") == "" {
+		state = alerts.All
+	}
+	f.State = state
+	switch sev := qs.Get("severity"); sev {
+	case "":
+	case string(alerts.Page), string(alerts.Warn):
+		f.Severity = alerts.Severity(sev)
+	default:
+		httpx.WriteProblem(w, http.StatusBadRequest, "invalid-severity", "Invalid severity", "use page or warn")
+		return
+	}
+	if v := qs.Get("limit"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 1 || n > 200 {
+			httpx.WriteProblem(w, http.StatusBadRequest, "invalid-limit", "Invalid limit", "use 1 to 200")
+			return
+		}
+		f.Limit = n
+	}
+	list, err := h.StaffServices.Alerts.List(r.Context(), f)
+	if errors.Is(err, alerts.ErrCursor) {
+		httpx.WriteProblem(w, http.StatusBadRequest, "invalid-cursor", "Invalid cursor", "use next_before from the previous page")
+		return
+	} else if err != nil {
+		staffError(w, err)
+		return
+	}
+	kinds, err := h.StaffServices.Alerts.Kinds(r.Context())
 	if err != nil {
 		staffError(w, err)
 		return
 	}
-	if list == nil {
-		list = []alerts.View{}
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{"alerts": list.Alerts, "next_before": nextOf(list.NextBefore), "kinds": kinds})
+}
+
+// staffAlert is one alert with its history and the check that owns it.
+func (h *handlers) staffAlert(w http.ResponseWriter, r *http.Request) {
+	if h.StaffServices.Alerts == nil {
+		unavailable(w, "Alerts")
+		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, map[string]any{"alerts": list})
+	d, err := h.StaffServices.Alerts.Get(r.Context(), chi.URLParam(r, "id"))
+	if err != nil {
+		staffError(w, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, d)
 }
 
 func (h *handlers) staffAlertAck(w http.ResponseWriter, r *http.Request) {

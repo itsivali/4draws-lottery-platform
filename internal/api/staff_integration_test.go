@@ -120,6 +120,7 @@ var staffRoutes = []staffRoute{
 	{http.MethodPost, "/v1/staff/players/0192f000-0000-7000-8000-000000000001/suspend", staff.Staff},
 	{http.MethodPost, "/v1/staff/players/0192f000-0000-7000-8000-000000000001/reinstate", staff.Staff},
 	{http.MethodPost, "/v1/staff/players/0192f000-0000-7000-8000-000000000001/password", staff.Staff},
+	{http.MethodGet, "/v1/staff/alerts/0192f000-0000-7000-8000-000000000001", staff.Staff},
 }
 
 func TestStaffAPI_EveryRouteNeedsAStaffTokenWithTheRightRole(t *testing.T) {

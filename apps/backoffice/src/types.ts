@@ -74,12 +74,16 @@ export interface Alert {
   severity: string
   freezes_payouts: boolean
   summary: string
+  /** what the check found: ids, amounts, ages (and escalated_at once a warning became a page) */
+  details?: Record<string, unknown>
   first_seen_at: string
   last_seen_at: string
   occurrences: number
+  notifications?: number
   acknowledged_by?: string
   acknowledged_at?: string
   ack_note?: string
+  resolved_by?: string
   resolved_at?: string
 }
 
@@ -422,3 +426,14 @@ export interface SystemState {
   top_ups_unconfirmed: number
   receipt_claims: number
 }
+
+/** GET /v1/staff/alerts: a page of alerts, newest first, and how many of each kind are open (ADR 0025). */
+export interface AlertKindCount { kind: string; open: number }
+export interface AlertsPage { alerts: Alert[]; next_before: string | null; kinds: AlertKindCount[] }
+export type AlertState = 'open' | 'acknowledged' | 'resolved' | 'all'
+
+/** One thing that happened to an alert: raised, escalated, alert.acknowledged, resolved. */
+export interface AlertEvent { at: string; event: string; actor: string; note?: string }
+
+/** GET /v1/staff/alerts/{id}: the alert, the check that owns it and its history. */
+export interface AlertDetail extends Alert { check: string; history: AlertEvent[] }

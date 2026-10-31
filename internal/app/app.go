@@ -286,10 +286,7 @@ func oversightSettings(cfg config.Config) oversight.Settings {
 			daraja = p.BaseURL
 		}
 	}
-	delivery := "log"
-	if cfg.Alerts.WebhookURL != "" {
-		delivery = "webhook"
-	}
+	delivery := AlertChannels(cfg)
 	workers := "separate worker"
 	if cfg.WorkersInProcess {
 		workers = "in-process"
@@ -408,25 +405,68 @@ func mailer(m config.Mail) mail.Sender {
 // ReconciliationStaleAfter is how long after its last run a daily reconciliation counts as not running.
 const ReconciliationStaleAfter = 26 * time.Hour
 
-// alerts builds the alert watch: late draws, failed or missing reconciliations (a failed one freezes payouts), and
-// withheld tax nearing its remittance deadline, sent to ALERT_WEBHOOK_URL (else logged) with ALERT_HEARTBEAT_URL pinged.
+// alerts builds the alert watch (ADR 0025): the checks of AlertChecks, sent through every channel of AlertNotifier,
+// with ALERT_HEARTBEAT_URL pinged after each complete run.
 func (a *App) alerts() *alerts.Service { return a.alertsOn(a.pool, a.draws) }
 
 func (a *App) alertsOn(pool *pgxpool.Pool, ds *draws.Service) *alerts.Service {
 	hc := &http.Client{Timeout: 10 * time.Second}
 	clk := clock.Postgres{}
-	var n alerts.Notifier
-	if u := a.cfg.Alerts.WebhookURL; u != "" {
-		n = alerts.Webhook{URL: u, Client: hc}
-	}
 	cfg := alerts.Config{}
 	if u := a.cfg.Alerts.HeartbeatURL; u != "" {
 		cfg.Heartbeat = alerts.Heartbeat(u, hc)
 	}
-	return alerts.NewService(pool, clk, n, audit.NewWriter(), cfg,
+	return alerts.NewService(pool, clk, AlertNotifier(a.cfg, hc), audit.NewWriter(), cfg, AlertChecks(pool, clk, ds, a.cfg.Alerts)...)
+}
+
+// AlertNotifier is every configured alert channel: the webhook (ALERT_WEBHOOK_URL), email to ALERT_EMAILS through the
+// SMTP server, and the log when there is neither. A channel that fails does not stop the others.
+func AlertNotifier(cfg config.Config, hc *http.Client) alerts.Notifier {
+	var n alerts.Multi
+	if u := cfg.Alerts.WebhookURL; u != "" {
+		n = append(n, alerts.Webhook{URL: u, Client: hc})
+	}
+	if to := cfg.Alerts.Emails; len(to) > 0 {
+		n = append(n, alerts.Email{Sender: mailer(cfg.Mail), To: to, BackOfficeURL: cfg.Mail.BackOfficeURL})
+	}
+	if len(n) == 0 {
+		return alerts.LogNotifier{}
+	}
+	return n
+}
+
+// AlertChannels names the channels AlertNotifier sends to, for the System page: "webhook", "email", "webhook, email"
+// or "log".
+func AlertChannels(cfg config.Config) string {
+	var names []string
+	if cfg.Alerts.WebhookURL != "" {
+		names = append(names, "webhook")
+	}
+	if len(cfg.Alerts.Emails) > 0 {
+		names = append(names, "email")
+	}
+	if len(names) == 0 {
+		return "log"
+	}
+	return strings.Join(names, ", ")
+}
+
+// AlertChecks are every check the watch runs (docs/runbooks/alerts.md lists what each raises), on pool with the
+// thresholds of cfg; lotteryctl alerts watch runs the same ones.
+func AlertChecks(pool *pgxpool.Pool, clk clock.Clock, ds *draws.Service, cfg config.Alerts) []alerts.Check {
+	th := alerts.Thresholds(cfg.Thresholds)
+	return []alerts.Check{
 		alerts.DrawsOverdue(ds.Overdue),
 		alerts.ReconciliationCheck(pool, clk, ReconciliationStaleAfter),
-		alerts.RemittanceCheck(pool, clk, a.cfg.Alerts.KRARemitWarnAfter, a.cfg.Alerts.KRARemitDueAfter))
+		alerts.RemittanceCheck(pool, clk, cfg.KRARemitWarnAfter, cfg.KRARemitDueAfter),
+		alerts.TopUpsCheck(pool, clk, payments.DefaultExpiry, th),
+		alerts.PaybillCheck(pool, clk, th),
+		alerts.PayoutsCheck(pool, clk, th),
+		alerts.B2CFloatCheck(pool, th),
+		alerts.JobsCheck(pool, clk, th),
+		alerts.KYCQueueCheck(pool, clk, th),
+		alerts.ClosuresCheck(pool, clk, th),
+	}
 }
 
 // StopStreams ends every open payment stream and refuses new ones. The server calls it when shutdown begins, since

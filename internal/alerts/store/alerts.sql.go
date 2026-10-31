@@ -36,6 +36,48 @@ func (q *Queries) AcknowledgeAlert(ctx context.Context, arg AcknowledgeAlertPara
 	return err
 }
 
+const alertAuditEvents = `-- name: AlertAuditEvents :many
+SELECT id, at, actor_type, actor_id, action, details FROM audit.audit_log
+WHERE entity_type = 'alert' AND entity_id = $1 ORDER BY at, id
+`
+
+type AlertAuditEventsRow struct {
+	ID        int64
+	At        time.Time
+	ActorType string
+	ActorID   *string
+	Action    string
+	Details   []byte
+}
+
+// what people did about the alert, as the audit log recorded it
+func (q *Queries) AlertAuditEvents(ctx context.Context, entityID *string) ([]AlertAuditEventsRow, error) {
+	rows, err := q.db.Query(ctx, alertAuditEvents, entityID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AlertAuditEventsRow
+	for rows.Next() {
+		var i AlertAuditEventsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.At,
+			&i.ActorType,
+			&i.ActorID,
+			&i.Action,
+			&i.Details,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const alertsToNotify = `-- name: AlertsToNotify :many
 SELECT id, kind, subject, severity, freezes, summary, details, first_seen_at, last_seen_at, occurrences, notified_at, notifications, acknowledged_by, acknowledged_at, ack_note, resolved_by, resolved_at, resolution_notified_at FROM audit.alerts
 WHERE (resolved_at IS NULL AND notified_at IS NULL)
@@ -85,6 +127,109 @@ func (q *Queries) AlertsToNotify(ctx context.Context, remindBefore *time.Time) (
 	return items, nil
 }
 
+const b2CFloatBalance = `-- name: B2CFloatBalance :one
+SELECT coalesce(sum(CASE e.direction WHEN 'D' THEN e.amount_kes ELSE -e.amount_kes END), 0)::bigint
+FROM ledger.ledger_entries e JOIN ledger.ledger_accounts a ON a.id = e.account_id WHERE a.code = 'B2C_FLOAT'
+`
+
+// the B2C float as the ledger sees it (an asset: debits add, credits take), in whole KES
+func (q *Queries) B2CFloatBalance(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, b2CFloatBalance)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const failedPayoutsSince = `-- name: FailedPayoutsSince :many
+SELECT id, kind, net_kes, reason, updated_at FROM payouts.payouts WHERE status = 'failed' AND updated_at >= $1 ORDER BY updated_at, id
+`
+
+type FailedPayoutsSinceRow struct {
+	ID        string
+	Kind      string
+	NetKes    int64
+	Reason    *string
+	UpdatedAt time.Time
+}
+
+// payouts that failed (money back in the wallet or the prize pool) since the cutoff
+func (q *Queries) FailedPayoutsSince(ctx context.Context, since time.Time) ([]FailedPayoutsSinceRow, error) {
+	rows, err := q.db.Query(ctx, failedPayoutsSince, since)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []FailedPayoutsSinceRow
+	for rows.Next() {
+		var i FailedPayoutsSinceRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Kind,
+			&i.NetKes,
+			&i.Reason,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getAlert = `-- name: GetAlert :one
+SELECT id, kind, subject, severity, freezes, summary, details, first_seen_at, last_seen_at, occurrences, notified_at, notifications, acknowledged_by, acknowledged_at, ack_note, resolved_by, resolved_at, resolution_notified_at FROM audit.alerts WHERE id = $1
+`
+
+func (q *Queries) GetAlert(ctx context.Context, id string) (AuditAlert, error) {
+	row := q.db.QueryRow(ctx, getAlert, id)
+	var i AuditAlert
+	err := row.Scan(
+		&i.ID,
+		&i.Kind,
+		&i.Subject,
+		&i.Severity,
+		&i.Freezes,
+		&i.Summary,
+		&i.Details,
+		&i.FirstSeenAt,
+		&i.LastSeenAt,
+		&i.Occurrences,
+		&i.NotifiedAt,
+		&i.Notifications,
+		&i.AcknowledgedBy,
+		&i.AcknowledgedAt,
+		&i.AckNote,
+		&i.ResolvedBy,
+		&i.ResolvedAt,
+		&i.ResolutionNotifiedAt,
+	)
+	return i, err
+}
+
+const kYCReviewQueue = `-- name: KYCReviewQueue :one
+SELECT count(*)::bigint AS waiting, coalesce(min(c.created_at), now())::timestamptz AS oldest
+FROM identity.users u
+JOIN LATERAL (SELECT k.created_at FROM kyc.kyc_checks k WHERE k.user_id = u.id ORDER BY k.created_at DESC, k.id DESC LIMIT 1) c ON true
+WHERE u.kyc_status = 'manual_review'
+`
+
+type KYCReviewQueueRow struct {
+	Waiting int64
+	Oldest  time.Time
+}
+
+// accounts waiting for a staff decision and when the oldest of their latest submissions arrived (as kyc.ReviewQueue;
+// oldest is meaningless when nobody waits)
+func (q *Queries) KYCReviewQueue(ctx context.Context) (KYCReviewQueueRow, error) {
+	row := q.db.QueryRow(ctx, kYCReviewQueue)
+	var i KYCReviewQueueRow
+	err := row.Scan(&i.Waiting, &i.Oldest)
+	return i, err
+}
+
 const latestReconciliations = `-- name: LatestReconciliations :many
 (SELECT 'payments'::text AS source, id, ran_at, ok, report FROM payments.reconciliation_runs ORDER BY ran_at DESC LIMIT 1)
 UNION ALL
@@ -131,17 +276,38 @@ func (q *Queries) LatestReconciliations(ctx context.Context) ([]LatestReconcilia
 }
 
 const listAlerts = `-- name: ListAlerts :many
-SELECT id, kind, subject, severity, freezes, summary, details, first_seen_at, last_seen_at, occurrences, notified_at, notifications, acknowledged_by, acknowledged_at, ack_note, resolved_by, resolved_at, resolution_notified_at FROM audit.alerts WHERE resolved_at IS NULL OR $1::bool
-ORDER BY first_seen_at DESC LIMIT $2
+SELECT id, kind, subject, severity, freezes, summary, details, first_seen_at, last_seen_at, occurrences, notified_at, notifications, acknowledged_by, acknowledged_at, ack_note, resolved_by, resolved_at, resolution_notified_at FROM audit.alerts
+WHERE ($1::text IS NULL OR kind = $1)
+  AND ($2::text IS NULL OR severity = $2)
+  AND (CASE $3::text
+         WHEN 'open' THEN resolved_at IS NULL
+         WHEN 'acknowledged' THEN resolved_at IS NULL AND acknowledged_at IS NOT NULL
+         WHEN 'resolved' THEN resolved_at IS NOT NULL
+         ELSE true END)
+  AND ($4::timestamptz IS NULL OR (first_seen_at, id) < ($4, $5::uuid))
+ORDER BY first_seen_at DESC, id DESC LIMIT $6
 `
 
 type ListAlertsParams struct {
-	IncludeResolved bool
-	MaxRows         int32
+	Kind     *string
+	Severity *string
+	State    string
+	BeforeAt *time.Time
+	BeforeID *string
+	MaxRows  int32
 }
 
+// newest first, by kind, severity and state (open: not resolved, acknowledged or not; acknowledged: acknowledged and
+// not resolved; resolved; anything else: all), continued from before (first_seen_at, id)
 func (q *Queries) ListAlerts(ctx context.Context, arg ListAlertsParams) ([]AuditAlert, error) {
-	rows, err := q.db.Query(ctx, listAlerts, arg.IncludeResolved, arg.MaxRows)
+	rows, err := q.db.Query(ctx, listAlerts,
+		arg.Kind,
+		arg.Severity,
+		arg.State,
+		arg.BeforeAt,
+		arg.BeforeID,
+		arg.MaxRows,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -237,6 +403,36 @@ func (q *Queries) MarkResolutionNotified(ctx context.Context, arg MarkResolution
 	return err
 }
 
+const openAlertCounts = `-- name: OpenAlertCounts :many
+SELECT kind, count(*)::bigint AS open FROM audit.alerts WHERE resolved_at IS NULL GROUP BY kind ORDER BY kind
+`
+
+type OpenAlertCountsRow struct {
+	Kind string
+	Open int64
+}
+
+// how many alerts of each kind are not resolved
+func (q *Queries) OpenAlertCounts(ctx context.Context) ([]OpenAlertCountsRow, error) {
+	rows, err := q.db.Query(ctx, openAlertCounts)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []OpenAlertCountsRow
+	for rows.Next() {
+		var i OpenAlertCountsRow
+		if err := rows.Scan(&i.Kind, &i.Open); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const openAlertsOfKind = `-- name: OpenAlertsOfKind :many
 SELECT id, subject, freezes FROM audit.alerts WHERE kind = $1 AND resolved_at IS NULL
 `
@@ -267,12 +463,255 @@ func (q *Queries) OpenAlertsOfKind(ctx context.Context, kind string) ([]OpenAler
 	return items, nil
 }
 
+const openClosureRequestsBefore = `-- name: OpenClosureRequestsBefore :many
+SELECT user_id, requested_at FROM identity.closure_requests WHERE closed_at IS NULL AND requested_at < $1 ORDER BY requested_at
+`
+
+type OpenClosureRequestsBeforeRow struct {
+	UserID      string
+	RequestedAt time.Time
+}
+
+// account closures requested before the cutoff that nobody has carried out
+func (q *Queries) OpenClosureRequestsBefore(ctx context.Context, before time.Time) ([]OpenClosureRequestsBeforeRow, error) {
+	rows, err := q.db.Query(ctx, openClosureRequestsBefore, before)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []OpenClosureRequestsBeforeRow
+	for rows.Next() {
+		var i OpenClosureRequestsBeforeRow
+		if err := rows.Scan(&i.UserID, &i.RequestedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const openReceiptClaims = `-- name: OpenReceiptClaims :many
+SELECT id, amount_requested_kes, msisdn, claimed_receipt, claim_status, claim_note, claimed_at
+FROM payments.payments
+WHERE claim_status IN ('claimed','checking','unverified') AND claimed_at IS NOT NULL
+ORDER BY claimed_at, id
+`
+
+type OpenReceiptClaimsRow struct {
+	ID                 string
+	AmountRequestedKes int64
+	Msisdn             *string
+	ClaimedReceipt     *string
+	ClaimStatus        *string
+	ClaimNote          *string
+	ClaimedAt          *time.Time
+}
+
+// receipts players gave for uncredited top-ups (ADR 0024) that M-Pesa has not confirmed, oldest first
+func (q *Queries) OpenReceiptClaims(ctx context.Context) ([]OpenReceiptClaimsRow, error) {
+	rows, err := q.db.Query(ctx, openReceiptClaims)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []OpenReceiptClaimsRow
+	for rows.Next() {
+		var i OpenReceiptClaimsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.AmountRequestedKes,
+			&i.Msisdn,
+			&i.ClaimedReceipt,
+			&i.ClaimStatus,
+			&i.ClaimNote,
+			&i.ClaimedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const openSuspense = `-- name: OpenSuspense :many
+SELECT id, mpesa_receipt, amount_kes, reason, created_at FROM payments.c2b_unmatched WHERE status = 'open' ORDER BY created_at, id
+`
+
+type OpenSuspenseRow struct {
+	ID           string
+	MpesaReceipt string
+	AmountKes    int64
+	Reason       string
+	CreatedAt    time.Time
+}
+
+// paybill money parked in suspense that no operator has settled, oldest first
+func (q *Queries) OpenSuspense(ctx context.Context) ([]OpenSuspenseRow, error) {
+	rows, err := q.db.Query(ctx, openSuspense)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []OpenSuspenseRow
+	for rows.Next() {
+		var i OpenSuspenseRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.MpesaReceipt,
+			&i.AmountKes,
+			&i.Reason,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const orphanCallbacksSince = `-- name: OrphanCallbacksSince :many
+SELECT checkout_request_id, count(*)::bigint AS callbacks, min(received_at)::timestamptz AS first_at, max(received_at)::timestamptz AS last_at
+FROM payments.stk_orphan_callbacks WHERE received_at >= $1 GROUP BY checkout_request_id ORDER BY 3
+`
+
+type OrphanCallbacksSinceRow struct {
+	CheckoutRequestID string
+	Callbacks         int64
+	FirstAt           time.Time
+	LastAt            time.Time
+}
+
+// STK callbacks that matched no payment, per checkout id, since the cutoff
+func (q *Queries) OrphanCallbacksSince(ctx context.Context, since time.Time) ([]OrphanCallbacksSinceRow, error) {
+	rows, err := q.db.Query(ctx, orphanCallbacksSince, since)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []OrphanCallbacksSinceRow
+	for rows.Next() {
+		var i OrphanCallbacksSinceRow
+		if err := rows.Scan(
+			&i.CheckoutRequestID,
+			&i.Callbacks,
+			&i.FirstAt,
+			&i.LastAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const payoutsAwaitingApproval = `-- name: PayoutsAwaitingApproval :many
+SELECT id, kind, status, net_kes, reason, created_at, updated_at FROM payouts.payouts WHERE status IN ('held','manual') ORDER BY updated_at, id
+`
+
+type PayoutsAwaitingApprovalRow struct {
+	ID        string
+	Kind      string
+	Status    string
+	NetKes    int64
+	Reason    *string
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
+// payouts waiting for an operator: held (a withdrawal above the automatic limit) or manual (an outcome Daraja could not confirm)
+func (q *Queries) PayoutsAwaitingApproval(ctx context.Context) ([]PayoutsAwaitingApprovalRow, error) {
+	rows, err := q.db.Query(ctx, payoutsAwaitingApproval)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []PayoutsAwaitingApprovalRow
+	for rows.Next() {
+		var i PayoutsAwaitingApprovalRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Kind,
+			&i.Status,
+			&i.NetKes,
+			&i.Reason,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const pendingTopUpsStartedBefore = `-- name: PendingTopUpsStartedBefore :many
+SELECT id, status, amount_requested_kes, msisdn, created_at
+FROM payments.payments WHERE status IN ('initiated','stk_sent','callback_received') AND created_at < $1 ORDER BY created_at, id
+`
+
+type PendingTopUpsStartedBeforeRow struct {
+	ID                 string
+	Status             string
+	AmountRequestedKes int64
+	Msisdn             *string
+	CreatedAt          time.Time
+}
+
+// top-ups still pending (a stuck job: the verify job settles every pending top-up at expiry) that started before the cutoff
+func (q *Queries) PendingTopUpsStartedBefore(ctx context.Context, before time.Time) ([]PendingTopUpsStartedBeforeRow, error) {
+	rows, err := q.db.Query(ctx, pendingTopUpsStartedBefore, before)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []PendingTopUpsStartedBeforeRow
+	for rows.Next() {
+		var i PendingTopUpsStartedBeforeRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Status,
+			&i.AmountRequestedKes,
+			&i.Msisdn,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const raiseAlert = `-- name: RaiseAlert :one
 INSERT INTO audit.alerts (kind, subject, severity, freezes, summary, details, first_seen_at, last_seen_at)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $7)
 ON CONFLICT (kind, subject) WHERE resolved_at IS NULL
 DO UPDATE SET last_seen_at = EXCLUDED.last_seen_at, occurrences = audit.alerts.occurrences + 1, summary = EXCLUDED.summary,
-              details = EXCLUDED.details
+              severity = CASE WHEN audit.alerts.severity = 'warn' AND EXCLUDED.severity = 'page' THEN 'page' ELSE audit.alerts.severity END,
+              details = EXCLUDED.details || CASE
+                WHEN audit.alerts.severity = 'warn' AND EXCLUDED.severity = 'page'
+                  THEN jsonb_build_object('escalated_at', EXCLUDED.last_seen_at, 'escalated_from', 'warn')
+                WHEN audit.alerts.details ? 'escalated_at'
+                  THEN jsonb_build_object('escalated_at', audit.alerts.details->'escalated_at', 'escalated_from', audit.alerts.details->'escalated_from')
+                ELSE '{}'::jsonb END,
+              notified_at = CASE WHEN audit.alerts.severity = 'warn' AND EXCLUDED.severity = 'page' THEN NULL ELSE audit.alerts.notified_at END
 RETURNING id, (xmax = 0)::bool AS created
 `
 
@@ -291,7 +730,9 @@ type RaiseAlertRow struct {
 	Created bool
 }
 
-// one open alert per (kind, subject): raising it again counts the occurrence and refreshes what it says
+// one open alert per (kind, subject): raising it again counts the occurrence and refreshes what it says. A warning
+// raised again as a page escalates (ADR 0025): it becomes a page, remembers when in its details, and is sent again
+// (notified_at cleared). A page raised again as a warning stays a page.
 func (q *Queries) RaiseAlert(ctx context.Context, arg RaiseAlertParams) (RaiseAlertRow, error) {
 	row := q.db.QueryRow(ctx, raiseAlert,
 		arg.Kind,
@@ -324,6 +765,48 @@ func (q *Queries) ResolveAlert(ctx context.Context, arg ResolveAlertParams) erro
 	return err
 }
 
+const unconfirmedTopUps = `-- name: UnconfirmedTopUps :many
+SELECT id, amount_requested_kes, msisdn, failure_reason, created_at, updated_at
+FROM payments.payments WHERE status = 'unconfirmed' ORDER BY created_at, id
+`
+
+type UnconfirmedTopUpsRow struct {
+	ID                 string
+	AmountRequestedKes int64
+	Msisdn             *string
+	FailureReason      *string
+	CreatedAt          time.Time
+	UpdatedAt          time.Time
+}
+
+// top-ups M-Pesa may have taken that were never confirmed (status unconfirmed), oldest first
+func (q *Queries) UnconfirmedTopUps(ctx context.Context) ([]UnconfirmedTopUpsRow, error) {
+	rows, err := q.db.Query(ctx, unconfirmedTopUps)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []UnconfirmedTopUpsRow
+	for rows.Next() {
+		var i UnconfirmedTopUpsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.AmountRequestedKes,
+			&i.Msisdn,
+			&i.FailureReason,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const unremittedWithholding = `-- name: UnremittedWithholding :many
 SELECT o.created_at, (o.payload->>'tax_kes')::bigint AS tax_kes, b.batch_no
 FROM audit.kra_outbox o LEFT JOIN audit.kra_batches b ON b.id = o.batch_id
@@ -348,6 +831,45 @@ func (q *Queries) UnremittedWithholding(ctx context.Context) ([]UnremittedWithho
 	for rows.Next() {
 		var i UnremittedWithholdingRow
 		if err := rows.Scan(&i.CreatedAt, &i.TaxKes, &i.BatchNo); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const unverifiedPaybill = `-- name: UnverifiedPaybill :many
+SELECT trans_id, amount_kes, bill_ref, outcome_reason, created_at FROM payments.c2b_confirmations WHERE status = 'unverified' ORDER BY created_at, id
+`
+
+type UnverifiedPaybillRow struct {
+	TransID       string
+	AmountKes     int64
+	BillRef       string
+	OutcomeReason *string
+	CreatedAt     time.Time
+}
+
+// paybill confirmations Daraja's status query could not verify, oldest first
+func (q *Queries) UnverifiedPaybill(ctx context.Context) ([]UnverifiedPaybillRow, error) {
+	rows, err := q.db.Query(ctx, unverifiedPaybill)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []UnverifiedPaybillRow
+	for rows.Next() {
+		var i UnverifiedPaybillRow
+		if err := rows.Scan(
+			&i.TransID,
+			&i.AmountKes,
+			&i.BillRef,
+			&i.OutcomeReason,
+			&i.CreatedAt,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

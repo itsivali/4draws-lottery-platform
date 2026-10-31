@@ -75,7 +75,7 @@ const usage = `usage:
   lotteryctl tax file -batch N                           (the batch's file, rebuilt and checked against its SHA-256)
   lotteryctl tax remit -batch N -prn PRN -amount KES -operator NAME   (record the KRA payment; not the preparer)
   lotteryctl tax batches
-  lotteryctl alerts list [-all]
+  lotteryctl alerts list [-all] [-kind K] [-state open|acknowledged|resolved|all]   (-all is -state all)
   lotteryctl alerts ack -alert ID -note TEXT -operator NAME   (stops reminders; closes a payout freeze)
   lotteryctl alerts watch                                (run the checks and send what is due now)
   lotteryctl staff password -email E [-password P] [-admin]   (emergency: a temporary back-office password for E, read
@@ -87,7 +87,7 @@ type command struct {
 	receipt, reason, operator, payment string
 	user, refundRef, msisdn, account   string
 	draw, payout, state, result        string
-	prn, alert, note                   string
+	prn, alert, note, kind             string
 	email, password                    string
 	all, admin                         bool
 	batch                              int64
@@ -138,7 +138,7 @@ var flagsOf = map[string][]string{
 // optionalOf lists, per command, the flags it may take; the rest of a command's flags are as in flagsOf.
 var optionalOf = map[string][]string{
 	"game simulate":  {"days", "slots", "lucky", "price"},
-	"alerts list":    {"all"},
+	"alerts list":    {"all", "kind", "state"},
 	"staff password": {"password", "admin"},
 }
 
@@ -164,7 +164,8 @@ func parse(args []string) (command, error) {
 	fs.StringVar(&c.account, "account", "", "account number typed by the payer")
 	fs.StringVar(&c.draw, "draw", "", "draw id")
 	fs.StringVar(&c.payout, "payout", "", "payout id")
-	fs.StringVar(&c.state, "state", "", "payout state")
+	fs.StringVar(&c.state, "state", "", "payout state, or alert state (open, acknowledged, resolved, all)")
+	fs.StringVar(&c.kind, "kind", "", "alert kind (topup.unconfirmed, jobs.failing, ...)")
 	fs.StringVar(&c.result, "result", "", "draw result (prize) id")
 	fs.Int64Var(&c.amount, "amount", 0, "amount, whole KES")
 	fs.Int64Var(&c.batch, "batch", 0, "KRA remittance batch number")
@@ -597,24 +598,28 @@ func alertsCmd(ctx context.Context, cfg config.Config, cmd command, out io.Write
 	defer pool.Close()
 	clk := clock.Postgres{}
 	hc := &http.Client{Timeout: 20 * time.Second}
-	var n alerts.Notifier
-	if cfg.Alerts.WebhookURL != "" {
-		n = alerts.Webhook{URL: cfg.Alerts.WebhookURL, Client: hc}
-	}
 	ds := draws.NewService(pool, clk, nil, drand.New(drand.Quicknet, drand.DefaultRelays, hc), ledger.NewStore())
-	svc := alerts.NewService(pool, clk, n, audit.NewWriter(), alerts.Config{},
-		alerts.DrawsOverdue(ds.Overdue),
-		alerts.ReconciliationCheck(pool, clk, app.ReconciliationStaleAfter),
-		alerts.RemittanceCheck(pool, clk, cfg.Alerts.KRARemitWarnAfter, cfg.Alerts.KRARemitDueAfter))
+	svc := alerts.NewService(pool, clk, app.AlertNotifier(cfg, hc), audit.NewWriter(), alerts.Config{}, app.AlertChecks(pool, clk, ds, cfg.Alerts)...)
 	var res any
 	switch cmd.name {
 	case "alerts list":
-		res, err = svc.List(ctx, cmd.all, 100)
+		state, ok := alerts.ParseState(cmd.state)
+		if !ok {
+			return errors.New("-state must be open, acknowledged, resolved or all")
+		}
+		if cmd.all && cmd.state == "" {
+			state = alerts.All
+		}
+		var l alerts.Listing
+		l, err = svc.List(ctx, alerts.Filter{Kind: cmd.kind, State: state, Limit: 100})
+		res = l.Alerts
 	case "alerts ack":
 		res, err = svc.Acknowledge(ctx, cmd.alert, cmd.operator, cmd.note)
 	case "alerts watch":
 		if err = svc.Watch(ctx); err == nil {
-			res, err = svc.List(ctx, false, 100)
+			var l alerts.Listing
+			l, err = svc.List(ctx, alerts.Filter{Limit: 100})
+			res = l.Alerts
 		}
 	}
 	if err != nil {

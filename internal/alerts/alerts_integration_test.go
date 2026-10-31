@@ -121,7 +121,7 @@ func TestWatch_RaisesOnceRemindsPagesAndResolvesWhatClears(t *testing.T) {
 	if got := e.inbox.take(); len(got) != 0 {
 		t.Fatalf("sent again %v", got)
 	}
-	list, err := svc.List(ctx, false, 10)
+	list, err := openAlerts(svc)
 	if err != nil || len(list) != 2 || list[0].Occurrences != 2 {
 		t.Fatalf("list %+v %v", list, err)
 	}
@@ -164,10 +164,10 @@ func TestWatch_RaisesOnceRemindsPagesAndResolvesWhatClears(t *testing.T) {
 	if got := e.inbox.take(); !same(got, "resolved test.page", "resolved test.warn") {
 		t.Fatalf("resolutions %v", got)
 	}
-	if open, _ := svc.List(ctx, false, 10); len(open) != 0 {
+	if open, _ := openAlerts(svc); len(open) != 0 {
 		t.Fatalf("still open %+v", open)
 	}
-	if all, _ := svc.List(ctx, true, 10); len(all) != 2 || all[0].ResolvedBy != "system" {
+	if all, _ := allAlerts(svc); len(all) != 2 || all[0].ResolvedBy != "system" {
 		t.Fatalf("history %+v", all)
 	}
 	if _, err := svc.Acknowledge(ctx, list[1].ID, "operator:alice", "late"); !errors.Is(err, alerts.ErrClosed) && !errors.Is(err, alerts.ErrAcknowledged) {
@@ -207,7 +207,7 @@ func TestWatch_AFreezeIsClosedOnlyByAPerson(t *testing.T) {
 	if frozen(t, e) != true {
 		t.Fatal("the freeze closed without a person")
 	}
-	open, _ := svc.List(ctx, false, 10)
+	open, _ := openAlerts(svc)
 	a, err := svc.Acknowledge(ctx, open[0].ID, "operator:alice", "a rounding bug in the export, fixed in #40")
 	if err != nil || a.ResolvedAt == nil || a.ResolvedBy != "operator:alice" {
 		t.Fatalf("ack %+v %v", a, err)
@@ -257,7 +257,7 @@ func TestWatch_ACheckThatCannotRunIsAnAlertAndClearsNothing(t *testing.T) {
 	if got := e.inbox.take(); !same(got, "raised alerts.check_failed") {
 		t.Fatalf("sent %v", got)
 	}
-	if open, _ := svc.List(ctx, false, 10); len(open) != 2 {
+	if open, _ := openAlerts(svc); len(open) != 2 {
 		t.Fatalf("the failing check cleared its alerts: %+v", open)
 	}
 	if e.beats != 1 {
@@ -297,7 +297,7 @@ func TestDeliver_WhatCannotBeSentIsSentAtTheNextWatch(t *testing.T) {
 	if err := logged.Watch(ctx); err != nil {
 		t.Fatal(err)
 	}
-	list, _ := logged.List(ctx, false, 10)
+	list, _ := openAlerts(logged)
 	for _, a := range list {
 		if a.Kind == "test.log" && a.Notifications != 1 {
 			t.Fatalf("logged %+v", a)
@@ -432,7 +432,7 @@ func TestAlerts_TheDatabaseKeepsWhatWasRaisedAndAcknowledged(t *testing.T) {
 	if err := svc.Watch(ctx); err != nil {
 		t.Fatal(err)
 	}
-	open, _ := svc.List(ctx, false, 10)
+	open, _ := openAlerts(svc)
 	if _, err := svc.Acknowledge(ctx, open[0].ID, "operator:alice", "mine"); err != nil {
 		t.Fatal(err)
 	}
@@ -493,4 +493,15 @@ func now(t *testing.T, e *env) time.Time {
 		t.Fatal(err)
 	}
 	return at
+}
+
+// openAlerts and allAlerts list through the service as the old List did: open (or every) alert, newest first.
+func openAlerts(svc *alerts.Service) ([]alerts.View, error) {
+	l, err := svc.List(context.Background(), alerts.Filter{Limit: 10})
+	return l.Alerts, err
+}
+
+func allAlerts(svc *alerts.Service) ([]alerts.View, error) {
+	l, err := svc.List(context.Background(), alerts.Filter{State: alerts.All, Limit: 10})
+	return l.Alerts, err
 }

@@ -1,7 +1,9 @@
-// Package alerts tells a person what needs them: draws whose next step is late, reconciliations that failed or did
-// not run, withheld tax nearing its remittance deadline. Every few minutes the watch runs each check, keeps one alert
-// per condition in audit.alerts, sends new alerts to the configured channel, reminds about pages until someone
-// acknowledges them, and closes alerts whose condition has cleared.
+// Package alerts tells a person what needs them: money waiting for a human (top-ups never confirmed, paybill money in
+// suspense, payouts awaiting approval or failed), the platform's health (failing jobs, Daraja throttling, a low B2C
+// float), and the duties with deadlines (late draws, reconciliations, withheld tax, identity reviews, account
+// closures). Every few minutes the watch runs each check, keeps one alert per condition in audit.alerts, sends new
+// alerts to every configured channel, reminds about pages until someone acknowledges them, escalates a warning that has
+// waited too long into a page, and closes alerts whose condition has cleared (ADR 0025).
 //
 // An alert raised by a failed reconciliation freezes payouts: B2C sends stop (payouts.Service.Send) until a person
 // acknowledges it with a note, and only a person closes it. Books that do not balance never pay out.
@@ -12,6 +14,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"sort"
 	"strings"
 	"time"
 
@@ -232,6 +235,8 @@ func (s *Service) Deliver(ctx context.Context) error {
 			event = "resolved"
 		case a.NotifiedAt != nil:
 			event = "reminder"
+		case a.Notifications > 0: // sent before as a warning, and since escalated to a page (RaiseAlert cleared notified_at)
+			event = "escalated"
 		}
 		v := view(a)
 		if err := s.notify.Notify(ctx, Message{Event: event, Alert: v, Text: Text(event, v)}); err != nil {
@@ -264,6 +269,8 @@ func Text(event string, a View) string {
 		b.WriteString("[RESOLVED] ")
 	case "reminder":
 		b.WriteString("[REMINDER] ")
+	case "escalated":
+		b.WriteString("[ESCALATED] ")
 	}
 	b.WriteString("[" + strings.ToUpper(string(a.Severity)) + "] " + a.Summary + " (" + a.Kind + " " + a.Subject + ", alert " + a.ID + ")")
 	if event != "resolved" && a.FreezesPayouts {
@@ -314,17 +321,184 @@ func (s *Service) Acknowledge(ctx context.Context, id, operator, note string) (V
 	return out, err
 }
 
-// List returns open alerts (and resolved ones with all), newest first.
-func (s *Service) List(ctx context.Context, all bool, limit int) ([]View, error) {
-	rows, err := store.New(s.pool).ListAlerts(ctx, store.ListAlertsParams{IncludeResolved: all, MaxRows: int32(limit)}) //nolint:gosec // small limits
+// State narrows a listing: open alerts are the ones not resolved (acknowledged or not), acknowledged the open ones a
+// person has taken on, resolved the closed ones; All lists everything.
+type State string
+
+// States.
+const (
+	Open         State = "open"
+	Acknowledged State = "acknowledged"
+	Resolved     State = "resolved"
+	All          State = "all"
+)
+
+// ParseState reads a state from a query; "" is Open.
+func ParseState(s string) (State, bool) {
+	switch State(s) {
+	case "":
+		return Open, true
+	case Open, Acknowledged, Resolved, All:
+		return State(s), true
+	}
+	return "", false
+}
+
+// Filter narrows a listing. Zero values mean no restriction except State ("" lists open alerts) and Limit (0 is 100).
+type Filter struct {
+	Kind     string
+	Severity Severity
+	State    State
+	Limit    int
+	// Before continues a listing after the page that ended with it: the next_before of that page.
+	Before string
+}
+
+// ErrCursor says a Before was not one this service gave out.
+var ErrCursor = errors.New("alerts: invalid cursor")
+
+// Listing is one page of alerts, newest first, and where the next page starts (empty at the end).
+type Listing struct {
+	Alerts     []View
+	NextBefore string
+}
+
+// List returns alerts matching f, newest first.
+func (s *Service) List(ctx context.Context, f Filter) (Listing, error) {
+	if f.State == "" {
+		f.State = Open
+	}
+	if f.Limit <= 0 {
+		f.Limit = 100
+	}
+	p := store.ListAlertsParams{State: string(f.State), MaxRows: int32(f.Limit + 1)} //nolint:gosec // small limits
+	if f.Kind != "" {
+		p.Kind = &f.Kind
+	}
+	if f.Severity != "" {
+		sev := string(f.Severity)
+		p.Severity = &sev
+	}
+	if f.Before != "" {
+		at, id, ok := strings.Cut(f.Before, "|")
+		t, err := time.Parse(time.RFC3339Nano, at)
+		if !ok || err != nil || id == "" {
+			return Listing{}, ErrCursor
+		}
+		p.BeforeAt, p.BeforeID = &t, &id
+	}
+	rows, err := store.New(s.pool).ListAlerts(ctx, p)
+	if err != nil {
+		var pe *pgconn.PgError
+		if errors.As(err, &pe) && pe.Code == "22P02" {
+			return Listing{}, ErrCursor
+		}
+		return Listing{}, err
+	}
+	out := Listing{Alerts: make([]View, 0, len(rows))}
+	for _, r := range rows {
+		out.Alerts = append(out.Alerts, view(r))
+	}
+	if len(out.Alerts) > f.Limit {
+		out.Alerts = out.Alerts[:f.Limit]
+		last := out.Alerts[f.Limit-1]
+		out.NextBefore = last.FirstSeenAt.UTC().Format(time.RFC3339Nano) + "|" + last.ID
+	}
+	return out, nil
+}
+
+// KindCount is a kind of alert and how many of it are open.
+type KindCount struct {
+	Kind string `json:"kind"`
+	Open int    `json:"open"`
+}
+
+// Kinds lists every kind the checks can raise, and any other kind with an open alert, each with its open count.
+func (s *Service) Kinds(ctx context.Context) ([]KindCount, error) {
+	rows, err := store.New(s.pool).OpenAlertCounts(ctx)
 	if err != nil {
 		return nil, err
 	}
-	out := make([]View, 0, len(rows))
-	for _, r := range rows {
-		out = append(out, view(r))
+	open := map[string]int{checkFailed: 0}
+	for _, c := range s.checks {
+		for _, k := range c.Kinds {
+			open[k] = 0
+		}
 	}
+	for _, r := range rows {
+		open[r.Kind] = int(r.Open)
+	}
+	out := make([]KindCount, 0, len(open))
+	for k, n := range open {
+		out = append(out, KindCount{Kind: k, Open: n})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Kind < out[j].Kind })
 	return out, nil
+}
+
+// Event is one thing that happened to an alert, in the order it happened.
+type Event struct {
+	At    time.Time `json:"at"`
+	Event string    `json:"event"` // raised, escalated, alert.acknowledged (and any other audited action), resolved
+	Actor string    `json:"actor"` // system, or the operator
+	Note  string    `json:"note,omitempty"`
+}
+
+// Detail is an alert with its history and the check that owns it.
+type Detail struct {
+	View
+	Check   string  `json:"check"`
+	History []Event `json:"history"`
+}
+
+// Get returns one alert with everything known about it.
+func (s *Service) Get(ctx context.Context, id string) (Detail, error) {
+	q := store.New(s.pool)
+	a, err := q.GetAlert(ctx, id)
+	var pe *pgconn.PgError
+	if errors.Is(err, pgx.ErrNoRows) || (errors.As(err, &pe) && pe.Code == "22P02") {
+		return Detail{}, ErrNotFound
+	} else if err != nil {
+		return Detail{}, err
+	}
+	d := Detail{View: view(a), Check: s.owner(a.Kind), History: []Event{{At: a.FirstSeenAt, Event: "raised", Actor: "system"}}}
+	var details struct {
+		EscalatedAt *time.Time `json:"escalated_at"`
+	}
+	if json.Unmarshal(a.Details, &details) == nil && details.EscalatedAt != nil {
+		d.History = append(d.History, Event{At: *details.EscalatedAt, Event: "escalated", Actor: "system", Note: "a warning became a page"})
+	}
+	events, err := q.AlertAuditEvents(ctx, &id)
+	if err != nil {
+		return Detail{}, err
+	}
+	for _, e := range events {
+		var det struct {
+			Note string `json:"note"`
+		}
+		_ = json.Unmarshal(e.Details, &det)
+		d.History = append(d.History, Event{At: e.At, Event: e.Action, Actor: deref(e.ActorID), Note: det.Note})
+	}
+	if a.ResolvedAt != nil {
+		d.History = append(d.History, Event{At: *a.ResolvedAt, Event: "resolved", Actor: deref(a.ResolvedBy)})
+	}
+	sort.SliceStable(d.History, func(i, j int) bool { return d.History[i].At.Before(d.History[j].At) })
+	return d, nil
+}
+
+// owner names the check that raises (and clears) alerts of kind.
+func (s *Service) owner(kind string) string {
+	if kind == checkFailed {
+		return "watch"
+	}
+	for _, c := range s.checks {
+		for _, k := range c.Kinds {
+			if k == kind {
+				return c.Name
+			}
+		}
+	}
+	return ""
 }
 
 func deref(p *string) string {

@@ -133,13 +133,25 @@ services:
         sync: false
       - key: DARAJA_SECURITY_CREDENTIAL
         sync: false
-      # Alerts (docs/runbooks/alerts.md): a Slack-compatible incoming webhook that receives alerts, and a dead man's
-      # switch (healthchecks.io or similar) pinged after every watch. Both secrets; unset means alerts are only logged
-      # and kept in the database, and nothing notices a stopped worker.
+      # Alerts (docs/runbooks/alerts.md, ADR 0025): a Slack-compatible incoming webhook that receives alerts, and a
+      # dead man's switch (healthchecks.io or similar) pinged after every watch. Both secrets; unset means alerts are
+      # only logged and kept in the database, and nothing notices a stopped worker.
       - key: ALERT_WEBHOOK_URL
         sync: false
       - key: ALERT_HEARTBEAT_URL
         sync: false
+      # ALERT_EMAILS: on-call addresses (comma-separated, not secret) that get every alert as plain-text email through
+      # the SMTP server below, with a link into the back office. Either channel, both, or neither (then: logs only).
+      - key: ALERT_EMAILS
+        sync: false
+      # When the checks warn and page (Go durations; the defaults in brackets are the owner's of 2026-10-31):
+      #   TOPUP_UNCONFIRMED_WARN_AFTER [30m]  TOPUP_UNCONFIRMED_PAGE_AFTER [4h]   TOPUP_PENDING_GRACE [10m]
+      #   SUSPENSE_WARN_AFTER [1h]            SUSPENSE_PAGE_AFTER [24h]
+      #   PAYOUT_APPROVAL_WARN_AFTER [2h]     PAYOUT_APPROVAL_PAGE_AFTER [24h]
+      #   KYC_QUEUE_WARN_AFTER [24h]          KYC_QUEUE_PAGE_AFTER [72h]          CLOSURE_WAIT_WARN_AFTER [168h]
+      #   JOB_RETRY_WARN_ATTEMPTS [5]         DARAJA_THROTTLE_WINDOW [15m]        DARAJA_THROTTLE_COUNT [5]
+      #   B2C_FLOAT_FLOOR_KES [0 = off; set it to a day's payouts once the float is funded]
+      #   KRA_REMIT_WARN_AFTER [72h]          KRA_REMIT_DUE_AFTER [120h]          (placeholders until a tax adviser confirms)
       # Email to staff (docs/runbooks/kyc-review.md): whenever a player's identity submission starts waiting for a
       # decision, KYC_REVIEW_NOTIFY_TO gets an email with a link into the back office. It is sent through the SMTP
       # server below (a transactional provider such as Resend or Brevo; SMTP_PASSWORD is a secret); with no SMTP_HOST

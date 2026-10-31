@@ -3,11 +3,13 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 import { App } from './App'
 import { ActivityPage } from './pages/Activity'
+import { AlertsPage } from './pages/Alerts'
 import { PlaysPage } from './pages/Plays'
 import { SystemPage } from './pages/System'
 import { TopUpsPage } from './pages/TopUps'
 import { renderSignedIn } from './test/render'
-import type { Alert, AuditEvent, PlayRow, SystemState, TopUpDetail, TopUpRow } from './types'
+
+import type { Alert, AlertDetail, AuditEvent, PlayRow, SystemState, TopUpDetail, TopUpRow } from './types'
 
 const play: PlayRow = {
   ticket_id: 't-1', user_id: 'u-1', msisdn: '254705369005', full_name: 'Willis Ivali', play_date: '2026-10-30', seq: 2,
@@ -166,5 +168,81 @@ describe('system alerts everywhere', () => {
     const nav = screen.getByRole('navigation', { name: 'Back office' })
     expect(await within(nav).findByRole('link', { name: 'Alerts, 1 open' })).toBeInTheDocument()
     expect(screen.queryByText('KRA remittance due soon')).not.toBeInTheDocument()
+  })
+})
+
+describe('alerts page', () => {
+  const unconfirmed: Alert = {
+    id: 'a1', kind: 'topup.unconfirmed', subject: 'p-1', severity: 'page', freezes_payouts: false,
+    summary: 'A top-up of KES 50 from 254705***005 is not confirmed 4 h 31 min after the player paid',
+    details: { payment: 'p-1', amount_kes: 50, msisdn: '254705***005', reason: 'still_pending_at_expiry', escalated_at: '2026-10-30T13:00:00Z', escalated_from: 'warn' },
+    first_seen_at: '2026-10-30T09:00:00Z', last_seen_at: '2026-10-30T13:30:00Z', occurrences: 55, notifications: 2,
+  }
+  const suspense: Alert = { ...unconfirmed, id: 'a2', kind: 'paybill.suspense_open', subject: 'RCPT1', severity: 'warn', summary: 'KES 300 paid to the paybill has sat in suspense 2 h', details: { receipt: 'RCPT1', amount_kes: 300 } }
+  const kinds = [{ kind: 'paybill.suspense_open', open: 1 }, { kind: 'topup.unconfirmed', open: 1 }, { kind: 'kyc.queue_stale', open: 0 }]
+  const detail: AlertDetail = { ...unconfirmed, check: 'topups', history: [{ at: '2026-10-30T09:00:00Z', event: 'raised', actor: 'system' }, { at: '2026-10-30T13:00:00Z', event: 'escalated', actor: 'system', note: 'a warning became a page' }] }
+
+  const server = (asked: URL[], posted: unknown[]) => (method: string, url: URL, body: unknown) => {
+    asked.push(url)
+    if (method === 'POST') { posted.push(body); return { status: 200, body: { ...unconfirmed, acknowledged_by: 'staff:s1', acknowledged_at: '2026-10-30T14:00:00Z', ack_note: 'credited from the statement' } } }
+    if (url.pathname === '/v1/staff/alerts/a1') return { status: 200, body: detail }
+    const sev = url.searchParams.get('severity')
+    const kind = url.searchParams.get('kind')
+    const rows = [unconfirmed, suspense].filter((a) => (!sev || a.severity === sev) && (!kind || a.kind === kind))
+    return { status: 200, body: { alerts: rows, next_before: null, kinds } }
+  }
+
+  it('lists alerts with their kind, state and age, and sends the filters to the server', async () => {
+    const asked: URL[] = []
+    renderSignedIn(<AlertsPage />, { roles: ['staff'], route: server(asked, []) })
+    const table = await screen.findByRole('table', { name: /Alerts, newest first/ })
+    expect(within(table).getByText(/KES 50 from 254705\*\*\*005/)).toBeInTheDocument()
+    expect(within(table).getByText('topup.unconfirmed')).toBeInTheDocument()
+    expect(within(table).getAllByText('Open')).toHaveLength(2 + 2) // two state pills, two Open buttons
+    expect(asked[0]?.searchParams.get('state')).toBe('open')
+    await userEvent.click(screen.getByRole('tab', { name: 'Resolved' }))
+    await waitFor(() => { expect(asked.at(-1)?.searchParams.get('state')).toBe('resolved') })
+    await userEvent.click(screen.getByRole('tab', { name: 'Pages' }))
+    await waitFor(() => { expect(asked.at(-1)?.searchParams.get('severity')).toBe('page') })
+    const kindSelect = screen.getByRole('combobox', { name: 'Kind' })
+    expect(within(kindSelect).getByRole('option', { name: 'topup.unconfirmed (1 open)' })).toBeInTheDocument()
+    expect(within(kindSelect).getByRole('option', { name: 'kyc.queue_stale' })).toBeInTheDocument()
+    await userEvent.selectOptions(kindSelect, 'paybill.suspense_open')
+    await waitFor(() => { expect(asked.at(-1)?.searchParams.get('kind')).toBe('paybill.suspense_open') })
+    expect(asked.at(-1)?.searchParams.get('limit')).toBe('100')
+  })
+
+  it('opens an alert in a sheet with its details, the runbook hint, its history and the acknowledge action', async () => {
+    const asked: URL[] = []
+    const posted: unknown[] = []
+    renderSignedIn(<AlertsPage />, { roles: ['staff'], route: server(asked, posted) })
+    const table = await screen.findByRole('table', { name: /Alerts, newest first/ })
+    await userEvent.click(within(table).getAllByRole('button', { name: 'Open' })[0] as HTMLElement)
+    const sheet = await screen.findByRole('dialog')
+    expect(within(sheet).getByText(/raised by the topups check/)).toBeInTheDocument()
+    expect(within(sheet).getByText('amount kes')).toBeInTheDocument()
+    expect(within(sheet).getByText('50')).toBeInTheDocument()
+    expect(within(sheet).getByText('still_pending_at_expiry')).toBeInTheDocument()
+    expect(within(sheet).getByText(/M-Pesa may have taken the money/)).toBeInTheDocument()
+    expect(within(sheet).getByRole('link', { name: /Open the top-up/ })).toHaveAttribute('href', '/topups?topup=p-1')
+    expect(within(sheet).getByText('escalated')).toBeInTheDocument()
+    expect(within(sheet).getByText('a warning became a page')).toBeInTheDocument()
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Acknowledge' }))
+    await userEvent.type(await screen.findByLabelText(/^What you did or found/), 'credited from the statement')
+    await userEvent.click(screen.getAllByRole('button', { name: 'Acknowledge' }).at(-1) as HTMLElement)
+    await waitFor(() => { expect(posted).toEqual([{ note: 'credited from the statement' }]) })
+    expect(asked.some((u) => u.pathname === '/v1/staff/alerts/a1/acknowledge')).toBe(true)
+  })
+
+  it('opens the alert an email linked to', async () => {
+    renderSignedIn(<AlertsPage />, { roles: ['staff'], route: server([], []), path: '/alerts?alert=a1' })
+    const sheet = await screen.findByRole('dialog')
+    expect(within(sheet).getByText(/raised by the topups check/)).toBeInTheDocument()
+  })
+
+  it('names the channels alerts go to on the System page', async () => {
+    renderSignedIn(<SystemPage />, { roles: ['staff'], route: () => ({ status: 200, body: { ...system, settings: { ...system.settings, alerts_delivery: 'webhook, email' } } }) })
+    expect(await screen.findByText('Webhook')).toBeInTheDocument()
+    expect(screen.getAllByText('Email')).toHaveLength(2) // the SMTP row and the channel
   })
 })

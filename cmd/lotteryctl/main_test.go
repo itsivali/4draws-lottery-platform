@@ -92,6 +92,8 @@ func TestParse(t *testing.T) {
 		{[]string{"tax", "batches"}, command{name: "tax batches"}, false},
 		{[]string{"alerts", "list"}, command{name: "alerts list"}, false},
 		{[]string{"alerts", "list", "-all"}, command{name: "alerts list", all: true}, false},
+		{[]string{"alerts", "list", "-kind", "jobs.failing", "-state", "resolved"}, command{name: "alerts list", kind: "jobs.failing", state: "resolved"}, false},
+		{[]string{"alerts", "ack", "-alert", "a1", "-note", "x", "-operator", opID, "-kind", "k"}, command{}, true},
 		{[]string{"alerts", "ack", "-alert", "a1", "-note", "checked", "-operator", opID},
 			command{name: "alerts ack", alert: "a1", note: "checked", operator: "staff:" + opID}, false},
 		{[]string{"alerts", "ack", "-alert", "a1", "-operator", opID}, command{}, true},
