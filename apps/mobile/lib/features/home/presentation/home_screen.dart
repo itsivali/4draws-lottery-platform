@@ -32,6 +32,18 @@ class HomeScreen extends ConsumerWidget {
     final wallet = ref.watch(walletStatementProvider);
     final cards = <Widget>[
       _Greeting(name: account.value?.firstName),
+      // an account from before sign-up asked for them is asked until it gives them (owner, 2026-10-31)
+      if (account.value?.needsIdentity ?? false)
+        InlineBanner(
+          tone: StatusTone.warning,
+          icon: Icons.badge_outlined,
+          title: 'Add your names and ID number',
+          message:
+              'Your account has none yet. They must match your national ID and M-Pesa; staff check them before '
+              'your first withdrawal.',
+          actionLabel: 'Add them',
+          onAction: () => context.go('/account/details'),
+        ),
       if (account.value case final a?) ?_nextStep(context, a, wallet.value?.debtKes ?? 0),
       const _BalanceHero(),
       const _TodayCard(),

@@ -10,6 +10,36 @@ import (
 	"time"
 )
 
+const authIdentitiesFor = `-- name: AuthIdentitiesFor :many
+SELECT provider, created_at FROM identity.auth_identities WHERE user_id = $1 ORDER BY created_at, id
+`
+
+type AuthIdentitiesForRow struct {
+	Provider  string
+	CreatedAt time.Time
+}
+
+// The Google or Apple identities that sign in to the account, oldest first.
+func (q *Queries) AuthIdentitiesFor(ctx context.Context, userID string) ([]AuthIdentitiesForRow, error) {
+	rows, err := q.db.Query(ctx, authIdentitiesFor, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AuthIdentitiesForRow
+	for rows.Next() {
+		var i AuthIdentitiesForRow
+		if err := rows.Scan(&i.Provider, &i.CreatedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const closeClosureRequest = `-- name: CloseClosureRequest :exec
 UPDATE identity.closure_requests SET closed_at = $1, closed_by = $2::uuid WHERE user_id = $3
 `
@@ -557,6 +587,51 @@ func (q *Queries) OpenClosureRequests(ctx context.Context, lim int32) ([]OpenClo
 	return items, nil
 }
 
+const openSessions = `-- name: OpenSessions :many
+SELECT s.id, s.created_at, COALESCE(s.platform, d.platform, 'web')::text AS platform,
+       COALESCE(d.attestation_verdict, 'none')::text AS device_verdict,
+       COALESCE((SELECT max(r.issued_at) FROM identity.refresh_tokens r WHERE r.session_id = s.id), s.created_at)::timestamptz AS last_used_at
+FROM identity.sessions s LEFT JOIN identity.devices d ON d.id = s.device_id
+WHERE s.user_id = $1 AND s.revoked_at IS NULL
+ORDER BY s.created_at DESC, s.id DESC
+`
+
+type OpenSessionsRow struct {
+	ID            string
+	CreatedAt     time.Time
+	Platform      string
+	DeviceVerdict string
+	LastUsedAt    time.Time
+}
+
+// The player's open sessions, newest first (owner, 2026-10-31: the account's "Devices signed in"): the device's platform
+// and attestation verdict, and when a token was last issued to the session (its start, if never refreshed).
+func (q *Queries) OpenSessions(ctx context.Context, userID string) ([]OpenSessionsRow, error) {
+	rows, err := q.db.Query(ctx, openSessions, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []OpenSessionsRow
+	for rows.Next() {
+		var i OpenSessionsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.CreatedAt,
+			&i.Platform,
+			&i.DeviceVerdict,
+			&i.LastUsedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const playerPasswordResetByHash = `-- name: PlayerPasswordResetByHash :one
 SELECT r.id, r.user_id, r.expires_at, r.used_at, u.msisdn, u.status
 FROM identity.password_resets r JOIN identity.users u ON u.id = r.user_id
@@ -662,6 +737,26 @@ type RevokeOtherSessionsParams struct {
 func (q *Queries) RevokeOtherSessions(ctx context.Context, arg RevokeOtherSessionsParams) error {
 	_, err := q.db.Exec(ctx, revokeOtherSessions, arg.At, arg.UserID, arg.KeepSessionID)
 	return err
+}
+
+const revokeOtherSessionsByPlayer = `-- name: RevokeOtherSessionsByPlayer :execrows
+UPDATE identity.sessions SET revoked_at = $1, revoked_reason = 'logout'
+WHERE user_id = $2 AND id <> $3 AND revoked_at IS NULL
+`
+
+type RevokeOtherSessionsByPlayerParams struct {
+	At            *time.Time
+	UserID        string
+	KeepSessionID string
+}
+
+// The player signs every other device out, keeping the one they are on.
+func (q *Queries) RevokeOtherSessionsByPlayer(ctx context.Context, arg RevokeOtherSessionsByPlayerParams) (int64, error) {
+	result, err := q.db.Exec(ctx, revokeOtherSessionsByPlayer, arg.At, arg.UserID, arg.KeepSessionID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const revokeSession = `-- name: RevokeSession :exec

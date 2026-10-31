@@ -65,6 +65,29 @@ class AccountRepository {
         body: {'email': email, 'current_password': currentPassword},
       );
 
+  /// Gives the names and ID number of an account that gave none at sign-up (owner, 2026-10-31): once, and only until
+  /// an identity submission exists (409 `identity-declared` / `kyc-state`).
+  Future<void> declareIdentity({
+    required String firstName,
+    required String secondName,
+    required String nationalId,
+    required String idempotencyKey,
+  }) => _api.post(
+    '/v1/account/identity',
+    idempotencyKey: idempotencyKey,
+    body: {'first_name': firstName, 'second_name': secondName, 'national_id': nationalId},
+  );
+
+  /// The devices signed in to the account, newest first, this one marked.
+  Future<List<DeviceSession>> sessions() async =>
+      parse(await _api.get('/v1/account/sessions'), (j) => j.list('sessions', DeviceSession.fromJson));
+
+  /// Signs every other device out; this one stays signed in.
+  Future<void> signOutOtherDevices({required String idempotencyKey}) =>
+      _api.post('/v1/account/sessions/revoke-others', idempotencyKey: idempotencyKey);
+
+  Future<SignInMethods> signIns() async => parse(await _api.get('/v1/account/sign-ins'), SignInMethods.fromJson);
+
   Future<DateTime> requestClosure({required String idempotencyKey}) async => parse(
     await _api.post('/v1/account/closure', idempotencyKey: idempotencyKey),
     (j) => j.instant('closure_requested_at'),

@@ -6,11 +6,14 @@ import '../core/auth/session_manager.dart';
 import '../core/widgets/inline_banner.dart';
 import '../features/account/presentation/account_screen.dart';
 import '../features/account/presentation/closure_screen.dart';
+import '../features/account/presentation/details_screen.dart';
+import '../features/account/presentation/devices_screen.dart';
 import '../features/account/presentation/email_screen.dart';
 import '../features/account/presentation/how_it_works_screen.dart';
 import '../features/account/presentation/kyc_screen.dart';
 import '../features/account/presentation/password_screen.dart';
 import '../features/account/presentation/responsible_gaming_screen.dart';
+import '../features/account/presentation/sign_ins_screen.dart';
 import '../features/auth/presentation/password_reset_screens.dart';
 import '../features/auth/presentation/session_screens.dart';
 import '../features/auth/presentation/sign_in_screen.dart';
@@ -116,7 +119,10 @@ final routerProvider = Provider<GoRouter>((ref) {
                 path: '/account',
                 builder: (_, _) => const AccountScreen(),
                 routes: [
+                  GoRoute(path: 'details', builder: (_, _) => const DetailsScreen()),
                   GoRoute(path: 'verify', builder: (_, _) => const KycScreen()),
+                  GoRoute(path: 'devices', builder: (_, _) => const DevicesScreen()),
+                  GoRoute(path: 'sign-ins', builder: (_, _) => const SignInsScreen()),
                   GoRoute(path: 'limits', builder: (_, _) => const ResponsibleGamingScreen()),
                   GoRoute(path: 'password', builder: (_, _) => const PasswordScreen()),
                   GoRoute(path: 'email', builder: (_, _) => const EmailScreen()),

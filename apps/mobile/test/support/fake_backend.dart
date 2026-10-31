@@ -49,6 +49,35 @@ class FakeBackend {
   /// What the account gave at sign-up (owner, 2026-10-30), as GET /v1/kyc reports it.
   Map<String, Object?>? declared = {'first_name': 'Jane', 'second_name': 'Wanjiru', 'national_id': '12345678'};
 
+  /// Where the declared identity stands, as GET /v1/account reports it: none, declared, submitted or verified.
+  String identityStatus = 'declared';
+
+  /// A problem slug POST /v1/account/identity answers with 409 (`identity-declared`, `kyc-state`), or null to accept.
+  String? declareRefusal;
+
+  /// The devices signed in (GET /v1/account/sessions), newest first, this one marked.
+  final sessions = <Map<String, Object?>>[
+    {
+      'id': 'sess-2',
+      'platform': 'web',
+      'device_verdict': 'none',
+      'created_at': '2026-10-24T20:00:00+03:00',
+      'last_used_at': '2026-10-25T20:30:00+03:00',
+      'current': false,
+    },
+    {
+      'id': 'sess-1',
+      'platform': 'android',
+      'device_verdict': 'passed',
+      'created_at': '2026-10-20T09:00:00+03:00',
+      'last_used_at': '2026-10-26T08:00:00+03:00',
+      'current': true,
+    },
+  ];
+
+  /// The Google or Apple identities linked to the account (GET /v1/account/sign-ins).
+  final linkedSignIns = <Map<String, Object?>>[];
+
   static bool _identityMissing(Map<String, Object?> body) =>
       [body['first_name'], body['second_name'], body['national_id']].any((v) => v is! String || v.trim().isEmpty);
 
@@ -320,7 +349,41 @@ class FakeBackend {
           'has_password': hasPassword,
           'first_name': firstName,
           'second_name': secondName,
+          'identity': {
+            'status': identityStatus,
+            'national_id_hint': identityStatus == 'none' ? null : (declared?['national_id'] as String?)?.substring(5),
+          },
         });
+      case ('POST', '/v1/account/identity'):
+        if (_identityMissing(body)) return _problem(400, 'invalid-identity', 'Check your names and ID number');
+        if (declareRefusal == 'kyc-state') {
+          return _problem(
+            409,
+            'kyc-state',
+            'Your identity is already submitted for verification',
+            'the name on that submission is the one shown',
+          );
+        }
+        if (declareRefusal != null || identityStatus != 'none') {
+          return _problem(
+            409,
+            'identity-declared',
+            'Your names and ID number are already on your account',
+            'they are checked, not changed, before your first withdrawal; contact support if they are wrong',
+          );
+        }
+        firstName = (body['first_name'] as String).trim();
+        secondName = (body['second_name'] as String).trim();
+        declared = {'first_name': firstName, 'second_name': secondName, 'national_id': body['national_id']};
+        identityStatus = 'declared';
+        return http.Response('', 204);
+      case ('GET', '/v1/account/sessions'):
+        return _ok({'sessions': sessions});
+      case ('POST', '/v1/account/sessions/revoke-others'):
+        sessions.removeWhere((s) => s['current'] != true);
+        return http.Response('', 204);
+      case ('GET', '/v1/account/sign-ins'):
+        return _ok({'password': hasPassword, 'providers': linkedSignIns});
       case ('POST', '/v1/account/closure'):
         closureRequestedAt ??= '2026-10-26T12:00:00+03:00';
         return _ok({'closure_requested_at': closureRequestedAt}, 202);

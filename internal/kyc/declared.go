@@ -2,12 +2,21 @@ package kyc
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 
+	"github.com/itsivali/lottery-platform/internal/audit"
 	"github.com/itsivali/lottery-platform/internal/kyc/store"
+)
+
+// Errors of a declaration made after sign-up.
+var (
+	ErrAlreadyDeclared = errors.New("kyc: the names and ID number were already given")
+	ErrSubmitted       = errors.New("kyc: an identity submission exists; the name comes from it")
 )
 
 // Declaration is what a new account gives at sign-up (owner, 2026-10-30): first name, second name and national ID
@@ -93,4 +102,83 @@ func (s *Service) Declared(ctx context.Context, userIDs []string) (map[string]De
 		out[r.UserID] = d
 	}
 	return out, nil
+}
+
+// DeclareLater stores the declaration of an account from before sign-up asked for one (owner, 2026-10-31): once
+// (ErrAlreadyDeclared), and only until an identity submission exists (ErrSubmitted: the name on the submission is the
+// one shown and reviewed). Its own transaction; audited as the player's act, without the details.
+func (s *Service) DeclareLater(ctx context.Context, userID string, d Declaration) error {
+	n, err := d.Normalized()
+	if err != nil {
+		return err
+	}
+	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+		q := store.New(tx)
+		if _, err := q.LockUserKYC(ctx, userID); err != nil {
+			return err
+		}
+		if _, err := q.LatestKYCCheck(ctx, userID); err == nil {
+			return ErrSubmitted
+		} else if !errors.Is(err, pgx.ErrNoRows) {
+			return err
+		}
+		rows, err := q.DeclaredIdentitiesFor(ctx, []string{userID})
+		if err != nil {
+			return err
+		}
+		if len(rows) > 0 {
+			return ErrAlreadyDeclared
+		}
+		if err := s.Declare(ctx, tx, userID, n); err != nil {
+			return err
+		}
+		return s.audit.Record(ctx, tx, audit.Event{ActorType: audit.Player, ActorID: userID, Action: "identity.declared",
+			EntityType: "user", EntityID: userID, Details: map[string]any{"source": "account"}})
+	})
+	var pe *pgconn.PgError
+	if errors.As(err, &pe) && pe.Code == "23505" { // two requests at once: the first one's declaration stands
+		return ErrAlreadyDeclared
+	}
+	return err
+}
+
+// Own is what a player sees of their own identity: the name and ID number they gave, and where they stand. Status is
+// none (nothing given), declared (given at sign-up or from the account, not checked yet), submitted (an identity
+// submission exists, pending, in review or refused) or verified.
+type Own struct {
+	FullName string
+	IDNumber string
+	Status   string
+}
+
+// OwnIdentity returns the player's own name, ID number and status: from the latest identity submission, else the
+// declaration (their own data, so no unmasking is audited).
+func (s *Service) OwnIdentity(ctx context.Context, userID string) (Own, error) {
+	rows, err := store.New(s.pool).LatestChecksFor(ctx, []string{userID})
+	if err != nil {
+		return Own{}, err
+	}
+	if len(rows) == 0 {
+		d, err := s.Declared(ctx, []string{userID})
+		if err != nil {
+			return Own{}, err
+		}
+		if v, ok := d[userID]; ok {
+			return Own{FullName: v.Full(), IDNumber: v.IDNumber, Status: "declared"}, nil
+		}
+		return Own{Status: "none"}, nil
+	}
+	nm, err := s.kr.Decrypt(rows[0].FullNameEnc, []byte("kyc.full_name"))
+	if err != nil {
+		return Own{}, err
+	}
+	id, err := s.kr.Decrypt(rows[0].IDNumberEnc, []byte("kyc.id_number"))
+	if err != nil {
+		return Own{}, err
+	}
+	st := "submitted"
+	if Status(rows[0].Status) == Verified {
+		st = "verified"
+	}
+	return Own{FullName: string(nm), IDNumber: string(id), Status: st}, nil
 }

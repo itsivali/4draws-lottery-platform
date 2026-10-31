@@ -19,3 +19,9 @@ final limitsProvider = FutureProvider<Map<String, LimitState>>((ref) => ref.watc
 final declaredIdentityProvider = FutureProvider<DeclaredIdentity?>(
   (ref) => ref.watch(accountRepositoryProvider).declaredIdentity(),
 );
+
+/// The devices signed in to the account.
+final sessionsProvider = FutureProvider<List<DeviceSession>>((ref) => ref.watch(accountRepositoryProvider).sessions());
+
+/// Whether the account has a password and which Google or Apple identities sign in to it.
+final signInsProvider = FutureProvider<SignInMethods>((ref) => ref.watch(accountRepositoryProvider).signIns());

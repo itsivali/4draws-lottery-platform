@@ -11,6 +11,33 @@ KycStatus kycStatusFrom(String s) => switch (s) {
   _ => throw FormatException('kyc status: $s'),
 };
 
+/// Where the player's declared identity stands (owner, 2026-10-31): nothing given, given but not checked, an identity
+/// submission made, or verified.
+enum IdentityStatus { none, declared, submitted, verified }
+
+IdentityStatus identityStatusFrom(String s) => switch (s) {
+  'none' => IdentityStatus.none,
+  'declared' => IdentityStatus.declared,
+  'submitted' => IdentityStatus.submitted,
+  'verified' => IdentityStatus.verified,
+  _ => throw FormatException('identity status: $s'),
+};
+
+class AccountIdentity {
+  const AccountIdentity({required this.status, required this.nationalIdHint});
+
+  factory AccountIdentity.fromJson(JsonObject j) =>
+      AccountIdentity(status: identityStatusFrom(j.str('status')), nationalIdHint: j.strOrNull('national_id_hint'));
+
+  final IdentityStatus status;
+
+  /// The last three digits of the ID number given, never the number itself; null when none was given.
+  final String? nationalIdHint;
+
+  /// "•••••678", or null when no number was given.
+  String? get maskedNationalId => nationalIdHint == null ? null : '•••••$nationalIdHint';
+}
+
 class Restriction {
   const Restriction({required this.kind, required this.until});
 
@@ -40,6 +67,7 @@ class Account {
     this.hasPassword = true,
     this.firstName,
     this.secondName,
+    this.identity,
   });
 
   factory Account.fromJson(JsonObject j) => Account(
@@ -48,6 +76,10 @@ class Account {
     hasPassword: j.raw['has_password'] != false,
     firstName: j.strOrNull('first_name'),
     secondName: j.strOrNull('second_name'),
+    identity: switch (j.objectOrNull('identity')) {
+      final i? => AccountIdentity.fromJson(i),
+      null => null,
+    },
     userId: j.str('user_id'),
     msisdn: j.str('msisdn'),
     phoneVerified: j.boolean('phone_verified'),
@@ -83,9 +115,22 @@ class Account {
   /// False for an account that signs in with Google or Apple only.
   final bool hasPassword;
 
-  /// The first two words of the name on the player's identity submission; null before any submission.
+  /// The first two words of the player's name: from their identity submission, else what they declared at sign-up or
+  /// from their account; null for an account that gave neither.
   final String? firstName;
   final String? secondName;
+
+  /// Where the declared identity stands; null when the server has no identity service.
+  final AccountIdentity? identity;
+
+  /// The account has no names or ID number yet (one from before sign-up asked for them): the app asks for them.
+  bool get needsIdentity => identity?.status == IdentityStatus.none;
+
+  /// "JW" from the names, for the avatar; null without names.
+  String? get initials {
+    final letters = [?firstName, ?secondName].where((p) => p.isNotEmpty).map((p) => p[0].toUpperCase()).join();
+    return letters.isEmpty ? null : letters;
+  }
 
   /// "First Second", or null when the account has no names yet.
   String? get displayName {
@@ -141,4 +186,62 @@ class DeclaredIdentity {
   final String nationalId;
 
   String get fullName => '$firstName $secondName';
+}
+
+/// One of the devices signed in to the account (owner, 2026-10-31).
+class DeviceSession {
+  const DeviceSession({
+    required this.id,
+    required this.platform,
+    required this.deviceVerdict,
+    required this.createdAt,
+    required this.lastUsedAt,
+    required this.current,
+  });
+
+  factory DeviceSession.fromJson(JsonObject j) => DeviceSession(
+    id: j.str('id'),
+    platform: j.str('platform'),
+    deviceVerdict: j.str('device_verdict'),
+    createdAt: j.instant('created_at'),
+    lastUsedAt: j.instant('last_used_at'),
+    current: j.boolean('current'),
+  );
+
+  final String id;
+
+  /// android, ios or web.
+  final String platform;
+
+  /// The device's attestation verdict: none, passed or failed.
+  final String deviceVerdict;
+  final DateTime createdAt;
+  final DateTime lastUsedAt;
+
+  /// The session this app is using.
+  final bool current;
+}
+
+/// A Google or Apple identity that signs in to the account (ADR 0020).
+class LinkedSignIn {
+  const LinkedSignIn({required this.provider, required this.linkedAt});
+
+  factory LinkedSignIn.fromJson(JsonObject j) =>
+      LinkedSignIn(provider: j.str('provider'), linkedAt: j.instant('linked_at'));
+
+  final String provider;
+  final DateTime linkedAt;
+}
+
+/// How the account can be signed in to.
+class SignInMethods {
+  const SignInMethods({required this.password, required this.providers});
+
+  factory SignInMethods.fromJson(JsonObject j) =>
+      SignInMethods(password: j.boolean('password'), providers: j.list('providers', LinkedSignIn.fromJson));
+
+  final bool password;
+  final List<LinkedSignIn> providers;
+
+  LinkedSignIn? linked(String provider) => providers.where((p) => p.provider == provider).firstOrNull;
 }

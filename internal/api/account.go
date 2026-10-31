@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/itsivali/lottery-platform/internal/identity"
+	"github.com/itsivali/lottery-platform/internal/kyc"
 	"github.com/itsivali/lottery-platform/internal/payments/daraja"
 	"github.com/itsivali/lottery-platform/internal/platform/httpx"
 	"github.com/itsivali/lottery-platform/internal/wallet"
@@ -98,19 +99,26 @@ func (h *handlers) getAccount(w http.ResponseWriter, r *http.Request) {
 		internalError(w, err)
 		return
 	}
-	// the player's name is the one on their identity submission (owner, 2026-10-30): its first two words
-	var first, second *string
+	// the player's name is the one on their identity submission, else the one they declared (owner, 2026-10-30): its
+	// first two words; with it, where the identity stands and a hint of the ID number, never the number itself
+	var first, second, hint *string
+	var ident map[string]any
 	if h.KYC != nil {
-		name, err := h.KYC.OwnName(r.Context(), p.UserID)
+		own, err := h.KYC.OwnIdentity(r.Context(), p.UserID)
 		if err != nil {
 			internalError(w, err)
 			return
 		}
-		if words := strings.Fields(name); len(words) >= 2 {
+		if words := strings.Fields(own.FullName); len(words) >= 2 {
 			first, second = &words[0], &words[1]
 		} else if len(words) == 1 {
 			first = &words[0]
 		}
+		if n := len(own.IDNumber); n >= 3 {
+			last := own.IDNumber[n-3:]
+			hint = &last
+		}
+		ident = map[string]any{"status": own.Status, "national_id_hint": hint}
 	}
 	var restriction *restrictionJSON
 	if h.RG != nil {
@@ -127,8 +135,93 @@ func (h *handlers) getAccount(w http.ResponseWriter, r *http.Request) {
 		"user_id": a.UserID, "msisdn": a.MSISDN, "phone_verified": a.PhoneVerified, "kyc_status": a.KYCStatus, "status": a.Status,
 		"created_at": a.CreatedAt, "restriction": restriction, "closure_requested_at": a.ClosureRequestedAt,
 		"must_change_password": a.MustChangePassword, "email": a.Email, "has_password": a.HasPassword,
-		"first_name": first, "second_name": second,
+		"first_name": first, "second_name": second, "identity": ident,
 	})
+}
+
+// declareIdentity takes the first name, second name and national ID number of an account that gave none at sign-up
+// (owner, 2026-10-31): once, and only until an identity submission exists.
+func (h *handlers) declareIdentity(w http.ResponseWriter, r *http.Request) {
+	var in declaredJSON
+	if !httpx.DecodeJSON(w, r, &in) {
+		return
+	}
+	if h.KYC == nil {
+		httpx.WriteProblemRetry(w, http.StatusServiceUnavailable, "unavailable", "Temporarily unavailable", "", 5)
+		return
+	}
+	p, _ := principalFrom(r.Context())
+	if !h.limit(w, r, "identity:user:"+p.UserID, 10, time.Hour) {
+		return
+	}
+	err := h.KYC.DeclareLater(r.Context(), p.UserID, kyc.Declaration{FirstName: in.FirstName, SecondName: in.SecondName, IDNumber: in.NationalID})
+	switch {
+	case err == nil:
+		w.WriteHeader(http.StatusNoContent)
+	case errors.Is(err, kyc.ErrInvalidInput):
+		invalidIdentity(w)
+	case errors.Is(err, kyc.ErrAlreadyDeclared):
+		httpx.WriteProblem(w, http.StatusConflict, "identity-declared", "Your names and ID number are already on your account",
+			"they are checked, not changed, before your first withdrawal; contact support if they are wrong")
+	case errors.Is(err, kyc.ErrSubmitted):
+		httpx.WriteProblem(w, http.StatusConflict, "kyc-state", "Your identity is already submitted for verification",
+			"the name on that submission is the one shown")
+	default:
+		internalError(w, err)
+	}
+}
+
+type sessionJSON struct {
+	ID            string    `json:"id"`
+	Platform      string    `json:"platform"`
+	DeviceVerdict string    `json:"device_verdict"`
+	CreatedAt     time.Time `json:"created_at"`
+	LastUsedAt    time.Time `json:"last_used_at"`
+	Current       bool      `json:"current"`
+}
+
+// listSessions shows the player every device signed in to their account (open sessions, newest first).
+func (h *handlers) listSessions(w http.ResponseWriter, r *http.Request) {
+	p, _ := principalFrom(r.Context())
+	list, err := h.Identity.Sessions(r.Context(), p.UserID)
+	if err != nil {
+		internalError(w, err)
+		return
+	}
+	out := make([]sessionJSON, 0, len(list))
+	for _, s := range list {
+		out = append(out, sessionJSON{ID: s.ID, Platform: s.Platform, DeviceVerdict: s.DeviceVerdict, CreatedAt: s.CreatedAt,
+			LastUsedAt: s.LastUsedAt, Current: s.ID == p.SessionID})
+	}
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{"sessions": out})
+}
+
+// revokeOtherSessions signs every other device out; the one making the call stays signed in.
+func (h *handlers) revokeOtherSessions(w http.ResponseWriter, r *http.Request) {
+	p, _ := principalFrom(r.Context())
+	if !h.limit(w, r, "sessions:user:"+p.UserID, 10, time.Hour) {
+		return
+	}
+	if _, err := h.Identity.EndOtherSessions(r.Context(), p.UserID, p.SessionID); err != nil {
+		internalError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// signIns says how the account can be signed in to: with a password, and with which Google or Apple identities.
+func (h *handlers) signIns(w http.ResponseWriter, r *http.Request) {
+	p, _ := principalFrom(r.Context())
+	hasPassword, linked, err := h.Identity.SignInMethods(r.Context(), p.UserID)
+	if err != nil {
+		internalError(w, err)
+		return
+	}
+	providers := make([]map[string]any, 0, len(linked))
+	for _, l := range linked {
+		providers = append(providers, map[string]any{"provider": l.Provider, "linked_at": l.LinkedAt})
+	}
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{"password": hasPassword, "providers": providers})
 }
 
 // setEmail changes or adds the player's email address; an account with a password must give it (ADR 0021).

@@ -708,3 +708,49 @@ func TestDeclared_SignUpNamesAndIDAreKeptAndManualReviewNeedsNoDateOfBirth(t *te
 		t.Fatalf("registry without a date of birth: %v", err)
 	}
 }
+
+// Owner, 2026-10-31: an account from before sign-up asked for them gives its names and ID number from its account,
+// once, and only until an identity submission exists.
+func TestDeclared_LaterDeclarationIsMadeOnceAndOnlyBeforeASubmission(t *testing.T) {
+	e := manualSetup(t)
+	ctx := context.Background()
+	u := e.user(t)
+	if own, err := e.svc.OwnIdentity(ctx, u); err != nil || own != (kyc.Own{Status: "none"}) {
+		t.Fatalf("own identity before anything = %+v, %v", own, err)
+	}
+	if err := e.svc.DeclareLater(ctx, u, kyc.Declaration{FirstName: "A", SecondName: "Otieno", IDNumber: "24681357"}); !errors.Is(err, kyc.ErrInvalidInput) {
+		t.Fatalf("invalid names: %v", err)
+	}
+	if err := e.svc.DeclareLater(ctx, u, kyc.Declaration{FirstName: " Amina", SecondName: "Otieno ", IDNumber: "24681357"}); err != nil {
+		t.Fatal(err)
+	}
+	if own, err := e.svc.OwnIdentity(ctx, u); err != nil || own != (kyc.Own{FullName: "Amina Otieno", IDNumber: "24681357", Status: "declared"}) {
+		t.Fatalf("own identity once declared = %+v, %v", own, err)
+	}
+	if err := e.svc.DeclareLater(ctx, u, kyc.Declaration{FirstName: "Grace", SecondName: "Otieno", IDNumber: "24681357"}); !errors.Is(err, kyc.ErrAlreadyDeclared) {
+		t.Fatalf("a second declaration: %v", err)
+	}
+	var n int
+	var details string
+	if err := e.pool.QueryRow(ctx, `SELECT count(*), max(details::text) FROM audit.audit_log WHERE action = 'identity.declared' AND actor_type = 'player' AND actor_id = $1`, u).Scan(&n, &details); err != nil ||
+		n != 1 || !strings.Contains(details, `"source": "account"`) || strings.Contains(details, "Amina") || strings.Contains(details, "24681357") {
+		t.Fatalf("audited %d times with %s (%v): want once, the source only", n, details, err)
+	}
+	// after a submission the name on it is the one shown; nothing can be declared any more
+	v := e.user(t)
+	if _, err := e.svc.Submit(ctx, v, kyc.Submission{IDNumber: "24681358", FullName: "Grace Njeri Kamau"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.svc.DeclareLater(ctx, v, kyc.Declaration{FirstName: "Grace", SecondName: "Njeri", IDNumber: "24681358"}); !errors.Is(err, kyc.ErrSubmitted) {
+		t.Fatalf("declaring after a submission: %v", err)
+	}
+	if own, err := e.svc.OwnIdentity(ctx, v); err != nil || own != (kyc.Own{FullName: "Grace Njeri Kamau", IDNumber: "24681358", Status: "submitted"}) {
+		t.Fatalf("own identity once submitted = %+v, %v", own, err)
+	}
+	if _, err := e.svc.Review(ctx, v, "staff-1", true, "matches"); err != nil {
+		t.Fatal(err)
+	}
+	if own, err := e.svc.OwnIdentity(ctx, v); err != nil || own.Status != "verified" {
+		t.Fatalf("own identity once verified = %+v, %v", own, err)
+	}
+}

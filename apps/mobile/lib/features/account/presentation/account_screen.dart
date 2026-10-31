@@ -24,6 +24,7 @@ import '../domain/account_models.dart';
   KycStatus.rejected => (StatusTone.error, 'ID not accepted'),
 };
 
+/// The player's profile (owner, 2026-10-31): who they are, then everything they manage about the account.
 class AccountScreen extends ConsumerWidget {
   const AccountScreen({super.key});
 
@@ -32,10 +33,17 @@ class AccountScreen extends ConsumerWidget {
     final account = ref.watch(accountProvider);
     final hapticsOn = ref.watch(hapticsEnabledProvider);
     final hapticsSupported = ref.watch(hapticsSupportedProvider);
-    final t = Theme.of(context).textTheme;
     final c = context.colors;
+    final a = account.value;
     Widget link(IconData icon, String title, String route, {String? subtitle}) =>
         ListRow(icon: icon, title: title, subtitle: subtitle, chevron: true, onTap: () => context.go(route));
+    final detailsSubtitle = switch (a) {
+      null => null,
+      Account(needsIdentity: true) => 'Add your first name, second name and ID number',
+      Account(identity: AccountIdentity(status: IdentityStatus.verified)) => 'Names and ID number, verified',
+      Account(identity: AccountIdentity(status: IdentityStatus.submitted)) => 'Names and ID number, being checked',
+      _ => 'Names and ID number, checked before your first withdrawal',
+    };
     return PageScaffold(
       title: 'Account',
       onRefresh: () async => ref.invalidate(accountProvider),
@@ -45,66 +53,44 @@ class AccountScreen extends ConsumerWidget {
             value: account,
             what: 'your account',
             onRetry: () => ref.invalidate(accountProvider),
-            data: (a) => Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  width: 52,
-                  height: 52,
-                  decoration: BoxDecoration(color: c.primaryContainer, shape: BoxShape.circle),
-                  child: ExcludeSemantics(child: Icon(Icons.person_rounded, color: c.onPrimaryContainer, size: 28)),
-                ),
-                const SizedBox(width: Space.lg),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(a.displayName ?? formatMsisdn(a.msisdn), style: t.headlineSmall),
-                      if (a.displayName != null) Text(formatMsisdn(a.msisdn), style: t.bodySmall),
-                      Text('Member since ${formatDay(a.createdAt)} ${a.createdAt.year}', style: t.bodySmall),
-                      const SizedBox(height: Space.md),
-                      Wrap(
-                        spacing: Space.sm,
-                        runSpacing: Space.sm,
-                        children: [
-                          StatusPill(tone: kycPill(a.kycStatus).$1, label: kycPill(a.kycStatus).$2),
-                          a.phoneVerified
-                              ? const StatusPill(tone: StatusTone.success, label: 'Number confirmed')
-                              : const StatusPill(tone: StatusTone.warning, label: 'Number not confirmed yet'),
-                          if (a.status == 'suspended')
-                            const StatusPill(tone: StatusTone.error, label: 'Account suspended'),
-                          if (a.status == 'closed') const StatusPill(tone: StatusTone.neutral, label: 'Account closed'),
-                          if (a.restriction case final r?)
-                            StatusPill(
-                              tone: StatusTone.pending,
-                              label: r.selfExclusion
-                                  ? (r.until == null
-                                        ? 'Self-excluded permanently'
-                                        : 'Self-excluded until ${formatEat(r.until!)}')
-                                  : (r.until == null ? 'On a break' : 'Break until ${formatEat(r.until!)}'),
-                            ),
-                          if (a.closureRequestedAt != null)
-                            const StatusPill(tone: StatusTone.pending, label: 'Closure requested'),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
+            data: (a) => _ProfileHeader(account: a),
           ),
         ),
-        const SectionHeader(title: 'Your account'),
+        const SectionHeader(title: 'Your details'),
         RowGroup(
           children: [
-            link(Icons.badge_rounded, 'Identity verification', '/account/verify'),
+            link(
+              a?.needsIdentity ?? false ? Icons.person_add_alt_1_rounded : Icons.badge_rounded,
+              'Your details',
+              '/account/details',
+              subtitle: detailsSubtitle,
+            ),
+            link(
+              Icons.verified_user_rounded,
+              'Identity verification',
+              '/account/verify',
+              subtitle: a == null ? null : kycPill(a.kycStatus).$2,
+            ),
+          ],
+        ),
+        const SectionHeader(title: 'Sign-in and security'),
+        RowGroup(
+          children: [
             link(Icons.lock_rounded, 'Change password', '/account/password'),
             link(
               Icons.alternate_email_rounded,
               'Email address',
               '/account/email',
-              subtitle: account.value?.email ?? 'Add one so you can reset a forgotten password',
+              // the address itself is in the header above
+              subtitle: a?.email == null ? 'Add one so you can reset a forgotten password' : 'Where a reset link goes',
             ),
+            link(
+              Icons.devices_rounded,
+              'Devices signed in',
+              '/account/devices',
+              subtitle: 'See every device with this account open; sign the others out',
+            ),
+            link(Icons.login_rounded, 'Sign-in methods', '/account/sign-ins', subtitle: 'Password, Google and Apple'),
           ],
         ),
         const SectionHeader(title: 'Play safely'),
@@ -141,7 +127,7 @@ class AccountScreen extends ConsumerWidget {
             ),
           ],
         ),
-        const SizedBox(height: Space.sm),
+        const SectionHeader(title: 'Account'),
         Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -172,6 +158,96 @@ class AccountScreen extends ConsumerWidget {
             const SizedBox(height: Space.sm),
             const BackOfficeLink(),
           ],
+        ),
+      ],
+    );
+  }
+}
+
+/// Initials avatar, name (or the invitation to add it), number, email, member since, and the account's states.
+class _ProfileHeader extends StatelessWidget {
+  const _ProfileHeader({required this.account});
+
+  final Account account;
+
+  @override
+  Widget build(BuildContext context) {
+    final a = account;
+    final t = Theme.of(context).textTheme;
+    final c = context.colors;
+    final initials = a.initials;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 56,
+          height: 56,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(color: c.primaryContainer, shape: BoxShape.circle),
+          child: ExcludeSemantics(
+            child: initials == null
+                ? Icon(Icons.person_rounded, color: c.onPrimaryContainer, size: 28)
+                : Text(
+                    initials,
+                    style: t.titleLarge?.copyWith(color: c.onPrimaryContainer, fontWeight: FontWeight.w700),
+                  ),
+          ),
+        ),
+        const SizedBox(width: Space.lg),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (a.displayName case final name?)
+                Text(name, style: t.headlineSmall)
+              else if (a.needsIdentity)
+                // the invitation stands where the name will: tapping it opens the form
+                InkWell(
+                  onTap: () => context.go('/account/details'),
+                  borderRadius: BorderRadius.circular(Radii.sm),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: Space.xxs),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text('Add your names', style: t.headlineSmall?.copyWith(color: c.primary)),
+                        const SizedBox(width: Space.xs),
+                        ExcludeSemantics(child: Icon(Icons.edit_rounded, size: 20, color: c.primary)),
+                      ],
+                    ),
+                  ),
+                )
+              else
+                Text(formatMsisdn(a.msisdn), style: t.headlineSmall),
+              if (a.displayName != null || a.needsIdentity) Text(formatMsisdn(a.msisdn), style: t.bodySmall),
+              if (a.email case final email?) Text(email, style: t.bodySmall),
+              Text('Member since ${formatDay(a.createdAt)} ${a.createdAt.year}', style: t.bodySmall),
+              const SizedBox(height: Space.md),
+              Wrap(
+                spacing: Space.sm,
+                runSpacing: Space.sm,
+                children: [
+                  StatusPill(tone: kycPill(a.kycStatus).$1, label: kycPill(a.kycStatus).$2),
+                  a.phoneVerified
+                      ? const StatusPill(tone: StatusTone.success, label: 'Number confirmed')
+                      : const StatusPill(tone: StatusTone.warning, label: 'Number not confirmed yet'),
+                  if (a.status == 'suspended') const StatusPill(tone: StatusTone.error, label: 'Account suspended'),
+                  if (a.status == 'closed') const StatusPill(tone: StatusTone.neutral, label: 'Account closed'),
+                  if (a.restriction case final r?)
+                    StatusPill(
+                      tone: StatusTone.pending,
+                      label: r.selfExclusion
+                          ? (r.until == null
+                                ? 'Self-excluded permanently'
+                                : 'Self-excluded until ${formatEat(r.until!)}')
+                          : (r.until == null ? 'On a break' : 'Break until ${formatEat(r.until!)}'),
+                    ),
+                  if (a.closureRequestedAt != null)
+                    const StatusPill(tone: StatusTone.pending, label: 'Closure requested'),
+                ],
+              ),
+            ],
+          ),
         ),
       ],
     );

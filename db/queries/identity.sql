@@ -174,3 +174,22 @@ LIMIT sqlc.arg(lim);
 -- suspend an active account or reinstate a suspended one; closed accounts are left alone
 UPDATE identity.users SET status = sqlc.arg(status), updated_at = sqlc.arg(at)
 WHERE id = sqlc.arg(id) AND status = sqlc.arg(from_status);
+
+-- The player's open sessions, newest first (owner, 2026-10-31: the account's "Devices signed in"): the device's platform
+-- and attestation verdict, and when a token was last issued to the session (its start, if never refreshed).
+-- name: OpenSessions :many
+SELECT s.id, s.created_at, COALESCE(s.platform, d.platform, 'web')::text AS platform,
+       COALESCE(d.attestation_verdict, 'none')::text AS device_verdict,
+       COALESCE((SELECT max(r.issued_at) FROM identity.refresh_tokens r WHERE r.session_id = s.id), s.created_at)::timestamptz AS last_used_at
+FROM identity.sessions s LEFT JOIN identity.devices d ON d.id = s.device_id
+WHERE s.user_id = sqlc.arg(user_id) AND s.revoked_at IS NULL
+ORDER BY s.created_at DESC, s.id DESC;
+
+-- The player signs every other device out, keeping the one they are on.
+-- name: RevokeOtherSessionsByPlayer :execrows
+UPDATE identity.sessions SET revoked_at = sqlc.arg(at), revoked_reason = 'logout'
+WHERE user_id = sqlc.arg(user_id) AND id <> sqlc.arg(keep_session_id) AND revoked_at IS NULL;
+
+-- The Google or Apple identities that sign in to the account, oldest first.
+-- name: AuthIdentitiesFor :many
+SELECT provider, created_at FROM identity.auth_identities WHERE user_id = $1 ORDER BY created_at, id;

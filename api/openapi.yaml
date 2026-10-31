@@ -910,6 +910,87 @@ paths:
         "403": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
         "429": { $ref: "#/components/responses/Problem" }
+  /v1/account/identity:
+    post:
+      operationId: declareIdentity
+      tags: [account]
+      summary: Give the first name, second name and national ID number of an account that gave none at sign-up
+      description: |
+        Owner, 2026-10-31. Accounts from before sign-up asked for them (ADR 0022) give them here, once: the same
+        validation as sign-up (400 `invalid-identity`), 409 `identity-declared` when the account already has them,
+        409 `kyc-state` once an identity submission exists (the name on the submission is the one shown and reviewed).
+        Stored encrypted; shown back by `GET /v1/account` and `GET /v1/kyc`; checked before the first withdrawal.
+        Audited without the details. Rate limited per account.
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/IdentityDeclaration" }
+      responses:
+        "204": { description: Stored }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+  /v1/account/sessions:
+    get:
+      operationId: listSessions
+      tags: [account]
+      summary: The devices signed in to the account
+      description: Open sessions, newest first, with the one making the call marked `current`.
+      responses:
+        "200":
+          description: Sessions
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [sessions]
+                properties:
+                  sessions:
+                    type: array
+                    items: { $ref: "#/components/schemas/Session" }
+        "401": { $ref: "#/components/responses/Problem" }
+  /v1/account/sessions/revoke-others:
+    post:
+      operationId: revokeOtherSessions
+      tags: [account]
+      summary: Sign every other device out
+      description: |
+        Ends every open session of the account but the one making the call (their refresh tokens stop working at
+        once; their access tokens within ten minutes). Audited with the count. Rate limited per account.
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      responses:
+        "204": { description: Other sessions ended }
+        "401": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+  /v1/account/sign-ins:
+    get:
+      operationId: listSignIns
+      tags: [account]
+      summary: How the account can be signed in to
+      description: Whether it has a password, and the Google or Apple identities linked to it (ADR 0020), oldest first.
+      responses:
+        "200":
+          description: Sign-in methods
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [password, providers]
+                properties:
+                  password: { type: boolean, description: "False for an account that signs in with Google or Apple only." }
+                  providers:
+                    type: array
+                    items:
+                      type: object
+                      required: [provider, linked_at]
+                      properties:
+                        provider: { type: string, enum: [google, apple] }
+                        linked_at: { type: string, format: date-time }
+        "401": { $ref: "#/components/responses/Problem" }
   /v1/account/closure:
     post:
       operationId: requestClosure
@@ -3099,6 +3180,24 @@ components:
       required: true
       schema: { type: string, enum: [google, apple] }
   responses:
+    IdentityDeclaration:
+      type: object
+      additionalProperties: false
+      required: [first_name, second_name, national_id]
+      properties:
+        first_name: { type: string, description: "As on the national ID: a letter, then letters, spaces, dots, apostrophes or hyphens (2 to 100)." }
+        second_name: { type: string }
+        national_id: { type: string, pattern: "^[0-9]{7,9}$" }
+    Session:
+      type: object
+      required: [id, platform, device_verdict, created_at, last_used_at, current]
+      properties:
+        id: { type: string }
+        platform: { type: string, enum: [android, ios, web] }
+        device_verdict: { type: string, enum: [none, passed, failed], description: The device's attestation verdict. }
+        created_at: { type: string, format: date-time, description: When the device signed in. }
+        last_used_at: { type: string, format: date-time, description: When a token was last issued to the session (its start, if never refreshed). }
+        current: { type: boolean, description: The session making the call. }
     Problem:
       description: RFC 7807 problem details
       content:
@@ -3407,8 +3506,25 @@ components:
         must_change_password: { type: boolean, description: Staff gave the player a temporary password they have not replaced yet; the app asks for a new one first. }
         email: { type: [string, "null"], format: email, description: "Null for an account from before addresses were asked for (ADR 0021)." }
         has_password: { type: boolean, description: "False for an account that signs in with Google or Apple only (ADR 0020)." }
-        first_name: { type: [string, "null"], description: "The first word of the name on the player's latest identity submission; null before any submission." }
-        second_name: { type: [string, "null"] }
+        first_name:
+          type: [string, "null"]
+          description: |
+            The first word of the player's name: from their latest identity submission, else from the first name,
+            second name and ID number they declared at sign-up (ADR 0022) or later from their account
+            (`POST /v1/account/identity`); null for an account that gave neither.
+        second_name: { type: [string, "null"], description: The second word of that name. }
+        identity:
+          description: Where the player's declared identity stands, so the app knows whether to ask for it. Null when the deployment has no identity service.
+          oneOf:
+            - type: object
+              required: [status, national_id_hint]
+              properties:
+                status:
+                  type: string
+                  enum: [none, declared, submitted, verified]
+                  description: "`none`: nothing given yet; `declared`: given, not checked; `submitted`: an identity submission exists (pending, in review or refused); `verified`."
+                national_id_hint: { type: [string, "null"], description: "The last 3 digits of the ID number given, to show it masked; never the number itself. Null when none was given." }
+            - { type: "null" }
     Problem:
       type: object
       required: [type, title, status]

@@ -26,6 +26,7 @@ import '../data/auth_repository.dart';
 import '../data/provider_sign_in.dart';
 import '../data/sign_in_providers.dart';
 import 'email_rules.dart';
+import 'identity_fields.dart';
 
 enum _Mode { signIn, create }
 
@@ -558,7 +559,7 @@ class _Form extends StatelessWidget {
       title: const Text('I am 18 or older'),
       subtitle: const Text('Your M-Pesa number is registered to you as an adult, against your ID.'),
     );
-    final identityFields = _IdentityFields(
+    final identityFields = IdentityFields(
       firstName: firstName,
       secondName: secondName,
       nationalId: nationalId,
@@ -822,67 +823,4 @@ class _GoogleMarkPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}
-
-/// First name, second name, then the national ID number (owner, 2026-10-30): asked of every new account, kept, and
-/// checked against the ID before the first withdrawal.
-class _IdentityFields extends StatelessWidget {
-  const _IdentityFields({required this.firstName, required this.secondName, required this.nationalId, this.error});
-
-  final TextEditingController firstName;
-  final TextEditingController secondName;
-  final TextEditingController nationalId;
-  final String? error;
-
-  static final _name = RegExp(r"^\p{L}[\p{L} .'-]{1,99}$", unicode: true);
-
-  static String? _nameError(String? v, String which) {
-    final s = (v ?? '').trim().replaceAll(RegExp(r'\s+'), ' ');
-    if (s.isEmpty) return 'Enter your $which name as on your ID.';
-    return _name.hasMatch(s) ? null : 'Use the letters of your $which name as on your ID.';
-  }
-
-  @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    children: [
-      TextFormField(
-        controller: firstName,
-        autofillHints: const [AutofillHints.givenName],
-        textCapitalization: TextCapitalization.words,
-        textInputAction: TextInputAction.next,
-        decoration: const InputDecoration(labelText: 'First name', prefixIcon: Icon(Icons.badge_rounded)),
-        validator: (v) => _nameError(v, 'first'),
-      ),
-      const SizedBox(height: Space.lg),
-      TextFormField(
-        controller: secondName,
-        autofillHints: const [AutofillHints.familyName],
-        textCapitalization: TextCapitalization.words,
-        textInputAction: TextInputAction.next,
-        decoration: const InputDecoration(
-          labelText: 'Second name',
-          helperText: 'Both names as on your ID, as M-Pesa shows them',
-          prefixIcon: Icon(Icons.badge_outlined),
-        ),
-        validator: (v) => _nameError(v, 'second'),
-      ),
-      const SizedBox(height: Space.lg),
-      TextFormField(
-        controller: nationalId,
-        keyboardType: TextInputType.number,
-        textInputAction: TextInputAction.next,
-        inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(9)],
-        decoration: InputDecoration(
-          labelText: 'National ID number',
-          helperText: 'Checked before your first withdrawal',
-          errorText: error,
-          errorMaxLines: 3,
-          prefixIcon: const Icon(Icons.credit_card_rounded),
-        ),
-        validator: (v) =>
-            RegExp(r'^[0-9]{7,9}$').hasMatch((v ?? '').trim()) ? null : 'Enter the 7 to 9 digits of your ID number.',
-      ),
-    ],
-  );
 }

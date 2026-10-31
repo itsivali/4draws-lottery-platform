@@ -148,6 +148,10 @@ func Mount(d Deps) func(chi.Router) {
 				r.Get("/account", h.getAccount)
 				r.Post("/account/closure", h.requestClosure)
 				r.Put("/account/email", h.setEmail)
+				r.Post("/account/identity", h.declareIdentity)
+				r.Get("/account/sessions", h.listSessions)
+				r.Post("/account/sessions/revoke-others", h.revokeOtherSessions)
+				r.Get("/account/sign-ins", h.signIns)
 			})
 		})
 	}

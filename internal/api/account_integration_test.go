@@ -234,3 +234,162 @@ func TestAPI_SignUpTakesNamesAndIDNumberThatVerificationStartsFrom(t *testing.T)
 		t.Fatalf("submit from sign-up: %d %s", s.Code, s.Raw)
 	}
 }
+
+// undeclare removes an account's sign-up declaration, standing in for an account from before 2026-10-30 (the table is
+// append-only for the application; the database owner lifts the trigger for the test).
+func (e *env) undeclare(t *testing.T, userID string) {
+	t.Helper()
+	e.ownerExec(t, `ALTER TABLE kyc.declared_identities DISABLE TRIGGER declared_identities_append_only`)
+	e.ownerExec(t, `DELETE FROM kyc.declared_identities WHERE user_id = $1`, userID)
+	e.ownerExec(t, `ALTER TABLE kyc.declared_identities ENABLE TRIGGER declared_identities_append_only`)
+}
+
+// Owner, 2026-10-31: a player whose account has no names fills them in from their account, once.
+func TestAPI_AccountWithoutNamesGivesThemOnceFromTheAccount(t *testing.T) {
+	e := setup(t)
+	s := e.signIn(t)
+	id := e.userID(t, s)
+	// a sign-up of today declares: the account says so and refuses a second declaration
+	r := e.do(t, http.MethodGet, "/v1/account", s.access, nil)
+	identity, _ := r.Body["identity"].(map[string]any)
+	if r.Code != http.StatusOK || identity["status"] != "declared" || identity["national_id_hint"] != "357" || r.Body["first_name"] != "Amina" {
+		t.Fatalf("declared account: %d %s", r.Code, r.Raw)
+	}
+	body := map[string]any{"first_name": "Grace", "second_name": "Wanjiru", "national_id": "13579246"}
+	if r := e.do(t, http.MethodPost, "/v1/account/identity", s.access, body); r.Code != http.StatusConflict || !hasType(r, "identity-declared") {
+		t.Fatalf("second declaration: %d %s", r.Code, r.Raw)
+	}
+
+	// an older account: nothing on it, so the app asks
+	e.undeclare(t, id)
+	r = e.do(t, http.MethodGet, "/v1/account", s.access, nil)
+	identity, _ = r.Body["identity"].(map[string]any)
+	if identity["status"] != "none" || identity["national_id_hint"] != nil || r.Body["first_name"] != nil || r.Body["second_name"] != nil {
+		t.Fatalf("account without a declaration: %s", r.Raw)
+	}
+	if r := e.do(t, http.MethodPost, "/v1/account/identity", s.access, map[string]any{"first_name": "G", "second_name": "Wanjiru", "national_id": "13579246"}); r.Code != http.StatusBadRequest || !hasType(r, "invalid-identity") {
+		t.Fatalf("invalid declaration: %d %s", r.Code, r.Raw)
+	}
+	if r := e.do(t, http.MethodPost, "/v1/account/identity", s.access, body); r.Code != http.StatusNoContent {
+		t.Fatalf("declare: %d %s", r.Code, r.Raw)
+	}
+	r = e.do(t, http.MethodGet, "/v1/account", s.access, nil)
+	identity, _ = r.Body["identity"].(map[string]any)
+	if r.Body["first_name"] != "Grace" || r.Body["second_name"] != "Wanjiru" || identity["status"] != "declared" || identity["national_id_hint"] != "246" {
+		t.Fatalf("account once declared: %s", r.Raw)
+	}
+	k := e.do(t, http.MethodGet, "/v1/kyc", s.access, nil)
+	declared, _ := k.Body["declared"].(map[string]any)
+	if declared["first_name"] != "Grace" || declared["second_name"] != "Wanjiru" || declared["national_id"] != "13579246" {
+		t.Fatalf("kyc declared: %s", k.Raw)
+	}
+	pl := e.do(t, http.MethodGet, "/v1/staff/players", e.member(staff.Staff), nil)
+	players, _ := pl.Body["players"].([]any)
+	if len(players) != 1 || players[0].(map[string]any)["full_name"] != "Grace Wanjiru" || players[0].(map[string]any)["national_id"] != "13579246" {
+		t.Fatalf("players: %s", pl.Raw)
+	}
+	if r := e.do(t, http.MethodPost, "/v1/account/identity", s.access, body); r.Code != http.StatusConflict || !hasType(r, "identity-declared") {
+		t.Fatalf("declaring twice: %d %s", r.Code, r.Raw)
+	}
+	var audited int
+	if err := e.pool.QueryRow(context.Background(), `SELECT count(*) FROM audit.audit_log WHERE action = 'identity.declared' AND actor_id = $1 AND details::text NOT LIKE '%Grace%'`, id).Scan(&audited); err != nil || audited != 1 {
+		t.Fatalf("declaration audited %d times without the names (%v), want once", audited, err)
+	}
+
+	// once an identity submission exists the name comes from it; nothing can be declared any more
+	o := e.signIn(t)
+	e.undeclare(t, e.userID(t, o))
+	if r := e.do(t, http.MethodPost, "/v1/kyc", o.access, map[string]any{"national_id": "11223344", "full_name": "Peter Kamau Mwangi", "date_of_birth": "1990-01-02"}); r.Code != http.StatusAccepted {
+		t.Fatalf("submit: %d %s", r.Code, r.Raw)
+	}
+	if r := e.do(t, http.MethodPost, "/v1/account/identity", o.access, body); r.Code != http.StatusConflict || !hasType(r, "kyc-state") {
+		t.Fatalf("declaring after a submission: %d %s", r.Code, r.Raw)
+	}
+	r = e.do(t, http.MethodGet, "/v1/account", o.access, nil)
+	identity, _ = r.Body["identity"].(map[string]any)
+	if r.Body["first_name"] != "Peter" || r.Body["second_name"] != "Kamau" || identity["status"] != "submitted" || identity["national_id_hint"] != "344" {
+		t.Fatalf("account once submitted: %s", r.Raw)
+	}
+}
+
+// Owner, 2026-10-31: the account lists the devices signed in and signs the others out.
+func TestAPI_AccountListsSessionsAndSignsTheOtherDevicesOut(t *testing.T) {
+	e := setup(t)
+	first := e.signIn(t)
+	e.clk.Advance(time.Minute)
+	// the same account on a second device
+	r := e.do(t, http.MethodPost, "/v1/auth/login", "", map[string]any{"msisdn": first.msisdn, "password": strongPassword,
+		"device": map[string]any{"fingerprint": "fp-second", "platform": "web"}})
+	if r.Code != http.StatusOK {
+		t.Fatalf("second login: %d %s", r.Code, r.Raw)
+	}
+	second := session{access: r.Body["access_token"].(string), refresh: r.Body["refresh_token"].(string), fp: "fp-second"}
+
+	r = e.do(t, http.MethodGet, "/v1/account/sessions", second.access, nil)
+	list, _ := r.Body["sessions"].([]any)
+	if r.Code != http.StatusOK || len(list) != 2 {
+		t.Fatalf("sessions: %d %s", r.Code, r.Raw)
+	}
+	newest, oldest := list[0].(map[string]any), list[1].(map[string]any)
+	if newest["current"] != true || newest["platform"] != "web" || oldest["current"] != false || oldest["platform"] != "android" ||
+		oldest["device_verdict"] != "none" || newest["id"] == oldest["id"] || newest["created_at"] == nil || newest["last_used_at"] == nil {
+		t.Fatalf("sessions, newest first with the caller's marked: %s", r.Raw)
+	}
+	// the other device sees itself as current, and a refresh moves its last use on
+	e.clk.Advance(time.Minute)
+	if r := e.do(t, http.MethodPost, "/v1/auth/refresh", "", map[string]any{"refresh_token": first.refresh, "device_fingerprint": first.fp}); r.Code != http.StatusOK {
+		t.Fatalf("refresh: %d %s", r.Code, r.Raw)
+	} else {
+		first.refresh = r.Body["refresh_token"].(string)
+		first.access = r.Body["access_token"].(string)
+	}
+	r = e.do(t, http.MethodGet, "/v1/account/sessions", first.access, nil)
+	list, _ = r.Body["sessions"].([]any)
+	if list[1].(map[string]any)["current"] != true || !sameInstant(list[1].(map[string]any)["last_used_at"], "2026-10-21T12:02:00Z") ||
+		!sameInstant(list[1].(map[string]any)["created_at"], "2026-10-21T12:00:00Z") {
+		t.Fatalf("from the first device: %s", r.Raw)
+	}
+
+	if r := e.do(t, http.MethodPost, "/v1/account/sessions/revoke-others", second.access, nil); r.Code != http.StatusNoContent {
+		t.Fatalf("revoke others: %d %s", r.Code, r.Raw)
+	}
+	if r := e.do(t, http.MethodPost, "/v1/auth/refresh", "", map[string]any{"refresh_token": first.refresh, "device_fingerprint": first.fp}); r.Code != http.StatusUnauthorized {
+		t.Fatalf("the other device's refresh after revocation: %d %s", r.Code, r.Raw)
+	}
+	if r := e.do(t, http.MethodGet, "/v1/kyc", first.access, nil); r.Code != http.StatusUnauthorized {
+		t.Fatalf("the other device's token after revocation: %d", r.Code)
+	}
+	r = e.do(t, http.MethodGet, "/v1/account/sessions", second.access, nil)
+	list, _ = r.Body["sessions"].([]any)
+	if r.Code != http.StatusOK || len(list) != 1 || list[0].(map[string]any)["current"] != true {
+		t.Fatalf("the caller's session must stay: %d %s", r.Code, r.Raw)
+	}
+	var count string
+	if err := e.pool.QueryRow(context.Background(), `SELECT details->>'count' FROM audit.audit_log WHERE action = 'auth.sessions_revoked' AND actor_type = 'player'`).Scan(&count); err != nil || count != "1" {
+		t.Fatalf("audited count = %q (%v), want 1", count, err)
+	}
+	if r := e.do(t, http.MethodPost, "/v1/account/sessions/revoke-others", second.access, nil); r.Code != http.StatusNoContent {
+		t.Fatalf("nothing else to revoke is still fine: %d %s", r.Code, r.Raw)
+	}
+}
+
+// Owner, 2026-10-31: the account shows how it can be signed in to.
+func TestAPI_AccountShowsItsSignInMethods(t *testing.T) {
+	e := setup(t)
+	s := e.signIn(t)
+	r := e.do(t, http.MethodGet, "/v1/account/sign-ins", s.access, nil)
+	providers, _ := r.Body["providers"].([]any)
+	if r.Code != http.StatusOK || r.Body["password"] != true || len(providers) != 0 {
+		t.Fatalf("password account: %d %s", r.Code, r.Raw)
+	}
+	e.exec(t, `INSERT INTO identity.auth_identities (user_id, provider, subject, created_at) VALUES ($1, 'google', 'sub-1', '2026-10-20T10:00:00Z')`, e.userID(t, s))
+	r = e.do(t, http.MethodGet, "/v1/account/sign-ins", s.access, nil)
+	providers, _ = r.Body["providers"].([]any)
+	if len(providers) != 1 || providers[0].(map[string]any)["provider"] != "google" || !sameInstant(providers[0].(map[string]any)["linked_at"], "2026-10-20T10:00:00Z") {
+		t.Fatalf("linked google: %s", r.Raw)
+	}
+	other := e.signIn(t)
+	if r := e.do(t, http.MethodGet, "/v1/account/sign-ins", other.access, nil); len(r.Body["providers"].([]any)) != 0 {
+		t.Fatalf("another account's sign-ins: %s", r.Raw)
+	}
+}

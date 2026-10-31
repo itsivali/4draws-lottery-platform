@@ -108,6 +108,12 @@ type declaredJSON struct {
 	NationalID string `json:"national_id"`
 }
 
+// invalidIdentity answers a declaration that does not look like names and an ID number, at sign-up or later.
+func invalidIdentity(w http.ResponseWriter) {
+	httpx.WriteProblem(w, http.StatusBadRequest, "invalid-identity", "Check your names and ID number",
+		"give your first and second names as on your national ID, and the ID number (7 to 9 digits)")
+}
+
 // declaration checks what a new account gave about itself and returns what stores it with the account. Without the
 // identity service (a deployment with no KYC) nothing is asked.
 func (h *handlers) declaration(w http.ResponseWriter, in declaredJSON) ([]identity.Created, bool) {
@@ -116,8 +122,7 @@ func (h *handlers) declaration(w http.ResponseWriter, in declaredJSON) ([]identi
 	}
 	d, err := kyc.Declaration{FirstName: in.FirstName, SecondName: in.SecondName, IDNumber: in.NationalID}.Normalized()
 	if err != nil {
-		httpx.WriteProblem(w, http.StatusBadRequest, "invalid-identity", "Check your names and ID number",
-			"give your first and second names as on your national ID, and the ID number (7 to 9 digits)")
+		invalidIdentity(w)
 		return nil, false
 	}
 	return []identity.Created{func(ctx context.Context, tx pgx.Tx, userID string) error { return h.KYC.Declare(ctx, tx, userID, d) }}, true
