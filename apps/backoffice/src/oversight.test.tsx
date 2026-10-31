@@ -1,6 +1,6 @@
-import { screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { App } from './App'
 import { ActivityPage } from './pages/Activity'
 import { AlertsPage } from './pages/Alerts'
@@ -8,8 +8,7 @@ import { PlaysPage } from './pages/Plays'
 import { SystemPage } from './pages/System'
 import { TopUpsPage } from './pages/TopUps'
 import { renderSignedIn } from './test/render'
-
-import type { Alert, AlertDetail, AuditEvent, PlayRow, SystemState, TopUpDetail, TopUpRow } from './types'
+import type { Alert, AlertDetail, AuditEvent, PlayRow, StaffMember, SystemState, TopUpDetail, TopUpRow } from './types'
 
 const play: PlayRow = {
   ticket_id: 't-1', user_id: 'u-1', msisdn: '254705369005', full_name: 'Willis Ivali', play_date: '2026-10-30', seq: 2,
@@ -130,15 +129,70 @@ describe('system status', () => {
 })
 
 describe('activity', () => {
+  const ev: AuditEvent = { id: '42', at: '2026-10-30T09:22:29Z', actor_type: 'player', actor_id: 'u-1', action: 'payment.topup.started', entity_type: 'payment', entity_id: 'p-1', details: { amount_kes: 1 } }
+  const byStaff: AuditEvent = { id: '43', at: '2026-10-30T09:30:00Z', actor_type: 'staff', actor_id: 'staff:m1', action: 'identity.account_suspended', entity_type: 'user', entity_id: 'u-1', details: { reason: 'chargeback dispute' } }
+  const grace: StaffMember = { id: 'm1', email: 'grace@staff.local', name: 'Grace Wanjiku', roles: ['staff'], active: true, invited_by: 'x', providers: [], last_sign_in: null, created_at: '2026-10-01T00:00:00Z', has_password: true, must_change_password: false }
+  const server = (asked: URL[]) => (_m: string, url: URL) => {
+    asked.push(url)
+    if (url.pathname === '/v1/staff/members') return { status: 200, body: { members: [grace], roles: ['admin', 'staff'] } }
+    if (url.pathname === '/v1/staff/activity/export') return { status: 200, body: 'id,at_eat' }
+    return { status: 200, body: { events: [ev, byStaff], next_before: null } }
+  }
+
   it('lists audit records with who did what, and filters by actor on the server', async () => {
-    const ev: AuditEvent = { id: '42', at: '2026-10-30T09:22:29Z', actor_type: 'player', actor_id: 'u-1', action: 'payment.topup.started', entity_type: 'payment', entity_id: 'p-1', details: { amount_kes: 1 } }
     const asked: URL[] = []
-    renderSignedIn(<ActivityPage />, { roles: ['admin'], route: (_m, url) => { asked.push(url); return { status: 200, body: { events: [ev], next_before: null } } } })
+    renderSignedIn(<ActivityPage />, { roles: ['admin'], route: server(asked) })
     const table = await screen.findByRole('table', { name: /Activity, newest first/ })
     expect(within(table).getByText('payment.topup.started')).toBeInTheDocument()
     expect(within(table).getByText('amount kes: 1')).toBeInTheDocument()
     await userEvent.click(screen.getByRole('tab', { name: 'Staff' }))
-    await waitFor(() => { expect(asked.at(-1)?.searchParams.get('actor_type')).toBe('staff') })
+    await waitFor(() => { expect(asked.filter((u) => u.pathname === '/v1/staff/activity').at(-1)?.searchParams.get('actor_type')).toBe('staff') })
+  })
+
+  it('names staff, links ids to their pages, sends the day, entity and actor filters, and downloads the file (owner, 2026-10-31)', async () => {
+    const asked: URL[] = []
+    const created: string[] = []
+    Object.defineProperty(URL, 'createObjectURL', { value: vi.fn(() => 'blob:activity'), configurable: true })
+    Object.defineProperty(URL, 'revokeObjectURL', { value: vi.fn(), configurable: true })
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) { created.push(this.download) })
+    renderSignedIn(<ActivityPage />, { roles: ['admin'], route: server(asked) })
+    const table = await screen.findByRole('table', { name: /Activity, newest first/ })
+    expect(await within(table).findByText('Grace Wanjiku')).toBeInTheDocument()
+    expect(within(table).getByText('reason: chargeback dispute')).toBeInTheDocument()
+    expect(within(table).getByRole('link', { name: 'p-1' })).toHaveAttribute('href', '/topups?topup=p-1')
+    expect(within(table).getAllByRole('link', { name: 'u-1' })[0]).toHaveAttribute('href', '/players?player=u-1')
+    const user = userEvent.setup()
+    fireEvent.change(screen.getByLabelText('From'), { target: { value: '2026-10-01' } })
+    fireEvent.change(screen.getByLabelText('To'), { target: { value: '2026-10-31' } })
+    await user.type(screen.getByLabelText('Entity type'), 'user')
+    await user.type(screen.getByLabelText('Entity id'), 'u-1')
+    await user.type(screen.getByLabelText('Actor id'), 'staff:m1')
+    await user.click(screen.getByRole('button', { name: 'Search' }))
+    await waitFor(() => {
+      const last = asked.filter((u) => u.pathname === '/v1/staff/activity').at(-1)
+      expect(last?.searchParams.get('from')).toBe('2026-10-01')
+      expect(last?.searchParams.get('to')).toBe('2026-10-31')
+      expect(last?.searchParams.get('entity_type')).toBe('user')
+      expect(last?.searchParams.get('entity_id')).toBe('u-1')
+      expect(last?.searchParams.get('actor_id')).toBe('staff:m1')
+    })
+    await user.click(screen.getByRole('button', { name: 'Download CSV' }))
+    await waitFor(() => { expect(created).toEqual(['activity-2026-10-01-2026-10-31.csv']) })
+    const exported = asked.find((u) => u.pathname === '/v1/staff/activity/export')
+    expect(exported?.searchParams.get('entity_id')).toBe('u-1')
+    expect(exported?.searchParams.get('from')).toBe('2026-10-01')
+    expect(await screen.findByRole('status')).toHaveTextContent(/Saved activity-2026-10-01-2026-10-31.csv/)
+    click.mockRestore()
+  })
+
+  it('arrives with the filters of a link from a player’s timeline', async () => {
+    const asked: URL[] = []
+    renderSignedIn(<ActivityPage />, { roles: ['admin'], route: server(asked), path: '/activity?entity_id=u-1&action=identity.' })
+    await screen.findByRole('table', { name: /Activity, newest first/ })
+    const first = asked.find((u) => u.pathname === '/v1/staff/activity')
+    expect(first?.searchParams.get('entity_id')).toBe('u-1')
+    expect(first?.searchParams.get('action')).toBe('identity.')
+    expect(screen.getByLabelText('Entity id')).toHaveValue('u-1')
   })
 
   it('is for administrators only', () => {

@@ -146,9 +146,40 @@ starting the stack and `VITE_GOOGLE_CLIENT_ID` in `apps/backoffice/.env.local`.
 - **Alerts on every page:** the sidebar counts open alerts; a paging alert, or one that froze payouts, is shown at the
   top of every page until someone acknowledges it on *Alerts*. Polled every minute.
 - **Activity log** (administrators): the audit trail, newest first, searchable by action, id or actor and filtered by
-  who acted. It cannot be changed or deleted.
+  who acted, by day, by action family and by entity (below). It cannot be changed or deleted; it can be downloaded.
 - **Session timeouts:** a session that lapses (with the tab open, or while it was closed) or that the server ends
   sends the member to sign in with *Your session timed out*; the player app says the same when its session ends.
 
 The draw entry list (which ties entries to players) is not in the back office: it is for the regulator
 (`lotteryctl draws entries`).
+
+## Running an audit (owner, 2026-10-31; ADR 0026)
+
+The back office answers "what happened to this player, this money, or on this day, and who did it", and lets you
+take the evidence away as files. Every file carries its SHA-256 (`X-File-SHA256`, shown after the download) and
+its row count, and the download itself is recorded in the activity log, so a file can later be tied to the log it
+came from.
+
+**A player.** *Players* → search by phone number, email or user id → *Open* (or follow a `/players?player=<id>` link
+from the activity log). The sheet shows the account (name and ID number from the identity submission, else sign-up),
+the balance and anything owed after a reversed top-up, and tabs for the wallet's last 50 movements, the last 20
+top-ups (each opens on *Top-ups*), plays, payouts, the identity history (submissions' outcomes, the last 10
+sign-ins with the device's verdict, a closure request), the deposit limits and any time-out or self-exclusion, and
+the last 50 audit records about the player. Suspend, reinstate and temporary password work from the sheet too.
+*Download player pack (CSV)* gives every row of every list in one file for an auditor or a data-subject request:
+columns `section` (player, wallet_transaction, top_up, play, payout, kyc_check, session, deposit_limit, restriction,
+event), `id`, `at_eat`, `kind`, `status`, `amount_kes`, `reference`, `details_json`. Opening the sheet is audited
+(`identity.player_viewed`, and `kyc.unmask` for the name); the pack as `identity.player_exported`.
+
+**Money, or a day.** *Activity log* (administrators): set *From* and *To* (Nairobi days, inclusive), pick an action
+family (`payment.` for every top-up event, `payout.`, `draw.`, `kra.`, `staff.`, …), or name the entity (type
+`payment` and the payment's id; type `user` and the player's id) or the actor (a player's id, or `staff:<id>` -
+staff show by name). The search box still matches fragments. Ids in the rows link to the top-up, player, payout,
+draw or alert they name. *Download CSV* exports what the filters show, oldest first, as `activity-<from>-<to>.csv`
+(columns id, at_eat, actor_type, actor_id, actor_name, action, entity_type, entity_id, details_json), up to 100,000
+records; narrow the filters if it is refused with "too many records". The export is recorded as `activity.exported`
+with the filters, the row count and the hash.
+
+**Figures.** *Finance* exports the summary and the full ledger for a range (ADR 0023); the KRA batch files are on
+*KRA tax*. Together with a player pack and the day's activity file, that is what an auditor needs to trace a
+shilling from the M-Pesa receipt to the wallet, the play, the prize and the payout.

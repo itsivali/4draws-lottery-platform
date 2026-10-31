@@ -1464,11 +1464,20 @@ paths:
       tags: [back-office]
       summary: The audit trail, newest first
       description: |
-        Role: `admin`. Narrow with `q` (a fragment of the action, entity type, entity id or actor) and `actor_type`.
+        Role: `admin`. Narrow with `q` (a fragment of the action, entity type, entity id or actor) and `actor_type`,
+        and (owner, 2026-10-31) by Nairobi day (`from` and `to`, YYYY-MM-DD, both inclusive), by the action's prefix
+        (`action`, e.g. `payment.`), and by `entity_type`, `entity_id` and `actor_id` (exact; staff are `staff:<id>`).
+        A day that is not YYYY-MM-DD, or a range that runs backwards, is refused with `invalid-range`.
       security: [{ staffBearer: [] }]
       parameters:
         - { name: q, in: query, required: false, schema: { type: string } }
         - { name: actor_type, in: query, required: false, schema: { type: string, enum: [system, player, staff] } }
+        - { name: from, in: query, required: false, schema: { type: string, format: date } }
+        - { name: to, in: query, required: false, schema: { type: string, format: date } }
+        - { name: action, in: query, required: false, schema: { type: string }, description: The start of the action, e.g. `payment.` or `identity.account_`. }
+        - { name: entity_type, in: query, required: false, schema: { type: string } }
+        - { name: entity_id, in: query, required: false, schema: { type: string } }
+        - { name: actor_id, in: query, required: false, schema: { type: string } }
         - { name: limit, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
         - { name: before, in: query, required: false, schema: { type: string }, description: "`next_before` of the previous page." }
       responses:
@@ -3147,6 +3156,247 @@ paths:
                   ResultCode: { oneOf: [{ type: integer }, { type: string }] }
                   ResultDesc: { type: string }
         "400": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /v1/staff/activity/export:
+    get:
+      operationId: staffActivityExport
+      tags: [back-office]
+      summary: The filtered audit trail as a CSV file, oldest first
+      description: |
+        Role: `admin`. Takes the same filters as `GET /v1/staff/activity` (`q`, `actor_type`, `from`, `to`, `action`,
+        `entity_type`, `entity_id`, `actor_id`). Columns: id, at_eat, actor_type, actor_id, actor_name (the staff
+        member's name when the actor is one), action, entity_type, entity_id, details_json. At most 100,000 records in
+        one file; more is refused with `too-many-rows` (narrow the filters). The file is read from one snapshot and
+        hashed before the first byte is sent, so `X-File-SHA256` is the hash of what follows; the export is recorded in
+        the audit trail as `activity.exported` with the filters, the row count and the hash.
+      security: [{ staffBearer: [] }]
+      parameters:
+        - { name: q, in: query, required: false, schema: { type: string } }
+        - { name: actor_type, in: query, required: false, schema: { type: string, enum: [system, player, staff] } }
+        - { name: from, in: query, required: false, schema: { type: string, format: date } }
+        - { name: to, in: query, required: false, schema: { type: string, format: date } }
+        - { name: action, in: query, required: false, schema: { type: string } }
+        - { name: entity_type, in: query, required: false, schema: { type: string } }
+        - { name: entity_id, in: query, required: false, schema: { type: string } }
+        - { name: actor_id, in: query, required: false, schema: { type: string } }
+      responses:
+        "200":
+          description: The file (`activity-<from>-<to>.csv`, or `activity-all.csv` without days)
+          headers:
+            X-File-SHA256: { schema: { type: string }, description: SHA-256 of the file, hex }
+            X-File-Rows: { schema: { type: integer }, description: How many records the file holds }
+          content:
+            text/csv:
+              schema: { type: string }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+  /v1/staff/players/{user}:
+    get:
+      operationId: staffPlayer
+      tags: [back-office]
+      summary: One player's timeline - account, wallet, top-ups, plays, payouts, identity, limits and audit records
+      description: |
+        Role: `staff` (admins too). What happened to this player and their money (owner, 2026-10-31): the account as
+        the player list shows it (name and ID number from the identity submission, else sign-up; unmasked and audited),
+        the wallet's balance, debt and last 50 movements, the last 20 top-ups, the count of plays and the last 20, the
+        last 20 payouts, the identity history (submissions' outcomes without their personal data, the last 10 sign-ins,
+        an open closure request), the deposit limits and any time-out or self-exclusion in force, and the last 50 audit
+        records about the player (as actor, as entity, or named in the details). The view is audited as
+        `identity.player_viewed`. 404 `not-found` for an id no account has.
+      security: [{ staffBearer: [] }]
+      parameters:
+        - { name: user, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: The timeline
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [player, wallet, top_ups, plays, payouts, identity, limits, events]
+                properties:
+                  player:
+                    type: object
+                    required: [user_id, msisdn, email, kyc_status, status, phone_verified, balance_kes, plays, created_at, last_sign_in_at, closure_requested_at, full_name, national_id]
+                    properties:
+                      user_id: { type: string }
+                      msisdn: { type: string }
+                      email: { type: [string, "null"] }
+                      kyc_status: { type: string, enum: [none, pending, verified, manual_review, rejected] }
+                      status: { type: string, enum: [active, suspended, closed] }
+                      phone_verified: { type: boolean }
+                      balance_kes: { type: integer }
+                      plays: { type: integer }
+                      created_at: { type: string, format: date-time }
+                      last_sign_in_at: { type: [string, "null"], format: date-time }
+                      closure_requested_at: { type: [string, "null"], format: date-time }
+                      full_name: { type: string }
+                      national_id: { type: string }
+                  wallet:
+                    type: object
+                    required: [balance_kes, debt_kes, transactions]
+                    properties:
+                      balance_kes: { type: integer }
+                      debt_kes: { type: integer, description: What the player owes after reversed top-ups. }
+                      transactions:
+                        type: array
+                        items:
+                          type: object
+                          required: [id, kind, amount_kes, journal_id, reference, created_at]
+                          properties:
+                            id: { type: string }
+                            kind: { type: string, enum: [deposit, deposit_excise, stake, withdrawal, prize, refund, adjustment, reversal] }
+                            amount_kes: { type: integer, description: Credits positive, debits negative. }
+                            journal_id: { type: string }
+                            reference: { type: [string, "null"], description: "`<type>:<id>` of what moved the money." }
+                            created_at: { type: string, format: date-time }
+                  top_ups:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, channel, status, amount_requested_kes, amount_confirmed_kes, receipt, failure_reason, result_code, created_at]
+                      properties:
+                        id: { type: string }
+                        channel: { type: string, enum: [stk, c2b] }
+                        status: { type: string }
+                        amount_requested_kes: { type: integer }
+                        amount_confirmed_kes: { type: [integer, "null"] }
+                        receipt: { type: [string, "null"] }
+                        failure_reason: { type: [string, "null"] }
+                        result_code: { type: [integer, "null"] }
+                        created_at: { type: string, format: date-time }
+                  plays:
+                    type: object
+                    required: [count, last]
+                    properties:
+                      count: { type: integer, description: Paid plays, all time. }
+                      last:
+                        type: array
+                        items:
+                          type: object
+                          required: [ticket_id, play_date, seq, price_kes, status, slot, lucky, created_at]
+                          properties:
+                            ticket_id: { type: string }
+                            play_date: { type: string, format: date }
+                            seq: { type: integer }
+                            price_kes: { type: integer }
+                            status: { type: string, enum: [paid, refunded] }
+                            slot: { type: [integer, "null"] }
+                            lucky: { type: [boolean, "null"] }
+                            created_at: { type: string, format: date-time }
+                  payouts:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, kind, state, gross_kes, tax_kes, net_kes, receipt, created_at]
+                      properties:
+                        id: { type: string }
+                        kind: { type: string, enum: [prize, withdrawal] }
+                        state: { type: string, description: The internal state (pending, sent, timed_out, succeeded, failed, manual, ...). }
+                        gross_kes: { type: integer }
+                        tax_kes: { type: integer }
+                        net_kes: { type: integer }
+                        receipt: { type: [string, "null"] }
+                        created_at: { type: string, format: date-time }
+                  identity:
+                    type: object
+                    required: [kyc, sessions, closure_requested_at]
+                    properties:
+                      kyc:
+                        type: array
+                        description: Identity submissions, newest first, without the personal data they carry.
+                        items:
+                          type: object
+                          required: [id, status, provider, reviewed_by, reason, created_at]
+                          properties:
+                            id: { type: string }
+                            status: { type: string, enum: [verified, mismatch, manual_review, rejected, error] }
+                            provider: { type: string }
+                            reviewed_by: { type: [string, "null"], description: "`staff:<id>` when a person decided." }
+                            reason: { type: [string, "null"] }
+                            created_at: { type: string, format: date-time }
+                      sessions:
+                        type: array
+                        items:
+                          type: object
+                          required: [id, platform, created_at, revoked_at, revoked_reason, device_verdict]
+                          properties:
+                            id: { type: string }
+                            platform: { type: string, description: android, ios, web, or empty when unknown. }
+                            created_at: { type: string, format: date-time }
+                            revoked_at: { type: [string, "null"], format: date-time }
+                            revoked_reason: { type: [string, "null"] }
+                            device_verdict: { type: string, enum: [none, passed, failed] }
+                      closure_requested_at: { type: [string, "null"], format: date-time }
+                  limits:
+                    type: object
+                    required: [deposit, restriction]
+                    properties:
+                      deposit:
+                        type: array
+                        items:
+                          type: object
+                          required: [period, amount_kes, effective_from, pending]
+                          properties:
+                            period: { type: string, enum: [daily, weekly, monthly] }
+                            amount_kes: { type: integer }
+                            effective_from: { type: string, format: date-time }
+                            pending: { type: boolean, description: A raise still in its cooling-off. }
+                      restriction:
+                        type: [object, "null"]
+                        required: [kind, until]
+                        properties:
+                          kind: { type: string, enum: [timeout, self_exclusion] }
+                          until: { type: [string, "null"], format: date-time, description: Null for a permanent exclusion. }
+                  events:
+                    type: array
+                    description: Audit records about the player, newest first (as actor, as entity, or named in the details).
+                    items:
+                      type: object
+                      required: [id, at, actor_type, actor_id, action, entity_type, entity_id, details]
+                      properties:
+                        id: { type: string }
+                        at: { type: string, format: date-time }
+                        actor_type: { type: string, enum: [system, player, staff] }
+                        actor_id: { type: [string, "null"] }
+                        action: { type: string }
+                        entity_type: { type: string }
+                        entity_id: { type: [string, "null"] }
+                        details: { type: object }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+  /v1/staff/players/{user}/export:
+    get:
+      operationId: staffPlayerExport
+      tags: [back-office]
+      summary: The player pack - one player's whole timeline as a CSV file
+      description: |
+        Role: `staff` (admins too). Everything `GET /v1/staff/players/{user}` shows, with every row of each list rather
+        than the latest, for an auditor or a data-subject request. One section per list, in shared columns: section
+        (player, wallet_transaction, top_up, play, payout, kyc_check, session, deposit_limit, restriction, event), id,
+        at_eat, kind, status, amount_kes, reference, details_json (the rest of the row as JSON). At most 100,000 rows;
+        more is refused with `too-many-rows`. `X-File-SHA256` is the file's hash; the export is recorded in the audit
+        trail as `identity.player_exported` with the row count and the hash, and the unmasking of the name as
+        `kyc.unmask`. 404 `not-found` for an id no account has.
+      security: [{ staffBearer: [] }]
+      parameters:
+        - { name: user, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: The file (`player-<user id>.csv`)
+          headers:
+            X-File-SHA256: { schema: { type: string }, description: SHA-256 of the file, hex }
+            X-File-Rows: { schema: { type: integer }, description: How many rows the file holds }
+          content:
+            text/csv:
+              schema: { type: string }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
         "404": { $ref: "#/components/responses/Problem" }
   /v1/staff/alerts/{id}:
     get:

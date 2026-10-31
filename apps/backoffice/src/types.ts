@@ -427,6 +427,45 @@ export interface SystemState {
   receipt_claims: number
 }
 
+/** One player's timeline (GET /v1/staff/players/{id}): what happened to them and their money (owner, 2026-10-31). */
+export interface PlayerTimeline {
+  player: Player
+  wallet: {
+    balance_kes: number
+    /** what the player owes after reversed top-ups */
+    debt_kes: number
+    transactions: { id: string; kind: string; amount_kes: number; journal_id: string; reference: string | null; created_at: string }[]
+  }
+  top_ups: {
+    id: string
+    channel: 'stk' | 'c2b'
+    status: string
+    amount_requested_kes: number
+    amount_confirmed_kes: number | null
+    receipt: string | null
+    failure_reason: string | null
+    result_code: number | null
+    created_at: string
+  }[]
+  plays: {
+    count: number
+    last: { ticket_id: string; play_date: string; seq: number; price_kes: number; status: 'paid' | 'refunded'; slot: number | null; lucky: boolean | null; created_at: string }[]
+  }
+  payouts: { id: string; kind: 'prize' | 'withdrawal'; state: string; gross_kes: number; tax_kes: number; net_kes: number; receipt: string | null; created_at: string }[]
+  identity: {
+    /** submissions' outcomes, newest first, without the personal data they carry */
+    kyc: { id: string; status: string; provider: string; reviewed_by: string | null; reason: string | null; created_at: string }[]
+    sessions: { id: string; platform: string; created_at: string; revoked_at: string | null; revoked_reason: string | null; device_verdict: string }[]
+    closure_requested_at: string | null
+  }
+  limits: {
+    deposit: { period: 'daily' | 'weekly' | 'monthly'; amount_kes: number; effective_from: string; pending: boolean }[]
+    restriction: { kind: 'timeout' | 'self_exclusion'; until: string | null } | null
+  }
+  /** audit records about the player, newest first */
+  events: AuditEvent[]
+}
+
 /** GET /v1/staff/alerts: a page of alerts, newest first, and how many of each kind are open (ADR 0025). */
 export interface AlertKindCount { kind: string; open: number }
 export interface AlertsPage { alerts: Alert[]; next_before: string | null; kinds: AlertKindCount[] }

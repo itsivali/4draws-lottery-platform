@@ -6,7 +6,7 @@ import { DrawsPage } from './pages/Draws'
 import { PayoutsPage } from './pages/Payouts'
 import { PlayersPage } from './pages/Players'
 import { problem, renderSignedIn } from './test/render'
-import type { Draw, FinanceSummary, Player, ReconciliationRun, StaffMember } from './types'
+import type { Draw, FinanceSummary, Player, PlayerTimeline, ReconciliationRun, StaffMember } from './types'
 
 const zero = { deposits_kes: 0, stakes_kes: 0, prizes_awarded_kes: 0, prizes_paid_kes: 0, withdrawals_kes: 0, reversals_kes: 0, excise_kes: 0, tax_withheld_kes: 0, tax_remitted_kes: 0, ggr_kes: 0 }
 const none = { count: 0, kes: 0 }
@@ -419,6 +419,79 @@ describe('players: temporary passwords', () => {
     expect(await screen.findByRole('status')).toHaveTextContent('0796 992 457 has a temporary password.')
     const post = fetch.mock.calls.find(([, init]) => init?.method === 'POST')
     expect(JSON.parse(post?.[1]?.body as string)).toEqual({ password: 'short but long enough now', reason: 'caller verified by ID over the phone' })
+  })
+})
+
+describe('players: the timeline (owner, 2026-10-31)', () => {
+  const amina: Player = {
+    user_id: 'u1', msisdn: '254796992457', email: 'amina@example.com', kyc_status: 'verified', status: 'active', phone_verified: true, balance_kes: 850, plays: 3,
+    created_at: '2026-10-27T18:04:26Z', last_sign_in_at: '2026-10-28T09:00:00Z', closure_requested_at: null, full_name: 'Amina Otieno', national_id: '12345678',
+  }
+  const timeline: PlayerTimeline = {
+    player: amina,
+    wallet: { balance_kes: 850, debt_kes: 0, transactions: [
+      { id: 'w2', kind: 'stake', amount_kes: -100, journal_id: 'j2', reference: 'ticket:t-1', created_at: '2026-10-28T09:05:00Z' },
+      { id: 'w1', kind: 'deposit', amount_kes: 950, journal_id: 'j1', reference: 'payment:p-1', created_at: '2026-10-28T09:00:00Z' },
+    ] },
+    top_ups: [{ id: 'p-1', channel: 'stk', status: 'credited', amount_requested_kes: 1000, amount_confirmed_kes: 1000, receipt: 'SGH1234567', failure_reason: null, result_code: 0, created_at: '2026-10-28T08:59:00Z' }],
+    plays: { count: 3, last: [{ ticket_id: 't-1', play_date: '2026-10-28', seq: 1, price_kes: 100, status: 'paid', slot: 4, lucky: false, created_at: '2026-10-28T09:05:00Z' }] },
+    payouts: [],
+    identity: { kyc: [{ id: 'k1', status: 'verified', provider: 'manual', reviewed_by: 'staff:m1', reason: 'ID matches', created_at: '2026-10-27T19:00:00Z' }],
+      sessions: [{ id: 's1', platform: 'android', created_at: '2026-10-28T09:00:00Z', revoked_at: null, revoked_reason: null, device_verdict: 'passed' }], closure_requested_at: null },
+    limits: { deposit: [{ period: 'daily', amount_kes: 500, effective_from: '2026-10-27T19:00:00Z', pending: false }], restriction: null },
+    events: [{ id: '7', at: '2026-10-28T09:05:00Z', actor_type: 'player', actor_id: 'u1', action: 'game.play', entity_type: 'ticket', entity_id: 't-1', details: { price_kes: 100 } }],
+  }
+  const server = (asked: URL[]) => (method: string, url: URL) => {
+    asked.push(url)
+    if (method === 'GET' && url.pathname === '/v1/staff/players') return { status: 200, body: { players: [amina], next_before: null } }
+    if (method === 'GET' && url.pathname === '/v1/staff/players/u1') return { status: 200, body: timeline }
+    if (method === 'GET' && url.pathname === '/v1/staff/players/u1/export') return { status: 200, body: 'section,id' }
+    return { status: 404 }
+  }
+
+  it('opens from a row with every section, and downloads the player pack', async () => {
+    const asked: URL[] = []
+    const created: string[] = []
+    Object.defineProperty(URL, 'createObjectURL', { value: vi.fn(() => 'blob:player'), configurable: true })
+    Object.defineProperty(URL, 'revokeObjectURL', { value: vi.fn(), configurable: true })
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) { created.push(this.download) })
+    renderSignedIn(<PlayersPage />, { roles: ['staff'], route: server(asked) })
+    const user = userEvent.setup()
+    await user.click(within(await screen.findByRole('row', { name: /0796 992 457/ })).getByRole('button', { name: 'Open 0796 992 457' }))
+    const sheet = await screen.findByRole('dialog', { name: 'Amina Otieno' })
+    expect(within(sheet).getByText('KES 850')).toBeInTheDocument()
+    expect(within(sheet).getByText('3 plays')).toBeInTheDocument()
+    expect(within(sheet).getByText('Top-up')).toBeInTheDocument()
+    expect(within(sheet).getByText('Play')).toBeInTheDocument()
+    expect(within(sheet).getByText('−KES 100')).toBeInTheDocument()
+    await user.click(within(sheet).getByRole('tab', { name: 'Top-ups' }))
+    expect(within(sheet).getByText('SGH1234567')).toBeInTheDocument()
+    expect(within(sheet).getByRole('link', { name: 'Open top-up' })).toHaveAttribute('href', '/topups?topup=p-1')
+    await user.click(within(sheet).getByRole('tab', { name: 'Identity & sessions' }))
+    expect(within(sheet).getByText('device passed')).toBeInTheDocument()
+    expect(within(sheet).getByText(/ID matches/)).toBeInTheDocument()
+    await user.click(within(sheet).getByRole('tab', { name: 'Limits' }))
+    expect(within(sheet).getByText('KES 500')).toBeInTheDocument()
+    await user.click(within(sheet).getByRole('tab', { name: 'Activity' }))
+    expect(within(sheet).getByText('game.play')).toBeInTheDocument()
+    expect(within(sheet).getByRole('link', { name: 'Everything, in the activity log' })).toHaveAttribute('href', '/activity?entity_id=u1')
+    expect(within(sheet).getByRole('button', { name: 'Suspend' })).toBeInTheDocument()
+    await user.click(within(sheet).getByRole('button', { name: 'Download player pack (CSV)' }))
+    await waitFor(() => { expect(created).toEqual(['player-u1.csv']) })
+    expect(asked.some((u) => u.pathname === '/v1/staff/players/u1/export')).toBe(true)
+    expect(await within(sheet).findByRole('status')).toHaveTextContent(/Saved player-u1.csv/)
+    click.mockRestore()
+  })
+
+  it('opens from a ?player= link, and closing it keeps the list', async () => {
+    const asked: URL[] = []
+    renderSignedIn(<PlayersPage />, { roles: ['staff'], route: server(asked), path: '/players?player=u1' })
+    const sheet = await screen.findByRole('dialog', { name: 'Amina Otieno' })
+    expect(within(sheet).getByText('Balance')).toBeInTheDocument()
+    expect(asked.some((u) => u.pathname === '/v1/staff/players/u1')).toBe(true)
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Close' }))
+    await waitFor(() => { expect(screen.queryByRole('dialog')).not.toBeInTheDocument() })
+    expect(screen.getByRole('row', { name: /0796 992 457/ })).toBeInTheDocument()
   })
 })
 

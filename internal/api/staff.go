@@ -24,6 +24,7 @@ import (
 	"github.com/itsivali/lottery-platform/internal/payments"
 	"github.com/itsivali/lottery-platform/internal/payouts"
 	"github.com/itsivali/lottery-platform/internal/platform/httpx"
+	"github.com/itsivali/lottery-platform/internal/rg"
 	"github.com/itsivali/lottery-platform/internal/staff"
 	"github.com/itsivali/lottery-platform/internal/wallet"
 )
@@ -48,6 +49,8 @@ type StaffServices struct {
 	Metrics  *metrics.Service // the app metrics (admins)
 	// Oversight reads plays, top-ups, the audit trail and the system's state for the back office.
 	Oversight *oversight.Service
+	// RG reads a player's deposit limits and restrictions for their timeline (owner, 2026-10-31).
+	RG *rg.Service
 }
 
 type staffKey struct{}
@@ -209,8 +212,11 @@ func (h *handlers) mountStaff(r chi.Router) {
 	r.With(anyStaff).Get("/topups/{id}", h.needs(h.StaffServices.Oversight != nil, "Top-ups", h.staffTopUp))
 	r.With(anyStaff).Get("/system", h.needs(h.StaffServices.Oversight != nil, "System status", h.staffSystem))
 	r.With(admin).Get("/activity", h.needs(h.StaffServices.Oversight != nil, "Activity log", h.staffActivity))
+	r.With(admin).Get("/activity/export", h.needs(h.StaffServices.Oversight != nil, "Activity log", h.staffActivityExport))
 
 	r.With(anyStaff).Get("/players", h.staffPlayers)
+	r.With(anyStaff).Get("/players/{user}", h.needs(h.StaffServices.Oversight != nil, "Players", h.staffPlayer))
+	r.With(anyStaff).Get("/players/{user}/export", h.needs(h.StaffServices.Oversight != nil, "Players", h.staffPlayerExport))
 	r.With(anyStaff).Post("/players/{user}/suspend", h.staffSuspend(true))
 	r.With(anyStaff).Post("/players/{user}/reinstate", h.staffSuspend(false))
 	r.With(anyStaff).Post("/players/{user}/password", h.staffPlayerPassword)
@@ -304,6 +310,9 @@ func staffError(w http.ResponseWriter, err error) {
 		{alerts.ErrAcknowledged, m{http.StatusConflict, "state", "The alert is already acknowledged"}},
 		{alerts.ErrClosed, m{http.StatusConflict, "state", "The alert is already resolved"}},
 		{identity.ErrNoClosureRequest, m{http.StatusNotFound, "not-found", "No open closure request for this account"}},
+		{oversight.ErrNoSuchPlayer, m{http.StatusNotFound, "not-found", "No such player"}},
+		{oversight.ErrTooManyRows, m{http.StatusBadRequest, "too-many-rows", "Too many records for one file; narrow the filters"}},
+		{oversight.ErrRange, m{http.StatusBadRequest, "invalid-range", "Days are YYYY-MM-DD and the range must run forward"}},
 	}
 	if errors.Is(err, identity.ErrClosureBlocked) {
 		httpx.WriteProblem(w, http.StatusConflict, "closure-blocked", "The account cannot be closed yet", strings.TrimPrefix(err.Error(), identity.ErrClosureBlocked.Error()+": "))

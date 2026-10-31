@@ -30,7 +30,7 @@ func oversightError(w http.ResponseWriter, err error) {
 		httpx.WriteProblem(w, http.StatusBadRequest, "invalid-cursor", "Invalid cursor or date", "use next_before from the previous page and dates as YYYY-MM-DD")
 		return
 	}
-	internalError(w, err)
+	staffError(w, err)
 }
 
 func nextOf(s string) *string {
@@ -122,6 +122,18 @@ func (h *handlers) staffTopUps(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusOK, map[string]any{"topups": p.Rows, "next_before": nextOf(p.NextBefore)})
 }
 
+// eventFilter reads the activity log's filters (owner, 2026-10-31): q, actor_type, from and to (Nairobi days), action
+// (a prefix), entity_type, entity_id and actor_id. The days are checked by the service.
+func eventFilter(w http.ResponseWriter, r *http.Request) (oversight.EventFilter, bool) {
+	qs := r.URL.Query()
+	if a := qs.Get("actor_type"); a != "" && !actorTypes[a] {
+		httpx.WriteProblem(w, http.StatusBadRequest, "invalid-actor-type", "Invalid actor type", "use system, player or staff")
+		return oversight.EventFilter{}, false
+	}
+	return oversight.EventFilter{Query: qs.Get("q"), ActorType: qs.Get("actor_type"), From: qs.Get("from"), To: qs.Get("to"),
+		ActionPrefix: qs.Get("action"), EntityType: qs.Get("entity_type"), EntityID: qs.Get("entity_id"), ActorID: qs.Get("actor_id")}, true
+}
+
 // dayWindow reads from/to dates (YYYY-MM-DD, Nairobi days; to is inclusive) into a created-at window.
 func dayWindow(w http.ResponseWriter, from, to string) (*time.Time, *time.Time, bool) {
 	var f, t *time.Time
@@ -176,12 +188,11 @@ func (h *handlers) staffActivity(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	qs := r.URL.Query()
-	if a := qs.Get("actor_type"); a != "" && !actorTypes[a] {
-		httpx.WriteProblem(w, http.StatusBadRequest, "invalid-actor-type", "Invalid actor type", "use system, player or staff")
+	f, ok := eventFilter(w, r)
+	if !ok {
 		return
 	}
-	p, err := h.StaffServices.Oversight.Activity(r.Context(), oversight.EventFilter{Query: qs.Get("q"), ActorType: qs.Get("actor_type")}, limit, qs.Get("before"))
+	p, err := h.StaffServices.Oversight.Activity(r.Context(), f, limit, r.URL.Query().Get("before"))
 	if err != nil {
 		oversightError(w, err)
 		return

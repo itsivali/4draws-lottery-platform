@@ -8,7 +8,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"strconv"
 	"strings"
 	"time"
 
@@ -242,62 +241,6 @@ func (s *Service) TopUps(ctx context.Context, f TopUpFilter, limit int, before s
 		return Page[TopUp]{}, err
 	}
 	return page(out, limit, func(t TopUp) string { return cursor(t.CreatedAt, t.ID) }), nil
-}
-
-// Event is one audit record.
-type Event struct {
-	ID         string          `json:"id"`
-	At         time.Time       `json:"at"`
-	ActorType  string          `json:"actor_type"` // system, player or staff
-	ActorID    *string         `json:"actor_id"`
-	Action     string          `json:"action"`
-	EntityType string          `json:"entity_type"`
-	EntityID   *string         `json:"entity_id"`
-	Details    json.RawMessage `json:"details"`
-}
-
-// EventFilter narrows the audit trail: Query matches the action, the entity id or the actor; ActorType one kind.
-type EventFilter struct {
-	Query     string
-	ActorType string
-}
-
-const eventsSQL = `
-SELECT id::text, at, actor_type, actor_id, action, entity_type, entity_id, details
-FROM audit.audit_log
-WHERE ($1::bigint IS NULL OR id < $1)
-  AND ($2::text IS NULL OR action LIKE $2 OR entity_id LIKE $2 OR actor_id LIKE $2 OR entity_type LIKE $2)
-  AND ($3::text IS NULL OR actor_type = $3)
-ORDER BY id DESC
-LIMIT $4`
-
-// Activity lists audit records, newest first. Its cursor is the last record's id.
-func (s *Service) Activity(ctx context.Context, f EventFilter, limit int, before string) (Page[Event], error) {
-	var beforeID *int64
-	if before != "" {
-		n, err := strconv.ParseInt(before, 10, 64)
-		if err != nil || n <= 0 {
-			return Page[Event]{}, ErrCursor
-		}
-		beforeID = &n
-	}
-	var actor *string
-	if f.ActorType != "" {
-		actor = &f.ActorType
-	}
-	rows, err := s.pool.Query(ctx, eventsSQL, beforeID, like(f.Query), actor, limit+1)
-	if err != nil {
-		return Page[Event]{}, err
-	}
-	out, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (Event, error) {
-		var e Event
-		err := r.Scan(&e.ID, &e.At, &e.ActorType, &e.ActorID, &e.Action, &e.EntityType, &e.EntityID, &e.Details)
-		return e, err
-	})
-	if err != nil {
-		return Page[Event]{}, err
-	}
-	return page(out, limit, func(e Event) string { return e.ID }), nil
 }
 
 // JobState counts one kind of background job in one state.
