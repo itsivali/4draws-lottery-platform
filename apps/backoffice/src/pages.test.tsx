@@ -1,28 +1,59 @@
-import { screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { App } from './App'
 import { DrawsPage } from './pages/Draws'
 import { PayoutsPage } from './pages/Payouts'
 import { PlayersPage } from './pages/Players'
-import { renderSignedIn } from './test/render'
-import type { Draw, FinanceSummary, Player, StaffMember } from './types'
+import { problem, renderSignedIn } from './test/render'
+import type { Draw, FinanceSummary, Player, ReconciliationRun, StaffMember } from './types'
 
 const zero = { deposits_kes: 0, stakes_kes: 0, prizes_awarded_kes: 0, prizes_paid_kes: 0, withdrawals_kes: 0, reversals_kes: 0, excise_kes: 0, tax_withheld_kes: 0, tax_remitted_kes: 0, ggr_kes: 0 }
+const none = { count: 0, kes: 0 }
+const dayA = { start: '2026-10-25', end: '2026-10-25', ...zero, deposits_kes: 10000, stakes_kes: 3000, ggr_kes: 2100, plays: 30, players: 7, signups: 8 }
+const dayB = { start: '2026-10-26', end: '2026-10-26', ...zero, deposits_kes: 5000, stakes_kes: 1200, prizes_paid_kes: 900, withdrawals_kes: 2500, ggr_kes: 840, plays: 12, players: 5, signups: 4 }
 const summary: FinanceSummary = {
   from: '2026-10-25',
   to: '2026-10-26',
+  group: 'day',
   totals: { ...zero, deposits_kes: 15000, stakes_kes: 4200, prizes_awarded_kes: 1260, prizes_paid_kes: 900, withdrawals_kes: 2500, excise_kes: 750, tax_withheld_kes: 180, ggr_kes: 2940 },
-  days: [
-    { day: '2026-10-25', ...zero, deposits_kes: 10000, stakes_kes: 3000, ggr_kes: 2100 },
-    { day: '2026-10-26', ...zero, deposits_kes: 5000, stakes_kes: 1200, prizes_paid_kes: 900, withdrawals_kes: 2500, ggr_kes: 840 },
-  ],
+  periods: [dayA, dayB],
   balances: { owed_to_players_kes: 9800, player_debt_kes: 60, excise_owed_kes: 750, tax_owed_kes: 180, prize_pools_kes: 360, suspense_kes: 0, mpesa_clearing_kes: 15000, b2c_float_kes: -3400 },
   activity: { signups: 12, plays: 42, players: 9 },
+  by_kind: [{ kind: 'deposit', journals: 30, debit_kes: 15750, credit_kes: 15750 }, { kind: 'stake', journals: 42, debit_kes: 4200, credit_kes: 4200 }],
+  trial_balance: {
+    as_at: '2026-10-26',
+    accounts: [
+      { code: 'MPESA_CLEARING', name: 'M-Pesa paybill clearing', type: 'asset', debits_kes: 15000, credits_kes: 0, balance_kes: 15000 },
+      { code: 'WALLET_LIABILITY', name: 'Player wallet liability', type: 'liability', debits_kes: 6700, credits_kes: 16500, balance_kes: 9800 },
+    ],
+    debits_kes: 21700,
+    credits_kes: 21700,
+    balanced: true,
+  },
+  top_ups: [
+    { start: '2026-10-25', end: '2026-10-25', started: { count: 25, kes: 12000 }, credited: { count: 20, kes: 10000 }, failed: { count: 2, kes: 1000 }, cancelled: { count: 2, kes: 800 }, expired: none, unconfirmed: { count: 1, kes: 200 }, reversed: none, pending_now: none, median_seconds_to_credit: 42 },
+    { start: '2026-10-26', end: '2026-10-26', started: { count: 10, kes: 5000 }, credited: { count: 10, kes: 5000 }, failed: none, cancelled: none, expired: none, unconfirmed: none, reversed: none, pending_now: none, median_seconds_to_credit: null },
+  ],
+  payouts: [
+    { start: '2026-10-25', end: '2026-10-25', requested: none, paid: none, failed: none, held: none, manual: none, tax_withheld_kes: 0 },
+    { start: '2026-10-26', end: '2026-10-26', requested: { count: 3, kes: 3400 }, paid: { count: 2, kes: 2320 }, failed: none, held: { count: 1, kes: 900 }, manual: none, tax_withheld_kes: 180 },
+  ],
+  prize_pools: [{ type: 'daily', balance_kes: 360, funded_kes: 1260, paid_kes: 900 }],
+  tax: { withheld_kes: 180, remitted_kes: 0, awaiting_remittance: { batches: 1, kes: 120 }, unbatched: { events: 2, kes: 60 }, oldest_unremitted_age_seconds: 3 * 86400 },
 }
 
+const runs: ReconciliationRun[] = [
+  { id: 'r2', area: 'payments', ran_at: '2026-10-26T06:00:00Z', ok: false, mismatches: { credited_without_journal: 2 }, attention: { c2b_overdue: 1 }, totals: { payments: 120 } },
+  { id: 'r1', area: 'payments', ran_at: '2026-10-25T06:00:00Z', ok: true, mismatches: {}, attention: {}, totals: { payments: 100 } },
+]
+
+/** The finance requests made so far, as URLs (the shell polls other things). */
+const financeCalls = (fetch: ReturnType<typeof renderSignedIn>['fetch']) =>
+  fetch.mock.calls.map(([u]) => new URL(u as string)).filter((u) => u.pathname === '/v1/staff/finance')
+
 describe('finance', () => {
-  it('shows the range’s figures, what is owed, and every day in a table', async () => {
+  it('shows the range’s figures, what is owed, and every period in a table', async () => {
     const { fetch } = renderSignedIn(<App />, {
       roles: ['staff'],
       path: '/finance',
@@ -35,13 +66,147 @@ describe('finance', () => {
     expect(screen.getByRole('group', { name: 'Owed to players' })).toHaveTextContent('KES 9,800')
     expect(screen.getByRole('group', { name: 'Excise owed to KRA' })).toHaveTextContent('KES 750')
     expect(screen.getByRole('img', { name: /Deposits, stakes, prizes paid and withdrawals per day/ })).toBeInTheDocument()
-    const table = screen.getByRole('table', { name: /Per day/ })
-    expect(within(table).getAllByRole('row')).toHaveLength(3)
+    expect(screen.getByRole('img', { name: /Gross gaming revenue per day/ })).toBeInTheDocument()
+    const table = screen.getByRole('table', { name: /^Per day/ })
+    expect(within(table).getAllByRole('row')).toHaveLength(4) // header, two days, total
     expect(within(table).getByRole('row', { name: /26 Oct/ })).toHaveTextContent('2,500')
-    // another range asks the server again
+    expect(within(table).getByRole('row', { name: /Total/ })).toHaveTextContent('42')
+    // the first request asks for the last 30 days by day; another range asks the server again
+    const first = financeCalls(fetch)[0]
+    expect(first?.searchParams.get('group')).toBe('day')
+    expect(first?.searchParams.get('from')).toMatch(/^\d{4}-\d{2}-\d{2}$/)
     const user = userEvent.setup()
     await user.click(screen.getByRole('button', { name: 'Last 7 days' }))
-    expect(fetch.mock.calls.some(([u]) => (u as string).includes('from='))).toBe(true)
+    await waitFor(() => { expect(financeCalls(fetch)).toHaveLength(2) })
+    const second = financeCalls(fetch)[1]
+    expect(second?.searchParams.get('to')).toBe(first?.searchParams.get('to'))
+    expect(second?.searchParams.get('from')).not.toBe(first?.searchParams.get('from'))
+  })
+
+  it('groups by week or month on request and names the periods by their ends', async () => {
+    const weekly: FinanceSummary = { ...summary, group: 'week', from: '2026-10-15', to: '2026-10-26', periods: [
+      { ...dayA, start: '2026-10-15', end: '2026-10-18' },
+      { ...dayB, start: '2026-10-19', end: '2026-10-25' },
+      { ...dayB, start: '2026-10-26', end: '2026-10-26' },
+    ] }
+    const { fetch } = renderSignedIn(<App />, {
+      roles: ['staff'],
+      path: '/finance',
+      route: (_m, url) => (url.pathname === '/v1/staff/finance' ? { status: 200, body: url.searchParams.get('group') === 'week' ? weekly : summary } : { status: 404 }),
+    })
+    await screen.findByRole('heading', { name: 'Finance' })
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'Week' }))
+    const table = await screen.findByRole('table', { name: /^Per week/ })
+    expect(within(table).getByRole('row', { name: /19 Oct – 25 Oct/ })).toBeInTheDocument()
+    expect(financeCalls(fetch).at(-1)?.searchParams.get('group')).toBe('week')
+    expect(screen.getByRole('button', { name: 'Week' })).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('a custom range is asked for only once it runs forward and fits in 366 days', async () => {
+    const { fetch } = renderSignedIn(<App />, {
+      roles: ['staff'],
+      path: '/finance',
+      route: (_m, url) => (url.pathname === '/v1/staff/finance' ? { status: 200, body: summary } : { status: 404 }),
+    })
+    await screen.findByRole('heading', { name: 'Finance' })
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'Custom' }))
+    const before = financeCalls(fetch).length
+    const from = screen.getByLabelText('From')
+    const to = screen.getByLabelText('To')
+    fireEvent.change(from, { target: { value: '2026-10-20' } })
+    fireEvent.change(to, { target: { value: '2026-10-10' } })
+    expect(screen.getByText('The range must run forward and cover at most 366 days.')).toHaveAttribute('role', 'alert')
+    expect(financeCalls(fetch)).toHaveLength(before)
+    fireEvent.change(to, { target: { value: '2028-10-10' } })
+    expect(screen.getByText('The range must run forward and cover at most 366 days.')).toBeInTheDocument()
+    expect(financeCalls(fetch)).toHaveLength(before)
+    fireEvent.change(to, { target: { value: '2026-10-25' } })
+    await waitFor(() => { expect(financeCalls(fetch)).toHaveLength(before + 1) })
+    const url = financeCalls(fetch).at(-1)
+    expect(url?.searchParams.get('from')).toBe('2026-10-20')
+    expect(url?.searchParams.get('to')).toBe('2026-10-25')
+    expect(screen.queryByText('The range must run forward and cover at most 366 days.')).not.toBeInTheDocument()
+  })
+
+  it('exports the figures and the ledger as files, and reports a refused ledger export in words', async () => {
+    const created: string[] = []
+    const objectURL = vi.fn(() => 'blob:finance')
+    Object.defineProperty(URL, 'createObjectURL', { value: objectURL, configurable: true })
+    Object.defineProperty(URL, 'revokeObjectURL', { value: vi.fn(), configurable: true })
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) { created.push(this.download) })
+    const { fetch } = renderSignedIn(<App />, {
+      roles: ['staff'],
+      path: '/finance',
+      route: (_m, url) => {
+        if (url.pathname === '/v1/staff/finance') return { status: 200, body: summary }
+        if (url.pathname === '/v1/staff/finance/export') return { status: 200, body: 'period_start,period_end' }
+        if (url.pathname === '/v1/staff/ledger/export') return problem(400, 'too-many-rows', 'Too many ledger entries for one file; narrow the range')
+        return { status: 404 }
+      },
+    })
+    await screen.findByRole('heading', { name: 'Finance' })
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'Export figures (CSV)' }))
+    expect(await screen.findByText(/^Saved finance-\d{4}-\d{2}-\d{2}-\d{4}-\d{2}-\d{2}\.csv/)).toHaveAttribute('role', 'status')
+    const call = fetch.mock.calls.find(([u]) => (u as string).includes('/v1/staff/finance/export'))
+    const url = new URL(call?.[0] as string)
+    expect(url.searchParams.get('group')).toBe('day')
+    expect(url.searchParams.get('from')).toBeTruthy()
+    expect(created).toHaveLength(1)
+    expect(created[0]).toMatch(/^finance-.*\.csv$/)
+    expect(objectURL).toHaveBeenCalledTimes(1)
+
+    await user.click(screen.getByRole('button', { name: 'Export ledger (CSV)' }))
+    expect(await screen.findByText(/Too many ledger entries for one file; narrow the range/)).toBeInTheDocument()
+    expect(created).toHaveLength(1)
+    click.mockRestore()
+  })
+
+  it('warns when the trial balance does not balance, and shows the journal kinds', async () => {
+    const broken: FinanceSummary = { ...summary, trial_balance: { ...summary.trial_balance, credits_kes: 21690, balanced: false } }
+    renderSignedIn(<App />, {
+      roles: ['staff'],
+      path: '/finance',
+      route: (_m, url) => (url.pathname === '/v1/staff/finance' ? { status: 200, body: broken } : { status: 404 }),
+    })
+    await screen.findByRole('heading', { name: 'Finance' })
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('tab', { name: /Trial balance/ }))
+    expect(await screen.findByText('Debits and credits differ')).toBeInTheDocument()
+    expect(screen.getByText(/The ledger does not balance/)).toHaveAttribute('role', 'alert')
+    const table = screen.getByRole('table', { name: /Trial balance/ })
+    expect(within(table).getByRole('row', { name: /WALLET_LIABILITY/ })).toHaveTextContent('9,800')
+    expect(within(table).getByRole('row', { name: /Total/ })).toHaveTextContent('off by 10')
+    expect(within(screen.getByRole('table', { name: /by kind/ })).getByRole('row', { name: /stake/ })).toHaveTextContent('42')
+  })
+
+  it('lists the stored reconciliation runs of an area, newest first, with their findings counted', async () => {
+    const { fetch } = renderSignedIn(<App />, {
+      roles: ['staff'],
+      path: '/finance',
+      route: (_m, url) => {
+        if (url.pathname === '/v1/staff/finance') return { status: 200, body: summary }
+        if (url.pathname === '/v1/staff/reconciliations') return { status: 200, body: { runs: url.searchParams.get('area') === 'payments' ? runs : [], next_before: null } }
+        return { status: 404 }
+      },
+    })
+    await screen.findByRole('heading', { name: 'Finance' })
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('tab', { name: 'Reconciliations' }))
+    const table = await screen.findByRole('table', { name: /Payments reconciliation runs/ })
+    const rows = within(table).getAllByRole('row')
+    expect(rows).toHaveLength(3)
+    expect(rows[1]).toHaveTextContent('Mismatches')
+    expect(rows[1]).toHaveTextContent('credited_without_journal × 2')
+    expect(rows[1]).toHaveTextContent('c2b_overdue × 1')
+    expect(rows[2]).toHaveTextContent('Everything matched')
+    const list = fetch.mock.calls.map(([u]) => new URL(u as string)).find((u) => u.pathname === '/v1/staff/reconciliations')
+    expect(list?.searchParams.get('area')).toBe('payments')
+    expect(screen.getByRole('button', { name: 'Run now' })).toBeInTheDocument()
+    await user.click(screen.getByRole('tab', { name: 'Draws' }))
+    expect(await screen.findByText('No draws reconciliation has run yet.')).toBeInTheDocument()
   })
 })
 

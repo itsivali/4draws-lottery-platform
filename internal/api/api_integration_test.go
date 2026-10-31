@@ -204,7 +204,7 @@ func setupWith(t *testing.T, mutate func(*apiDeps)) *env {
 		Game:      game.NewService(staffPool, clk, sIDs, sRG, wallet.NewService(ls), kr, wallet.ErrInsufficientFunds),
 		Members:   staff.NewService(staffPool, clk, staffIDTokens{}, aw, []byte("staff-pepper")),
 		Metrics:   metrics.NewService(staffPool, clk),
-		Finance:   finance.NewService(staffPool, clk),
+		Finance:   finance.NewService(staffPool, clk, aw),
 		Oversight: oversight.NewService(staffPool, clk, oversight.Settings{Daraja: "sandbox", SandboxSettlement: true}),
 	}
 	staffAuth := &fakeStaff{members: map[string]staff.Member{}}

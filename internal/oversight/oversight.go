@@ -420,3 +420,82 @@ func nilIfEmpty(v string) *string {
 	}
 	return &v
 }
+
+// ErrArea is a reconciliation area that is not payments, game, draws or payouts.
+var ErrArea = errors.New("oversight: unknown reconciliation area")
+
+// Run is one stored reconciliation run: when it ran, whether the books matched, and how many findings of each kind it
+// made (the findings themselves are in the run's report, shown when the reconciliation is run from the back office).
+type Run struct {
+	ID         string           `json:"id"`
+	Area       string           `json:"area"`
+	RanAt      time.Time        `json:"ran_at"`
+	OK         bool             `json:"ok"`
+	Mismatches map[string]int   `json:"mismatches"`
+	Attention  map[string]int   `json:"attention"`
+	Totals     map[string]int64 `json:"totals"`
+}
+
+// runsSQL lists one area's runs, newest first; the table is fixed per area (no SQL is built from the area).
+var runsSQL = map[string]string{
+	"payments": runsFrom("payments.reconciliation_runs"),
+	"game":     runsFrom("game.reconciliation_runs"),
+	"draws":    runsFrom("draws.reconciliation_runs"),
+	"payouts":  runsFrom("payouts.reconciliation_runs"),
+}
+
+func runsFrom(table string) string {
+	return `SELECT id::text, ran_at, ok, report FROM ` + table + `
+WHERE ($1::timestamptz IS NULL OR (ran_at, id::text) < ($1, $2::text))
+ORDER BY ran_at DESC, id DESC
+LIMIT $3`
+}
+
+// Reconciliations lists area's stored runs, newest first.
+func (s *Service) Reconciliations(ctx context.Context, area string, limit int, before string) (Page[Run], error) {
+	sql, ok := runsSQL[area]
+	if !ok {
+		return Page[Run]{}, ErrArea
+	}
+	at, id, err := parseCursor(before)
+	if err != nil {
+		return Page[Run]{}, err
+	}
+	rows, err := s.pool.Query(ctx, sql, at, id, limit+1)
+	if err != nil {
+		return Page[Run]{}, err
+	}
+	out, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (Run, error) {
+		run := Run{Area: area, Mismatches: map[string]int{}, Attention: map[string]int{}, Totals: map[string]int64{}}
+		var report []byte
+		if err := r.Scan(&run.ID, &run.RanAt, &run.OK, &report); err != nil {
+			return run, err
+		}
+		var rep struct {
+			Mismatches map[string][]string `json:"mismatches"`
+			Attention  map[string][]string `json:"attention"`
+			Totals     map[string]int64    `json:"totals"`
+		}
+		if err := json.Unmarshal(report, &rep); err != nil {
+			return run, err
+		}
+		for k, v := range rep.Mismatches {
+			if len(v) > 0 {
+				run.Mismatches[k] = len(v)
+			}
+		}
+		for k, v := range rep.Attention {
+			if len(v) > 0 {
+				run.Attention[k] = len(v)
+			}
+		}
+		if rep.Totals != nil {
+			run.Totals = rep.Totals
+		}
+		return run, nil
+	})
+	if err != nil {
+		return Page[Run]{}, err
+	}
+	return page(out, limit, func(r Run) string { return cursor(r.RanAt, r.ID) }), nil
+}

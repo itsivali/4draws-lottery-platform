@@ -264,7 +264,7 @@ func (a *App) staff(ctx context.Context, sh shared, base services) (staff.Authen
 	}
 	return members, api.StaffServices{
 		Identity: svc.identity, KYC: svc.kyc, Payments: svc.payments, Draws: svc.draws, Payouts: svc.payouts, Game: svc.game,
-		Alerts: a.alertsOn(pool, svc.draws), Members: members, Finance: finance.NewService(pool, sh.clk), Metrics: metrics.NewService(pool, sh.clk),
+		Alerts: a.alertsOn(pool, svc.draws), Members: members, Finance: finance.NewService(pool, sh.clk, sh.aw), Metrics: metrics.NewService(pool, sh.clk),
 		Oversight: oversight.NewService(pool, sh.clk, oversightSettings(sh.cfg)),
 	}, nil
 }

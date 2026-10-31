@@ -150,7 +150,7 @@ export interface MetricsSummary {
   all: MetricFigures
 }
 
-/** One day's, or a range's, money movements in whole KES (GET /v1/staff/finance). */
+/** One period's, or a range's, money movements in whole KES (GET /v1/staff/finance). */
 export interface Figures {
   deposits_kes: number
   stakes_kes: number
@@ -164,11 +164,64 @@ export interface Figures {
   ggr_kes: number
 }
 
+/** How a range is cut: Nairobi days, Monday-start weeks or calendar months, the first and last clipped to the range. */
+export type FinanceGroup = 'day' | 'week' | 'month'
+
+/** One day, week or month of the range (start and end inclusive) with its figures and activity. */
+export interface FinancePeriod extends Figures {
+  start: string
+  end: string
+  plays: number
+  players: number
+  signups: number
+}
+
+/** How many of something, and how much money they carry. */
+export interface Counted { count: number; kes: number }
+
+/** The top-ups started in one period, by how they ended; reversed ones count among the credited ones too. */
+export interface TopUpFunnelPeriod {
+  start: string
+  end: string
+  started: Counted
+  credited: Counted
+  failed: Counted
+  cancelled: Counted
+  expired: Counted
+  unconfirmed: Counted
+  reversed: Counted
+  pending_now: Counted
+  median_seconds_to_credit: number | null
+}
+
+/** The payouts requested in one period, by where they stand now. */
+export interface PayoutFunnelPeriod {
+  start: string
+  end: string
+  requested: Counted
+  paid: Counted
+  failed: Counted
+  held: Counted
+  manual: Counted
+  tax_withheld_kes: number
+}
+
+/** One ledger account's line of the trial balance; the balance carries the account's natural sign. */
+export interface TrialBalanceAccount {
+  code: string
+  name: string
+  type: 'asset' | 'liability' | 'revenue' | 'expense'
+  debits_kes: number
+  credits_kes: number
+  balance_kes: number
+}
+
 export interface FinanceSummary {
   from: string
   to: string
+  group: FinanceGroup
   totals: Figures
-  days: (Figures & { day: string })[]
+  periods: FinancePeriod[]
   balances: {
     owed_to_players_kes: number
     player_debt_kes: number
@@ -180,6 +233,31 @@ export interface FinanceSummary {
     b2c_float_kes: number
   }
   activity: { signups: number; plays: number; players: number }
+  /** every journal kind posted in the range */
+  by_kind: { kind: string; journals: number; debit_kes: number; credit_kes: number }[]
+  /** every account as at the end of the range; balanced is false when a posting is broken */
+  trial_balance: { as_at: string; accounts: TrialBalanceAccount[]; debits_kes: number; credits_kes: number; balanced: boolean }
+  top_ups: TopUpFunnelPeriod[]
+  payouts: PayoutFunnelPeriod[]
+  prize_pools: { type: string; balance_kes: number; funded_kes: number; paid_kes: number }[]
+  tax: {
+    withheld_kes: number
+    remitted_kes: number
+    awaiting_remittance: { batches: number; kes: number }
+    unbatched: { events: number; kes: number }
+    oldest_unremitted_age_seconds: number | null
+  }
+}
+
+/** One stored reconciliation run (GET /v1/staff/reconciliations): findings are counted per kind. */
+export interface ReconciliationRun {
+  id: string
+  area: 'payments' | 'game' | 'draws' | 'payouts'
+  ran_at: string
+  ok: boolean
+  mismatches: Record<string, number>
+  attention: Record<string, number>
+  totals: Record<string, number>
 }
 
 /** One paid play (GET /v1/staff/plays). */

@@ -1585,18 +1585,164 @@ paths:
     get:
       operationId: staffFinance
       tags: [back-office]
-      summary: The financial dashboard over Nairobi days, read from the ledger
-      description: "Role: `staff` (admins too). Defaults to the last 30 days, today included; at most 366 days."
+      summary: The financial dashboard over Nairobi days, weeks or months, read from the ledger
+      description: |
+        Role: `staff` (admins too). Defaults to the last 30 days, today included; at most 366 days. `group` cuts the
+        range into days (default), Monday-start weeks or calendar months in Nairobi time, the first and last clipped
+        to the range. Besides the totals, periods, balances now and activity, the answer carries what an audit asks
+        for: every journal kind posted (`by_kind`), the trial balance as at the range's end with its natural-sign
+        balances and whether debits equal credits (`trial_balance`), the top-up and payout funnels per period
+        (`top_ups`, `payouts`), each prize pool (`prize_pools`) and the withholding tax position (`tax`).
+      security: [{ staffBearer: [] }]
+      parameters:
+        - { name: from, in: query, schema: { type: string, format: date } }
+        - { name: to, in: query, schema: { type: string, format: date } }
+        - { name: group, in: query, schema: { type: string, enum: [day, week, month], default: day } }
+      responses:
+        "200":
+          description: Totals, periods, balances now, activity and the audit sections
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [from, to, group, totals, periods, balances, activity, by_kind, trial_balance, top_ups, payouts, prize_pools, tax]
+                properties:
+                  from: { type: string, format: date }
+                  to: { type: string, format: date }
+                  group: { type: string, enum: [day, week, month] }
+                  totals: { type: object }
+                  periods:
+                    type: array
+                    items:
+                      type: object
+                      required: [start, end, plays, players, signups]
+                      properties:
+                        start: { type: string, format: date }
+                        end: { type: string, format: date }
+                        plays: { type: integer }
+                        players: { type: integer }
+                        signups: { type: integer }
+                  balances: { type: object }
+                  activity: { type: object }
+                  by_kind:
+                    type: array
+                    items:
+                      type: object
+                      required: [kind, journals, debit_kes, credit_kes]
+                      properties:
+                        kind: { type: string }
+                        journals: { type: integer }
+                        debit_kes: { type: integer }
+                        credit_kes: { type: integer }
+                  trial_balance:
+                    type: object
+                    required: [as_at, accounts, debits_kes, credits_kes, balanced]
+                    properties:
+                      as_at: { type: string, format: date }
+                      accounts: { type: array, items: { type: object } }
+                      debits_kes: { type: integer }
+                      credits_kes: { type: integer }
+                      balanced: { type: boolean }
+                  top_ups: { type: array, items: { type: object } }
+                  payouts: { type: array, items: { type: object } }
+                  prize_pools: { type: array, items: { type: object } }
+                  tax: { type: object }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+  /v1/staff/finance/export:
+    get:
+      operationId: staffFinanceExport
+      tags: [back-office]
+      summary: The financial dashboard as a CSV file (one row per period, the totals, then the trial balance)
+      description: |
+        Role: `staff` (admins too). Same `from`, `to` and `group` as `/v1/staff/finance`. `X-File-SHA256` carries the
+        file's hash and `X-File-Rows` its period rows; the export is recorded in the audit trail as
+        `finance.exported` with the range, the row count and the hash.
+      security: [{ staffBearer: [] }]
+      parameters:
+        - { name: from, in: query, schema: { type: string, format: date } }
+        - { name: to, in: query, schema: { type: string, format: date } }
+        - { name: group, in: query, schema: { type: string, enum: [day, week, month], default: day } }
+      responses:
+        "200":
+          description: The file (`finance-<from>-<to>.csv`)
+          headers:
+            X-File-SHA256: { schema: { type: string }, description: SHA-256 of the file, hex }
+            X-File-Rows: { schema: { type: integer }, description: How many period rows the file holds }
+          content:
+            text/csv:
+              schema: { type: string }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+  /v1/staff/ledger/export:
+    get:
+      operationId: staffLedgerExport
+      tags: [back-office]
+      summary: Every ledger entry posted in the range as a CSV file, oldest first
+      description: |
+        Role: `staff` (admins too). Columns: journal_id, journal_kind, reference_type, reference_id, created_at_eat,
+        account_code, direction (D or C), amount_kes, user_id. At most 100,000 entries in one file; more is refused
+        with `too-many-rows` (narrow the range). The file is read from one snapshot and hashed before the first byte
+        is sent, so `X-File-SHA256` is the hash of what follows; the export is recorded in the audit trail as
+        `ledger.exported` with the range, the row count and the hash.
       security: [{ staffBearer: [] }]
       parameters:
         - { name: from, in: query, schema: { type: string, format: date } }
         - { name: to, in: query, schema: { type: string, format: date } }
       responses:
         "200":
-          description: Totals, days, balances now and activity
+          description: The file (`ledger-<from>-<to>.csv`)
+          headers:
+            X-File-SHA256: { schema: { type: string }, description: SHA-256 of the file, hex }
+            X-File-Rows: { schema: { type: integer }, description: How many entries the file holds }
+          content:
+            text/csv:
+              schema: { type: string }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+  /v1/staff/reconciliations:
+    get:
+      operationId: staffReconciliations
+      tags: [back-office]
+      summary: One area's stored reconciliation runs, newest first
+      description: |
+        Role: `staff` (admins too). `area` is `payments`, `game`, `draws` or `payouts` (anything else: `invalid-area`).
+        Each run says whether the books matched and how many findings of each kind it made; the findings themselves
+        are shown when a reconciliation is run from the back office.
+      security: [{ staffBearer: [] }]
+      parameters:
+        - { name: area, in: query, required: true, schema: { type: string, enum: [payments, game, draws, payouts] } }
+        - { name: limit, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+        - { name: before, in: query, required: false, schema: { type: string }, description: "`next_before` of the previous page." }
+      responses:
+        "200":
+          description: The page
           content:
             application/json:
-              schema: { type: object }
+              schema:
+                type: object
+                required: [runs, next_before]
+                properties:
+                  runs:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, area, ran_at, ok, mismatches, attention, totals]
+                      properties:
+                        id: { type: string }
+                        area: { type: string }
+                        ran_at: { type: string, format: date-time }
+                        ok: { type: boolean }
+                        mismatches: { type: object, additionalProperties: { type: integer } }
+                        attention: { type: object, additionalProperties: { type: integer } }
+                        totals: { type: object, additionalProperties: { type: integer } }
+                  next_before: { type: [string, "null"] }
         "400": { $ref: "#/components/responses/Problem" }
         "401": { $ref: "#/components/responses/Problem" }
         "403": { $ref: "#/components/responses/Problem" }

@@ -112,8 +112,19 @@ starting the stack and `VITE_GOOGLE_CLIENT_ID` in `apps/backoffice/.env.local`.
 
 ## Daily operations
 
-- **Finance:** the *Finance* page reads every figure from the ledger for the last 7, 30 or 90 Nairobi days, with a
-  daily chart and table, and shows what is owed now (wallets, excise and withheld tax, prize pools, suspense).
+- **Finance** (owner, 2026-10-31, ADR 0023): the *Finance* page reads every figure from the ledger for a range of
+  Nairobi days (the last 7, 30 or 90 days, this or last month, this quarter, the year to date, or any two dates up to
+  366 days apart), cut by day, Monday-start week or calendar month. *Overview* has the money in and out, GGR per
+  period and what is owed now; *Top-ups* the M-Pesa funnel (started, credited, failed, cancelled, expired,
+  unconfirmed, reversed, still pending, and the median time to credit); *Payouts & tax* the payout funnel, each prize
+  pool and the withholding tax position (batches awaiting remittance, withholding not yet batched, the oldest
+  unremitted item's age); *Trial balance* every ledger account as at the range's end, with a warning when debits and
+  credits differ (they never should; it means a posting is broken, so stop and raise it); *Reconciliations* every
+  stored run of each area, newest first, with *Run now*. **For an audit**, use the two export buttons: *Export
+  figures* is the page as CSV (periods, totals, trial balance), *Export ledger* every ledger entry of the range (at
+  most 100,000; narrow the range if refused). Both answer with the file's SHA-256 (`X-File-SHA256`), and each export
+  is recorded in the activity log (`finance.exported`, `ledger.exported`) with who, the range, the row count and the
+  hash, so a file handed to an auditor can be matched to its download.
 - **Identity review:** open *Identity review*, compare each submission with the ID, approve or reject with what you
   checked. Opening the list is audited.
 - **Reconciliations:** run them from *Payments* and *Overview* when an alert says one failed or is stale; the run is

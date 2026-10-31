@@ -154,6 +154,9 @@ func (h *handlers) mountStaff(r chi.Router) {
 	r.With(admin).Put("/members/{id}/name", h.needs(signIn, "Staff members", h.staffSetName(true)))
 	r.With(admin).Get("/metrics", h.needs(h.StaffServices.Metrics != nil, "App metrics", h.staffMetrics))
 	r.With(anyStaff).Get("/finance", h.needs(h.StaffServices.Finance != nil, "Finance", h.staffFinance))
+	r.With(anyStaff).Get("/finance/export", h.needs(h.StaffServices.Finance != nil, "Finance", h.staffFinanceExport))
+	r.With(anyStaff).Get("/ledger/export", h.needs(h.StaffServices.Finance != nil, "Finance", h.staffLedgerExport))
+	r.With(anyStaff).Get("/reconciliations", h.needs(h.StaffServices.Oversight != nil, "Reconciliations", h.staffReconciliations))
 
 	r.With(anyStaff).Get("/kyc/queue", h.needs(h.StaffServices.KYC != nil, "KYC review", h.staffKYCQueue))
 	r.With(anyStaff).Get("/kyc/pending", h.needs(h.StaffServices.KYC != nil, "KYC review", h.staffKYCPending))
@@ -255,6 +258,8 @@ func staffError(w http.ResponseWriter, err error) {
 		{staff.ErrWrongPassword, m{http.StatusForbidden, "wrong-password", "Current password is incorrect"}},
 		{metrics.ErrRange, m{http.StatusBadRequest, "invalid-range", "The range must run forward and cover at most 366 days"}},
 		{finance.ErrRange, m{http.StatusBadRequest, "invalid-range", "The range must run forward and cover at most 366 days"}},
+		{finance.ErrGroup, m{http.StatusBadRequest, "invalid-group", "Group must be day, week or month"}},
+		{finance.ErrTooManyRows, m{http.StatusBadRequest, "too-many-rows", "Too many ledger entries for one file; narrow the range"}},
 		{payments.ErrNotFound, m{http.StatusNotFound, "not-found", "Not found"}},
 		{payments.ErrNotReversible, m{http.StatusConflict, "state", "Only a credited payment can be reversed"}},
 		{payments.ErrNotResolvable, m{http.StatusConflict, "state", "Only a settled, uncredited top-up can be resolved"}},
@@ -1294,16 +1299,4 @@ func (h *handlers) staffSetActive(active bool) http.HandlerFunc {
 	}
 }
 
-// staffFinance is the financial dashboard over Nairobi days from..to (default: the last 30 days, today included).
-func (h *handlers) staffFinance(w http.ResponseWriter, r *http.Request) {
-	from, to, ok := dateRange(w, r)
-	if !ok {
-		return
-	}
-	sum, err := h.StaffServices.Finance.Summary(r.Context(), from, to)
-	if err != nil {
-		staffError(w, err)
-		return
-	}
-	httpx.WriteJSON(w, http.StatusOK, sum)
-}
+// staffFinance and the other Finance tab handlers are in staff_finance.go.

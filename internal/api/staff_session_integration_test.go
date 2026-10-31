@@ -93,7 +93,7 @@ func TestStaffMembers_AnAdminInvitesAssignsRolesAndDisables(t *testing.T) {
 		t.Fatalf("unknown role: %d %s", r.Code, r.Raw)
 	}
 	amina := e.staffSignIn(t, "apple", "amina").Body["token"].(string)
-	if r := e.do(t, http.MethodGet, "/v1/staff/finance", amina, nil); r.Code != http.StatusOK || r.Body["totals"] == nil || len(r.Body["days"].([]any)) != 30 {
+	if r := e.do(t, http.MethodGet, "/v1/staff/finance", amina, nil); r.Code != http.StatusOK || r.Body["totals"] == nil || len(r.Body["periods"].([]any)) != 30 {
 		t.Fatalf("finance: %d %s", r.Code, r.Raw)
 	}
 	if r := e.do(t, http.MethodGet, "/v1/staff/finance?from=2026-11-02&to=2026-11-01", amina, nil); r.Code != http.StatusBadRequest {

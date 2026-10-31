@@ -22,6 +22,10 @@ var topUpStatuses = map[string]bool{
 var actorTypes = map[string]bool{"system": true, "player": true, "staff": true}
 
 func oversightError(w http.ResponseWriter, err error) {
+	if errors.Is(err, oversight.ErrArea) {
+		httpx.WriteProblem(w, http.StatusBadRequest, "invalid-area", "Invalid area", "use payments, game, draws or payouts")
+		return
+	}
 	if errors.Is(err, oversight.ErrCursor) {
 		httpx.WriteProblem(w, http.StatusBadRequest, "invalid-cursor", "Invalid cursor or date", "use next_before from the previous page and dates as YYYY-MM-DD")
 		return

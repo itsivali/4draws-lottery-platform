@@ -11,11 +11,11 @@ import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle }
 /** attention lists whose items are top-up ids: each opens the top-up */
 const topUpKeys = new Set(['unconfirmed', 'overdue_pending', 'receipt_claims'])
 
-/** Runs one reconciliation now and shows its findings (the run is stored by the server). */
-export function ReconcileCard({ path, title, description }: { path: string; title: string; description?: string }) {
+/** Runs one reconciliation now and shows its findings (the run is stored by the server; onDone hears it finished). */
+export function ReconcileCard({ path, title, description, onDone }: { path: string; title: string; description?: string; onDone?: () => void }) {
   const { api } = useSession()
   const [report, setReport] = useState<Reconciliation | null>(null)
-  const { state, run } = useAction()
+  const { state, run } = useAction(onDone)
   const issues = (m: Record<string, string[] | undefined> | null | undefined) => Object.entries(m ?? {}).filter(([, v]) => (v?.length ?? 0) > 0)
   const busy = state.kind === 'busy'
   return (
