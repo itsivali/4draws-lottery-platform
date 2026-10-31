@@ -22,6 +22,7 @@ import '../application/wallet_providers.dart';
 import '../domain/wallet_models.dart';
 import 'amount_form.dart';
 import 'money_flow_view.dart';
+import 'receipt_claim_card.dart';
 import 'top_up_cooldown_note.dart';
 
 class TopUpScreen extends ConsumerStatefulWidget {
@@ -165,7 +166,7 @@ class _TopUpScreenState extends ConsumerState<TopUpScreen> {
                               TopUpStatus.failed => (
                                 StatusTone.error,
                                 'Not completed',
-                                'M-Pesa did not confirm a payment, so nothing was taken. You can try again.',
+                                'M-Pesa did not confirm a payment. Usually nothing was taken and you can try again.',
                               ),
                               TopUpStatus.unconfirmed => (
                                 StatusTone.warning,
@@ -181,6 +182,13 @@ class _TopUpScreenState extends ConsumerState<TopUpScreen> {
                               ),
                               TopUpStatus.pending => (StatusTone.pending, 'Waiting for M-Pesa', ''),
                             },
+                            below: (x) => x.status == TopUpStatus.unconfirmed || x.status == TopUpStatus.failed
+                                ? ReceiptClaimCard(
+                                    topUp: x,
+                                    compact: x.status == TopUpStatus.failed,
+                                    onChanged: m.flow.refresh,
+                                  )
+                                : null,
                             onDone: () {
                               m.flow.reset();
                               context.go('/wallet');

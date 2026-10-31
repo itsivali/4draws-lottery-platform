@@ -15,6 +15,7 @@ import '../../../core/widgets/skeleton.dart';
 import '../../../core/widgets/status_pill.dart';
 import '../application/wallet_providers.dart';
 import '../domain/wallet_models.dart';
+import 'receipt_claim_card.dart';
 import 'wallet_copy.dart';
 
 const _preview = 5;
@@ -115,12 +116,15 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
           row: (TopUp tp) {
             final (tone, label) = topUpStatus(tp.status);
             final (color, icon) = tone.resolve(c);
+            final claimLine = receiptClaimLine(tp);
+            final canAct = tp.status == TopUpStatus.unconfirmed || tp.status == TopUpStatus.failed;
             return ListRow(
               icon: icon,
               iconColor: color,
               title: formatKes(tp.amountConfirmedKes ?? tp.amountRequestedKes),
-              subtitle: formatEat(tp.createdAt),
+              subtitle: claimLine == null ? formatEat(tp.createdAt) : '${formatEat(tp.createdAt)}\n$claimLine',
               trailing: StatusPill(tone: tone, label: label, compact: true),
+              onTap: canAct ? () => _showReceiptSheet(context, tp) : null,
             );
           },
         ),
@@ -251,3 +255,22 @@ class _Section<T> extends StatelessWidget {
     );
   }
 }
+
+/// The receipt from the player's M-Pesa message, for a top-up in the history that was not credited.
+Future<void> _showReceiptSheet(BuildContext context, TopUp topUp) => showModalBottomSheet<void>(
+  context: context,
+  isScrollControlled: true,
+  showDragHandle: true,
+  builder: (sheet) => Padding(
+    padding: EdgeInsets.fromLTRB(Space.lg, 0, Space.lg, Space.lg + MediaQuery.viewInsetsOf(sheet).bottom),
+    child: Consumer(
+      builder: (context, ref, _) {
+        // the row's top-up is re-read after the receipt is taken, so the sheet follows the server's view of it
+        final latest = ref.watch(topUpsProvider).value?.where((x) => x.id == topUp.id).firstOrNull ?? topUp;
+        return SingleChildScrollView(
+          child: ReceiptClaimCard(topUp: latest, onChanged: () => ref.invalidate(topUpsProvider)),
+        );
+      },
+    ),
+  ),
+);

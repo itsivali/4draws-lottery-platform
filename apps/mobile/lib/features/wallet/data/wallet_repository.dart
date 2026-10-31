@@ -22,6 +22,17 @@ class WalletRepository {
 
   Future<TopUp> topUp(String id) async => parse(await _api.get('/v1/payments/$id'), TopUp.fromJson);
 
+  /// Gives the receipt from the player's M-Pesa message for a top-up that was not credited. The server asks M-Pesa
+  /// about it when it can, else the team confirms it from the statement; nothing is credited by this call.
+  Future<ReceiptClaim> claimReceipt({
+    required String id,
+    required String receipt,
+    required String idempotencyKey,
+  }) async => parse(
+    await _api.post('/v1/payments/$id/receipt', idempotencyKey: idempotencyKey, body: {'receipt': receipt}),
+    ReceiptClaim.fromJson,
+  );
+
   /// Debits the wallet and sends the money to the account's proved number; `processing` until M-Pesa's answer is
   /// confirmed.
   Future<Payout> withdraw({required int amountKes, required String idempotencyKey}) async => parse(

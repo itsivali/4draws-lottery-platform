@@ -37,6 +37,14 @@ type C2BVerifyArgs struct {
 // Kind implements river.JobArgs.
 func (C2BVerifyArgs) Kind() string { return "payments.c2b_verify" }
 
+// ClaimCheckArgs asks M-Pesa about the receipt a player claimed for an uncredited top-up. One job per payment.
+type ClaimCheckArgs struct {
+	PaymentID string `json:"payment_id" river:"unique"`
+}
+
+// Kind implements river.JobArgs.
+func (ClaimCheckArgs) Kind() string { return "payments.claim_check" }
+
 // ReconcileArgs runs the daily internal reconciliation.
 type ReconcileArgs struct{}
 
@@ -83,6 +91,29 @@ func (e *RiverEnqueuer) EnqueueC2B(ctx context.Context, tx pgx.Tx, confirmationI
 	_, err := e.client.InsertTx(ctx, tx, C2BVerifyArgs{ConfirmationID: confirmationID, Source: source},
 		&river.InsertOpts{MaxAttempts: verifyMaxAttempts, UniqueOpts: river.UniqueOpts{ByArgs: true}})
 	return err
+}
+
+// EnqueueClaimCheck implements Enqueuer.
+func (e *RiverEnqueuer) EnqueueClaimCheck(ctx context.Context, tx pgx.Tx, paymentID string) error {
+	_, err := e.client.InsertTx(ctx, tx, ClaimCheckArgs{PaymentID: paymentID},
+		&river.InsertOpts{MaxAttempts: verifyMaxAttempts, UniqueOpts: river.UniqueOpts{ByArgs: true}})
+	return err
+}
+
+type claimWorker struct {
+	river.WorkerDefaults[ClaimCheckArgs]
+	svc *Service
+}
+
+func (w *claimWorker) Work(ctx context.Context, j *river.Job[ClaimCheckArgs]) error {
+	d, err := w.svc.CheckClaim(ctx, j.Args.PaymentID)
+	if err != nil {
+		return err
+	}
+	if d > 0 {
+		return river.JobSnooze(d)
+	}
+	return nil
 }
 
 type pushWorker struct {
@@ -153,6 +184,7 @@ func AddWorkers(ws *river.Workers, svc *Service) {
 	river.AddWorker(ws, &pushWorker{svc: svc})
 	river.AddWorker(ws, &verifyWorker{svc: svc})
 	river.AddWorker(ws, &c2bWorker{svc: svc})
+	river.AddWorker(ws, &claimWorker{svc: svc})
 	river.AddWorker(ws, &sweepWorker{svc: svc})
 	river.AddWorker(ws, &reconcileWorker{svc: svc})
 }

@@ -38,7 +38,7 @@ on its own only applies while the admin has no password at all: changing it afte
 
 | Role | Can |
 |---|---|
-| `staff` | every operational queue: identity review (each view audited as unmasked; approve or reject with a reason), payments (reconciliations, reversals, unconfirmed top-ups, suspense, paybill re-checks), draws (sign, approve, void with a reason), payouts (approve, reject, settle from the statement, retry prizes), KRA tax (prepare batches, download files, record remittances), alerts (acknowledge), account closures; and the *Finance* dashboard |
+| `staff` | every operational queue: identity review (each view audited as unmasked; approve or reject with a reason), payments (reconciliations, reversals, unconfirmed top-ups and players' receipts, the M-Pesa statement import, suspense, paybill re-checks), draws (sign, approve, void with a reason), payouts (approve, reject, settle from the statement, retry prizes), KRA tax (prepare batches, download files, record remittances), alerts (acknowledge), account closures; and the *Finance* dashboard |
 | `admin` | everything staff can, and the *Staff* page (invite, roles, disable and re-enable, reset passwords; never their own) and the *App metrics* page |
 
 **Two-person rules hold in the back office as in `lotteryctl`:** two different people sign, and two approve, each

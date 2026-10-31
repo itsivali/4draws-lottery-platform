@@ -495,6 +495,49 @@ paths:
         "401": { $ref: "#/components/responses/Problem" }
         "429": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
+  /v1/payments/{id}/receipt:
+    post:
+      operationId: claimReceipt
+      tags: [payments]
+      summary: Give the M-Pesa receipt for a top-up that was not credited
+      description: |
+        For a top-up that settled without being credited (`unconfirmed` or `failed`), the receipt code from the
+        player's M-Pesa message. The platform asks M-Pesa about it (Transaction Status) when it can and credits the
+        top-up once M-Pesa confirms the receipt, the amount and the payer; otherwise an operator confirms it from the
+        statement. Nothing is credited on this call. Limited to 10 an hour per player.
+      parameters:
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [receipt]
+              properties:
+                receipt: { type: string, description: "10 letters and digits" }
+      responses:
+        "202":
+          description: The claim as recorded
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [receipt, status]
+                properties:
+                  receipt: { type: string }
+                  status: { type: string, enum: [claimed, checking] }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409":
+          description: "`still-settling`, `not-claimable` (credited already), `claim-open`, `receipt-used`"
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
   /v1/payments/{id}:
     get:
       operationId: getPayment
@@ -1293,6 +1336,11 @@ paths:
           in: query
           required: false
           schema: { type: string, enum: [initiated, stk_sent, callback_received, verified, credited, failed, cancelled, expired, unconfirmed, reversed] }
+        - { name: reason, in: query, required: false, schema: { type: string }, description: "A failure reason, such as `paid_without_callback`." }
+        - { name: channel, in: query, required: false, schema: { type: string, enum: [stk, c2b] } }
+        - { name: from, in: query, required: false, schema: { type: string, format: date }, description: "Nairobi day, inclusive." }
+        - { name: to, in: query, required: false, schema: { type: string, format: date }, description: "Nairobi day, inclusive." }
+        - { name: claimed, in: query, required: false, schema: { type: boolean }, description: "Only top-ups whose player gave a receipt that awaits M-Pesa or an operator." }
         - { name: limit, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
         - { name: before, in: query, required: false, schema: { type: string }, description: "`next_before` of the previous page." }
       responses:
@@ -1736,6 +1784,198 @@ paths:
         "409": { $ref: "#/components/responses/Problem" }
         "429": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
+  /v1/staff/topups/{id}:
+    get:
+      operationId: staffTopUp
+      tags: [back-office]
+      summary: One top-up in full
+      description: |
+        Role: `staff` (admins too). The payment with its M-Pesa identifiers, Safaricom's callback (parsed and raw),
+        the receipt the player claimed and M-Pesa's answer about it, orphan callbacks for its checkout, the background
+        jobs that worked on it, its audit trail and the player's standing. The player's name is unmasked and audited.
+      security: [{ staffBearer: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: The top-up
+          content:
+            application/json:
+              schema: { type: object }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /v1/staff/topups/{id}/recheck:
+    post:
+      operationId: staffTopUpRecheck
+      tags: [back-office]
+      summary: Ask M-Pesa about a top-up again
+      description: |
+        Role: `staff` (admins too). A paid callback that arrived late or as an orphan is credited; otherwise the
+        status query is asked: a failure is recorded, a success reported as needing the receipt (`paid_without_receipt`).
+        Outcomes: `credited`, `paid_without_receipt`, `failed`, `cancelled`, `pending`, `no_prompt`, `asking`.
+      security: [{ staffBearer: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: What M-Pesa said
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [outcome, status]
+                properties:
+                  outcome: { type: string }
+                  status: { type: string }
+                  result_code: { type: [integer, "null"] }
+                  result_desc: { type: string }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+  /v1/staff/topups/{id}/resolve:
+    post:
+      operationId: staffTopUpResolve
+      tags: [back-office]
+      summary: Credit a settled, uncredited top-up from a receipt
+      description: "Role: `staff` (admins too). Credits exactly like a confirmed callback; a receipt the player claimed is confirmed or rejected accordingly."
+      security: [{ staffBearer: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [receipt, amount_kes]
+              properties:
+                receipt: { type: string }
+                amount_kes: { type: integer }
+                note: { type: string }
+      responses:
+        "204": { description: Credited }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /v1/staff/topups/{id}/dismiss:
+    post:
+      operationId: staffTopUpDismiss
+      tags: [back-office]
+      summary: Close an unconfirmed top-up that is not on the statement
+      description: "Role: `staff` (admins too). The top-up fails as `not_on_statement`; a claimed receipt is rejected with the note."
+      security: [{ staffBearer: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [note]
+              properties:
+                note: { type: string }
+      responses:
+        "204": { description: Dismissed }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /v1/staff/payments/statement/match:
+    post:
+      operationId: staffStatementMatch
+      tags: [back-office]
+      summary: Match an M-Pesa statement to the platform's top-ups
+      description: |
+        Role: `staff` (admins too). The statement CSV as a multipart `file` field or as the raw body. Every paid row is
+        matched by receipt (already credited, or claimed by the player), else by amount, number and time to one prompt
+        that settled uncredited. Nothing is credited: the report lists what to confirm (`to_credit`).
+      security: [{ staffBearer: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema: { type: object, properties: { file: { type: string, format: binary } } }
+          text/csv:
+            schema: { type: string }
+      responses:
+        "200":
+          description: The matching report
+          content:
+            application/json:
+              schema: { type: object }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+  /v1/staff/payments/statement/apply:
+    post:
+      operationId: staffStatementApply
+      tags: [back-office]
+      summary: Credit the top-ups confirmed from a matched statement
+      description: "Role: `staff` (admins too). Each credit stands alone; the import is recorded with the report and the outcomes."
+      security: [{ staffBearer: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [sha256, credits]
+              properties:
+                filename: { type: string }
+                sha256: { type: string }
+                rows: { type: integer }
+                credits:
+                  type: array
+                  items:
+                    type: object
+                    required: [payment_id, receipt, amount_kes]
+                    properties:
+                      payment_id: { type: string }
+                      receipt: { type: string }
+                      amount_kes: { type: integer }
+                report: { type: object }
+      responses:
+        "200":
+          description: What was credited
+          content:
+            application/json:
+              schema: { type: object }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+  /v1/staff/payments/statements:
+    get:
+      operationId: staffStatementImports
+      tags: [back-office]
+      summary: Past statement imports
+      description: "Role: `staff` (admins too)."
+      security: [{ staffBearer: [] }]
+      parameters:
+        - { name: limit, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 100 } }
+      responses:
+        "200":
+          description: Imports, newest first
+          content:
+            application/json:
+              schema: { type: object }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
   /v1/staff/payments/{id}/resolve:
     post:
       operationId: staffResolve
@@ -2952,6 +3192,17 @@ components:
         next_top_up_in_s:
           type: integer
           description: On a new top-up only, seconds until another prompt may be asked for (the top-up cooldown).
+        receipt_claim:
+          type: object
+          description: |
+            The receipt the player gave for a top-up that settled uncredited (POST /v1/payments/{id}/receipt), and what
+            became of it: `claimed` (M-Pesa not asked yet, or cannot be asked), `checking` (M-Pesa asked), `confirmed`
+            (credited), `unverified` (M-Pesa did not confirm it; an operator decides; `note` says why), `rejected`.
+          required: [receipt, status]
+          properties:
+            receipt: { type: string }
+            status: { type: string, enum: [claimed, checking, confirmed, unverified, rejected] }
+            note: { type: string }
     MoneyBounds:
       type: object
       required: [min_kes, max_kes]

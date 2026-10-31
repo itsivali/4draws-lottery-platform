@@ -49,6 +49,8 @@ export function SystemPage() {
                 {[
                   { label: 'Open alerts', value: s.open_alerts, tone: s.open_alerts > 0 ? 'text-destructive' : '', to: '/alerts' },
                   { label: 'Top-ups in progress', value: s.top_ups_pending, tone: '', to: '/topups' },
+                  { label: 'Unconfirmed top-ups', value: s.top_ups_unconfirmed, tone: s.top_ups_unconfirmed > 0 ? 'text-warning' : '', to: '/topups?status=unconfirmed' },
+                  { label: 'Receipts from players to check', value: s.receipt_claims, tone: s.receipt_claims > 0 ? 'text-warning' : '', to: '/topups?claimed=true' },
                   { label: 'Plays today', value: s.plays_today, tone: '', to: '/plays' },
                   { label: 'Players', value: s.players, tone: '', to: '/players' },
                 ].map((t) => (

@@ -134,6 +134,7 @@ func Mount(d Deps) func(chi.Router) {
 				r.Get("/payments", h.listPayments)
 				r.Get("/payments/events", h.paymentEvents)
 				r.Get("/payments/{id}", h.getPayment)
+				r.Post("/payments/{id}/receipt", h.claimReceipt)
 				r.Post("/plays", h.play)
 				r.Get("/plays/today", h.playsToday)
 				r.Get("/fairness", h.fairness)

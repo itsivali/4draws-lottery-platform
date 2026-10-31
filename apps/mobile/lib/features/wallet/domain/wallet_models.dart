@@ -132,6 +132,31 @@ enum TopUpStatus {
   bool get settled => this != pending;
 }
 
+/// What became of the receipt the player gave for a top-up that settled uncredited (owner, 2026-10-31).
+enum ReceiptClaimStatus {
+  claimed, // sent; M-Pesa not asked yet
+  checking, // M-Pesa asked
+  confirmed, // M-Pesa confirmed it: credited
+  unverified, // M-Pesa did not confirm it; the team checks the statement
+  rejected; // not accepted (the note says why)
+
+  bool get open => this == claimed || this == checking;
+}
+
+class ReceiptClaim {
+  const ReceiptClaim({required this.receipt, required this.status, this.note});
+
+  factory ReceiptClaim.fromJson(JsonObject j) => ReceiptClaim(
+    receipt: j.str('receipt'),
+    status: ReceiptClaimStatus.values.byName(j.str('status')),
+    note: j.strOrNull('note'),
+  );
+
+  final String receipt;
+  final ReceiptClaimStatus status;
+  final String? note;
+}
+
 class TopUp {
   const TopUp({
     required this.id,
@@ -139,6 +164,7 @@ class TopUp {
     required this.amountRequestedKes,
     required this.amountConfirmedKes,
     required this.createdAt,
+    this.claim,
   });
 
   factory TopUp.fromJson(JsonObject j) => TopUp(
@@ -147,6 +173,10 @@ class TopUp {
     amountRequestedKes: j.integer('amount_requested_kes'),
     amountConfirmedKes: j.intOrNull('amount_confirmed_kes'),
     createdAt: j.instant('created_at'),
+    claim: switch (j.objectOrNull('receipt_claim')) {
+      final c? => ReceiptClaim.fromJson(c),
+      null => null,
+    },
   );
 
   final String id;
@@ -156,6 +186,14 @@ class TopUp {
   /// What M-Pesa confirmed the player paid (gross, before excise); null until credited.
   final int? amountConfirmedKes;
   final DateTime createdAt;
+
+  /// The receipt the player gave for a top-up that was not credited, if any.
+  final ReceiptClaim? claim;
+
+  /// Whether the player may give the receipt from their M-Pesa message: settled without being credited, and no
+  /// receipt is being checked right now.
+  bool get canClaimReceipt =>
+      (status == TopUpStatus.unconfirmed || status == TopUpStatus.failed) && !(claim?.status.open ?? false);
 }
 
 enum PayoutStatus {

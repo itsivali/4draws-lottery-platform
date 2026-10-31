@@ -17,7 +17,7 @@ SELECT id, user_id, status, amount_requested_kes, amount_confirmed_kes, msisdn, 
 FROM payments.payments WHERE id = $1 FOR UPDATE;
 
 -- name: LockPaymentByCheckout :one
-SELECT id, status FROM payments.payments WHERE checkout_request_id = $1 FOR UPDATE;
+SELECT id, user_id, status, msisdn FROM payments.payments WHERE checkout_request_id = $1 FOR UPDATE;
 
 -- name: MarkSTKSent :execrows
 UPDATE payments.payments
@@ -256,14 +256,14 @@ SELECT trans_id FROM payments.c2b_confirmations WHERE conflicting AND status = '
 
 -- What a player's live stream starts from: payments still being settled, and those that changed recently.
 -- name: RecentPayments :many
-SELECT id, status, amount_requested_kes, amount_confirmed_kes, created_at
+SELECT id, status, amount_requested_kes, amount_confirmed_kes, created_at, claimed_receipt, claim_status, claim_note
 FROM payments.payments
 WHERE user_id = sqlc.arg(user_id)
   AND (updated_at >= sqlc.arg(since) OR status IN ('initiated','stk_sent','callback_received','verified'))
 ORDER BY created_at DESC LIMIT 20;
 
 -- name: ListPayments :many
-SELECT id, status, amount_requested_kes, amount_confirmed_kes, created_at
+SELECT id, status, amount_requested_kes, amount_confirmed_kes, created_at, claimed_receipt, claim_status, claim_note
 FROM payments.payments
 WHERE user_id = sqlc.arg(user_id)
 ORDER BY created_at DESC, id DESC LIMIT sqlc.arg(lim);
@@ -278,3 +278,73 @@ WHERE user_id = sqlc.arg(user_id) AND status IN ('initiated','stk_sent','callbac
 SELECT created_at FROM payments.payments
 WHERE user_id = $1 AND channel = 'stk'
 ORDER BY created_at DESC LIMIT 1;
+
+-- Top-up reconciliation (owner, 2026-10-31): the receipt a player claims, what M-Pesa said about it, statements.
+
+-- name: GetPaymentDetail :one
+SELECT id, user_id, channel, status, amount_requested_kes, amount_confirmed_kes, msisdn, merchant_request_id,
+       checkout_request_id, mpesa_receipt, raw_callback, failure_reason, result_code, reversed_at, reversal_reason,
+       claimed_receipt, claimed_at, claim_status, claim_originator, claim_result, claim_note, created_at, updated_at
+FROM payments.payments WHERE id = $1;
+
+-- name: ClaimReceipt :exec
+UPDATE payments.payments
+   SET claimed_receipt = sqlc.arg(receipt), claimed_at = sqlc.arg(at), claim_status = 'claimed', claim_originator = NULL,
+       claim_result = NULL, claim_note = NULL, updated_at = sqlc.arg(at)
+ WHERE id = sqlc.arg(id);
+
+-- name: SetClaimStatus :exec
+UPDATE payments.payments
+   SET claim_status = sqlc.arg(status), claim_originator = coalesce(sqlc.narg(originator), claim_originator),
+       claim_result = coalesce(sqlc.narg(result), claim_result), claim_note = sqlc.narg(note), updated_at = sqlc.arg(at)
+ WHERE id = sqlc.arg(id);
+
+-- name: LockPaymentByClaim :one
+-- a Transaction Status answer names the request it answers; an answer to an earlier request is matched by the receipt
+SELECT id FROM payments.payments
+WHERE claim_originator = sqlc.arg(originator) OR (sqlc.arg(receipt)::text <> '' AND claimed_receipt = sqlc.arg(receipt)::text AND claim_status IN ('claimed','checking'))
+ORDER BY (claim_originator = sqlc.arg(originator)) DESC LIMIT 1 FOR UPDATE;
+
+-- name: ClaimsToCheck :many
+-- claims M-Pesa has not been asked about yet, or asked longer ago than the wait: the sweep asks again
+SELECT id FROM payments.payments
+WHERE claim_status IN ('claimed','checking') AND coalesce(updated_at, claimed_at) < $1
+ORDER BY claimed_at LIMIT 50;
+
+-- name: ReceiptClaims :many
+SELECT id FROM payments.payments WHERE claim_status IN ('claimed','checking','unverified') ORDER BY claimed_at;
+
+-- name: OrphanCallbacksFor :many
+SELECT id::text, raw_payload, received_at FROM payments.stk_orphan_callbacks WHERE checkout_request_id = $1 ORDER BY received_at DESC LIMIT 5;
+
+-- name: PaymentsByReceipts :many
+SELECT id, user_id, status, mpesa_receipt, claimed_receipt, amount_confirmed_kes, created_at FROM payments.payments
+WHERE mpesa_receipt = ANY(sqlc.arg(receipts)::text[]) OR claimed_receipt = ANY(sqlc.arg(receipts)::text[]);
+
+-- name: StatementCandidates :many
+-- prompts that may be the statement's rows: not credited, in the statement's time window (with a margin)
+SELECT p.id, p.user_id, p.status, p.failure_reason, p.amount_requested_kes, p.msisdn, p.claimed_receipt, p.claim_status, p.created_at
+FROM payments.payments p
+WHERE p.channel = 'stk' AND p.status IN ('unconfirmed','failed','cancelled','expired') AND p.msisdn IS NOT NULL
+  AND p.created_at BETWEEN sqlc.arg(from_at) AND sqlc.arg(to_at)
+ORDER BY p.created_at;
+
+-- name: CreditedBetween :many
+-- credited prompts in the window, to find ones the statement does not show
+SELECT id, user_id, mpesa_receipt, amount_confirmed_kes, msisdn, created_at FROM payments.payments
+WHERE channel = 'stk' AND status IN ('credited','reversed') AND created_at BETWEEN sqlc.arg(from_at) AND sqlc.arg(to_at)
+ORDER BY created_at;
+
+-- name: InsertStatementImport :one
+INSERT INTO payments.statement_imports (imported_by, imported_at, filename, sha256, rows_total, matched, credited, credited_kes, report)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id;
+
+-- name: ListStatementImports :many
+SELECT id, imported_by, imported_at, filename, sha256, rows_total, matched, credited, credited_kes, report
+FROM payments.statement_imports ORDER BY imported_at DESC LIMIT $1;
+
+-- name: MarkClaimChecking :exec
+-- only while the claim is still open: M-Pesa's answer may have arrived (and settled it) before the request returned
+UPDATE payments.payments
+   SET claim_status = 'checking', claim_originator = sqlc.arg(originator)::text, updated_at = sqlc.arg(at)
+ WHERE id = sqlc.arg(id) AND claim_status IN ('claimed','checking');

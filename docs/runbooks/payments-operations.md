@@ -18,8 +18,13 @@ logged: `ERROR payments reconciliation found mismatches` or `WARN ... items need
   `deposit_without_credit`, `deposit_amount_mismatch`, `reversal_mismatch`, `clearing_vs_credited` (now credited +
   open suspense), `liability_vs_wallets`, `suspense_vs_items`, `suspense_without_journal`). They should never happen: stop and investigate (a bug or tampering).
 - **Attention** lists work for an operator:
-  - `unconfirmed`: the status query said paid but no receipt arrived. Find the payment on the M-Pesa statement (same
-    phone number, amount, time) and resolve it (below). If it is not on the statement, leave it and note why.
+  - `unconfirmed`: settlement gave up without M-Pesa's confirmation (`paid_without_callback`: the status query said
+    paid but no receipt arrived; `still_pending_at_expiry`; `query_rejected`). Open the top-up in the back office
+    (Top-ups → the row): a late callback or the player's receipt may already have settled it. Otherwise import the
+    M-Pesa statement (below), or resolve it from the receipt by hand, or dismiss it as not on the statement.
+  - `receipt_claims`: receipts players gave for uncredited top-ups that M-Pesa has not confirmed (`claimed`,
+    `checking`) or did not confirm (`unverified`, with M-Pesa's reason on the top-up). Check the statement for the
+    receipt and resolve or dismiss.
   - `overdue_pending`: pending past the expiry window: the sweep should settle these; persistent ones are a bug.
   - `orphan_callbacks`: callbacks for pushes we never recorded. Check the statement for a matching receipt.
   - `players_in_debt`: players who owe after a reversal; recovered automatically from their next top-ups.
@@ -71,14 +76,42 @@ confirms every payment: delete the key from render.yaml and the dashboard when s
 If every prompt to one number times out (1037) about 26 seconds after the PIN, with no deduction and no SMS, the PIN
 is not reaching M-Pesa: check that the line is the phone's M-Pesa SIM, try another number, or ask Safaricom (100).
 
-## Resolve an unconfirmed top-up from the statement
+## A top-up M-Pesa completed but the platform never credited (ADR 0024)
+
+Money is credited only against an M-Pesa receipt. For a top-up that settled uncredited the receipt comes from one of:
+
+1. **A late callback.** Safaricom retries callbacks; one that arrives after the top-up settled credits it at once
+   (audit `payment.topup.credited`, `source: late_callback`). Nothing to do.
+2. **The player's M-Pesa message.** The app asks the player for the receipt code once a top-up settles uncredited
+   (`POST /v1/payments/{id}/receipt`). With the paybill initiator configured (`DARAJA_C2B_SHORTCODE`,
+   `DARAJA_INITIATOR_NAME`, `DARAJA_SECURITY_CREDENTIAL`) the platform asks M-Pesa about the receipt (Transaction
+   Status) and credits the top-up when M-Pesa confirms a completed payment of the amount asked, to our business, from
+   the player's number. A claim M-Pesa does not confirm is `unverified` with the reason; the sweep asks again every
+   10 minutes while M-Pesa has not answered. Without the initiator the claim waits for you.
+3. **The M-Pesa statement.** Back office → Payments → *Import an M-Pesa statement*: upload Safaricom's CSV export
+   (organisation portal → Completed transactions → Export). Every paid row is matched: `credited` (known receipt),
+   `claimed` (the receipt a player gave), `matched` (one prompt with the same amount, number and time: 2 h before
+   to 20 min after the prompt), `ambiguous` (pick one), `unmatched`. Credited prompts in the window that the
+   statement does not show are listed as *missing from statement*: either the file is partial or a credit is wrong.
+   Nothing is credited by the upload; confirm the list and each credit stands alone. The import is kept
+   (`payments.statement_imports`: file hash, counts, report, outcomes) and audited (`payment.statement.imported`).
+4. **You, one top-up at a time**, from the top-up's page in the back office (`GET /v1/staff/topups/{id}` shows the
+   callback, the claim and M-Pesa's answer, orphan callbacks, the jobs, the audit trail, the player's standing):
+   - *Ask M-Pesa again* (`recheck`): credits an orphan or late callback; otherwise reports the status query:
+     `paid_without_receipt` means the receipt is still needed; a failure code is recorded.
+   - *Credit from a receipt* (`resolve`): with the receipt and the amount on the statement, and a note.
+   - *Not on the statement* (`dismiss`): the top-up fails as `not_on_statement`; a claimed receipt is rejected with
+     your note. It can still be credited later if it does turn up.
+
+From the command line:
 
 ```sh
 go run ./cmd/lotteryctl payments resolve -payment <payment id> -receipt <M-Pesa receipt> -amount <KES on the statement> -operator <your staff id>
 ```
 
-Credits exactly like a confirmed callback (excise booked to the operator, debt recovered, phone proved). Refused if the payment is
-not `unconfirmed` or the receipt already credited another payment.
+Credits exactly like a confirmed callback (excise booked to the operator, debt recovered, phone proved). Refused if the
+payment holds money already or is still being settled, if the receipt is not 10 letters and digits, or if the receipt
+already credited another payment. A receipt credits one payment, ever.
 
 ## Reverse a top-up M-Pesa took back
 

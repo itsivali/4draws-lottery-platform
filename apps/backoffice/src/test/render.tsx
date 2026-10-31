@@ -12,7 +12,7 @@ export type Route = (method: string, url: URL, body: unknown) => { status: numbe
 export function renderSignedIn(ui: ReactNode, { roles, route, path = '/' }: { roles: Role[]; route: Route; path?: string }) {
   const fetch = vi.fn<typeof globalThis.fetch>(async (input, init) => {
     const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url)
-    const body: unknown = typeof init?.body === 'string' ? JSON.parse(init.body) : undefined
+    const body: unknown = typeof init?.body === 'string' ? parseBody(init.body) : undefined
     const r = await route(init?.method ?? 'GET', url, body)
     const problem = r.status >= 400
     return new Response(r.body === undefined ? null : JSON.stringify(r.body), {
@@ -34,3 +34,11 @@ export const problem = (status: number, slug: string, title: string) => ({
   status,
   body: { type: `https://lottery.example/problems/${slug}`, title, status },
 })
+
+function parseBody(raw: string): unknown {
+  try {
+    return JSON.parse(raw)
+  } catch {
+    return raw // a text upload (the M-Pesa statement)
+  }
+}

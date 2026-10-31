@@ -28,10 +28,61 @@ type topUpJSON struct {
 	CreatedAt          time.Time `json:"created_at"`
 	// NextTopUpInS, on a new top-up, is how long until the player may ask for another prompt (the cooldown)
 	NextTopUpInS int64 `json:"next_top_up_in_s,omitempty"`
+	// ReceiptClaim is the receipt the player gave for a top-up that settled uncredited, and what became of it
+	ReceiptClaim *claimJSON `json:"receipt_claim,omitempty"`
+}
+
+type claimJSON struct {
+	Receipt string `json:"receipt"`
+	Status  string `json:"status"` // claimed, checking, confirmed, unverified or rejected
+	Note    string `json:"note,omitempty"`
 }
 
 func toTopUpJSON(t payments.TopUp) topUpJSON {
-	return topUpJSON{ID: t.ID, Status: t.Status, AmountRequestedKES: t.AmountRequestedKES, AmountConfirmedKES: t.AmountConfirmedKES, CreatedAt: t.CreatedAt}
+	out := topUpJSON{ID: t.ID, Status: t.Status, AmountRequestedKES: t.AmountRequestedKES, AmountConfirmedKES: t.AmountConfirmedKES, CreatedAt: t.CreatedAt}
+	if t.Claim != nil {
+		out.ReceiptClaim = &claimJSON{Receipt: t.Claim.Receipt, Status: t.Claim.Status, Note: t.Claim.Note}
+	}
+	return out
+}
+
+// claimReceipt takes the receipt from the player's M-Pesa message for a top-up that settled without being credited
+// (owner, 2026-10-31). M-Pesa is asked about it when the platform can; otherwise an operator confirms it. Nothing is
+// credited until one of them does.
+func (h *handlers) claimReceipt(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Receipt string `json:"receipt"`
+	}
+	if !httpx.DecodeJSON(w, r, &in) {
+		return
+	}
+	p, _ := principalFrom(r.Context())
+	if !h.limit(w, r, "receipt:user:"+p.UserID, 10, time.Hour) {
+		return
+	}
+	if h.Payments == nil {
+		paymentsUnavailable(w)
+		return
+	}
+	c, err := h.Payments.ClaimReceipt(r.Context(), p.UserID, chi.URLParam(r, "id"), in.Receipt)
+	switch {
+	case err == nil:
+		httpx.WriteJSON(w, http.StatusAccepted, claimJSON{Receipt: c.Receipt, Status: c.Status, Note: c.Note})
+	case errors.Is(err, payments.ErrNotFound):
+		httpx.WriteProblem(w, http.StatusNotFound, "not-found", "Not found", "")
+	case errors.Is(err, payments.ErrInvalidReceipt):
+		httpx.WriteProblem(w, http.StatusBadRequest, "invalid-receipt", "Check the receipt", "an M-Pesa receipt is 10 letters and digits, like QJ7XK2M9PL")
+	case errors.Is(err, payments.ErrStillSettling):
+		httpx.WriteProblem(w, http.StatusConflict, "still-settling", "This top-up is still being confirmed", "wait for it to settle; the receipt is only needed if it is not credited")
+	case errors.Is(err, payments.ErrNotClaimable):
+		httpx.WriteProblem(w, http.StatusConflict, "not-claimable", "This top-up is already credited", "")
+	case errors.Is(err, payments.ErrClaimOpen):
+		httpx.WriteProblem(w, http.StatusConflict, "claim-open", "A receipt is already being checked for this top-up", "")
+	case errors.Is(err, payments.ErrReceiptUsed):
+		httpx.WriteProblem(w, http.StatusConflict, "receipt-used", "This receipt already credited a top-up", "")
+	default:
+		internalError(w, err)
+	}
 }
 
 func (h *handlers) startTopUp(w http.ResponseWriter, r *http.Request) {

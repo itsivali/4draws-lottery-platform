@@ -61,6 +61,13 @@ type staffRoute struct {
 }
 
 var staffRoutes = []staffRoute{
+	{http.MethodGet, "/v1/staff/topups/0192f000-0000-7000-8000-000000000001", staff.Staff},
+	{http.MethodPost, "/v1/staff/topups/0192f000-0000-7000-8000-000000000001/recheck", staff.Staff},
+	{http.MethodPost, "/v1/staff/topups/0192f000-0000-7000-8000-000000000001/resolve", staff.Staff},
+	{http.MethodPost, "/v1/staff/topups/0192f000-0000-7000-8000-000000000001/dismiss", staff.Staff},
+	{http.MethodPost, "/v1/staff/payments/statement/match", staff.Staff},
+	{http.MethodPost, "/v1/staff/payments/statement/apply", staff.Staff},
+	{http.MethodGet, "/v1/staff/payments/statements", staff.Staff},
 	{http.MethodGet, "/v1/staff/kyc/pending", staff.Staff},
 	{http.MethodGet, "/v1/staff/kyc/queue", staff.Staff},
 	{http.MethodGet, "/v1/staff/members", staff.Admin},

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -162,6 +163,13 @@ func (h *handlers) mountStaff(r chi.Router) {
 	r.With(anyStaff).Post("/payments/reconcile", h.staffReconcile(func(ctx context.Context) (any, error) { return h.StaffServices.Payments.Reconcile(ctx) }, h.StaffServices.Payments != nil))
 	r.With(anyStaff).Post("/payments/reversals", h.staffReverse)
 	r.With(anyStaff).Post("/payments/{id}/resolve", h.staffResolve)
+	// top-up reconciliation (owner, 2026-10-31): the statement, and one top-up at a time
+	r.With(anyStaff).Post("/payments/statement/match", h.staffStatementMatch)
+	r.With(anyStaff).Post("/payments/statement/apply", h.staffStatementApply)
+	r.With(anyStaff).Get("/payments/statements", h.staffStatementImports)
+	r.With(anyStaff).Post("/topups/{id}/recheck", h.staffTopUpRecheck)
+	r.With(anyStaff).Post("/topups/{id}/resolve", h.staffTopUpResolve)
+	r.With(anyStaff).Post("/topups/{id}/dismiss", h.staffTopUpDismiss)
 	r.With(anyStaff).Post("/suspense/{receipt}/credit", h.staffSuspenseCredit)
 	r.With(anyStaff).Post("/suspense/{receipt}/refund", h.staffSuspenseRefund)
 	r.With(anyStaff).Post("/paybill/{receipt}/recheck", h.staffRecheck)
@@ -194,6 +202,7 @@ func (h *handlers) mountStaff(r chi.Router) {
 
 	r.With(anyStaff).Get("/plays", h.needs(h.StaffServices.Oversight != nil, "Plays", h.staffPlays))
 	r.With(anyStaff).Get("/topups", h.needs(h.StaffServices.Oversight != nil, "Top-ups", h.staffTopUps))
+	r.With(anyStaff).Get("/topups/{id}", h.needs(h.StaffServices.Oversight != nil, "Top-ups", h.staffTopUp))
 	r.With(anyStaff).Get("/system", h.needs(h.StaffServices.Oversight != nil, "System status", h.staffSystem))
 	r.With(admin).Get("/activity", h.needs(h.StaffServices.Oversight != nil, "Activity log", h.staffActivity))
 
@@ -248,7 +257,14 @@ func staffError(w http.ResponseWriter, err error) {
 		{finance.ErrRange, m{http.StatusBadRequest, "invalid-range", "The range must run forward and cover at most 366 days"}},
 		{payments.ErrNotFound, m{http.StatusNotFound, "not-found", "Not found"}},
 		{payments.ErrNotReversible, m{http.StatusConflict, "state", "Only a credited payment can be reversed"}},
-		{payments.ErrNotResolvable, m{http.StatusConflict, "state", "Only an unconfirmed payment can be resolved"}},
+		{payments.ErrNotResolvable, m{http.StatusConflict, "state", "Only a settled, uncredited top-up can be resolved"}},
+		{payments.ErrInvalidReceipt, m{http.StatusBadRequest, "invalid-receipt", "An M-Pesa receipt is 10 letters and digits"}},
+		{payments.ErrSettledAlready, m{http.StatusConflict, "state", "A credited or reversed top-up is not checked again"}},
+		{payments.ErrNotDismissable, m{http.StatusConflict, "state", "Only a settled, uncredited top-up can be dismissed"}},
+		{payments.ErrDarajaUnavailable, m{http.StatusServiceUnavailable, "daraja-unavailable", "M-Pesa did not answer; ask again in a few minutes"}},
+		{payments.ErrStatementEmpty, m{http.StatusBadRequest, "statement-empty", "The file has no statement rows the platform can read"}},
+		{payments.ErrStatementTooLarge, m{http.StatusBadRequest, "statement-too-large", "The statement has too many rows; split it"}},
+		{oversight.ErrNotFound, m{http.StatusNotFound, "not-found", "No such top-up"}},
 		{payments.ErrReceiptUsed, m{http.StatusConflict, "receipt-used", "This receipt already credited another payment"}},
 		{payments.ErrReasonRequired, m{http.StatusBadRequest, "reason-required", "A reason is required"}},
 		{payments.ErrNotInSuspense, m{http.StatusNotFound, "not-found", "No open suspense item for this receipt"}},
@@ -397,6 +413,143 @@ func (h *handlers) staffResolve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// staffTopUpRecheck asks M-Pesa about a top-up again and reports what it said.
+func (h *handlers) staffTopUpRecheck(w http.ResponseWriter, r *http.Request) {
+	if h.StaffServices.Payments == nil {
+		unavailable(w, "Payments")
+		return
+	}
+	out, err := h.StaffServices.Payments.Recheck(r.Context(), chi.URLParam(r, "id"), member(r).Operator())
+	if err != nil {
+		staffError(w, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, out)
+}
+
+// staffTopUpResolve credits a settled, uncredited top-up from a receipt the operator found.
+func (h *handlers) staffTopUpResolve(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Receipt   string `json:"receipt"`
+		AmountKES int64  `json:"amount_kes"`
+		Note      string `json:"note"`
+	}
+	if !httpx.DecodeJSON(w, r, &in) {
+		return
+	}
+	if h.StaffServices.Payments == nil {
+		unavailable(w, "Payments")
+		return
+	}
+	res := payments.Resolution{PaymentID: chi.URLParam(r, "id"), Receipt: in.Receipt, AmountKES: in.AmountKES, Note: in.Note, Source: "operator"}
+	if err := h.StaffServices.Payments.Resolve(r.Context(), res, member(r).Operator()); err != nil {
+		staffError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// staffTopUpDismiss closes an unconfirmed top-up the operator could not find on the statement.
+func (h *handlers) staffTopUpDismiss(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Note string `json:"note"`
+	}
+	if !httpx.DecodeJSON(w, r, &in) {
+		return
+	}
+	if h.StaffServices.Payments == nil {
+		unavailable(w, "Payments")
+		return
+	}
+	if err := h.StaffServices.Payments.Dismiss(r.Context(), chi.URLParam(r, "id"), in.Note, member(r).Operator()); err != nil {
+		staffError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// maxStatementBytes bounds an uploaded M-Pesa statement (20,000 rows are well under this).
+const maxStatementBytes = 8 << 20
+
+// statementBody reads the statement from a multipart upload (field "file") or a raw text/csv body.
+func statementBody(w http.ResponseWriter, r *http.Request) ([]byte, string, bool) {
+	r.Body = http.MaxBytesReader(w, r.Body, maxStatementBytes)
+	if strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data") {
+		f, hdr, err := r.FormFile("file")
+		if err != nil {
+			httpx.WriteProblem(w, http.StatusBadRequest, "no-file", "Attach the statement as the file field", "")
+			return nil, "", false
+		}
+		defer func() { _ = f.Close() }()
+		body, err := io.ReadAll(f)
+		if err != nil {
+			httpx.WriteProblem(w, http.StatusBadRequest, "unreadable-file", "The file could not be read", "")
+			return nil, "", false
+		}
+		return body, hdr.Filename, true
+	}
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		httpx.WriteProblem(w, http.StatusRequestEntityTooLarge, "too-large", "The statement is too large", "")
+		return nil, "", false
+	}
+	return body, "", true
+}
+
+// staffStatementMatch matches an uploaded M-Pesa statement to the platform's prompts; nothing is credited.
+func (h *handlers) staffStatementMatch(w http.ResponseWriter, r *http.Request) {
+	if h.StaffServices.Payments == nil {
+		unavailable(w, "Payments")
+		return
+	}
+	body, filename, ok := statementBody(w, r)
+	if !ok {
+		return
+	}
+	rep, err := h.StaffServices.Payments.MatchStatement(r.Context(), body)
+	if err != nil {
+		staffError(w, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{"filename": filename, "report": rep})
+}
+
+// staffStatementApply credits the top-ups the operator confirmed from a matched statement.
+func (h *handlers) staffStatementApply(w http.ResponseWriter, r *http.Request) {
+	var in payments.StatementApply
+	if !httpx.DecodeJSON(w, r, &in) {
+		return
+	}
+	if h.StaffServices.Payments == nil {
+		unavailable(w, "Payments")
+		return
+	}
+	out, err := h.StaffServices.Payments.ApplyStatement(r.Context(), in, member(r).Operator())
+	if err != nil {
+		staffError(w, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, out)
+}
+
+// staffStatementImports lists past statement imports.
+func (h *handlers) staffStatementImports(w http.ResponseWriter, r *http.Request) {
+	if h.StaffServices.Payments == nil {
+		unavailable(w, "Payments")
+		return
+	}
+	limit, ok := pageLimit(w, r)
+	if !ok {
+		return
+	}
+	out, err := h.StaffServices.Payments.StatementImports(r.Context(), limit)
+	if err != nil {
+		staffError(w, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{"imports": out})
 }
 
 func (h *handlers) staffSuspenseCredit(w http.ResponseWriter, r *http.Request) {

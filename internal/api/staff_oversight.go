@@ -3,6 +3,9 @@ package api
 import (
 	"errors"
 	"net/http"
+	"time"
+
+	"github.com/go-chi/chi/v5"
 
 	"github.com/itsivali/lottery-platform/internal/oversight"
 	"github.com/itsivali/lottery-platform/internal/platform/httpx"
@@ -90,7 +93,16 @@ func (h *handlers) staffTopUps(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteProblem(w, http.StatusBadRequest, "invalid-status", "Invalid status", "")
 		return
 	}
-	p, err := h.StaffServices.Oversight.TopUps(r.Context(), oversight.TopUpFilter{Query: qs.Get("q"), Status: qs.Get("status")}, limit, qs.Get("before"))
+	f := oversight.TopUpFilter{Query: qs.Get("q"), Status: qs.Get("status"), Reason: qs.Get("reason"), Channel: qs.Get("channel"), Claimed: qs.Get("claimed") == "true"}
+	if f.Channel != "" && f.Channel != "stk" && f.Channel != "c2b" {
+		httpx.WriteProblem(w, http.StatusBadRequest, "invalid-channel", "Invalid channel", "stk or c2b")
+		return
+	}
+	var ok2 bool
+	if f.From, f.To, ok2 = dayWindow(w, qs.Get("from"), qs.Get("to")); !ok2 {
+		return
+	}
+	p, err := h.StaffServices.Oversight.TopUps(r.Context(), f, limit, qs.Get("before"))
 	if err != nil {
 		oversightError(w, err)
 		return
@@ -104,6 +116,55 @@ func (h *handlers) staffTopUps(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpx.WriteJSON(w, http.StatusOK, map[string]any{"topups": p.Rows, "next_before": nextOf(p.NextBefore)})
+}
+
+// dayWindow reads from/to dates (YYYY-MM-DD, Nairobi days; to is inclusive) into a created-at window.
+func dayWindow(w http.ResponseWriter, from, to string) (*time.Time, *time.Time, bool) {
+	var f, t *time.Time
+	if from != "" {
+		d, err := time.ParseInLocation("2006-01-02", from, nairobi)
+		if err != nil {
+			httpx.WriteProblem(w, http.StatusBadRequest, "invalid-range", "Invalid from date", "YYYY-MM-DD")
+			return nil, nil, false
+		}
+		f = &d
+	}
+	if to != "" {
+		d, err := time.ParseInLocation("2006-01-02", to, nairobi)
+		if err != nil {
+			httpx.WriteProblem(w, http.StatusBadRequest, "invalid-range", "Invalid to date", "YYYY-MM-DD")
+			return nil, nil, false
+		}
+		d = d.AddDate(0, 0, 1)
+		t = &d
+	}
+	if f != nil && t != nil && !t.After(*f) {
+		httpx.WriteProblem(w, http.StatusBadRequest, "invalid-range", "The range is reversed", "")
+		return nil, nil, false
+	}
+	return f, t, true
+}
+
+var nairobi = func() *time.Location {
+	loc, err := time.LoadLocation("Africa/Nairobi")
+	if err != nil {
+		return time.FixedZone("EAT", 3*3600)
+	}
+	return loc
+}()
+
+// staffTopUp shows one top-up in full, with the player's name.
+func (h *handlers) staffTopUp(w http.ResponseWriter, r *http.Request) {
+	d, err := h.StaffServices.Oversight.TopUp(r.Context(), chi.URLParam(r, "id"))
+	if err != nil {
+		staffError(w, err)
+		return
+	}
+	if err := h.withNames(r, []string{d.UserID}, func(_ int, name string) { d.FullName = &name }); err != nil {
+		staffError(w, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, d)
 }
 
 func (h *handlers) staffActivity(w http.ResponseWriter, r *http.Request) {

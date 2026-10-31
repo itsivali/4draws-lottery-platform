@@ -113,6 +113,21 @@ void main() {
     expect(u.status, TopUpStatus.unconfirmed);
     expect(u.status.settled, isTrue, reason: 'the server has given up: nothing more comes from polling');
     expect(u.amountConfirmedKes, isNull);
+    expect(u.claim, isNull);
+    expect(u.canClaimReceipt, isTrue);
+    final claimed = TopUp.fromJson(
+      JsonObject(topUpJson(status: 'unconfirmed', claim: {'receipt': 'QJ7XK2M9PL', 'status': 'checking'})),
+    );
+    expect(claimed.claim!.receipt, 'QJ7XK2M9PL');
+    expect(claimed.claim!.status, ReceiptClaimStatus.checking);
+    expect(claimed.canClaimReceipt, isFalse, reason: 'one receipt at a time');
+    final unverified = TopUp.fromJson(
+      JsonObject(
+        topUpJson(status: 'unconfirmed', claim: {'receipt': 'QJ7XK2M9PL', 'status': 'unverified', 'note': 'x'}),
+      ),
+    );
+    expect(unverified.claim!.note, 'x');
+    expect(unverified.canClaimReceipt, isTrue, reason: 'a refused receipt may be corrected');
     final c = TopUp.fromJson(JsonObject(topUpJson(status: 'credited', confirmed: 500)));
     expect(c.status.settled, isTrue);
     expect(c.amountConfirmedKes, 500);

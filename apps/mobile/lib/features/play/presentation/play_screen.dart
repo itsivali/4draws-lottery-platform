@@ -26,6 +26,7 @@ import '../../wallet/application/top_up_cooldown.dart';
 import '../../wallet/application/wallet_providers.dart';
 import '../../wallet/domain/wallet_models.dart';
 import '../../wallet/presentation/money_flow_view.dart';
+import '../../wallet/presentation/receipt_claim_card.dart';
 import '../../wallet/presentation/top_up_cooldown_note.dart';
 import '../application/pay_and_play.dart';
 import '../application/play_controller.dart';
@@ -304,6 +305,9 @@ class _PlayPanel extends ConsumerWidget {
                 TopUpStatus.reversed => (StatusTone.error, 'Reversed', 'M-Pesa took it back. Nothing was played.'),
                 TopUpStatus.pending => (StatusTone.pending, 'Waiting', ''),
               },
+              below: (x) => x.status == TopUpStatus.unconfirmed || x.status == TopUpStatus.failed
+                  ? ReceiptClaimCard(topUp: x, compact: x.status == TopUpStatus.failed, onChanged: topUp.flow.refresh)
+                  : null,
               onDone: ref.read(payAndPlayProvider.notifier).dismiss,
             ),
           ),

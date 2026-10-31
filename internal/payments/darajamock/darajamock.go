@@ -73,15 +73,17 @@ type Server struct {
 	opts Options
 	mux  *http.ServeMux
 
-	mu        sync.Mutex
-	seq       int
-	queries   int
-	next      Fault
-	txns      map[string]*txn
-	order     []string
-	autoDelay time.Duration
-	autoCtx   context.Context
-	auto      bool
+	mu      sync.Mutex
+	seq     int
+	queries int
+	next    Fault
+	txns    map[string]*txn
+	order   []string
+	// stkReceipts maps the receipt of a completed prompt to its checkout id, so Transaction Status can answer about it
+	stkReceipts map[string]string
+	autoDelay   time.Duration
+	autoCtx     context.Context
+	auto        bool
 
 	validationURL, confirmationURL, responseType string
 	nextC2B                                      C2BFault
@@ -100,7 +102,7 @@ func New(o Options) *Server {
 	if o.HTTPClient == nil {
 		o.HTTPClient = http.DefaultClient
 	}
-	s := &Server{opts: o, txns: map[string]*txn{}, c2bTxns: map[string]*c2bTxn{}, b2cTxns: map[string]*b2cTxn{}, mux: http.NewServeMux()}
+	s := &Server{opts: o, txns: map[string]*txn{}, stkReceipts: map[string]string{}, c2bTxns: map[string]*c2bTxn{}, b2cTxns: map[string]*b2cTxn{}, mux: http.NewServeMux()}
 	s.mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("daraja-mock ok")) })
 	s.mux.HandleFunc("GET /oauth/v1/generate", s.token)
 	s.mux.HandleFunc("POST /mpesa/stkpush/v1/processrequest", s.authed(s.push))
@@ -272,6 +274,19 @@ func (s *Server) query(w http.ResponseWriter, _ *http.Request, body map[string]a
 	}
 }
 
+// ReceiptOf is the receipt M-Pesa issued for a completed, paid prompt ("" otherwise): what the customer's message
+// shows, for tests of the receipt a player claims.
+func (s *Server) ReceiptOf(checkoutID string) string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for receipt, id := range s.stkReceipts {
+		if id == checkoutID {
+			return receipt
+		}
+	}
+	return ""
+}
+
 // Complete settles a pending push as its fault says and posts the callback (unless the fault drops it). An error
 // means the push is unknown or the receiver did not answer 2xx.
 func (s *Server) Complete(ctx context.Context, checkoutID string) error {
@@ -282,7 +297,10 @@ func (s *Server) Complete(ctx context.Context, checkoutID string) error {
 		return errors.New("darajamock: unknown checkout id")
 	}
 	t.completed = true
-	f, p, receipt := t.fault, t.Push, fmt.Sprint("MCK", 100000+s.seqFor(checkoutID))
+	f, p, receipt := t.fault, t.Push, fmt.Sprint("MCK", 1000000+s.seqFor(checkoutID))
+	if f.ResultCode == 0 {
+		s.stkReceipts[receipt] = checkoutID
+	}
 	s.mu.Unlock()
 
 	if f.DropCallback {

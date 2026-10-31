@@ -117,12 +117,19 @@ Map<String, Object?> walletJson({int balance = 850, int debt = 0}) => {
   'next_before': null,
 };
 
-Map<String, Object?> topUpJson({String id = 'pay-1', String status = 'pending', int amount = 500, int? confirmed}) => {
+Map<String, Object?> topUpJson({
+  String id = 'pay-1',
+  String status = 'pending',
+  int amount = 500,
+  int? confirmed,
+  Map<String, Object?>? claim,
+}) => {
   'id': id,
   'status': status,
   'amount_requested_kes': amount,
   'amount_confirmed_kes': confirmed,
   'created_at': '2026-10-26T09:00:00+03:00',
+  'receipt_claim': ?claim,
 };
 
 Map<String, Object?> payoutJson({String id = 'po-1', String status = 'processing', int amount = 400}) => {

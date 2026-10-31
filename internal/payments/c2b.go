@@ -247,8 +247,20 @@ func (s *Service) HandleC2BStatusResult(ctx context.Context, raw []byte) error {
 		}
 		row, err := q.LockC2BForResult(ctx, store.LockC2BForResultParams{Originator: &r.OriginatorConversationID, Receipt: receipt})
 		if errors.Is(err, pgx.ErrNoRows) {
-			slog.WarnContext(ctx, "transaction status result for no known paybill payment", "result_code", r.ResultCode)
-			return nil
+			// not a paybill payment: perhaps the receipt a player claimed for an uncredited prompt
+			paymentID, cerr := q.LockPaymentByClaim(ctx, store.LockPaymentByClaimParams{Originator: &r.OriginatorConversationID, Receipt: receipt})
+			if errors.Is(cerr, pgx.ErrNoRows) {
+				slog.WarnContext(ctx, "transaction status result for no known paybill payment or receipt claim", "result_code", r.ResultCode)
+				return nil
+			}
+			if cerr != nil {
+				return cerr
+			}
+			now, err := s.clk.Now(ctx, tx)
+			if err != nil {
+				return err
+			}
+			return s.settleClaim(ctx, tx, paymentID, raw, r, now)
 		}
 		if err != nil {
 			return err

@@ -211,8 +211,90 @@ export interface TopUpRow {
   result_code: number | null
   receipt: string | null
   sandbox: boolean
+  /** the receipt the player gave for an uncredited top-up, and what came of it */
+  claimed_receipt: string | null
+  claim_status: 'claimed' | 'checking' | 'confirmed' | 'unverified' | 'rejected' | null
   created_at: string
   updated_at: string
+}
+
+/** Safaricom's STK result, parsed (GET /v1/staff/topups/{id}). */
+export interface CallbackView {
+  received_at?: string
+  result_code: number
+  result_desc: string
+  amount_kes?: number
+  receipt?: string
+  payer?: string
+  unreadable?: boolean
+}
+
+/** Everything about one top-up (GET /v1/staff/topups/{id}). */
+export interface TopUpDetail extends TopUpRow {
+  merchant_request_id: string | null
+  checkout_request_id: string | null
+  reversed_at: string | null
+  reversal_reason: string | null
+  callback: CallbackView | null
+  raw_callback?: unknown
+  claim: { receipt: string; status: NonNullable<TopUpRow['claim_status']>; claimed_at: string; note: string | null; originator: string | null; result?: unknown } | null
+  orphan_callbacks: CallbackView[]
+  jobs: { kind: string; state: string; attempt: number; scheduled_at: string; finalized_at: string | null; last_error?: string }[]
+  events: AuditEvent[]
+  player: { status: string; kyc_status: string; phone_verified: boolean; email: string | null; balance_kes: number; top_ups: number; credited_kes: number; unconfirmed_count: number }
+}
+
+/** What M-Pesa said when an operator asked again (POST /v1/staff/topups/{id}/recheck). */
+export interface Recheck {
+  outcome: 'credited' | 'paid_without_receipt' | 'failed' | 'cancelled' | 'pending' | 'no_prompt' | 'asking'
+  status: string
+  result_code: number | null
+  result_desc?: string
+}
+
+/** One statement row and what the platform found for it (POST /v1/staff/payments/statement/match). */
+export interface StatementMatch {
+  row: { line: number; receipt: string; completed_at: string; paid_in_kes: number; withdrawn_kes?: number; party: string; party_number: string; account: string; details: string; status: string }
+  kind: 'credited' | 'claimed' | 'matched' | 'ambiguous' | 'unmatched' | 'skipped'
+  payment_id?: string
+  user_id?: string
+  msisdn?: string
+  status?: string
+  reason?: string
+  candidates?: { payment_id: string; user_id: string; msisdn: string; amount_kes: number; status: string; created_at: string; why: string }[]
+}
+
+export interface StatementCredit { payment_id: string; receipt: string; amount_kes: number }
+
+export interface StatementReport {
+  sha256: string
+  rows: number
+  skipped?: string[]
+  from: string
+  to: string
+  counts: Record<string, number>
+  matches: StatementMatch[]
+  missing_from_statement?: { payment_id: string; user_id: string; receipt: string; amount_kes: number; created_at: string }[]
+  to_credit: StatementCredit[]
+}
+
+export interface StatementApplied {
+  import_id: string
+  credited: number
+  credited_kes: number
+  results: { payment_id: string; receipt: string; amount_kes: number; credited: boolean; error?: string }[]
+}
+
+export interface StatementImport {
+  id: string
+  imported_by: string
+  imported_at: string
+  filename: string
+  sha256: string
+  rows: number
+  matched: number
+  credited: number
+  credited_kes: number
 }
 
 /** One audit record (GET /v1/staff/activity). */
@@ -259,4 +341,6 @@ export interface SystemState {
   players: number
   plays_today: number
   top_ups_pending: number
+  top_ups_unconfirmed: number
+  receipt_claims: number
 }

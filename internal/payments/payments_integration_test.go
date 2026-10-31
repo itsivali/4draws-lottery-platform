@@ -46,6 +46,9 @@ func (q *queue) EnqueueVerify(_ context.Context, _ pgx.Tx, id string, _ payments
 func (q *queue) EnqueueC2B(_ context.Context, _ pgx.Tx, id string, _ payments.VerifySource) error {
 	return q.add("c2b", id)
 }
+func (q *queue) EnqueueClaimCheck(_ context.Context, _ pgx.Tx, id string) error {
+	return q.add("claim", id)
+}
 
 func (q *queue) add(kind, id string) error {
 	q.mu.Lock()
@@ -133,7 +136,11 @@ func setupWith(t *testing.T, withDaraja bool, cfg ...payments.Config) *env {
 		if err := c.RegisterC2BURLs(context.Background(), cb.URL+"/validate", cb.URL+"/confirm", daraja.C2BCancelOnTimeout); err != nil {
 			t.Fatal(err)
 		}
-		svc = payments.NewService(pool, e.clk, c, e.q, e.ids, e.rg, wallet.NewService(ls), ls, aw, append(cfg, payments.Config{})[0]).
+		c0 := append(cfg, payments.Config{})[0]
+		if c0.ShortCode == "" {
+			c0.ShortCode = "174379" // the business the prompts pay into, as the app wires it
+		}
+		svc = payments.NewService(pool, e.clk, c, e.q, e.ids, e.rg, wallet.NewService(ls), ls, aw, c0).
 			WithC2B(c, payments.C2BConfig{ShortCode: "600982", MaxStatusRequests: 3})
 		e.svc = svc
 		return e
@@ -185,6 +192,14 @@ func (e *env) run(t *testing.T) {
 				d, err := e.svc.VerifyC2B(ctx, j.paymentID)
 				if err != nil {
 					t.Fatalf("c2b job: %v", err)
+				}
+				if d > 0 {
+					e.retries = append(e.retries, d)
+				}
+			case "claim":
+				d, err := e.svc.CheckClaim(ctx, j.paymentID)
+				if err != nil {
+					t.Fatalf("claim job: %v", err)
 				}
 				if d > 0 {
 					e.retries = append(e.retries, d)
@@ -880,17 +895,17 @@ func TestResolveUnconfirmed_CreditsFromTheStatementReceiptExactlyOnce(t *testing
 	}
 
 	for _, amt := range []int64{0, -5, daraja.MaxSTKAmountKES + 1} {
-		if err := e.svc.ResolveUnconfirmed(ctx, tu.ID, "STMT0001", amt, "operator:test"); !errors.Is(err, payments.ErrInvalidAmount) {
+		if err := e.svc.ResolveUnconfirmed(ctx, tu.ID, "STMT000001", amt, "operator:test"); !errors.Is(err, payments.ErrInvalidAmount) {
 			t.Fatalf("amount %d: %v", amt, err)
 		}
 	}
-	if err := e.svc.ResolveUnconfirmed(ctx, tu.ID, "STMT0001", 100, "operator:test"); err != nil {
+	if err := e.svc.ResolveUnconfirmed(ctx, tu.ID, "STMT000001", 100, "operator:test"); err != nil {
 		t.Fatal(err)
 	}
 	if got := e.get(t, user, tu.ID); got.Status != payments.StatusCredited || e.balance(t, user) != 100 || !e.phoneVerified(t, user) {
 		t.Fatalf("payment %+v balance %d phone %v", got, e.balance(t, user), e.phoneVerified(t, user))
 	}
-	if err := e.svc.ResolveUnconfirmed(ctx, tu.ID, "STMT0001", 100, "operator:test"); !errors.Is(err, payments.ErrNotResolvable) {
+	if err := e.svc.ResolveUnconfirmed(ctx, tu.ID, "STMT000001", 100, "operator:test"); !errors.Is(err, payments.ErrNotResolvable) {
 		t.Fatalf("second resolve: %v", err)
 	}
 
@@ -903,10 +918,10 @@ func TestResolveUnconfirmed_CreditsFromTheStatementReceiptExactlyOnce(t *testing
 	if _, err := e.svc.Verify(ctx, tu2.ID); err != nil {
 		t.Fatal(err)
 	}
-	if err := e.svc.ResolveUnconfirmed(ctx, tu2.ID, "STMT0001", 100, "operator:test"); !errors.Is(err, payments.ErrReceiptUsed) {
+	if err := e.svc.ResolveUnconfirmed(ctx, tu2.ID, "STMT000001", 100, "operator:test"); !errors.Is(err, payments.ErrReceiptUsed) {
 		t.Fatalf("reused receipt: %v", err)
 	}
-	if err := e.svc.ResolveUnconfirmed(ctx, "0192f000-0000-7000-8000-000000000000", "STMT0002", 100, "operator:test"); !errors.Is(err, payments.ErrNotFound) {
+	if err := e.svc.ResolveUnconfirmed(ctx, "0192f000-0000-7000-8000-000000000000", "STMT000002", 100, "operator:test"); !errors.Is(err, payments.ErrNotFound) {
 		t.Fatalf("unknown payment: %v", err)
 	}
 }

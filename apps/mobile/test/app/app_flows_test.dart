@@ -164,7 +164,7 @@ void main() {
     expect(h.haptics.events, isNot(contains(HapticEvent.confirmed)));
     await pumpUntilFound(t, find.text('Credited'), step: const Duration(milliseconds: 500));
     expect(h.haptics.events.where((e) => e == HapticEvent.confirmed), hasLength(1));
-    await t.tap(find.widgetWithText(FilledButton, 'Back to wallet'));
+    await tapVisible(t, find.widgetWithText(FilledButton, 'Back to wallet'));
     await t.pumpAndSettle();
     expect(find.text('KES 500'), findsWidgets, reason: 'the whole top-up is credited');
   });
@@ -174,7 +174,7 @@ void main() {
     final backend = FakeBackend(balance: 0)
       ..topUpPendingPolls = 2
       ..topUpOutcome = 'unconfirmed';
-    final h = await pumpApp(t, backend);
+    final h = await pumpApp(t, backend, size: const Size(390, 1600)); // tall: every button on screen
     await t.tap(find.text('Wallet').last);
     await t.pumpAndSettle();
     await t.tap(find.widgetWithText(FilledButton, 'Top up'));
@@ -189,10 +189,81 @@ void main() {
     expect(find.textContaining('nothing was taken'), findsNothing, reason: 'the money may well have been taken');
     expect(backend.balance, 0);
     expect(h.haptics.events, isNot(contains(HapticEvent.confirmed)));
-    await t.tap(find.widgetWithText(FilledButton, 'Back to wallet'));
+    await tapVisible(t, find.widgetWithText(FilledButton, 'Back to wallet'));
     await t.pumpAndSettle();
     expect(find.text('Not confirmed yet · being checked'), findsOneWidget, reason: 'the history says the same');
     expect(find.text('Pending M-Pesa confirmation'), findsNothing);
+  });
+
+  testWidgets('for a top-up M-Pesa never confirmed, the receipt from the M-Pesa message gets it credited', (t) async {
+    // 2026-10-31: the player has the M-Pesa message; the server asks M-Pesa about the receipt and credits the top-up
+    final backend = FakeBackend(balance: 0)
+      ..topUpPendingPolls = 2
+      ..topUpOutcome = 'unconfirmed';
+    await pumpApp(t, backend, size: const Size(390, 1600)); // tall: every button on screen
+    await t.tap(find.text('Wallet').last);
+    await t.pumpAndSettle();
+    await t.tap(find.widgetWithText(FilledButton, 'Top up'));
+    await t.pumpAndSettle();
+    await t.enterText(find.widgetWithText(TextFormField, 'Amount'), '500');
+    await t.tap(find.widgetWithText(FilledButton, 'Continue'));
+    await t.pumpAndSettle();
+    await t.tap(find.widgetWithText(FilledButton, 'Send M-Pesa prompt'));
+    await pumpUntilFound(t, find.text('Not confirmed yet'), step: const Duration(milliseconds: 500));
+    expect(find.text('Got an M-Pesa message for this payment?'), findsOneWidget);
+    await t.enterText(find.widgetWithText(TextField, 'M-Pesa receipt'), 'short');
+    await tapVisible(t, find.widgetWithText(FilledButton, 'Send receipt'));
+    await t.pumpAndSettle();
+    expect(find.textContaining('10 letters and digits'), findsWidgets, reason: 'checked before it is sent');
+    await t.enterText(find.widgetWithText(TextField, 'M-Pesa receipt'), 'qj7xk2m9pl');
+    await tapVisible(t, find.widgetWithText(FilledButton, 'Send receipt'));
+    await t.pumpAndSettle();
+    expect(find.text('Receipt QJ7XK2M9PL sent'), findsOneWidget, reason: 'upper-cased, acknowledged, not yet credited');
+    expect(backend.balance, 0);
+    await tapVisible(t, find.text('Check again'));
+    await t.pumpAndSettle();
+    expect(find.text('Credited'), findsOneWidget, reason: 'M-Pesa confirmed the receipt and the top-up is credited');
+    expect(backend.balance, 500);
+    await tapVisible(t, find.widgetWithText(FilledButton, 'Back to wallet'));
+    await t.pumpAndSettle();
+    expect(find.text('KES 500'), findsWidgets);
+  });
+
+  testWidgets('a receipt M-Pesa cannot confirm is left with the team, and the player may correct it', (t) async {
+    final backend = FakeBackend(balance: 0)
+      ..topUpPendingPolls = 1
+      ..topUpOutcome = 'unconfirmed'
+      ..claimOutcome = 'unverified';
+    await pumpApp(t, backend, size: const Size(390, 1600)); // tall: every button on screen
+    await t.tap(find.text('Wallet').last);
+    await t.pumpAndSettle();
+    await t.tap(find.widgetWithText(FilledButton, 'Top up'));
+    await t.pumpAndSettle();
+    await t.enterText(find.widgetWithText(TextFormField, 'Amount'), '500');
+    await t.tap(find.widgetWithText(FilledButton, 'Continue'));
+    await t.pumpAndSettle();
+    await t.tap(find.widgetWithText(FilledButton, 'Send M-Pesa prompt'));
+    await pumpUntilFound(t, find.text('Not confirmed yet'), step: const Duration(milliseconds: 500));
+    await t.enterText(find.widgetWithText(TextField, 'M-Pesa receipt'), 'ZZ00000000');
+    await tapVisible(t, find.widgetWithText(FilledButton, 'Send receipt'));
+    await t.pumpAndSettle();
+    await tapVisible(t, find.text('Check again'));
+    await t.pumpAndSettle();
+    expect(find.text('Not confirmed by M-Pesa yet'), findsOneWidget);
+    expect(find.textContaining('does not exist'), findsOneWidget, reason: "M-Pesa's reason is shown");
+    expect(
+      find.widgetWithText(TextField, 'M-Pesa receipt'),
+      findsOneWidget,
+      reason: 'a mistyped code can be corrected',
+    );
+    expect(backend.balance, 0);
+    // the wallet history says the same and opens the same form
+    await tapVisible(t, find.widgetWithText(FilledButton, 'Back to wallet'));
+    await t.pumpAndSettle();
+    expect(find.textContaining('Receipt ZZ00000000 not confirmed yet'), findsOneWidget);
+    await t.tap(find.textContaining('Receipt ZZ00000000 not confirmed yet'));
+    await t.pumpAndSettle();
+    expect(find.text('Got an M-Pesa message for this payment?'), findsOneWidget);
   });
 
   testWidgets('the top-up minimum and its quick pick come from the server: KES 1 while testing', (t) async {
@@ -232,7 +303,7 @@ void main() {
     await t.pump();
     expect(find.textContaining('You can top up again in 2 minutes'), findsOneWidget);
     await pumpUntilFound(t, find.text('Credited'), step: const Duration(milliseconds: 500));
-    await t.tap(find.widgetWithText(FilledButton, 'Back to wallet'));
+    await tapVisible(t, find.widgetWithText(FilledButton, 'Back to wallet'));
     await t.pumpAndSettle();
     await t.tap(find.widgetWithText(FilledButton, 'Top up'));
     await t.pumpAndSettle();

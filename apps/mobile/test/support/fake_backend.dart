@@ -62,8 +62,50 @@ class FakeBackend {
 
   /// How a top-up ends after [topUpPendingPolls]: `credited` (default) or `unconfirmed` (M-Pesa never confirmed it).
   String topUpOutcome = 'credited';
+
+  /// What M-Pesa says about a receipt the player gives for an uncredited top-up, on the next read: `confirmed`
+  /// (credited), `unverified` (left for the team) or `checking` (no answer yet).
+  String claimOutcome = 'confirmed';
   final topUps = <String, Map<String, Object?>>{};
   final _topUpPolls = <String, int>{};
+  final _claimReads = <String, int>{};
+
+  /// M-Pesa answers about a claimed receipt on the second read after the claim (the first still shows it sent).
+  void _settleClaim(String id, {bool count = true}) {
+    final t = topUps[id];
+    final claim = t?['receipt_claim'] as Map<String, Object?>?;
+    if (t == null || claim == null || claim['status'] != 'claimed') return;
+    final reads = _claimReads[id] = (_claimReads[id] ?? 0) + (count ? 1 : 0);
+    if (reads < 2) return;
+    final amount = t['amount_requested_kes']! as int;
+    switch (claimOutcome) {
+      case 'confirmed':
+        topUps[id] = topUpJson(
+          id: id,
+          status: 'credited',
+          amount: amount,
+          confirmed: amount,
+          claim: {'receipt': claim['receipt'], 'status': 'confirmed'},
+        );
+        balance += amount;
+        phoneVerified = true;
+      case 'unverified':
+        topUps[id] = {
+          ...t,
+          'receipt_claim': {
+            'receipt': claim['receipt'],
+            'status': 'unverified',
+            'note': 'M-Pesa did not confirm the receipt: The transaction receipt number does not exist.',
+          },
+        };
+      default:
+        topUps[id] = {
+          ...t,
+          'receipt_claim': {'receipt': claim['receipt'], 'status': 'checking'},
+        };
+    }
+  }
+
   final payouts = <String, Map<String, Object?>>{};
   final draws = <Map<String, Object?>>[
     drawJson(id: 'draw-daily', status: 'open'),
@@ -301,6 +343,9 @@ class FakeBackend {
           'withdraw': withdrawBounds,
         });
       case ('GET', '/v1/payments'):
+        for (final id in topUps.keys.toList()) {
+          _settleClaim(id, count: false); // the list shows what the single reads settled
+        }
         return _ok({'payments': topUps.values.toList().reversed.toList()});
       case ('POST', '/v1/payments/topups'):
         if (kyc != 'verified') {
@@ -361,12 +406,45 @@ class FakeBackend {
           'rotated': <Object>[],
         });
     }
+    if (method == 'POST' && path.startsWith('/v1/payments/') && path.endsWith('/receipt')) {
+      final id = path.split('/')[3];
+      final t = topUps[id];
+      if (t == null) {
+        return _problem(404, 'not-found', 'Not found');
+      }
+      final receipt = (body['receipt']! as String).trim().toUpperCase();
+      if (!RegExp(r'^[A-Z0-9]{10}$').hasMatch(receipt)) {
+        return _problem(
+          400,
+          'invalid-receipt',
+          'Check the receipt',
+          'an M-Pesa receipt is 10 letters and digits',
+        );
+      }
+      switch (t['status']) {
+        case 'pending':
+          return _problem(409, 'still-settling', 'This top-up is still being confirmed');
+        case 'credited' || 'reversed':
+          return _problem(409, 'not-claimable', 'This top-up is already credited');
+      }
+      final open = (t['receipt_claim'] as Map<String, Object?>?)?['status'];
+      if (open == 'claimed' || open == 'checking') {
+        return _problem(409, 'claim-open', 'A receipt is already being checked for this top-up');
+      }
+      topUps[id] = {
+        ...t,
+        'receipt_claim': {'receipt': receipt, 'status': 'claimed'},
+      };
+      _claimReads[id] = 0;
+      return _ok({'receipt': receipt, 'status': 'claimed'}, 202);
+    }
     if (method == 'GET' && path.startsWith('/v1/payments/')) {
       final id = path.split('/').last;
       final t = topUps[id];
       if (t == null) {
         return _problem(404, 'not-found', 'Not found');
       }
+      _settleClaim(id);
       final polls = _topUpPolls[id] = _topUpPolls[id]! + 1;
       if (topUpPendingPolls != null && polls >= topUpPendingPolls! && t['status'] == 'pending') {
         final amount = t['amount_requested_kes']! as int;

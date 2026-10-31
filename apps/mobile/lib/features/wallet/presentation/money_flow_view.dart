@@ -14,6 +14,7 @@ class SettlementStatusView<T> extends StatefulWidget {
     required this.describe,
     required this.pendingText,
     required this.onDone,
+    this.below,
   });
 
   final SettlementFlow<T> flow;
@@ -24,6 +25,9 @@ class SettlementStatusView<T> extends StatefulWidget {
   /// What we are waiting for (e.g. "Approve the M-Pesa prompt on your phone").
   final String pendingText;
   final VoidCallback onDone;
+
+  /// Shown under a settled item's text, before the way out: what the player can still do about it.
+  final Widget? Function(T item)? below;
 
   @override
   State<SettlementStatusView<T>> createState() => _SettlementStatusViewState<T>();
@@ -116,6 +120,7 @@ class _SettlementStatusViewState<T> extends State<SettlementStatusView<T>> {
             label: widget.describe(s.item as T).$2,
             children: [
               Text(widget.describe(s.item as T).$3, style: t.bodyLarge),
+              if (widget.below?.call(s.item as T) case final extra?) ...[const SizedBox(height: Space.lg), extra],
               const SizedBox(height: Space.lg),
               FilledButton(onPressed: widget.onDone, child: const Text('Back to wallet')),
             ],

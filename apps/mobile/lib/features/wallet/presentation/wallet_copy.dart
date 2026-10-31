@@ -22,6 +22,15 @@ String txLabel(String kind) => switch (kind) {
   TopUpStatus.reversed => (StatusTone.warning, 'Reversed by M-Pesa'),
 };
 
+/// A line under an uncredited top-up about the receipt the player gave, or may give.
+String? receiptClaimLine(TopUp t) => switch (t.claim?.status) {
+  ReceiptClaimStatus.claimed || ReceiptClaimStatus.checking => 'Receipt ${t.claim!.receipt} sent · being confirmed',
+  ReceiptClaimStatus.unverified => 'Receipt ${t.claim!.receipt} not confirmed yet · our team is checking',
+  ReceiptClaimStatus.rejected => 'Receipt ${t.claim!.receipt} not accepted',
+  ReceiptClaimStatus.confirmed => null,
+  null => t.status == TopUpStatus.unconfirmed ? 'Got an M-Pesa message? Tap to enter the receipt' : null,
+};
+
 (StatusTone, String) payoutStatus(PayoutStatus s) => switch (s) {
   PayoutStatus.processing => (StatusTone.pending, 'Processing'),
   PayoutStatus.paid => (StatusTone.success, 'Paid'),

@@ -63,6 +63,9 @@ func (q *payQueue) EnqueueVerify(_ context.Context, _ pgx.Tx, id string, src pay
 	return q.add("verify:" + string(src) + ":" + id)
 }
 
+func (q *payQueue) EnqueueClaimCheck(_ context.Context, _ pgx.Tx, id string) error {
+	return q.add("claim:" + id)
+}
 func (q *payQueue) EnqueueC2B(_ context.Context, _ pgx.Tx, id string, src payments.VerifySource) error {
 	return q.add("c2b:" + string(src) + ":" + id)
 }

@@ -23,6 +23,51 @@ func (q *Queries) AccountBalance(ctx context.Context, code string) (int64, error
 	return column_1, err
 }
 
+const claimReceipt = `-- name: ClaimReceipt :exec
+UPDATE payments.payments
+   SET claimed_receipt = $1, claimed_at = $2, claim_status = 'claimed', claim_originator = NULL,
+       claim_result = NULL, claim_note = NULL, updated_at = $2
+ WHERE id = $3
+`
+
+type ClaimReceiptParams struct {
+	Receipt *string
+	At      *time.Time
+	ID      string
+}
+
+func (q *Queries) ClaimReceipt(ctx context.Context, arg ClaimReceiptParams) error {
+	_, err := q.db.Exec(ctx, claimReceipt, arg.Receipt, arg.At, arg.ID)
+	return err
+}
+
+const claimsToCheck = `-- name: ClaimsToCheck :many
+SELECT id FROM payments.payments
+WHERE claim_status IN ('claimed','checking') AND coalesce(updated_at, claimed_at) < $1
+ORDER BY claimed_at LIMIT 50
+`
+
+// claims M-Pesa has not been asked about yet, or asked longer ago than the wait: the sweep asks again
+func (q *Queries) ClaimsToCheck(ctx context.Context, updatedAt time.Time) ([]string, error) {
+	rows, err := q.db.Query(ctx, claimsToCheck, updatedAt)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const conflictsAfterCredit = `-- name: ConflictsAfterCredit :many
 SELECT trans_id FROM payments.c2b_confirmations WHERE conflicting AND status = 'credited' ORDER BY created_at
 `
@@ -40,6 +85,54 @@ func (q *Queries) ConflictsAfterCredit(ctx context.Context) ([]string, error) {
 			return nil, err
 		}
 		items = append(items, trans_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const creditedBetween = `-- name: CreditedBetween :many
+SELECT id, user_id, mpesa_receipt, amount_confirmed_kes, msisdn, created_at FROM payments.payments
+WHERE channel = 'stk' AND status IN ('credited','reversed') AND created_at BETWEEN $1 AND $2
+ORDER BY created_at
+`
+
+type CreditedBetweenParams struct {
+	FromAt time.Time
+	ToAt   time.Time
+}
+
+type CreditedBetweenRow struct {
+	ID                 string
+	UserID             string
+	MpesaReceipt       *string
+	AmountConfirmedKes *int64
+	Msisdn             *string
+	CreatedAt          time.Time
+}
+
+// credited prompts in the window, to find ones the statement does not show
+func (q *Queries) CreditedBetween(ctx context.Context, arg CreditedBetweenParams) ([]CreditedBetweenRow, error) {
+	rows, err := q.db.Query(ctx, creditedBetween, arg.FromAt, arg.ToAt)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []CreditedBetweenRow
+	for rows.Next() {
+		var i CreditedBetweenRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.MpesaReceipt,
+			&i.AmountConfirmedKes,
+			&i.Msisdn,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -273,6 +366,72 @@ func (q *Queries) GetPaymentByKey(ctx context.Context, arg GetPaymentByKeyParams
 	return id, err
 }
 
+const getPaymentDetail = `-- name: GetPaymentDetail :one
+
+SELECT id, user_id, channel, status, amount_requested_kes, amount_confirmed_kes, msisdn, merchant_request_id,
+       checkout_request_id, mpesa_receipt, raw_callback, failure_reason, result_code, reversed_at, reversal_reason,
+       claimed_receipt, claimed_at, claim_status, claim_originator, claim_result, claim_note, created_at, updated_at
+FROM payments.payments WHERE id = $1
+`
+
+type GetPaymentDetailRow struct {
+	ID                 string
+	UserID             string
+	Channel            string
+	Status             string
+	AmountRequestedKes int64
+	AmountConfirmedKes *int64
+	Msisdn             *string
+	MerchantRequestID  *string
+	CheckoutRequestID  *string
+	MpesaReceipt       *string
+	RawCallback        []byte
+	FailureReason      *string
+	ResultCode         *int32
+	ReversedAt         *time.Time
+	ReversalReason     *string
+	ClaimedReceipt     *string
+	ClaimedAt          *time.Time
+	ClaimStatus        *string
+	ClaimOriginator    *string
+	ClaimResult        []byte
+	ClaimNote          *string
+	CreatedAt          time.Time
+	UpdatedAt          time.Time
+}
+
+// Top-up reconciliation (owner, 2026-10-31): the receipt a player claims, what M-Pesa said about it, statements.
+func (q *Queries) GetPaymentDetail(ctx context.Context, id string) (GetPaymentDetailRow, error) {
+	row := q.db.QueryRow(ctx, getPaymentDetail, id)
+	var i GetPaymentDetailRow
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Channel,
+		&i.Status,
+		&i.AmountRequestedKes,
+		&i.AmountConfirmedKes,
+		&i.Msisdn,
+		&i.MerchantRequestID,
+		&i.CheckoutRequestID,
+		&i.MpesaReceipt,
+		&i.RawCallback,
+		&i.FailureReason,
+		&i.ResultCode,
+		&i.ReversedAt,
+		&i.ReversalReason,
+		&i.ClaimedReceipt,
+		&i.ClaimedAt,
+		&i.ClaimStatus,
+		&i.ClaimOriginator,
+		&i.ClaimResult,
+		&i.ClaimNote,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const insertC2BConfirmation = `-- name: InsertC2BConfirmation :one
 INSERT INTO payments.c2b_confirmations (trans_id, shortcode, bill_ref, payer_msisdn, amount_kes, raw_confirmation, created_at, updated_at)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $7)
@@ -362,6 +521,40 @@ func (q *Queries) InsertReconciliationRun(ctx context.Context, arg InsertReconci
 	return err
 }
 
+const insertStatementImport = `-- name: InsertStatementImport :one
+INSERT INTO payments.statement_imports (imported_by, imported_at, filename, sha256, rows_total, matched, credited, credited_kes, report)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id
+`
+
+type InsertStatementImportParams struct {
+	ImportedBy  string
+	ImportedAt  time.Time
+	Filename    string
+	Sha256      string
+	RowsTotal   int32
+	Matched     int32
+	Credited    int32
+	CreditedKes int64
+	Report      []byte
+}
+
+func (q *Queries) InsertStatementImport(ctx context.Context, arg InsertStatementImportParams) (string, error) {
+	row := q.db.QueryRow(ctx, insertStatementImport,
+		arg.ImportedBy,
+		arg.ImportedAt,
+		arg.Filename,
+		arg.Sha256,
+		arg.RowsTotal,
+		arg.Matched,
+		arg.Credited,
+		arg.CreditedKes,
+		arg.Report,
+	)
+	var id string
+	err := row.Scan(&id)
+	return id, err
+}
+
 const insertTopUp = `-- name: InsertTopUp :one
 INSERT INTO payments.payments (user_id, channel, amount_requested_kes, msisdn, idempotency_key, created_at, updated_at)
 VALUES ($1, 'stk', $2, $3, $4, $5, $5)
@@ -435,7 +628,7 @@ func (q *Queries) LastTopUpAt(ctx context.Context, userID string) (time.Time, er
 }
 
 const listPayments = `-- name: ListPayments :many
-SELECT id, status, amount_requested_kes, amount_confirmed_kes, created_at
+SELECT id, status, amount_requested_kes, amount_confirmed_kes, created_at, claimed_receipt, claim_status, claim_note
 FROM payments.payments
 WHERE user_id = $1
 ORDER BY created_at DESC, id DESC LIMIT $2
@@ -452,6 +645,9 @@ type ListPaymentsRow struct {
 	AmountRequestedKes int64
 	AmountConfirmedKes *int64
 	CreatedAt          time.Time
+	ClaimedReceipt     *string
+	ClaimStatus        *string
+	ClaimNote          *string
 }
 
 func (q *Queries) ListPayments(ctx context.Context, arg ListPaymentsParams) ([]ListPaymentsRow, error) {
@@ -469,6 +665,45 @@ func (q *Queries) ListPayments(ctx context.Context, arg ListPaymentsParams) ([]L
 			&i.AmountRequestedKes,
 			&i.AmountConfirmedKes,
 			&i.CreatedAt,
+			&i.ClaimedReceipt,
+			&i.ClaimStatus,
+			&i.ClaimNote,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listStatementImports = `-- name: ListStatementImports :many
+SELECT id, imported_by, imported_at, filename, sha256, rows_total, matched, credited, credited_kes, report
+FROM payments.statement_imports ORDER BY imported_at DESC LIMIT $1
+`
+
+func (q *Queries) ListStatementImports(ctx context.Context, limit int32) ([]PaymentsStatementImport, error) {
+	rows, err := q.db.Query(ctx, listStatementImports, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []PaymentsStatementImport
+	for rows.Next() {
+		var i PaymentsStatementImport
+		if err := rows.Scan(
+			&i.ID,
+			&i.ImportedBy,
+			&i.ImportedAt,
+			&i.Filename,
+			&i.Sha256,
+			&i.RowsTotal,
+			&i.Matched,
+			&i.Credited,
+			&i.CreditedKes,
+			&i.Report,
 		); err != nil {
 			return nil, err
 		}
@@ -607,19 +842,45 @@ func (q *Queries) LockPayment(ctx context.Context, id string) (LockPaymentRow, e
 }
 
 const lockPaymentByCheckout = `-- name: LockPaymentByCheckout :one
-SELECT id, status FROM payments.payments WHERE checkout_request_id = $1 FOR UPDATE
+SELECT id, user_id, status, msisdn FROM payments.payments WHERE checkout_request_id = $1 FOR UPDATE
 `
 
 type LockPaymentByCheckoutRow struct {
 	ID     string
+	UserID string
 	Status string
+	Msisdn *string
 }
 
 func (q *Queries) LockPaymentByCheckout(ctx context.Context, checkoutRequestID *string) (LockPaymentByCheckoutRow, error) {
 	row := q.db.QueryRow(ctx, lockPaymentByCheckout, checkoutRequestID)
 	var i LockPaymentByCheckoutRow
-	err := row.Scan(&i.ID, &i.Status)
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Status,
+		&i.Msisdn,
+	)
 	return i, err
+}
+
+const lockPaymentByClaim = `-- name: LockPaymentByClaim :one
+SELECT id FROM payments.payments
+WHERE claim_originator = $1 OR ($2::text <> '' AND claimed_receipt = $2::text AND claim_status IN ('claimed','checking'))
+ORDER BY (claim_originator = $1) DESC LIMIT 1 FOR UPDATE
+`
+
+type LockPaymentByClaimParams struct {
+	Originator *string
+	Receipt    string
+}
+
+// a Transaction Status answer names the request it answers; an answer to an earlier request is matched by the receipt
+func (q *Queries) LockPaymentByClaim(ctx context.Context, arg LockPaymentByClaimParams) (string, error) {
+	row := q.db.QueryRow(ctx, lockPaymentByClaim, arg.Originator, arg.Receipt)
+	var id string
+	err := row.Scan(&id)
+	return id, err
 }
 
 const lockPaymentByReceipt = `-- name: LockPaymentByReceipt :one
@@ -705,6 +966,24 @@ func (q *Queries) MarkC2BStatusRequested(ctx context.Context, arg MarkC2BStatusR
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const markClaimChecking = `-- name: MarkClaimChecking :exec
+UPDATE payments.payments
+   SET claim_status = 'checking', claim_originator = $1::text, updated_at = $2
+ WHERE id = $3 AND claim_status IN ('claimed','checking')
+`
+
+type MarkClaimCheckingParams struct {
+	Originator string
+	At         time.Time
+	ID         string
+}
+
+// only while the claim is still open: M-Pesa's answer may have arrived (and settled it) before the request returned
+func (q *Queries) MarkClaimChecking(ctx context.Context, arg MarkClaimCheckingParams) error {
+	_, err := q.db.Exec(ctx, markClaimChecking, arg.Originator, arg.At, arg.ID)
+	return err
 }
 
 const markCredited = `-- name: MarkCredited :exec
@@ -811,6 +1090,36 @@ func (q *Queries) OrphanCallback(ctx context.Context, checkoutRequestID string) 
 	return raw_payload, err
 }
 
+const orphanCallbacksFor = `-- name: OrphanCallbacksFor :many
+SELECT id::text, raw_payload, received_at FROM payments.stk_orphan_callbacks WHERE checkout_request_id = $1 ORDER BY received_at DESC LIMIT 5
+`
+
+type OrphanCallbacksForRow struct {
+	ID         string
+	RawPayload []byte
+	ReceivedAt time.Time
+}
+
+func (q *Queries) OrphanCallbacksFor(ctx context.Context, checkoutRequestID string) ([]OrphanCallbacksForRow, error) {
+	rows, err := q.db.Query(ctx, orphanCallbacksFor, checkoutRequestID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []OrphanCallbacksForRow
+	for rows.Next() {
+		var i OrphanCallbacksForRow
+		if err := rows.Scan(&i.ID, &i.RawPayload, &i.ReceivedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const overdueC2B = `-- name: OverdueC2B :many
 SELECT trans_id FROM payments.c2b_confirmations
 WHERE status IN ('received','status_requested','status_received') AND created_at < $1 ORDER BY created_at
@@ -861,6 +1170,49 @@ func (q *Queries) OverduePending(ctx context.Context, createdAt time.Time) ([]st
 	return items, nil
 }
 
+const paymentsByReceipts = `-- name: PaymentsByReceipts :many
+SELECT id, user_id, status, mpesa_receipt, claimed_receipt, amount_confirmed_kes, created_at FROM payments.payments
+WHERE mpesa_receipt = ANY($1::text[]) OR claimed_receipt = ANY($1::text[])
+`
+
+type PaymentsByReceiptsRow struct {
+	ID                 string
+	UserID             string
+	Status             string
+	MpesaReceipt       *string
+	ClaimedReceipt     *string
+	AmountConfirmedKes *int64
+	CreatedAt          time.Time
+}
+
+func (q *Queries) PaymentsByReceipts(ctx context.Context, receipts []string) ([]PaymentsByReceiptsRow, error) {
+	rows, err := q.db.Query(ctx, paymentsByReceipts, receipts)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []PaymentsByReceiptsRow
+	for rows.Next() {
+		var i PaymentsByReceiptsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.Status,
+			&i.MpesaReceipt,
+			&i.ClaimedReceipt,
+			&i.AmountConfirmedKes,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const playersInDebt = `-- name: PlayersInDebt :many
 SELECT e.user_id::text AS user_id,
        sum(CASE e.direction WHEN 'D' THEN e.amount_kes ELSE -e.amount_kes END)::bigint AS debt
@@ -889,6 +1241,30 @@ func (q *Queries) PlayersInDebt(ctx context.Context) ([]PlayersInDebtRow, error)
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const receiptClaims = `-- name: ReceiptClaims :many
+SELECT id FROM payments.payments WHERE claim_status IN ('claimed','checking','unverified') ORDER BY claimed_at
+`
+
+func (q *Queries) ReceiptClaims(ctx context.Context) ([]string, error) {
+	rows, err := q.db.Query(ctx, receiptClaims)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -948,7 +1324,7 @@ func (q *Queries) RecentOrphanCallbacks(ctx context.Context, receivedAt time.Tim
 }
 
 const recentPayments = `-- name: RecentPayments :many
-SELECT id, status, amount_requested_kes, amount_confirmed_kes, created_at
+SELECT id, status, amount_requested_kes, amount_confirmed_kes, created_at, claimed_receipt, claim_status, claim_note
 FROM payments.payments
 WHERE user_id = $1
   AND (updated_at >= $2 OR status IN ('initiated','stk_sent','callback_received','verified'))
@@ -966,6 +1342,9 @@ type RecentPaymentsRow struct {
 	AmountRequestedKes int64
 	AmountConfirmedKes *int64
 	CreatedAt          time.Time
+	ClaimedReceipt     *string
+	ClaimStatus        *string
+	ClaimNote          *string
 }
 
 // What a player's live stream starts from: payments still being settled, and those that changed recently.
@@ -984,6 +1363,9 @@ func (q *Queries) RecentPayments(ctx context.Context, arg RecentPaymentsParams) 
 			&i.AmountRequestedKes,
 			&i.AmountConfirmedKes,
 			&i.CreatedAt,
+			&i.ClaimedReceipt,
+			&i.ClaimStatus,
+			&i.ClaimNote,
 		); err != nil {
 			return nil, err
 		}
@@ -1151,6 +1533,34 @@ func (q *Queries) SetC2BOutcome(ctx context.Context, arg SetC2BOutcomeParams) er
 	return err
 }
 
+const setClaimStatus = `-- name: SetClaimStatus :exec
+UPDATE payments.payments
+   SET claim_status = $1, claim_originator = coalesce($2, claim_originator),
+       claim_result = coalesce($3, claim_result), claim_note = $4, updated_at = $5
+ WHERE id = $6
+`
+
+type SetClaimStatusParams struct {
+	Status     *string
+	Originator *string
+	Result     []byte
+	Note       *string
+	At         time.Time
+	ID         string
+}
+
+func (q *Queries) SetClaimStatus(ctx context.Context, arg SetClaimStatusParams) error {
+	_, err := q.db.Exec(ctx, setClaimStatus,
+		arg.Status,
+		arg.Originator,
+		arg.Result,
+		arg.Note,
+		arg.At,
+		arg.ID,
+	)
+	return err
+}
+
 const setPaymentOutcome = `-- name: SetPaymentOutcome :exec
 UPDATE payments.payments
    SET status = $1, failure_reason = $2, result_code = $3,
@@ -1224,6 +1634,62 @@ func (q *Queries) StalePending(ctx context.Context, createdAt time.Time) ([]stri
 			return nil, err
 		}
 		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const statementCandidates = `-- name: StatementCandidates :many
+SELECT p.id, p.user_id, p.status, p.failure_reason, p.amount_requested_kes, p.msisdn, p.claimed_receipt, p.claim_status, p.created_at
+FROM payments.payments p
+WHERE p.channel = 'stk' AND p.status IN ('unconfirmed','failed','cancelled','expired') AND p.msisdn IS NOT NULL
+  AND p.created_at BETWEEN $1 AND $2
+ORDER BY p.created_at
+`
+
+type StatementCandidatesParams struct {
+	FromAt time.Time
+	ToAt   time.Time
+}
+
+type StatementCandidatesRow struct {
+	ID                 string
+	UserID             string
+	Status             string
+	FailureReason      *string
+	AmountRequestedKes int64
+	Msisdn             *string
+	ClaimedReceipt     *string
+	ClaimStatus        *string
+	CreatedAt          time.Time
+}
+
+// prompts that may be the statement's rows: not credited, in the statement's time window (with a margin)
+func (q *Queries) StatementCandidates(ctx context.Context, arg StatementCandidatesParams) ([]StatementCandidatesRow, error) {
+	rows, err := q.db.Query(ctx, statementCandidates, arg.FromAt, arg.ToAt)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []StatementCandidatesRow
+	for rows.Next() {
+		var i StatementCandidatesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.Status,
+			&i.FailureReason,
+			&i.AmountRequestedKes,
+			&i.Msisdn,
+			&i.ClaimedReceipt,
+			&i.ClaimStatus,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

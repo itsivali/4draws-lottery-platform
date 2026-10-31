@@ -37,8 +37,8 @@ describe('forms refuse what the server would refuse', () => {
   it('an amount must be whole shillings above zero', async () => {
     renderSignedIn(<App />, { roles: ['staff'], path: '/payments', route: () => ({ status: 200, body: {} }) })
     const user = userEvent.setup()
-    await user.click(await screen.findByRole('button', { name: 'Resolve an unconfirmed top-up' }))
-    const dialog = await screen.findByRole('dialog', { name: 'Resolve an unconfirmed top-up' })
+    await user.click(await screen.findByRole('button', { name: 'Credit a top-up from a receipt' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Credit a top-up from a receipt' })
     await user.type(within(dialog).getByLabelText(/^Payment id/), 'p1')
     await user.type(within(dialog).getByLabelText(/^M-Pesa receipt/), 'ABC123')
     await user.type(within(dialog).getByLabelText(/^Amount paid/), '0')

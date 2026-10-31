@@ -382,6 +382,12 @@ type PaymentsPayment struct {
 	ResultCode         pgtype.Int4
 	ReversedAt         pgtype.Timestamptz
 	ReversalReason     pgtype.Text
+	ClaimedReceipt     pgtype.Text
+	ClaimedAt          pgtype.Timestamptz
+	ClaimStatus        pgtype.Text
+	ClaimOriginator    pgtype.Text
+	ClaimResult        []byte
+	ClaimNote          pgtype.Text
 }
 
 type PaymentsReconciliationRun struct {
@@ -389,6 +395,19 @@ type PaymentsReconciliationRun struct {
 	RanAt  time.Time
 	Ok     bool
 	Report []byte
+}
+
+type PaymentsStatementImport struct {
+	ID          string
+	ImportedBy  string
+	ImportedAt  time.Time
+	Filename    string
+	Sha256      string
+	RowsTotal   int32
+	Matched     int32
+	Credited    int32
+	CreditedKes int64
+	Report      []byte
 }
 
 type PaymentsStkOrphanCallback struct {

@@ -1,5 +1,6 @@
 import { useSession } from '../context'
 import { ReconcileCard } from '../components/Reconcile'
+import { StatementImportCard } from '../components/StatementImport'
 import { useConfirmedAction, type ActionSpec } from '../components/useConfirmedAction'
 import { PageHeader, SectionTitle } from '../components/ui'
 import { can } from '../roles'
@@ -19,11 +20,11 @@ export function PaymentsPage() {
       act: (v) => api.post('/v1/staff/payments/reversals', { receipt: v.receipt, reason: v.reason }),
     },
     {
-      button: 'Resolve an unconfirmed top-up', help: 'Daraja never confirmed it, but the statement shows it was paid.',
-      title: 'Resolve an unconfirmed top-up', body: <p>Credits the player with the amount on the statement, once.</p>,
-      fields: [{ name: 'payment', label: 'Payment id', required: true }, { name: 'receipt', label: 'M-Pesa receipt', required: true }, { name: 'amount', label: 'Amount paid (KES)', type: 'number', required: true }],
-      confirmLabel: 'Credit', success: 'Top-up resolved and credited.',
-      act: (v) => api.post(`/v1/staff/payments/${encodeURIComponent(v.payment ?? '')}/resolve`, { receipt: v.receipt, amount_kes: Number(v.amount) }),
+      button: 'Credit a top-up from a receipt', help: 'M-Pesa never confirmed it, but the statement or the player’s message has the receipt. (Each top-up also has this under Top-ups.)',
+      title: 'Credit a top-up from a receipt', body: <p>Credits the player with the amount paid, once, exactly like a confirmed callback.</p>,
+      fields: [{ name: 'payment', label: 'Payment id', required: true }, { name: 'receipt', label: 'M-Pesa receipt', required: true, help: '10 letters and digits' }, { name: 'amount', label: 'Amount paid (KES)', type: 'number', required: true }, { name: 'note', label: 'Note', help: 'Where you found it.' }],
+      confirmLabel: 'Credit', success: 'Top-up credited.',
+      act: (v) => api.post(`/v1/staff/topups/${encodeURIComponent(v.payment ?? '')}/resolve`, { receipt: v.receipt, amount_kes: Number(v.amount), note: v.note }),
     },
     {
       button: 'Credit a suspense payment', help: 'A paybill payment with an unknown account number, once you know whose it is.',
@@ -49,13 +50,15 @@ export function PaymentsPage() {
   ]
   return (
     <section>
-      <PageHeader title="Payments">Money in: reconciliation, reversals, unconfirmed top-ups and the paybill suspense queue (listed in the reconciliation’s “needs attention”).</PageHeader>
+      <PageHeader title="Payments">Money in: reconciliation, the M-Pesa statement, reversals, unconfirmed top-ups and the paybill suspense queue (listed in the reconciliation’s “needs attention”).</PageHeader>
       <div className="grid gap-4 lg:grid-cols-2">
         <ReconcileCard path="/v1/staff/payments/reconcile" title="Payments reconciliation" description="Top-ups and paybill payments against M-Pesa and the ledger." />
         <ReconcileCard path="/v1/staff/game/reconcile" title="Game reconciliation" description="Plays, stakes and chances against the ledger." />
       </div>
       {operator ? (
         <>
+          <SectionTitle>The M-Pesa statement</SectionTitle>
+          <StatementImportCard />
           <SectionTitle>Actions</SectionTitle>
           {view}
           <Card className="shadow-card">

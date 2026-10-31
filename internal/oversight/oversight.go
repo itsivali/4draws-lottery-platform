@@ -21,6 +21,9 @@ import (
 // ErrCursor is a paging cursor that is not one this package handed out.
 var ErrCursor = errors.New("oversight: invalid cursor")
 
+// ErrNotFound is a top-up that does not exist (or an id that is not one).
+var ErrNotFound = errors.New("oversight: not found")
+
 // Settings are the system's settings that matter to an operator, as the api was started with. No secrets.
 type Settings struct {
 	Daraja            string `json:"daraja"`             // sandbox, production, or a mock's address; "" when top-ups are off
@@ -177,25 +180,40 @@ type TopUp struct {
 	FailureReason      *string   `json:"failure_reason"`
 	ResultCode         *int32    `json:"result_code"`
 	Receipt            *string   `json:"receipt"`
-	Sandbox            bool      `json:"sandbox"` // credited by sandbox settlement, not confirmed by M-Pesa
+	Sandbox            bool      `json:"sandbox"`         // credited by sandbox settlement, not confirmed by M-Pesa
+	ClaimedReceipt     *string   `json:"claimed_receipt"` // the receipt the player gave for an uncredited top-up
+	ClaimStatus        *string   `json:"claim_status"`    // claimed, checking, confirmed, unverified or rejected
 	CreatedAt          time.Time `json:"created_at"`
 	UpdatedAt          time.Time `json:"updated_at"`
 }
 
-// TopUpFilter narrows the top-ups: Query matches the number, player id or receipt; Status one internal status.
+// TopUpFilter narrows the top-ups: Query matches the number, player id, payment id, checkout id or a receipt;
+// Status one internal status; Reason a failure reason; Channel stk or c2b; From/To a created-at window (To
+// exclusive); Claimed only top-ups whose player gave a receipt that awaits M-Pesa or an operator.
 type TopUpFilter struct {
-	Query  string
-	Status string
+	Query   string
+	Status  string
+	Reason  string
+	Channel string
+	From    *time.Time
+	To      *time.Time
+	Claimed bool
 }
 
 const topUpsSQL = `
 SELECT p.id::text, p.user_id::text, u.msisdn, p.channel, p.amount_requested_kes, p.amount_confirmed_kes, p.status,
-       p.failure_reason, p.result_code, p.mpesa_receipt, p.created_at, p.updated_at
+       p.failure_reason, p.result_code, p.mpesa_receipt, p.claimed_receipt, p.claim_status, p.created_at, p.updated_at
 FROM payments.payments p
 JOIN identity.users u ON u.id = p.user_id
 WHERE ($1::timestamptz IS NULL OR (p.created_at, p.id::text) < ($1, $2::text))
-  AND ($3::text IS NULL OR u.msisdn LIKE $3 OR p.user_id::text LIKE $3 OR p.mpesa_receipt LIKE $3)
+  AND ($3::text IS NULL OR u.msisdn LIKE $3 OR p.user_id::text LIKE $3 OR p.mpesa_receipt LIKE $3
+       OR p.id::text LIKE $3 OR p.checkout_request_id LIKE $3 OR p.claimed_receipt LIKE $3)
   AND ($4::text IS NULL OR p.status = $4)
+  AND ($6::text IS NULL OR p.failure_reason = $6)
+  AND ($7::text IS NULL OR p.channel = $7)
+  AND ($8::timestamptz IS NULL OR p.created_at >= $8)
+  AND ($9::timestamptz IS NULL OR p.created_at < $9)
+  AND (NOT $10::bool OR p.claim_status IN ('claimed','checking','unverified'))
 ORDER BY p.created_at DESC, p.id DESC
 LIMIT $5`
 
@@ -209,14 +227,14 @@ func (s *Service) TopUps(ctx context.Context, f TopUpFilter, limit int, before s
 	if f.Status != "" {
 		status = &f.Status
 	}
-	rows, err := s.pool.Query(ctx, topUpsSQL, at, id, like(f.Query), status, limit+1)
+	rows, err := s.pool.Query(ctx, topUpsSQL, at, id, like(f.Query), status, limit+1, nilIfEmpty(f.Reason), nilIfEmpty(f.Channel), f.From, f.To, f.Claimed)
 	if err != nil {
 		return Page[TopUp]{}, err
 	}
 	out, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (TopUp, error) {
 		var t TopUp
 		err := r.Scan(&t.ID, &t.UserID, &t.MSISDN, &t.Channel, &t.AmountRequestedKES, &t.AmountConfirmedKES, &t.Status,
-			&t.FailureReason, &t.ResultCode, &t.Receipt, &t.CreatedAt, &t.UpdatedAt)
+			&t.FailureReason, &t.ResultCode, &t.Receipt, &t.ClaimedReceipt, &t.ClaimStatus, &t.CreatedAt, &t.UpdatedAt)
 		t.Sandbox = t.Receipt != nil && strings.HasPrefix(*t.Receipt, "SANDBOX-")
 		return t, err
 	})
@@ -317,6 +335,10 @@ type System struct {
 	Players         int64            `json:"players"`
 	PlaysToday      int64            `json:"plays_today"`
 	TopUpsPending   int64            `json:"top_ups_pending"`
+	// TopUpsUnconfirmed need an operator (settled without M-Pesa's confirmation); ReceiptClaims are receipts players
+	// gave that await M-Pesa or an operator.
+	TopUpsUnconfirmed int64 `json:"top_ups_unconfirmed"`
+	ReceiptClaims     int64 `json:"receipt_claims"`
 }
 
 const (
@@ -334,7 +356,9 @@ FROM river.river_job WHERE state IN ('discarded', 'retryable') ORDER BY id DESC 
   (SELECT count(*) FROM audit.alerts WHERE resolved_at IS NULL),
   (SELECT count(*) FROM identity.users WHERE status <> 'closed'),
   (SELECT count(*) FROM tickets.tickets WHERE play_date = (now() AT TIME ZONE 'Africa/Nairobi')::date),
-  (SELECT count(*) FROM payments.payments WHERE status IN ('initiated','stk_sent','callback_received'))`
+  (SELECT count(*) FROM payments.payments WHERE status IN ('initiated','stk_sent','callback_received')),
+  (SELECT count(*) FROM payments.payments WHERE status = 'unconfirmed'),
+  (SELECT count(*) FROM payments.payments WHERE claim_status IN ('claimed','checking','unverified'))`
 	oddsSQL = `SELECT price_kes, slot_count, lucky_slots FROM game.odds_config
 WHERE effective_from <= (now() AT TIME ZONE 'Africa/Nairobi')::date ORDER BY effective_from DESC LIMIT 1`
 )
@@ -376,7 +400,7 @@ func (s *Service) System(ctx context.Context) (System, error) {
 		}
 		out.Reconciliations = append(out.Reconciliations, r)
 	}
-	if err := s.pool.QueryRow(ctx, countsSQL).Scan(&out.OpenAlerts, &out.Players, &out.PlaysToday, &out.TopUpsPending); err != nil {
+	if err := s.pool.QueryRow(ctx, countsSQL).Scan(&out.OpenAlerts, &out.Players, &out.PlaysToday, &out.TopUpsPending, &out.TopUpsUnconfirmed, &out.ReceiptClaims); err != nil {
 		return System{}, err
 	}
 	var price int64
@@ -388,4 +412,11 @@ func (s *Service) System(ctx context.Context) (System, error) {
 		return System{}, err
 	}
 	return out, nil
+}
+
+func nilIfEmpty(v string) *string {
+	if v == "" {
+		return nil
+	}
+	return &v
 }

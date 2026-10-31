@@ -68,6 +68,19 @@ type TopUp struct {
 	AmountRequestedKES int64
 	AmountConfirmedKES *int64
 	CreatedAt          time.Time
+	// Claim is the receipt the player gave for a top-up that settled uncredited, and what became of it (nil: none).
+	Claim *Claim
+}
+
+func claimFields(receipt, status, note *string) *Claim {
+	if receipt == nil || status == nil {
+		return nil
+	}
+	c := &Claim{Receipt: *receipt, Status: *status}
+	if note != nil {
+		c.Note = *note
+	}
+	return c
 }
 
 func publicStatus(s string) string {
@@ -107,6 +120,8 @@ type Enqueuer interface {
 	EnqueueVerify(ctx context.Context, tx pgx.Tx, paymentID string, source VerifySource) error
 	// EnqueueC2B schedules the verification of a paybill confirmation, collapsing duplicates the same way.
 	EnqueueC2B(ctx context.Context, tx pgx.Tx, confirmationID string, source VerifySource) error
+	// EnqueueClaimCheck asks M-Pesa about the receipt a player claimed for an uncredited top-up (CheckClaim).
+	EnqueueClaimCheck(ctx context.Context, tx pgx.Tx, paymentID string) error
 }
 
 // VerifySource says what asked for a verification.
@@ -171,6 +186,9 @@ type Config struct {
 	// callback the status query decides, as without this setting. Nothing is ever credited without Safaricom's
 	// receipt. The configuration refuses it with production Daraja.
 	SandboxSettle bool
+	// ShortCode is the business the prompts pay into; a receipt the player claims must have been paid to it (or to
+	// the paybill) before it credits a top-up.
+	ShortCode string
 }
 
 // Service runs top-ups.
@@ -306,7 +324,7 @@ func (s *Service) topUpWait(ctx context.Context, q *store.Queries, userID string
 
 // Get returns one of the player's payments. Another player's payment is ErrNotFound.
 func (s *Service) Get(ctx context.Context, userID, id string) (TopUp, error) {
-	p, err := store.New(s.pool).GetPayment(ctx, id)
+	p, err := store.New(s.pool).GetPaymentDetail(ctx, id)
 	var pe *pgconn.PgError
 	if errors.Is(err, pgx.ErrNoRows) || (errors.As(err, &pe) && pe.Code == "22P02") || (err == nil && p.UserID != userID) {
 		return TopUp{}, ErrNotFound
@@ -314,7 +332,8 @@ func (s *Service) Get(ctx context.Context, userID, id string) (TopUp, error) {
 	if err != nil {
 		return TopUp{}, err
 	}
-	return TopUp{ID: p.ID, Status: publicStatus(p.Status), AmountRequestedKES: p.AmountRequestedKes, AmountConfirmedKES: p.AmountConfirmedKes, CreatedAt: p.CreatedAt}, nil
+	return TopUp{ID: p.ID, Status: publicStatus(p.Status), AmountRequestedKES: p.AmountRequestedKes, AmountConfirmedKES: p.AmountConfirmedKes, CreatedAt: p.CreatedAt,
+		Claim: claimFields(p.ClaimedReceipt, p.ClaimStatus, p.ClaimNote)}, nil
 }
 
 // List returns the player's latest top-ups, newest first.
@@ -325,7 +344,8 @@ func (s *Service) List(ctx context.Context, userID string, limit int) ([]TopUp, 
 	}
 	out := make([]TopUp, 0, len(rows))
 	for _, p := range rows {
-		out = append(out, TopUp{ID: p.ID, Status: publicStatus(p.Status), AmountRequestedKES: p.AmountRequestedKes, AmountConfirmedKES: p.AmountConfirmedKes, CreatedAt: p.CreatedAt})
+		out = append(out, TopUp{ID: p.ID, Status: publicStatus(p.Status), AmountRequestedKES: p.AmountRequestedKes, AmountConfirmedKES: p.AmountConfirmedKes, CreatedAt: p.CreatedAt,
+			Claim: claimFields(p.ClaimedReceipt, p.ClaimStatus, p.ClaimNote)})
 	}
 	return out, nil
 }
@@ -346,7 +366,8 @@ func (s *Service) Recent(ctx context.Context, userID string) ([]TopUp, error) {
 	}
 	out := make([]TopUp, 0, len(rows))
 	for _, p := range rows {
-		out = append(out, TopUp{ID: p.ID, Status: publicStatus(p.Status), AmountRequestedKES: p.AmountRequestedKes, AmountConfirmedKES: p.AmountConfirmedKes, CreatedAt: p.CreatedAt})
+		out = append(out, TopUp{ID: p.ID, Status: publicStatus(p.Status), AmountRequestedKES: p.AmountRequestedKes, AmountConfirmedKES: p.AmountConfirmedKes, CreatedAt: p.CreatedAt,
+			Claim: claimFields(p.ClaimedReceipt, p.ClaimStatus, p.ClaimNote)})
 	}
 	return out, nil
 }
@@ -428,11 +449,14 @@ func (s *Service) HandleCallback(ctx context.Context, raw []byte) error {
 		if err != nil {
 			return err
 		}
-		if final(p.Status) {
-			return nil
-		}
 		now, err := s.clk.Now(ctx, tx)
 		if err != nil {
+			return err
+		}
+		if final(p.Status) {
+			// a paid callback for a top-up that settled uncredited (the sandbox calls back late, or never; a verify
+			// job gave up) is the receipt itself: credited now, nothing to verify
+			_, err := s.lateCallback(ctx, tx, settledTopUp{ID: p.ID, UserID: p.UserID, Status: p.Status, Msisdn: p.Msisdn}, cb, raw, now)
 			return err
 		}
 		if err := q.RecordCallback(ctx, store.RecordCallbackParams{RawCallback: raw, At: now, ID: p.ID}); err != nil {
@@ -626,6 +650,9 @@ type creditInput struct {
 	// channel is "c2b" for a paybill payment, which proves no phone (anyone can pay into any account number);
 	// otherwise an STK top-up, whose approved prompt proves the target.
 	channel string
+	// source says where the receipt came from when not the callback of a pending top-up: late_callback,
+	// receipt_claim, statement, operator, recheck; note is the operator's; was is the status the top-up had.
+	source, note, was string
 }
 
 // creditPayment posts a confirmed top-up: the deposit and the excise the operator owes on it, recovery of any debt the player owes, the payment
@@ -653,6 +680,15 @@ func (s *Service) creditPayment(ctx context.Context, tx pgx.Tx, in creditInput) 
 	ev := in.actor
 	ev.Action, ev.EntityType, ev.EntityID = "payment.topup.credited", "payment", in.paymentID
 	ev.Details = map[string]any{"amount_kes": in.amount, "receipt": in.receipt, "debt_recovered_kes": recovered}
+	if in.source != "" {
+		ev.Details["source"] = in.source
+	}
+	if in.note != "" {
+		ev.Details["note"] = in.note
+	}
+	if in.was != "" {
+		ev.Details["was"] = in.was
+	}
 	if in.channel == "c2b" {
 		ev.Action = "payment.c2b.credited"
 	} else {
@@ -718,6 +754,9 @@ func (s *Service) settle(ctx context.Context, tx pgx.Tx, userID, paymentID, stat
 		Details: map[string]any{"user_id": userID, "reason": reason}})
 }
 
+// claimRetry is how long a receipt claim waits for M-Pesa's answer before the sweep asks again.
+const claimRetry = 10 * time.Minute
+
 // Sweep enqueues verification for payments that have been pending longer than the verify delay, and for paybill
 // confirmations whose verification has stalled, in case a job or a callback was lost.
 func (s *Service) Sweep(ctx context.Context) error {
@@ -730,6 +769,18 @@ func (s *Service) Sweep(ctx context.Context) error {
 		ids, err := q.StalePending(ctx, now.Add(-s.cfg.VerifyAfter))
 		if err != nil {
 			return err
+		}
+		if s.c2b != nil {
+			// receipts players claimed that M-Pesa has not answered about: ask again
+			claims, err := q.ClaimsToCheck(ctx, now.Add(-claimRetry))
+			if err != nil {
+				return err
+			}
+			for _, id := range claims {
+				if err := s.enq.EnqueueClaimCheck(ctx, tx, id); err != nil {
+					return err
+				}
+			}
 		}
 		for _, id := range ids {
 			if err := s.enq.EnqueueVerify(ctx, tx, id, FromSweep); err != nil {

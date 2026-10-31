@@ -6,17 +6,15 @@ import (
 	"strings"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/itsivali/lottery-platform/internal/audit"
-	"github.com/itsivali/lottery-platform/internal/payments/daraja"
 	"github.com/itsivali/lottery-platform/internal/payments/store"
 )
 
 // Errors of the operator actions.
 var (
 	ErrNotReversible  = errors.New("payments: only a credited payment can be reversed")
-	ErrNotResolvable  = errors.New("payments: only an unconfirmed payment can be resolved")
+	ErrNotResolvable  = errors.New("payments: only a settled, uncredited top-up can be resolved")
 	ErrReceiptUsed    = errors.New("payments: this receipt already credited another payment")
 	ErrReasonRequired = errors.New("payments: a reason is required")
 )
@@ -79,38 +77,8 @@ func (s *Service) Reverse(ctx context.Context, receipt, reason, operator string)
 	return out, err
 }
 
-// ResolveUnconfirmed credits an unconfirmed top-up (the status query said paid, no callback ever brought the receipt)
-// from the receipt and amount an operator found on the M-Pesa statement. It goes through the same credit path as a
-// confirmed callback: excise, debt recovery, phone proof, exactly once per receipt.
+// ResolveUnconfirmed credits a settled, uncredited top-up from the receipt an operator found on the statement
+// (Resolve, with no note).
 func (s *Service) ResolveUnconfirmed(ctx context.Context, paymentID, receipt string, amount int64, operator string) error {
-	if amount <= 0 || amount > daraja.MaxSTKAmountKES {
-		return ErrInvalidAmount
-	}
-	return pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
-		q := store.New(tx)
-		p, err := q.LockPayment(ctx, paymentID)
-		var pe *pgconn.PgError
-		if errors.Is(err, pgx.ErrNoRows) || (errors.As(err, &pe) && pe.Code == "22P02") {
-			return ErrNotFound
-		}
-		if err != nil {
-			return err
-		}
-		if p.Status != "unconfirmed" || p.Msisdn == nil {
-			return ErrNotResolvable
-		}
-		used, err := q.ReceiptUsedElsewhere(ctx, store.ReceiptUsedElsewhereParams{MpesaReceipt: &receipt, ID: paymentID})
-		if err != nil {
-			return err
-		}
-		if used {
-			return ErrReceiptUsed
-		}
-		now, err := s.clk.Now(ctx, tx)
-		if err != nil {
-			return err
-		}
-		return s.creditPayment(ctx, tx, creditInput{paymentID: paymentID, user: p.UserID, target: *p.Msisdn, amount: amount,
-			receipt: receipt, now: now, actor: audit.Event{ActorType: audit.Staff, ActorID: operator}})
-	})
+	return s.Resolve(ctx, Resolution{PaymentID: paymentID, Receipt: receipt, AmountKES: amount, Source: "statement"}, operator)
 }

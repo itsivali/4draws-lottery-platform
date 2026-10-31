@@ -78,6 +78,11 @@ export class ApiClient {
     await this.write('DELETE', path, undefined, key)
   }
 
+  /** A write whose body is text as it is (an uploaded CSV), not JSON. */
+  postText<T = unknown>(path: string, text: string, contentType = 'text/csv', key = newIdempotencyKey()): Promise<T> {
+    return this.write<T>('POST', path, { raw: text, contentType }, key)
+  }
+
   /**
    * Every write, one way: the same idempotency key on a retry, so a request that did arrive is replayed and never
    * repeated. A network failure is retried once; a second failure, a timeout, a 5xx or a request still in progress
@@ -91,10 +96,10 @@ export class ApiClient {
           method,
           headers: {
             ...(await this.headers()),
-            ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
+            ...(body === undefined ? {} : { 'Content-Type': isRaw(body) ? body.contentType : 'application/json' }),
             'Idempotency-Key': key,
           },
-          ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+          ...(body === undefined ? {} : { body: isRaw(body) ? body.raw : JSON.stringify(body) }),
           signal,
         }),
       )
@@ -167,4 +172,11 @@ async function isInProgress(res: Response): Promise<boolean> {
   } catch {
     return false
   }
+}
+
+/** A body sent as it is (postText) rather than as JSON. */
+interface RawBody { raw: string; contentType: string }
+
+function isRaw(body: unknown): body is RawBody {
+  return typeof body === 'object' && body !== null && 'raw' in body && 'contentType' in body && typeof (body as RawBody).raw === 'string'
 }

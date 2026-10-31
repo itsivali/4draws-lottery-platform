@@ -214,8 +214,18 @@ func (s *Server) transactionStatus(w http.ResponseWriter, _ *http.Request, body 
 	t, known := s.c2bTxns[receipt]
 	var f C2BFault
 	var pb PayBill
+	creditParty := s.opts.C2BShortCode + " - Mock Paybill"
 	if known {
 		f, pb = t.fault, t.PayBill
+	} else if checkout, ok := s.stkReceipts[receipt]; ok { // a completed prompt: M-Pesa knows its receipt too
+		if st := s.txns[checkout]; st != nil {
+			amount := st.AmountKES
+			if st.fault.PaidAmountKES != 0 {
+				amount = st.fault.PaidAmountKES
+			}
+			pb, known = PayBill{AmountKES: amount, MSISDN: st.MSISDN}, true
+			creditParty = s.opts.ShortCode + " - Mock Business"
+		}
 	}
 	s.statusSeq++
 	orig, conv := "mock-ts-"+strconv.Itoa(s.statusSeq), "AG_MOCK_"+strconv.Itoa(s.statusSeq)
@@ -260,7 +270,7 @@ func (s *Server) transactionStatus(w http.ResponseWriter, _ *http.Request, body 
 		result["ResultCode"], result["ResultDesc"] = 0, "The service request is processed successfully."
 		result["ResultParameters"] = map[string]any{"ResultParameter": []map[string]any{
 			{"Key": "DebitPartyName", "Value": payer + " - John Doe"},
-			{"Key": "CreditPartyName", "Value": s.opts.C2BShortCode + " - Mock Paybill"},
+			{"Key": "CreditPartyName", "Value": creditParty},
 			{"Key": "TransactionStatus", "Value": state},
 			{"Key": "ReasonType", "Value": "Pay Bill Online"},
 			{"Key": "Amount", "Value": amount},

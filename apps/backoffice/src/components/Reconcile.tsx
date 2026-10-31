@@ -1,11 +1,15 @@
 import { RefreshCw } from 'lucide-react'
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useSession } from '../context'
 import { useAction } from '../hooks'
 import type { Reconciliation } from '../types'
 import { ActionResult, Mono, Pill } from './ui'
 import { Button } from '@/components/ui/button'
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+
+/** attention lists whose items are top-up ids: each opens the top-up */
+const topUpKeys = new Set(['unconfirmed', 'overdue_pending', 'receipt_claims'])
 
 /** Runs one reconciliation now and shows its findings (the run is stored by the server). */
 export function ReconcileCard({ path, title, description }: { path: string; title: string; description?: string }) {
@@ -41,7 +45,13 @@ export function ReconcileCard({ path, title, description }: { path: string; titl
               {issues(report.attention).map(([k, v]) => (
                 <details key={k} className="rounded-lg border bg-muted/30 px-3 py-2 text-sm">
                   <summary className="cursor-pointer font-medium">Needs attention: {k} ({v?.length})</summary>
-                  <ul className="mt-2 grid gap-1 pl-4">{v?.map((x) => <li key={x}><Mono>{x}</Mono></li>)}</ul>
+                  <ul className="mt-2 grid gap-1 pl-4">
+                    {v?.map((x) => (
+                      <li key={x}>
+                        {topUpKeys.has(k) ? <Link to={`/topups?topup=${encodeURIComponent(x)}`} className="underline-offset-2 hover:underline"><Mono>{x}</Mono></Link> : <Mono>{x}</Mono>}
+                      </li>
+                    ))}
+                  </ul>
                 </details>
               ))}
             </div>

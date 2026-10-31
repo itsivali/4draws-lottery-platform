@@ -106,6 +106,9 @@ func (s *Service) Reconcile(ctx context.Context) (Report, error) {
 		if r.Attention["overdue_pending"], err = q.OverduePending(ctx, now.Add(-s.cfg.Expiry)); err != nil {
 			return err
 		}
+		if r.Attention["receipt_claims"], err = q.ReceiptClaims(ctx); err != nil {
+			return err
+		}
 		if r.Attention["orphan_callbacks"], err = q.RecentOrphanCallbacks(ctx, now.Add(-orphanWindow)); err != nil {
 			return err
 		}

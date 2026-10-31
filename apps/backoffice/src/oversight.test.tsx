@@ -7,7 +7,7 @@ import { PlaysPage } from './pages/Plays'
 import { SystemPage } from './pages/System'
 import { TopUpsPage } from './pages/TopUps'
 import { renderSignedIn } from './test/render'
-import type { Alert, AuditEvent, PlayRow, SystemState, TopUpRow } from './types'
+import type { Alert, AuditEvent, PlayRow, SystemState, TopUpDetail, TopUpRow } from './types'
 
 const play: PlayRow = {
   ticket_id: 't-1', user_id: 'u-1', msisdn: '254705369005', full_name: 'Willis Ivali', play_date: '2026-10-30', seq: 2,
@@ -17,7 +17,7 @@ const play: PlayRow = {
 const topUp: TopUpRow = {
   id: 'p-1', user_id: 'u-1', msisdn: '254705369005', full_name: 'Willis Ivali', channel: 'stk', amount_requested_kes: 1,
   amount_confirmed_kes: 1, status: 'credited', failure_reason: null, result_code: 1037, receipt: 'SANDBOX-p-1', sandbox: true,
-  created_at: '2026-10-30T09:22:29Z', updated_at: '2026-10-30T09:22:58Z',
+  claimed_receipt: null, claim_status: null, created_at: '2026-10-30T09:22:29Z', updated_at: '2026-10-30T09:22:58Z',
 }
 
 const system: SystemState = {
@@ -33,7 +33,7 @@ const system: SystemState = {
     { area: 'payments', ran_at: '2026-10-30T09:18:40Z', ok: true }, { area: 'game', ran_at: null, ok: null },
     { area: 'draws', ran_at: '2026-10-30T09:18:41Z', ok: true }, { area: 'payouts', ran_at: '2026-10-30T09:18:41Z', ok: false },
   ],
-  open_alerts: 1, players: 4, plays_today: 3, top_ups_pending: 0,
+  open_alerts: 1, players: 4, plays_today: 3, top_ups_pending: 0, top_ups_unconfirmed: 1, receipt_claims: 0,
 }
 
 describe('plays', () => {
@@ -59,6 +59,58 @@ describe('top-ups', () => {
     expect(within(table).getByText('Sandbox')).toBeInTheDocument()
     expect(within(table).getByText(/credited without M-Pesa’s confirmation/)).toBeInTheDocument()
     expect(within(table).getByText('SANDBOX-p-1')).toBeInTheDocument()
+  })
+})
+
+describe('top-up reconciliation', () => {
+  const claimed: TopUpRow = {
+    ...topUp, id: 'p-2', status: 'unconfirmed', amount_confirmed_kes: null, result_code: null, receipt: null, sandbox: false,
+    failure_reason: 'paid_without_callback', claimed_receipt: 'QJ7XK2M9PL', claim_status: 'unverified',
+  }
+  const detail: TopUpDetail = {
+    ...claimed, merchant_request_id: 'm-1', checkout_request_id: 'ws_CO_1', reversed_at: null, reversal_reason: null, callback: null,
+    claim: { receipt: 'QJ7XK2M9PL', status: 'unverified', claimed_at: '2026-10-30T18:40:00Z', note: 'M-Pesa did not confirm the receipt: does not exist', originator: 'AG_1' },
+    orphan_callbacks: [], jobs: [{ kind: 'payments.stk_verify', state: 'completed', attempt: 3, scheduled_at: '2026-10-30T18:36:00Z', finalized_at: '2026-10-30T18:49:00Z' }],
+    events: [{ id: '7', at: '2026-10-30T18:40:00Z', actor_type: 'player', actor_id: 'u-1', action: 'payment.topup.receipt_claimed', entity_type: 'payment', entity_id: 'p-2', details: { receipt: 'QJ7XK2M9PL' } }],
+    player: { status: 'active', kyc_status: 'verified', phone_verified: false, email: null, balance_kes: 0, top_ups: 2, credited_kes: 1, unconfirmed_count: 1 },
+  }
+
+  it('marks a player’s receipt in the list, filters on it, and opens the top-up with its claim and actions', async () => {
+    const calls: { method: string; url: URL; body: unknown }[] = []
+    renderSignedIn(<TopUpsPage />, {
+      roles: ['staff'],
+      route: (method, url, body) => {
+        calls.push({ method, url, body })
+        if (url.pathname === '/v1/staff/topups/p-2') return { status: 200, body: detail }
+        if (method === 'POST') return { status: 204 }
+        return { status: 200, body: { topups: [claimed], next_before: null } }
+      },
+    })
+    const table = await screen.findByRole('table', { name: /Top-ups, newest first/ })
+    expect(within(table).getByText('Receipt from player')).toBeInTheDocument()
+    expect(within(table).getByText('QJ7XK2M9PL')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('checkbox', { name: /Receipt from player to check/ }))
+    await waitFor(() => { expect(calls.at(-1)?.url.searchParams.get('claimed')).toBe('true') })
+
+    // the filtered list is a fresh table
+    const filtered = await screen.findByRole('table', { name: /Top-ups, newest first/ })
+    await userEvent.click(await within(filtered).findByRole('button', { name: 'Open top-up p-2' }))
+    const sheet = await screen.findByRole('dialog', { name: 'Top-up' })
+    expect(await within(sheet).findByText('Receipt from player: not confirmed')).toBeInTheDocument()
+    expect(within(sheet).getByText(/does not exist/)).toBeInTheDocument()
+    expect(within(sheet).getByText(/receipt claimed/)).toBeInTheDocument()
+    expect(within(sheet).getByText('Phone not proved')).toBeInTheDocument()
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Credit from receipt' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Credit from a receipt' })
+    expect(within(dialog).getByLabelText(/^M-Pesa receipt/)).toHaveValue('QJ7XK2M9PL')
+    expect(within(dialog).getByLabelText(/^Amount paid/)).toHaveDisplayValue('1')
+    await userEvent.type(within(dialog).getByLabelText(/^Note/), 'statement 31 Oct')
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Credit' }))
+    await waitFor(() => {
+      const post = calls.find((c) => c.method === 'POST')
+      expect(post?.url.pathname).toBe('/v1/staff/topups/p-2/resolve')
+      expect(post?.body).toEqual({ receipt: 'QJ7XK2M9PL', amount_kes: 1, note: 'statement 31 Oct' })
+    })
   })
 })
 
