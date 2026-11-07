@@ -35,6 +35,17 @@ Read this first at the start of every session.
   rotation is off.
 - **Keys:** `DATA_KEY` and `IDENTITY_KEY` were handed to the owner for the password manager; save `AUTH_KEY` too.
 
+- **Compliance and release readiness (started 2026-11-07, licensing pending):** audit baseline and backlog in
+  `docs/release/implementation-roadmap.md`; requirements from LN 112/2026 and others in
+  `docs/compliance/requirements-matrix.md`; evidence in `docs/compliance/evidence-register.md`. Owner decisions:
+  operating mode `disabled | sandbox | live` (sandbox only with sandbox Daraja; live needs licence evidence and two
+  approvals); 18+ declaration with date of birth at sign-up, verified ID before money in when live; one PR per slice.
+  Critical for live: LN 112 reg 42 (player data in Kenya; production is in Oregon), reg 82 (ID, age, location before
+  deposit), reg 27 (charity share for public lotteries).
+- **Hosting (owner, 2026-11-07):** production moves from Render (Oregon) to **Safaricom hosting in Kenya** for LN 112
+  reg 42 (player data in Kenya). Plan: slice S12 in `docs/release/implementation-roadmap.md`; waiting on the Safaricom
+  product and account.
+
 ## Before the API is exposed to players
 
 1. **Trusted proxy: fixed.** Measured on the live service (`docs/runbooks/trusted-proxy.md`): the rightmost
