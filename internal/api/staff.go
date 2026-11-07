@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/itsivali/lottery-platform/internal/alerts"
+	"github.com/itsivali/lottery-platform/internal/compliance"
 	"github.com/itsivali/lottery-platform/internal/draws"
 	"github.com/itsivali/lottery-platform/internal/finance"
 	"github.com/itsivali/lottery-platform/internal/game"
@@ -51,6 +52,8 @@ type StaffServices struct {
 	Oversight *oversight.Service
 	// RG reads a player's deposit limits and restrictions for their timeline (owner, 2026-10-31).
 	RG *rg.Service
+	// Gate is the operating mode (ADR 0027): its state, stop, resume and the two-admin live approval.
+	Gate *compliance.Gate
 }
 
 type staffKey struct{}
@@ -204,6 +207,13 @@ func (h *handlers) mountStaff(r chi.Router) {
 	r.With(anyStaff).Get("/alerts/{id}", h.staffAlert)
 	r.With(anyStaff).Post("/alerts/{id}/acknowledge", h.staffAlertAck)
 
+	hasGate := h.StaffServices.Gate != nil
+	r.With(anyStaff).Get("/operating", h.needs(hasGate, "Operating mode", h.staffOperating))
+	r.With(anyStaff).Post("/operating/stop", h.needs(hasGate, "Operating mode", h.staffOperatingStop))
+	r.With(admin).Post("/operating/resume", h.needs(hasGate, "Operating mode", h.staffOperatingResume))
+	r.With(admin).Post("/operating/live-requests", h.needs(hasGate, "Operating mode", h.staffLiveRequest))
+	r.With(admin).Post("/operating/live-requests/{id}/approve", h.needs(hasGate, "Operating mode", h.staffLiveApprove))
+
 	r.With(anyStaff).Get("/closures", h.staffClosures)
 	r.With(anyStaff).Post("/closures/{user}/close", h.staffClose)
 
@@ -241,6 +251,10 @@ func unavailable(w http.ResponseWriter, what string) {
 
 // staffError maps the services' refusals to problems. Anything unknown is a 500.
 func staffError(w http.ResponseWriter, err error) {
+	if status, slug, title, ok := complianceProblem(err); ok {
+		httpx.WriteProblem(w, status, slug, title, "")
+		return
+	}
 	if errors.Is(err, staff.ErrWeakPassword) {
 		httpx.WriteProblem(w, http.StatusBadRequest, "weak-password", "Password too weak", strings.TrimPrefix(err.Error(), "password: too weak: "))
 		return

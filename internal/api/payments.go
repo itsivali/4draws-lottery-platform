@@ -13,6 +13,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/itsivali/lottery-platform/internal/compliance"
 	"github.com/itsivali/lottery-platform/internal/identity"
 	"github.com/itsivali/lottery-platform/internal/payments"
 	"github.com/itsivali/lottery-platform/internal/payments/daraja"
@@ -126,6 +127,8 @@ func (h *handlers) startTopUp(w http.ResponseWriter, r *http.Request) {
 	case errors.Is(err, payments.ErrInvalidAmount):
 		httpx.WriteProblem(w, http.StatusBadRequest, "invalid-amount", "Invalid amount",
 			"top-ups are between KES "+strconv.FormatInt(h.Payments.MinTopUpKES(), 10)+" and KES "+strconv.Itoa(daraja.MaxSTKAmountKES))
+	case errors.Is(err, compliance.ErrOperationsStopped):
+		operationsStopped(w)
 	case errors.Is(err, payments.ErrUnavailable):
 		paymentsUnavailable(w)
 	case errors.As(err, &le):

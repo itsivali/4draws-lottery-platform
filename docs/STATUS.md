@@ -42,9 +42,16 @@ Read this first at the start of every session.
   approvals); 18+ declaration with date of birth at sign-up, verified ID before money in when live; one PR per slice.
   Critical for live: LN 112 reg 42 (player data in Kenya; production is in Oregon), reg 82 (ID, age, location before
   deposit), reg 27 (charity share for public lotteries).
-- **Hosting (owner, 2026-11-07):** production moves from Render (Oregon) to **Safaricom hosting in Kenya** for LN 112
-  reg 42 (player data in Kenya). Plan: slice S12 in `docs/release/implementation-roadmap.md`; waiting on the Safaricom
-  product and account.
+- **Hosting (owner, 2026-11-07):** production moves from Render (Oregon) to **hosting in Kenya** for LN 112 reg 42
+  (player data in Kenya). Safaricom's cPanel hosting packages cannot run the platform (long-running Go api and workers,
+  PostgreSQL with roles and triggers, Valkey, containers): it needs virtual machines with root access in a Kenyan data
+  centre. Next: ask Safaricom Business for cloud virtual machines (Nairobi/Kisumu); fallback Angani or Lineserve
+  (Nairobi), location confirmed in writing. Plan: slice S12 in `docs/release/implementation-roadmap.md`.
+- **Operating mode (ADR 0027, 2026-11-07):** `OPERATING_MODE` (default `disabled`) caps what the api may do; staff can
+  stop money moving from System status or `lotteryctl compliance stop`; an admin resumes; live needs production
+  Daraja, `REGULATORY_LICENCE_REFERENCE` and two admins (`docs/runbooks/operating-mode.md`). **Render must have
+  `OPERATING_MODE=sandbox`** (render.yaml sets it; check the dashboard after the Blueprint syncs), or the demo stops
+  taking top-ups and plays. `GET /v1/status` shows the mode.
 
 ## Before the API is exposed to players
 

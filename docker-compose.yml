@@ -68,6 +68,7 @@ services:
       TRUSTED_PROXY_HEADER: none
       # no KYC_API_URL: identities wait for a reviewer in the back office, as in production (ADR 0009)
       WORKERS_IN_PROCESS: "true"
+      OPERATING_MODE: sandbox # the mock is sandbox money (ADR 0027)
       DARAJA_BASE_URL: http://daraja-mock:8080
       TOP_UP_MIN_KES: "1" # as on Render while the apps are tested
       DARAJA_CONSUMER_KEY: local

@@ -68,6 +68,32 @@ type AuditKraOutbox struct {
 	BatchID    pgtype.UUID
 }
 
+type ComplianceLiveApproval struct {
+	RequestID  string
+	ApprovedBy string
+	CreatedAt  time.Time
+}
+
+type ComplianceLiveRequest struct {
+	ID                string
+	LicenceReference  string
+	ApprovalReference string
+	EvidenceSha256    string
+	EvidenceLocation  string
+	Reason            string
+	RequestedBy       string
+	CreatedAt         time.Time
+}
+
+type ComplianceModeChange struct {
+	ID            string
+	Mode          string
+	LiveRequestID pgtype.UUID
+	Reason        string
+	ChangedBy     string
+	CreatedAt     time.Time
+}
+
 type DrawsDraw struct {
 	ID              string
 	DrawType        string

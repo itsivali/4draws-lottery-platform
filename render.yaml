@@ -92,6 +92,11 @@ services:
       # DARAJA_ALLOW_PRODUCTION=true. Credentials are entered in the dashboard; all four unset means top-ups are
       # refused. The callback URL is PUBLIC_BASE_URL + /hooks/mpesa/stk/ + sha256(DARAJA_CALLBACK_TOKEN). Paybill (C2B)
       # URLs are registered once with `lotteryctl payments c2b-register`; ones registered on the onrender.com address keep working.
+      # Operating mode (ADR 0027, owner 2026-11-07): sandbox while licensing is pending. The api refuses to start with
+      # sandbox and production Daraja; live needs production Daraja, REGULATORY_LICENCE_REFERENCE and two admins
+      # approving a live request in the back office. Never set live here without the licence.
+      - key: OPERATING_MODE
+        value: sandbox
       - key: DARAJA_BASE_URL
         value: https://sandbox.safaricom.co.ke
       - key: PUBLIC_BASE_URL

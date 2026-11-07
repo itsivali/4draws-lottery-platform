@@ -41,11 +41,11 @@ submission; P2 hardens.
 | WEB-01 | P0 (store) | S8 | No privacy, terms, RG, deletion pages; no in-app links | Pages published (DRAFT for counsel); linked in the app | — | not_started |
 | CI-01 | P2 | S9 | No Flutter/npm dependency scan; dead `web` job | osv-scanner on lockfiles; job fixed | — | not_started |
 | RG-01 | P1 | S11 | LN 112 reg 84 requires loss, session and spend limits and reality checks; only deposit limits and time-outs exist | Limits enforced server-side on play; reality check served by the API and shown by the app | — | not_started |
-| REG-02 | P0 (launch) | S12 | LN 112 reg 42: player data must be stored in Kenya unless exempted; production runs on Render, Oregon. **Owner, 2026-11-07: Safaricom hosting in Kenya** | Database, cache, api, workers, backups and logs with player data all in Kenya; encrypted at rest; Render retired; location evidenced in writing | Safaricom account and product details | in_progress |
+| REG-02 | P0 (launch) | S12 | LN 112 reg 42: player data must be stored in Kenya unless exempted; production runs on Render, Oregon. **Owner, 2026-11-07: hosting in Kenya** (virtual machines; cPanel packages cannot run it) | Database, cache, api, workers, backups and logs with player data all in Kenya; encrypted at rest; Render retired; location evidenced in writing | Safaricom account and product details | in_progress |
 | REG-03 | P1 | — | LN 112 regs 41(e), 44, 73: regulator API, central monitoring, national self-exclusion register | Adapter built against the GRA's published specification | GRA specification | blocked |
 | STO-01 | P1 | S10 | No store submission pack | Checklists, reviewer notes, device matrix | AND-01, IOS-01, WEB-01 | not_started |
 
-### S12: Move to Safaricom hosting in Kenya (owner decision, 2026-11-07)
+### S12: Move to hosting in Kenya (owner decision, 2026-11-07)
 
 LN 112 reg 42 requires player data to be stored in Kenya. Everything that holds player data moves: PostgreSQL, Valkey,
 the api and its workers, backups, and any logs or traces that carry personal data. The static sites (player web app,
@@ -68,8 +68,14 @@ What has to be decided or built:
 | DNS | Safaricom DNS, records to Render | Records to the new host (`api.`, `backoffice.`, apex) |
 | Evidence | — | Contract or letter naming the data-centre location, for the evidence register (EV-09) |
 
-Needed from the owner: the Safaricom product chosen (virtual machines, managed database, Kubernetes, or a mix),
-account access for deployment, and whether the free-database rotation (`db-rotate`) can be retired once Render goes.
+Safaricom's cPanel hosting packages cannot run this (no long-running processes, no PostgreSQL roles or triggers, no
+Valkey, no containers). What is needed is virtual machines with root access in a Kenyan data centre: to start, one of
+about 4 vCPU, 8 GB RAM and 100 GB SSD on Ubuntu with a static IP and backups kept in Kenya, ideally a second for the
+database. First ask Safaricom Business for cloud virtual machines (its VMware-based cloud in Nairobi and Kisumu);
+fallback Angani or Lineserve (Nairobi). Get the data-centre location in writing.
+
+Needed from the owner: the provider and product chosen, account access for deployment, and whether the free-database
+rotation (`db-rotate`) can be retired once Render goes.
 
 ### Later backlog (not scheduled)
 

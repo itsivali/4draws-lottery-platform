@@ -17,7 +17,7 @@ Statuses: `not_started` · `in_progress` · `implemented` · `technically_verifi
 | EV-06 | Loss, session and spend limits; reality checks (GCA-08, rest) | — | — | Engineering | not_started | — |
 | EV-07 | Daily entry cap (GCA-09) | `game.go:26`, DB constraint `00006` | `game_integration_test.go:231` | Engineering | technically_verified | Authority's cap value |
 | EV-08 | Regulator API and central monitoring (GCA-11) | — | — | Engineering | blocked | Specification from the GRA |
-| EV-09 | Player data in Kenya (GCA-12) | S12: move to Safaricom hosting in Kenya (owner, 2026-11-07) | Render, Oregon today | Operator | in_progress | Safaricom hosting contract; data-centre location in writing |
+| EV-09 | Player data in Kenya (GCA-12) | S12: move to hosting in Kenya (owner, 2026-11-07); provider being chosen | Render, Oregon today | Operator | in_progress | Kenyan VM hosting contract; data-centre location in writing |
 | EV-10 | Tamper-evident audit log (GCA-13) | append-only `audit.audit_log` | `schema_integration_test.go` | Engineering | technically_verified | — |
 | EV-11 | Geo-blocking (GCA-13) | ID-05 (S3) | — | Engineering | not_started | — |
 | EV-12 | RNG certification (GCA-14) | `internal/game/fair`, `internal/draws`, `tools/verifier` | nightly distribution test | Operator | awaiting_external_evidence | Accredited lab |

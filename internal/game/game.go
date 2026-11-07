@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/itsivali/lottery-platform/internal/compliance"
 	"github.com/itsivali/lottery-platform/internal/game/fair"
 	"github.com/itsivali/lottery-platform/internal/game/store"
 	"github.com/itsivali/lottery-platform/internal/ledger"
@@ -61,6 +62,13 @@ type Service struct {
 	keys   *crypto.Keyring
 	// lowBalance is the wallet's insufficient-funds error.
 	lowBalance error
+	gate       *compliance.Gate // the operating mode (ADR 0027); nil allows everything (tests)
+}
+
+// WithGate makes plays ask the operating mode (ADR 0027).
+func (s *Service) WithGate(g *compliance.Gate) *Service {
+	s.gate = g
+	return s
 }
 
 // NewService returns a Service. lowBalance is the wallet error for a balance below the stake.
@@ -145,6 +153,9 @@ func (s *Service) Play(ctx context.Context, userID, key string) (Result, error) 
 			return err
 		}
 		day := playDate(now)
+		if err := s.gate.Assert(ctx, tx, compliance.OpPlay); err != nil {
+			return err
+		}
 		if err := s.ids.AssertCanPlay(ctx, tx, userID); err != nil {
 			return err
 		}

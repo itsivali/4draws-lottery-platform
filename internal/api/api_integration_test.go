@@ -26,6 +26,7 @@ import (
 	"github.com/itsivali/lottery-platform/internal/alerts"
 	"github.com/itsivali/lottery-platform/internal/api"
 	"github.com/itsivali/lottery-platform/internal/audit"
+	"github.com/itsivali/lottery-platform/internal/compliance"
 	"github.com/itsivali/lottery-platform/internal/draws"
 	"github.com/itsivali/lottery-platform/internal/finance"
 	"github.com/itsivali/lottery-platform/internal/game"
@@ -196,13 +197,17 @@ func setupWith(t *testing.T, mutate func(*apiDeps)) *env {
 		AccessTTL: 10 * time.Minute, RefreshTTL: 30 * 24 * time.Hour, DeviceCap: 2,
 	})
 	sRG := rg.NewService(staffPool, clk, aw, rg.Config{CoolingOff: 24 * time.Hour})
+	// the operating mode as the deployed demo runs it (ADR 0027): sandbox, so every money path asks and is allowed
+	gate := compliance.NewGate(pool, clk, aw, compliance.Config{Mode: compliance.Sandbox})
+	sGate := compliance.NewGate(staffPool, clk, aw, compliance.Config{Mode: compliance.Sandbox})
 	staffServices := api.StaffServices{
 		Identity:  sIDs,
 		KYC:       kyc.NewService(staffPool, clk, mock, kr, []byte("0123456789abcdef0123456789abcdef"), aw, enq),
-		Payments:  payments.NewService(staffPool, clk, dc, pay, sIDs, sRG, wallet.NewService(ls), ls, aw, payments.Config{}),
+		Payments:  payments.NewService(staffPool, clk, dc, pay, sIDs, sRG, wallet.NewService(ls), ls, aw, payments.Config{}).WithGate(sGate),
 		Draws:     draws.NewService(staffPool, clk, kr, drawBeacon{}, ls),
-		Payouts:   payouts.NewService(staffPool, clk, dc, payoutQueue{pay}, sIDs, wallet.NewService(ls), ls, aw, payouts.Config{}, wallet.ErrInsufficientFunds),
-		Game:      game.NewService(staffPool, clk, sIDs, sRG, wallet.NewService(ls), kr, wallet.ErrInsufficientFunds),
+		Payouts:   payouts.NewService(staffPool, clk, dc, payoutQueue{pay}, sIDs, wallet.NewService(ls), ls, aw, payouts.Config{}, wallet.ErrInsufficientFunds).WithGate(sGate),
+		Game:      game.NewService(staffPool, clk, sIDs, sRG, wallet.NewService(ls), kr, wallet.ErrInsufficientFunds).WithGate(sGate),
+		Gate:      sGate,
 		Members:   staff.NewService(staffPool, clk, staffIDTokens{}, aw, []byte("staff-pepper")),
 		Metrics:   metrics.NewService(staffPool, clk),
 		Finance:   finance.NewService(staffPool, clk, aw),
@@ -224,12 +229,13 @@ func setupWith(t *testing.T, mutate func(*apiDeps)) *env {
 		Identity:      ids,
 		KYC:           kyc.NewService(pool, clk, mock, kr, []byte("0123456789abcdef0123456789abcdef"), aw, enq),
 		RG:            rgs,
-		Payments:      payments.NewService(pool, clk, dc, pay, ids, rgs, wallet.NewService(ls), ls, aw, payments.Config{}).WithC2B(dc, payments.C2BConfig{ShortCode: "600982"}),
+		Payments:      payments.NewService(pool, clk, dc, pay, ids, rgs, wallet.NewService(ls), ls, aw, payments.Config{}).WithC2B(dc, payments.C2BConfig{ShortCode: "600982"}).WithGate(gate),
 		Live:          live,
-		Game:          game.NewService(pool, clk, ids, rgs, wallet.NewService(ls), kr, wallet.ErrInsufficientFunds),
+		Game:          game.NewService(pool, clk, ids, rgs, wallet.NewService(ls), kr, wallet.ErrInsufficientFunds).WithGate(gate),
 		Draws:         draws.NewService(pool, clk, kr, drawBeacon{}, ls),
 		Payouts: payouts.NewService(pool, clk, dc, payoutQueue{pay}, ids, wallet.NewService(ls), ls, aw, payouts.Config{},
-			wallet.ErrInsufficientFunds),
+			wallet.ErrInsufficientFunds).WithGate(gate),
+		Gate:         gate,
 		Wallet:       wallet.NewReader(pool),
 		CallbackPath: callbackPath,
 		Challenges:   challenge.NewStore(vk.Client(t), 5*time.Minute),

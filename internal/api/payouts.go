@@ -10,6 +10,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/itsivali/lottery-platform/internal/compliance"
 	"github.com/itsivali/lottery-platform/internal/identity"
 	"github.com/itsivali/lottery-platform/internal/payments/daraja"
 	"github.com/itsivali/lottery-platform/internal/payouts"
@@ -72,6 +73,8 @@ func (h *handlers) withdraw(w http.ResponseWriter, r *http.Request) {
 	case errors.Is(err, payouts.ErrInDebt):
 		httpx.WriteProblem(w, http.StatusForbidden, "in-debt", "Withdrawals are paused while you owe money from a reversed top-up",
 			"your next top-up repays it first")
+	case errors.Is(err, compliance.ErrOperationsStopped):
+		operationsStopped(w)
 	case errors.Is(err, payouts.ErrUnavailable):
 		payoutsUnavailable(w)
 	case errors.Is(err, identity.ErrKYCRequired), errors.Is(err, identity.ErrPhoneNotVerified), errors.Is(err, identity.ErrAccountSuspended):

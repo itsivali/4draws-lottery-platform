@@ -33,6 +33,8 @@ Thresholds are environment variables (Go durations such as `30m`, `4h`, `168h`);
 | `reconciliation.missing` | page | a daily reconciliation has not run for 26 hours (or ever) | at its next run | The worker is probably down: check the background jobs |
 | `kra.remittance_due` | warn | withheld tax unremitted for `KRA_REMIT_WARN_AFTER` [72h] (placeholder) | when remitted | Prepare the batch and remit it ([tax](tax.md)) |
 | `kra.remittance_overdue` | page | withheld tax unremitted for `KRA_REMIT_DUE_AFTER` [120h] (placeholder) | when remitted | Remit it now |
+| `operations.stopped` | page | staff stopped money operations (ADR 0027; [operating mode](operating-mode.md)) | when an admin resumes | Read the reason; fix the cause; an admin resumes on the System page |
+| `operations.live_request` | warn | a request to operate live waits for a second admin (one alert per request) | when approved, or after 7 days | A different admin checks the licence evidence and approves, or lets it expire |
 | `alerts.check_failed` | page | a check could not run (it then clears nothing it owns) | when the check runs again | Read the error: usually the database or a missing table |
 
 Ages in a summary count from when the thing started waiting (a top-up from when the player paid, a payout from when

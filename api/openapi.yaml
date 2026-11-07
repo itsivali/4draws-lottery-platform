@@ -246,6 +246,28 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/SignInProviders" }
+  /v1/status:
+    get:
+      operationId: status
+      tags: [auth]
+      summary: Whether money moves and whether it is real (ADR 0027)
+      description: |
+        `operating_mode` is `disabled` (top-ups, plays and withdrawals are paused), `sandbox` (a demonstration with
+        sandbox money: no real stakes or prizes) or `live`. The apps show which.
+      security: []
+      responses:
+        "200":
+          description: The operating mode
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [operating_mode, real_money, money_moves]
+                properties:
+                  operating_mode: { type: string, enum: [disabled, sandbox, live] }
+                  real_money: { type: boolean }
+                  money_moves: { type: boolean }
+        "503": { $ref: "#/components/responses/Problem" }
   /v1/auth/sso/{provider}:
     post:
       operationId: signInSso
@@ -2804,6 +2826,130 @@ paths:
               required: [note]
               properties:
                 note: { type: string, minLength: 1 }
+      responses:
+        "200":
+          description: Done
+          content:
+            application/json:
+              schema: { type: object }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+  /v1/staff/operating:
+    get:
+      operationId: staffOperating
+      tags: [back-office]
+      summary: The operating mode, live requests waiting for a second admin, and the latest changes
+      description: "Role: `staff (admins too)`. ADR 0027."
+      security: [{ staffBearer: [] }]
+      responses:
+        "200":
+          description: Done
+          content:
+            application/json:
+              schema: { type: object }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+  /v1/staff/operating/stop:
+    post:
+      operationId: staffOperatingStop
+      tags: [back-office]
+      summary: Stop money moving (top-ups, plays, withdrawals, payouts) until an admin resumes
+      description: "Role: `staff (admins too)`. ADR 0027."
+      security: [{ staffBearer: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [reason], properties: { reason: { type: string, maxLength: 1000 } } }
+      responses:
+        "200":
+          description: Done
+          content:
+            application/json:
+              schema: { type: object }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+  /v1/staff/operating/resume:
+    post:
+      operationId: staffOperatingResume
+      tags: [back-office]
+      summary: Lift a stop back to sandbox (live needs a request and a second admin)
+      description: "Role: `admin`. ADR 0027."
+      security: [{ staffBearer: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [mode, reason], properties: { mode: { type: string, enum: [sandbox] }, reason: { type: string, maxLength: 1000 } } }
+      responses:
+        "200":
+          description: Done
+          content:
+            application/json:
+              schema: { type: object }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+  /v1/staff/operating/live-requests:
+    post:
+      operationId: staffLiveRequest
+      tags: [back-office]
+      summary: Ask to operate with real money under the configured licence; a second admin approves
+      description: "Role: `admin`. ADR 0027."
+      security: [{ staffBearer: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [licence_reference, approval_reference, evidence_sha256, evidence_location, reason], properties: { licence_reference: { type: string }, approval_reference: { type: string }, evidence_sha256: { type: string, pattern: "^[0-9a-f]{64}$" }, evidence_location: { type: string }, reason: { type: string } } }
+      responses:
+        "200":
+          description: Done
+          content:
+            application/json:
+              schema: { type: object }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+  /v1/staff/operating/live-requests/{id}/approve:
+    post:
+      operationId: staffLiveApprove
+      tags: [back-office]
+      summary: "Approve a live request (not its requester); the service goes live"
+      description: "Role: `admin`. ADR 0027."
+      security: [{ staffBearer: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
       responses:
         "200":
           description: Done

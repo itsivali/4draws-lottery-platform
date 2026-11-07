@@ -54,7 +54,7 @@ restrictions; session revocation on self-exclusion; integration with the GRA's n
 
 LN 112 reg 42 requires player data to be stored in Kenya unless the Authority exempts it in writing. Production runs on
 Render in Oregon, USA (`docs/STATUS.md`). This blocks `live` operation; it does not block sandbox demonstration.
-**Owner, 2026-11-07:** the platform moves to Safaricom hosting in Kenya (slice S12 in the roadmap).
+**Owner, 2026-11-07:** the platform moves to hosting in Kenya on virtual machines (slice S12 in the roadmap).
 
 ## 6. AML
 

@@ -476,3 +476,32 @@ export interface AlertEvent { at: string; event: string; actor: string; note?: s
 
 /** GET /v1/staff/alerts/{id}: the alert, the check that owns it and its history. */
 export interface AlertDetail extends Alert { check: string; history: AlertEvent[] }
+
+/** One recorded change of the operating mode (ADR 0027). */
+export interface OperatingChange {
+  id: string
+  mode: 'disabled' | 'sandbox' | 'live'
+  reason: string
+  changed_by: string
+  at: string
+  licence_reference?: string
+}
+
+/** A request to operate with real money, waiting for a second admin. */
+export interface LiveRequest {
+  id: string
+  licence_reference: string
+  approval_reference: string
+  evidence_sha256: string
+  evidence_location: string
+  reason: string
+  requested_by: string
+  at: string
+}
+
+/** The operating mode (GET /v1/staff/operating). */
+export interface OperatingState {
+  status: { mode: 'disabled' | 'sandbox' | 'live'; configured: 'disabled' | 'sandbox' | 'live'; real_money: boolean; last_change: OperatingChange | null }
+  live_requests: LiveRequest[]
+  history: OperatingChange[]
+}

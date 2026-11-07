@@ -11,6 +11,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/itsivali/lottery-platform/internal/compliance"
 	"github.com/itsivali/lottery-platform/internal/draws"
 	"github.com/itsivali/lottery-platform/internal/game"
 	"github.com/itsivali/lottery-platform/internal/identity"
@@ -65,6 +66,8 @@ type Deps struct {
 	AttestationWeb string
 	// SignIn is the players' Google and Apple sign-in (ADR 0020): which to offer, with which client ids.
 	SignIn SignInProviders
+	// Gate is the operating mode (ADR 0027) GET /v1/status reports; nil answers 503.
+	Gate *compliance.Gate
 }
 
 type ctxKey struct{}
@@ -109,6 +112,7 @@ func Mount(d Deps) func(chi.Router) {
 			r.Post("/auth/password/reset", h.resetPasswordWithToken)
 			r.Post("/auth/attestation/challenge", h.attestationChallenge)
 			r.Get("/auth/providers", h.signInProviders)
+			r.Get("/status", h.status)
 			r.Post("/auth/sso/{provider}", h.ssoSignIn)
 			r.Post("/auth/sso/{provider}/signup", h.ssoSignup)
 			r.Get("/draws", h.listDraws)

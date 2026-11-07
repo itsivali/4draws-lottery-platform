@@ -26,6 +26,8 @@ type Config struct {
 	API API
 	// Payments configures M-Pesa top-ups (disabled unless the Daraja credentials are present).
 	Payments Payments
+	// Operating is the operating mode (ADR 0027): disabled unless OPERATING_MODE says otherwise.
+	Operating Operating
 	// Alerts configures where alerts are sent.
 	Alerts Alerts
 	// Mail configures the email sent to staff (identity submissions waiting for review).
@@ -64,6 +66,9 @@ func Load() (Config, error) {
 	}
 	cfg.API = api
 	if cfg.Payments, err = loadPayments(api); err != nil {
+		return Config{}, err
+	}
+	if cfg.Operating, err = loadOperating(cfg.Payments); err != nil {
 		return Config{}, err
 	}
 	if cfg.Alerts, err = loadAlerts(); err != nil {

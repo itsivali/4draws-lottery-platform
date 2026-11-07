@@ -25,6 +25,7 @@ import (
 	"github.com/itsivali/lottery-platform/internal/alerts"
 	"github.com/itsivali/lottery-platform/internal/app"
 	"github.com/itsivali/lottery-platform/internal/audit"
+	"github.com/itsivali/lottery-platform/internal/compliance"
 	"github.com/itsivali/lottery-platform/internal/draws"
 	"github.com/itsivali/lottery-platform/internal/draws/drand"
 	"github.com/itsivali/lottery-platform/internal/game"
@@ -78,6 +79,9 @@ const usage = `usage:
   lotteryctl alerts list [-all] [-kind K] [-state open|acknowledged|resolved|all]   (-all is -state all)
   lotteryctl alerts ack -alert ID -note TEXT -operator NAME   (stops reminders; closes a payout freeze)
   lotteryctl alerts watch                                (run the checks and send what is due now)
+  lotteryctl compliance status                          (the operating mode as recorded, live requests waiting, the latest changes)
+  lotteryctl compliance stop -reason TEXT -operator NAME   (emergency: stop top-ups, plays, withdrawals and payouts; an admin
+                                                         resumes in the back office, where going live takes two admins)
   lotteryctl staff password -email E [-password P] [-admin]   (emergency: a temporary back-office password for E, read
                                                               from stdin without -password; -admin also makes E an
                                                               administrator, creating them if needed)`
@@ -133,6 +137,8 @@ var flagsOf = map[string][]string{
 	"alerts ack":               {"alert", "note", "operator"},
 	"alerts watch":             nil,
 	"staff password":           {"email"},
+	"compliance status":        nil,
+	"compliance stop":          {"reason", "operator"},
 }
 
 // optionalOf lists, per command, the flags it may take; the rest of a command's flags are as in flagsOf.
@@ -255,6 +261,8 @@ func run(ctx context.Context, cmd command, out io.Writer) error {
 		return alertsCmd(ctx, cfg, cmd, out)
 	case "staff password":
 		return staffPassword(ctx, cfg, cmd, os.Stdin, out)
+	case "compliance status", "compliance stop":
+		return complianceCmd(ctx, cfg, cmd, out)
 	}
 
 	pool, err := db.Open(ctx, cfg.DatabaseURL)
@@ -589,6 +597,43 @@ func payoutsCmd(ctx context.Context, cfg config.Config, cmd command, out io.Writ
 	return enc.Encode(res)
 }
 
+// complianceCmd shows the operating mode or stops money moving (ADR 0027). Resuming and going live are back-office
+// actions: there staff are authenticated, which a typed -operator is not.
+func complianceCmd(ctx context.Context, cfg config.Config, cmd command, out io.Writer) error {
+	pool, err := db.Open(ctx, cfg.DatabaseURL)
+	if err != nil {
+		return err
+	}
+	defer pool.Close()
+	g := compliance.NewGate(pool, clock.Postgres{}, audit.NewWriter(), compliance.Config{Mode: compliance.Mode(cfg.Operating.Mode),
+		LicenceReference: cfg.Operating.LicenceReference})
+	var res any
+	switch cmd.name {
+	case "compliance status":
+		st, err := g.Current(ctx)
+		if err != nil {
+			return err
+		}
+		reqs, err := g.OpenLiveRequests(ctx)
+		if err != nil {
+			return err
+		}
+		hist, err := g.History(ctx, 20)
+		if err != nil {
+			return err
+		}
+		// the configured mode is this shell's OPERATING_MODE, not necessarily the api's
+		res = map[string]any{"status_in_this_shell": st, "recorded": st.Latest, "live_requests": reqs, "history": hist}
+	case "compliance stop":
+		if res, err = g.Stop(ctx, cmd.operator, cmd.reason); err != nil {
+			return err
+		}
+	}
+	enc := json.NewEncoder(out)
+	enc.SetIndent("", "  ")
+	return enc.Encode(res)
+}
+
 // alertsCmd lists and acknowledges alerts, or runs the checks now (sending to ALERT_WEBHOOK_URL when set).
 func alertsCmd(ctx context.Context, cfg config.Config, cmd command, out io.Writer) error {
 	pool, err := db.Open(ctx, cfg.DatabaseURL)
@@ -599,7 +644,7 @@ func alertsCmd(ctx context.Context, cfg config.Config, cmd command, out io.Write
 	clk := clock.Postgres{}
 	hc := &http.Client{Timeout: 20 * time.Second}
 	ds := draws.NewService(pool, clk, nil, drand.New(drand.Quicknet, drand.DefaultRelays, hc), ledger.NewStore())
-	svc := alerts.NewService(pool, clk, app.AlertNotifier(cfg, hc), audit.NewWriter(), alerts.Config{}, app.AlertChecks(pool, clk, ds, cfg.Alerts)...)
+	svc := alerts.NewService(pool, clk, app.AlertNotifier(cfg, hc), audit.NewWriter(), alerts.Config{}, app.AlertChecks(pool, clk, ds, cfg)...)
 	var res any
 	switch cmd.name {
 	case "alerts list":

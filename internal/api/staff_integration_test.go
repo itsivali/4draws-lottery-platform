@@ -124,6 +124,11 @@ var staffRoutes = []staffRoute{
 	{http.MethodGet, "/v1/staff/players/0192f000-0000-7000-8000-000000000001", staff.Staff},
 	{http.MethodGet, "/v1/staff/players/0192f000-0000-7000-8000-000000000001/export", staff.Staff},
 	{http.MethodGet, "/v1/staff/alerts/0192f000-0000-7000-8000-000000000001", staff.Staff},
+	{http.MethodGet, "/v1/staff/operating", staff.Staff},
+	{http.MethodPost, "/v1/staff/operating/stop", staff.Staff},
+	{http.MethodPost, "/v1/staff/operating/resume", staff.Admin},
+	{http.MethodPost, "/v1/staff/operating/live-requests", staff.Admin},
+	{http.MethodPost, "/v1/staff/operating/live-requests/0192f000-0000-7000-8000-000000000001/approve", staff.Admin},
 }
 
 func TestStaffAPI_EveryRouteNeedsAStaffTokenWithTheRightRole(t *testing.T) {

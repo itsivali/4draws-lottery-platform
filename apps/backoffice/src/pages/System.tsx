@@ -1,5 +1,6 @@
 import { Activity, CircleCheck, CircleX, RefreshCw } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import { OperatingMode } from '../components/OperatingMode'
 import { Loaded, PageHeader, Pill, SectionTitle, type Tone } from '../components/ui'
 import { useSession } from '../context'
 import { eat, kes } from '../format'
@@ -40,6 +41,7 @@ export function SystemPage() {
         How the platform is set up and running right now. Settings change in the hosting dashboard, not here; no secret
         is shown.
       </PageHeader>
+      <div className="mb-6"><OperatingMode /></div>
       <Loaded load={load} what="the system status">
         {(s) => {
           const st = s.settings

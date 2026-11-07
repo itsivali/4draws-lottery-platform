@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/itsivali/lottery-platform/internal/audit"
+	"github.com/itsivali/lottery-platform/internal/compliance"
 	"github.com/itsivali/lottery-platform/internal/payouts/store"
 )
 
@@ -51,6 +52,9 @@ func (s *Service) Approve(ctx context.Context, id, operator string) (Payout, err
 		return Payout{}, ErrUnavailable
 	}
 	return s.staffTx(ctx, id, operator, []string{"held"}, func(tx pgx.Tx, p store.PayoutsPayout) error {
+		if err := s.gate.Assert(ctx, tx, compliance.OpPayout); err != nil {
+			return err
+		}
 		now, err := s.clk.Now(ctx, tx)
 		if err != nil {
 			return err

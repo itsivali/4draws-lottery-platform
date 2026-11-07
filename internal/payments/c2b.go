@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/itsivali/lottery-platform/internal/audit"
+	"github.com/itsivali/lottery-platform/internal/compliance"
 	"github.com/itsivali/lottery-platform/internal/identity"
 	"github.com/itsivali/lottery-platform/internal/ledger"
 	"github.com/itsivali/lottery-platform/internal/payments/daraja"
@@ -102,6 +103,13 @@ func (s *Service) ValidateC2B(ctx context.Context, raw []byte) (string, error) {
 	err = pgx.BeginTxFunc(ctx, s.pool, pgx.TxOptions{AccessMode: pgx.ReadOnly}, func(tx pgx.Tx) error {
 		now, err := s.clk.Now(ctx, tx)
 		if err != nil {
+			return err
+		}
+		// operations stopped: Safaricom is told to refuse the payment, so no money arrives (ADR 0027)
+		if err := s.gate.Assert(ctx, tx, compliance.OpPaybill); errors.Is(err, compliance.ErrOperationsStopped) {
+			code = C2BOtherError
+			return nil
+		} else if err != nil {
 			return err
 		}
 		m, err := s.matchC2B(ctx, tx, p.BillRef, p.AmountKES, now)

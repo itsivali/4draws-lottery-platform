@@ -8,7 +8,7 @@ import { PlaysPage } from './pages/Plays'
 import { SystemPage } from './pages/System'
 import { TopUpsPage } from './pages/TopUps'
 import { renderSignedIn } from './test/render'
-import type { Alert, AlertDetail, AuditEvent, PlayRow, StaffMember, SystemState, TopUpDetail, TopUpRow } from './types'
+import type { Alert, AlertDetail, AuditEvent, OperatingState, PlayRow, StaffMember, SystemState, TopUpDetail, TopUpRow } from './types'
 
 const play: PlayRow = {
   ticket_id: 't-1', user_id: 'u-1', msisdn: '254705369005', full_name: 'Willis Ivali', play_date: '2026-10-30', seq: 2,
@@ -115,16 +115,66 @@ describe('top-up reconciliation', () => {
   })
 })
 
+const operating: OperatingState = {
+  status: { mode: 'sandbox', configured: 'sandbox', real_money: false, last_change: null },
+  live_requests: [], history: [],
+}
+
+/** Answers the System page's two reads: the system state and the operating mode. */
+const systemServer = (sys: SystemState, op: OperatingState = operating) => (_m: string, url: URL) =>
+  ({ status: 200, body: url.pathname === '/v1/staff/operating' ? op : sys })
+
 describe('system status', () => {
   it('shows the settings, failing jobs and reconciliations', async () => {
-    renderSignedIn(<SystemPage />, { roles: ['staff'], route: () => ({ status: 200, body: system }) })
-    expect(await screen.findByText('Sandbox')).toBeInTheDocument()
+    renderSignedIn(<SystemPage />, { roles: ['staff'], route: systemServer(system) })
+    expect(await screen.findByText('12 slots, 1 lucky')).toBeInTheDocument()
+    expect(await screen.findAllByText('Sandbox')).toHaveLength(2) // the operating mode and the Daraja environment
     expect(screen.getByText('2 min')).toBeInTheDocument()
     expect(screen.getByText('1 failing')).toBeInTheDocument()
     expect(screen.getByText('daraja: unavailable')).toBeInTheDocument()
     expect(screen.getByText('1 found mismatches')).toBeInTheDocument()
     expect(screen.getByText('Never run')).toBeInTheDocument()
     expect(screen.getByText('12 slots, 1 lucky')).toBeInTheDocument()
+  })
+})
+
+describe('operating mode (ADR 0027)', () => {
+  it('lets anyone on staff stop money moving, with a reason', async () => {
+    const posts: { url: URL; body: unknown }[] = []
+    renderSignedIn(<SystemPage />, { roles: ['staff'], route: (m, url, body) => {
+      if (m === 'POST') { posts.push({ url, body }); return { status: 200, body: {} } }
+      return systemServer(system)(m, url)
+    } })
+    expect(await screen.findByText(/A demonstration with sandbox money/)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Resume/ })).toBeNull()
+    await userEvent.click(screen.getByRole('button', { name: /Stop money operations/ }))
+    await userEvent.type(await screen.findByRole('textbox', { name: 'Why (required)' }), 'suspected fraud')
+    await userEvent.click(screen.getByRole('button', { name: 'Stop now' }))
+    await waitFor(() => { expect(posts.at(-1)?.url.pathname).toBe('/v1/staff/operating/stop') })
+    expect(posts.at(-1)?.body).toEqual({ reason: 'suspected fraud' })
+  })
+
+  it('shows a stop and lets only an admin resume in sandbox', async () => {
+    const stopped: OperatingState = { ...operating, status: { ...operating.status, mode: 'disabled',
+      last_change: { id: 'c1', mode: 'disabled', reason: 'suspected fraud', changed_by: 'staff:s9', at: '2026-11-07T09:00:00Z' } } }
+    const { unmount } = renderSignedIn(<SystemPage />, { roles: ['staff'], route: systemServer(system, stopped) })
+    expect(await screen.findByText('Stopped')).toBeInTheDocument()
+    expect(screen.getByText(/suspected fraud/)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Resume/ })).toBeNull()
+    unmount()
+    renderSignedIn(<SystemPage />, { roles: ['admin'], route: systemServer(system, stopped) })
+    expect(await screen.findByRole('button', { name: /Resume \(sandbox\)/ })).toBeInTheDocument()
+  })
+
+  it('offers the approval of a live request only to a different admin', async () => {
+    const req = { id: 'r1', licence_reference: 'GRA/OPL/1', approval_reference: 'A1', evidence_sha256: 'ab'.repeat(32), evidence_location: 'vault', reason: 'licensed', requested_by: 'staff:s1', at: '2026-11-07T09:00:00Z' }
+    const waiting: OperatingState = { status: { mode: 'disabled', configured: 'live', real_money: false, last_change: null }, live_requests: [req], history: [] }
+    const { unmount } = renderSignedIn(<SystemPage />, { roles: ['admin'], route: systemServer(system, waiting) })
+    expect(await screen.findByText('Another admin must approve your request.')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Approve' })).toBeNull()
+    unmount()
+    renderSignedIn(<SystemPage />, { roles: ['admin'], route: systemServer(system, { ...waiting, live_requests: [{ ...req, requested_by: 'staff:s2' }] }) })
+    expect(await screen.findByRole('button', { name: 'Approve' })).toBeInTheDocument()
   })
 })
 
@@ -295,7 +345,7 @@ describe('alerts page', () => {
   })
 
   it('names the channels alerts go to on the System page', async () => {
-    renderSignedIn(<SystemPage />, { roles: ['staff'], route: () => ({ status: 200, body: { ...system, settings: { ...system.settings, alerts_delivery: 'webhook, email' } } }) })
+    renderSignedIn(<SystemPage />, { roles: ['staff'], route: systemServer({ ...system, settings: { ...system.settings, alerts_delivery: 'webhook, email' } }) })
     expect(await screen.findByText('Webhook')).toBeInTheDocument()
     expect(screen.getAllByText('Email')).toHaveLength(2) // the SMTP row and the channel
   })

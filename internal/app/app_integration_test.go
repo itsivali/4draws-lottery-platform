@@ -41,7 +41,7 @@ func newGateways(t *testing.T) *gateways {
 func baseCfg(t *testing.T, g *gateways, vk *testvalkey.Server) config.Config {
 	t.Helper()
 	return config.Config{
-		DatabaseURL: "unused", WorkersInProcess: true,
+		DatabaseURL: "unused", WorkersInProcess: true, Operating: config.Operating{Mode: "sandbox"},
 		API: config.API{
 			Enabled: true, AuthKey: bytes.Repeat([]byte("o"), 32), TokenSeed: bytes.Repeat([]byte("t"), 32), IdentityKey: bytes.Repeat([]byte("i"), 32),
 			DataKeys: map[byte][]byte{1: bytes.Repeat([]byte("d"), 32)}, DataKeyActive: 1, ValkeyAddr: vk.Addr,

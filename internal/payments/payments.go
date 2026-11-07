@@ -17,6 +17,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/itsivali/lottery-platform/internal/audit"
+	"github.com/itsivali/lottery-platform/internal/compliance"
 	"github.com/itsivali/lottery-platform/internal/identity"
 	"github.com/itsivali/lottery-platform/internal/ledger"
 	"github.com/itsivali/lottery-platform/internal/payments/daraja"
@@ -203,7 +204,15 @@ type Service struct {
 	rules  Ledger
 	audit  *audit.Writer
 	cfg    Config
-	c2b    *c2bSetup // nil: paybill payments are not configured
+	c2b    *c2bSetup        // nil: paybill payments are not configured
+	gate   *compliance.Gate // the operating mode (ADR 0027); nil allows everything (tests)
+}
+
+// WithGate makes new top-ups, their prompts and paybill validations ask the operating mode (ADR 0027). Money that has
+// already moved (callbacks, verification, confirmations, reconciliation) is never refused by it.
+func (s *Service) WithGate(g *compliance.Gate) *Service {
+	s.gate = g
+	return s
 }
 
 // NewService returns a Service. A nil d (an untyped nil, not a nil *daraja.Client) disables top-ups.
@@ -252,6 +261,9 @@ func (s *Service) StartTopUp(ctx context.Context, userID string, amount int64, k
 		}
 		now, err := s.clk.Now(ctx, tx)
 		if err != nil {
+			return err
+		}
+		if err := s.gate.Assert(ctx, tx, compliance.OpTopUp); err != nil {
 			return err
 		}
 		msisdn, err := s.ids.AssertCanTopUp(ctx, tx, userID)
@@ -387,6 +399,10 @@ func (s *Service) Push(ctx context.Context, paymentID string) error {
 	}
 	if p.Status != "initiated" || p.Msisdn == nil {
 		return nil
+	}
+	// operations stopped since the top-up was recorded: no prompt goes out and the top-up fails (ADR 0027)
+	if stopped, err := s.failIfStopped(ctx, p.UserID, paymentID); err != nil || stopped {
+		return err
 	}
 	// Tajirika on the prompt (owner, 2026-10-29, #87). Tested 2026-10-30 (#107): sandbox prompts time out (1037) with
 	// the old TOPUP / Wallet top-up text too, so the text is not why they fail.
@@ -752,6 +768,30 @@ func (s *Service) settle(ctx context.Context, tx pgx.Tx, userID, paymentID, stat
 	}
 	return s.audit.Record(ctx, tx, audit.Event{ActorType: audit.System, Action: "payment.topup." + status, EntityType: "payment", EntityID: paymentID,
 		Details: map[string]any{"user_id": userID, "reason": reason}})
+}
+
+// failIfStopped fails a recorded top-up whose prompt has not gone out when the operating mode no longer allows money to
+// move, and reports whether it did.
+func (s *Service) failIfStopped(ctx context.Context, userID, paymentID string) (bool, error) {
+	stopped := false
+	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+		err := s.gate.Assert(ctx, tx, compliance.OpPush)
+		if !errors.Is(err, compliance.ErrOperationsStopped) {
+			return err
+		}
+		p, err := store.New(tx).LockPayment(ctx, paymentID)
+		if err != nil || p.Status != "initiated" {
+			return err
+		}
+		now, err := s.clk.Now(ctx, tx)
+		if err != nil {
+			return err
+		}
+		stopped = true
+		slog.WarnContext(ctx, "operations are stopped; the top-up's prompt is not sent", "payment", paymentID)
+		return s.settle(ctx, tx, userID, paymentID, "failed", "operations_stopped", nil, now)
+	})
+	return stopped, err
 }
 
 // claimRetry is how long a receipt claim waits for M-Pesa's answer before the sweep asks again.

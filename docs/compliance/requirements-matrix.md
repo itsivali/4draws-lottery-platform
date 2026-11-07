@@ -27,7 +27,7 @@ Kind: **M** = mandatory by law; **L** = depends on licence category; **ST** = st
 | GCA-09 | The Authority may cap entries per participant; excess entries are void | LN 112 reg 86 | P | L | Daily cap of 4 exists (`game.go:26`) | implemented |
 | GCA-10 | Minimum stake (a KES 20 figure is reported) | Nation 2023 (proposal); Afriwise | S | U | Price is versioned data (`game.odds_config`), so changing it needs no code | counsel |
 | GCA-11 | Secure API access for the Authority; integration with the central monitoring system and national gambling register | LN 112 regs 41(e), 44 | P | M | Reporting adapter (later); no specification yet | blocked (regulator) |
-| GCA-12 | Player data encrypted in transit and at rest and **stored in Kenya** unless the Authority exempts it in writing | LN 112 reg 42 | P | M | Production runs on Render, Oregon (USA). **Owner, 2026-11-07: moving to Safaricom hosting in Kenya** (S12) | planned |
+| GCA-12 | Player data encrypted in transit and at rest and **stored in Kenya** unless the Authority exempts it in writing | LN 112 reg 42 | P | M | Production runs on Render, Oregon (USA). **Owner, 2026-11-07: moving to hosting in Kenya** (S12; provider being chosen) | planned |
 | GCA-13 | Encrypted, tamper-evident audit log; geo-blocking | LN 112 reg 41 | P | M | Append-only audit log exists; geo-blocking is ID-05 (S3) | partial |
 | GCA-14 | RNG certified by the GRA or an approved lab; return-to-player disclosed | LN 112 reg 45 | P | M | Provably fair design; no certification | blocked (lab) |
 | GCA-15 | Lottery systems from a licensed, approved provider | LN 112 reg 26(2)(c) | P | L | — | counsel |

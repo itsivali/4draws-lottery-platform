@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/itsivali/lottery-platform/internal/audit"
+	"github.com/itsivali/lottery-platform/internal/compliance"
 	"github.com/itsivali/lottery-platform/internal/ledger"
 	"github.com/itsivali/lottery-platform/internal/payments/daraja"
 	"github.com/itsivali/lottery-platform/internal/payouts/store"
@@ -45,6 +46,13 @@ func (s *Service) Send(ctx context.Context, id string) error {
 		}
 		if p.Status != "pending" {
 			return nil
+		}
+		// operations stopped (ADR 0027): the payout stays pending, never sent, and the sweep queues it again
+		if err := s.gate.Assert(ctx, tx, compliance.OpPayout); errors.Is(err, compliance.ErrOperationsStopped) {
+			slog.WarnContext(ctx, "operations are stopped; the payout waits", "payout", id)
+			return nil
+		} else if err != nil {
+			return err
 		}
 		// an open alert freezes payouts (a reconciliation found the books wrong) until a person acknowledges it; the
 		// payout stays pending, never sent, and the sweep queues it again

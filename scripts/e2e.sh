@@ -95,6 +95,17 @@ alice=$(staff_token alice)
   || { echo "finance does not show the deposits"; exit 1; }
 [ "$(curl -sS -o /dev/null -w '%{http_code}' localhost:8080/v1/staff/members -H "Authorization: Bearer $paula")" = 403 ] \
   || { echo "a staff member could open the admin-only Staff page"; exit 1; }
+# the operating mode (ADR 0027): the stack is a sandbox; a staff member stops money moving, a play is refused, an admin
+# resumes
+[ "$(curl -fsS localhost:8080/v1/status | jq -r .operating_mode)" = sandbox ] || { echo "the stack is not in sandbox mode"; exit 1; }
+[ "$(post /v1/staff/operating/stop e2e-op-1 '{"reason":"e2e: stop drill"}' "$paula")" = 200 ] || { echo "stop failed"; cat /tmp/e2e.body; exit 1; }
+[ "$(post /v1/plays e2e-op-2 '' "$token")" = 503 ] && jq -e '.type | endswith("/operations-stopped")' /tmp/e2e.body >/dev/null \
+  || { echo "a play was not refused while stopped"; cat /tmp/e2e.body; exit 1; }
+[ "$(post /v1/staff/operating/resume e2e-op-3 '{"mode":"sandbox","reason":"e2e: drill over"}' "$paula")" = 403 ] \
+  || { echo "a staff member could resume"; cat /tmp/e2e.body; exit 1; }
+[ "$(post /v1/staff/operating/resume e2e-op-4 '{"mode":"sandbox","reason":"e2e: drill over"}' "$alice")" = 200 ] \
+  || { echo "an admin could not resume"; cat /tmp/e2e.body; exit 1; }
+[ "$(curl -fsS localhost:8080/v1/status | jq -r .money_moves)" = true ] || { echo "money does not move after the resume"; exit 1; }
 # email and password sign-in (ADR 0019): the seeded temporary password opens a session that may only change it
 pw_session=$(curl -fsS -X POST localhost:8080/v1/staff/session -H 'Content-Type: application/json' -H "Idempotency-Key: e2e-pw-$(date +%s%N)" \
   -d '{"provider":"password","email":"otis@staff.local","password":"local-dev-staff-2026"}')

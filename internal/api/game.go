@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/itsivali/lottery-platform/internal/compliance"
 	"github.com/itsivali/lottery-platform/internal/game"
 	"github.com/itsivali/lottery-platform/internal/game/fair"
 	"github.com/itsivali/lottery-platform/internal/identity"
@@ -94,6 +95,8 @@ func (h *handlers) play(w http.ResponseWriter, r *http.Request) {
 			"your next top-up repays it first")
 	case errors.As(err, &re):
 		httpx.WriteProblem(w, http.StatusForbidden, "restricted", "Your account is restricted", "")
+	case errors.Is(err, compliance.ErrOperationsStopped):
+		operationsStopped(w)
 	case errors.Is(err, game.ErrNoOdds):
 		gameUnavailable(w)
 	case errors.Is(err, identity.ErrKYCRequired), errors.Is(err, identity.ErrPhoneNotVerified), errors.Is(err, identity.ErrAccountSuspended):

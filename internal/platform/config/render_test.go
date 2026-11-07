@@ -60,6 +60,10 @@ func TestRenderBlueprint_ProvidesEveryVariableTheAPIRequires(t *testing.T) {
 	if api["WORKERS_IN_PROCESS"] != "true" || api["MIGRATE_ON_START"] != "true" {
 		t.Errorf("free plan has no worker or pre-deploy command: WORKERS_IN_PROCESS=%q MIGRATE_ON_START=%q", api["WORKERS_IN_PROCESS"], api["MIGRATE_ON_START"])
 	}
+	// licensing is pending (ADR 0027): the deployed service is a sandbox demonstration, never live from the Blueprint
+	if api["OPERATING_MODE"] != "sandbox" {
+		t.Errorf("OPERATING_MODE = %q, want sandbox until a licence and two admins' approval exist", api["OPERATING_MODE"])
+	}
 	if kinds["lottery-cache"] != "keyvalue" {
 		t.Errorf("no key-value instance for rate limits: %v", kinds)
 	}

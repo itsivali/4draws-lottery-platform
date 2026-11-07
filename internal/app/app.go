@@ -25,6 +25,7 @@ import (
 	"github.com/itsivali/lottery-platform/internal/alerts"
 	"github.com/itsivali/lottery-platform/internal/api"
 	"github.com/itsivali/lottery-platform/internal/audit"
+	"github.com/itsivali/lottery-platform/internal/compliance"
 	"github.com/itsivali/lottery-platform/internal/draws"
 	"github.com/itsivali/lottery-platform/internal/draws/drand"
 	"github.com/itsivali/lottery-platform/internal/finance"
@@ -70,6 +71,7 @@ type App struct {
 	game      *game.Service
 	draws     *draws.Service
 	payouts   *payouts.Service
+	gate      *compliance.Gate
 	live      *payments.Live
 	stopLive  context.CancelFunc
 	workers   *river.Client[pgx.Tx]
@@ -120,7 +122,7 @@ func New(ctx context.Context, cfg config.Config, pool *pgxpool.Pool) (*App, erro
 	}
 	svc := buildServices(pool, sh)
 	idSvc, rgSvc := svc.identity, svc.rg
-	a.kyc, a.payments, a.game, a.payouts, a.draws = svc.kyc, svc.payments, svc.game, svc.payouts, svc.draws
+	a.kyc, a.payments, a.game, a.payouts, a.draws, a.gate = svc.kyc, svc.payments, svc.game, svc.payouts, svc.draws, svc.gate
 
 	staffAuth, staffSvc, err := a.staff(ctx, sh, svc)
 	if err != nil {
@@ -144,6 +146,7 @@ func New(ctx context.Context, cfg config.Config, pool *pgxpool.Pool) (*App, erro
 		Staff:           staffAuth,
 		StaffServices:   staffSvc,
 		Challenges:      challenge.NewStore(vk, 5*time.Minute),
+		Gate:            svc.gate,
 		AttestationMode: c.Attestation.Mode,
 		AttestationWeb:  c.Attestation.Web,
 		SignIn: api.SignInProviders{GoogleClientID: c.SignIn.GoogleClientID, GoogleIOSClientID: c.SignIn.GoogleIOSClientID,
@@ -151,7 +154,7 @@ func New(ctx context.Context, cfg config.Config, pool *pgxpool.Pool) (*App, erro
 	})
 	slog.InfoContext(ctx, "v1 API enabled", "trusted_proxy_header", c.TrustedProxyHeader, "trusted_proxy_hops", c.TrustedProxyHops,
 		"kyc_registry", c.KYCURL != "", "google", c.SignIn.Google(), "apple", c.SignIn.Apple(),
-		"payments", cfg.Payments.Enabled, "buy_goods", cfg.Payments.TillNumber != "", "paybill", cfg.Payments.C2BEnabled(), "payouts", cfg.Payments.B2CEnabled(), "daraja", cfg.Payments.BaseURL, "sandbox_settle", cfg.Payments.SandboxSettle, "cors_origins", len(c.CORSOrigins), "staff", c.Staff.Enabled, "staff_pool", c.Staff.DatabaseURL != "",
+		"operating_mode", cfg.Operating.Mode, "payments", cfg.Payments.Enabled, "buy_goods", cfg.Payments.TillNumber != "", "paybill", cfg.Payments.C2BEnabled(), "payouts", cfg.Payments.B2CEnabled(), "daraja", cfg.Payments.BaseURL, "sandbox_settle", cfg.Payments.SandboxSettle, "cors_origins", len(c.CORSOrigins), "staff", c.Staff.Enabled, "staff_pool", c.Staff.DatabaseURL != "",
 		"attestation", c.Attestation.Mode, "app_attest", c.Attestation.AppID != "", "play_integrity", c.Attestation.PlayPackage != "")
 	return a, nil
 }
@@ -177,6 +180,7 @@ type services struct {
 	game     *game.Service
 	payouts  *payouts.Service
 	draws    *draws.Service
+	gate     *compliance.Gate
 }
 
 // buildServices builds the domain services on pool. Anything not configured fails closed instead of pretending to work.
@@ -198,6 +202,8 @@ func buildServices(pool *pgxpool.Pool, sh shared) services {
 		s.identity.WithPasswordResets(identity.PasswordResets{Sender: mailer(m), WebAppURL: m.WebAppURL})
 	}
 	s.rg = rg.NewService(pool, sh.clk, sh.aw, rg.Config{CoolingOff: 24 * time.Hour})
+	// every money path asks the operating mode (ADR 0027) inside its own transaction
+	s.gate = compliance.NewGate(pool, sh.clk, sh.aw, compliance.Config{Mode: compliance.Mode(cfg.Operating.Mode), LicenceReference: cfg.Operating.LicenceReference})
 
 	// Without Daraja configuration the payments service still answers reads but refuses top-ups (fail closed).
 	var dc payments.Daraja
@@ -207,11 +213,11 @@ func buildServices(pool *pgxpool.Pool, sh shared) services {
 	ls := ledger.NewStore()
 	s.payments = payments.NewService(pool, sh.clk, dc, payments.NewRiverEnqueuer(sh.insertOnly), s.identity, s.rg, wallet.NewService(ls), ls, sh.aw,
 		payments.Config{MinTopUpKES: cfg.Payments.MinTopUpKES, SandboxSettle: cfg.Payments.SandboxSettle,
-			TopUpCooldown: cfg.Payments.TopUpCooldown, ShortCode: cfg.Payments.ShortCode})
+			TopUpCooldown: cfg.Payments.TopUpCooldown, ShortCode: cfg.Payments.ShortCode}).WithGate(s.gate)
 	if p := cfg.Payments; p.C2BEnabled() {
 		s.payments.WithC2B(sh.daraja, payments.C2BConfig{ShortCode: p.C2BShortCode})
 	}
-	s.game = game.NewService(pool, sh.clk, s.identity, s.rg, wallet.NewService(ls), sh.keyring, wallet.ErrInsufficientFunds)
+	s.game = game.NewService(pool, sh.clk, s.identity, s.rg, wallet.NewService(ls), sh.keyring, wallet.ErrInsufficientFunds).WithGate(s.gate)
 
 	// Payouts need B2C; without it withdrawals are refused (fail closed).
 	var pd payouts.Daraja
@@ -219,7 +225,7 @@ func buildServices(pool *pgxpool.Pool, sh shared) services {
 		pd = sh.daraja
 	}
 	s.payouts = payouts.NewService(pool, sh.clk, pd, payouts.NewRiverEnqueuer(sh.insertOnly), s.identity, wallet.NewService(ls), ls, sh.aw, payouts.Config{},
-		wallet.ErrInsufficientFunds)
+		wallet.ErrInsufficientFunds).WithGate(s.gate)
 
 	// Draws use the League of Entropy's quicknet, verified against the pinned key, through its public relays.
 	s.draws = draws.NewService(pool, sh.clk, sh.keyring, drand.New(drand.Quicknet, drand.DefaultRelays, sh.hc), ls)
@@ -265,7 +271,7 @@ func (a *App) staff(ctx context.Context, sh shared, base services) (staff.Authen
 	return members, api.StaffServices{
 		Identity: svc.identity, KYC: svc.kyc, Payments: svc.payments, Draws: svc.draws, Payouts: svc.payouts, Game: svc.game,
 		Alerts: a.alertsOn(pool, svc.draws), Members: members, Finance: finance.NewService(pool, sh.clk, sh.aw), Metrics: metrics.NewService(pool, sh.clk),
-		Oversight: oversight.NewService(pool, sh.clk, oversightSettings(sh.cfg)), RG: svc.rg,
+		Oversight: oversight.NewService(pool, sh.clk, oversightSettings(sh.cfg)), RG: svc.rg, Gate: svc.gate,
 	}, nil
 }
 
@@ -416,7 +422,7 @@ func (a *App) alertsOn(pool *pgxpool.Pool, ds *draws.Service) *alerts.Service {
 	if u := a.cfg.Alerts.HeartbeatURL; u != "" {
 		cfg.Heartbeat = alerts.Heartbeat(u, hc)
 	}
-	return alerts.NewService(pool, clk, AlertNotifier(a.cfg, hc), audit.NewWriter(), cfg, AlertChecks(pool, clk, ds, a.cfg.Alerts)...)
+	return alerts.NewService(pool, clk, AlertNotifier(a.cfg, hc), audit.NewWriter(), cfg, AlertChecks(pool, clk, ds, a.cfg)...)
 }
 
 // AlertNotifier is every configured alert channel: the webhook (ALERT_WEBHOOK_URL), email to ALERT_EMAILS through the
@@ -453,7 +459,8 @@ func AlertChannels(cfg config.Config) string {
 
 // AlertChecks are every check the watch runs (docs/runbooks/alerts.md lists what each raises), on pool with the
 // thresholds of cfg; lotteryctl alerts watch runs the same ones.
-func AlertChecks(pool *pgxpool.Pool, clk clock.Clock, ds *draws.Service, cfg config.Alerts) []alerts.Check {
+func AlertChecks(pool *pgxpool.Pool, clk clock.Clock, ds *draws.Service, all config.Config) []alerts.Check {
+	cfg := all.Alerts
 	th := alerts.Thresholds(cfg.Thresholds)
 	return []alerts.Check{
 		alerts.DrawsOverdue(ds.Overdue),
@@ -466,7 +473,42 @@ func AlertChecks(pool *pgxpool.Pool, clk clock.Clock, ds *draws.Service, cfg con
 		alerts.JobsCheck(pool, clk, th),
 		alerts.KYCQueueCheck(pool, clk, th),
 		alerts.ClosuresCheck(pool, clk, th),
+		OperatingCheck(compliance.NewGate(pool, clk, audit.NewWriter(), compliance.Config{Mode: compliance.Mode(all.Operating.Mode),
+			LicenceReference: all.Operating.LicenceReference})),
 	}
+}
+
+// Alert kinds of the operating mode (ADR 0027).
+const (
+	KindOperationsStopped = "operations.stopped"
+	KindLiveRequest       = "operations.live_request"
+)
+
+// OperatingCheck pages while staff have stopped money moving and warns for each live request waiting for its second
+// admin. It reads only what is recorded, so the worker and lotteryctl (which may run without OPERATING_MODE) agree.
+func OperatingCheck(g *compliance.Gate) alerts.Check {
+	return alerts.Check{Name: "operating", Kinds: []string{KindOperationsStopped, KindLiveRequest}, Run: func(ctx context.Context) ([]alerts.Alert, error) {
+		st, err := g.Current(ctx)
+		if err != nil {
+			return nil, err
+		}
+		var out []alerts.Alert
+		if c := st.Latest; c != nil && c.Mode == compliance.Disabled {
+			out = append(out, alerts.Alert{Kind: KindOperationsStopped, Subject: "operating_mode", Severity: alerts.Page,
+				Summary: "Money operations are stopped (" + c.Reason + "): top-ups, plays and withdrawals are refused until an admin resumes them",
+				Details: map[string]any{"reason": c.Reason, "stopped_by": c.ChangedBy, "stopped_at": c.At}})
+		}
+		reqs, err := g.OpenLiveRequests(ctx)
+		if err != nil {
+			return nil, err
+		}
+		for _, r := range reqs {
+			out = append(out, alerts.Alert{Kind: KindLiveRequest, Subject: r.ID, Severity: alerts.Warn,
+				Summary: "A request to operate live under licence " + r.LicenceReference + " waits for a second admin",
+				Details: map[string]any{"request": r.ID, "requested_by": r.RequestedBy, "at": r.At}})
+		}
+		return out, nil
+	}}
 }
 
 // StopStreams ends every open payment stream and refuses new ones. The server calls it when shutdown begins, since

@@ -18,6 +18,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/itsivali/lottery-platform/internal/audit"
+	"github.com/itsivali/lottery-platform/internal/compliance"
 	"github.com/itsivali/lottery-platform/internal/ledger"
 	"github.com/itsivali/lottery-platform/internal/payments/daraja"
 	"github.com/itsivali/lottery-platform/internal/payouts/store"
@@ -170,6 +171,14 @@ type Service struct {
 	cfg    Config
 	// insufficient is the wallet's error for a balance below a debit (payouts does not import the wallet).
 	insufficient error
+	gate         *compliance.Gate // the operating mode (ADR 0027); nil allows everything (tests)
+}
+
+// WithGate makes withdrawals, approvals and sends ask the operating mode (ADR 0027). A payout that may not be sent
+// stays pending and the sweep offers it again; results, verification and reversals of payouts already sent go on.
+func (s *Service) WithGate(g *compliance.Gate) *Service {
+	s.gate = g
+	return s
 }
 
 // NewService returns a Service. A nil d (an untyped nil) turns payouts off. insufficient is the error w returns when a
@@ -259,6 +268,9 @@ func (s *Service) RequestWithdrawal(ctx context.Context, userID string, amount i
 			return nil
 		}
 		if !errors.Is(err, pgx.ErrNoRows) {
+			return err
+		}
+		if err := s.gate.Assert(ctx, tx, compliance.OpWithdrawal); err != nil {
 			return err
 		}
 		now, err := s.clk.Now(ctx, tx)

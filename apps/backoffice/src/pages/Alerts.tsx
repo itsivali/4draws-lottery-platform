@@ -38,6 +38,8 @@ const hints: Record<string, Hint> = {
   'reconciliation.missing': { what: 'A daily reconciliation has not run: the worker is probably down. Check the background jobs.', to: () => '/system', label: 'System status' },
   'kra.remittance_due': { what: 'Withheld tax is nearing its remittance deadline: prepare the batch and remit it.', to: () => '/tax', label: 'Tax' },
   'kra.remittance_overdue': { what: 'Withheld tax is past its remittance deadline: remit it now.', to: () => '/tax', label: 'Tax' },
+  'operations.stopped': { what: 'Someone stopped money operations: no top-up, play, withdrawal or payout starts. Read their reason; an admin resumes on the System page once it is resolved.', to: () => '/system', label: 'System status' },
+  'operations.live_request': { what: 'An admin asked to operate with real money. A different admin checks the licence evidence and approves it on the System page, or lets it expire after 7 days.', to: () => '/system', label: 'System status' },
   'alerts.check_failed': { what: 'A check itself could not run, so nothing it watches is being watched. Read the error; it is usually the database or a missing table.', to: () => '/system', label: 'System status' },
 }
 
