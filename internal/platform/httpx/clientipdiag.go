@@ -15,7 +15,7 @@ var clientIPHeaders = []string{"X-Forwarded-For", "X-Real-IP", "True-Client-IP",
 // never to leave on, since client addresses are personal data.
 func LogClientIPHeaders(log *slog.Logger, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		attrs := []any{"path", r.URL.Path, "remote_addr", r.RemoteAddr}
+		attrs := []any{"path", RedactPath(r.URL.Path), "remote_addr", r.RemoteAddr}
 		for _, h := range clientIPHeaders {
 			if v := r.Header.Values(h); len(v) > 0 {
 				attrs = append(attrs, strings.ToLower(h), strings.Join(v, " | "))

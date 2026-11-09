@@ -1,6 +1,6 @@
 # 0024. Top-ups M-Pesa completed but the platform never credited are reconciled from the receipt
 
-Date: 2026-10-31. Status: accepted.
+Date: 2026-10-31. Status: accepted; §1 (late callbacks) amended by 0028: a late callback is confirmed with M-Pesa before it credits.
 
 ## Context
 

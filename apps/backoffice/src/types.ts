@@ -328,7 +328,7 @@ export interface TopUpDetail extends TopUpRow {
 
 /** What M-Pesa said when an operator asked again (POST /v1/staff/topups/{id}/recheck). */
 export interface Recheck {
-  outcome: 'credited' | 'paid_without_receipt' | 'failed' | 'cancelled' | 'pending' | 'no_prompt' | 'asking'
+  outcome: 'credited' | 'paid_without_receipt' | 'failed' | 'cancelled' | 'pending' | 'no_prompt' | 'asking' | 'verifying'
   status: string
   result_code: number | null
   result_desc?: string

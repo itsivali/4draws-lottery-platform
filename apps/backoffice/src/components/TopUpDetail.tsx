@@ -44,6 +44,7 @@ const outcomeText: Record<Recheck['outcome'], string> = {
   pending: 'M-Pesa has no final answer yet.',
   no_prompt: 'The prompt was never accepted by M-Pesa.',
   asking: 'M-Pesa is being asked about the player’s receipt; look again in a minute.',
+  verifying: 'A paid callback had arrived. Its receipt is checked with M-Pesa before anything is credited; look again in a minute.',
 }
 
 /** Everything the platform knows about one top-up, and what an operator can do about it. */

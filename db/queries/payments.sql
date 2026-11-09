@@ -17,7 +17,7 @@ SELECT id, user_id, status, amount_requested_kes, amount_confirmed_kes, msisdn, 
 FROM payments.payments WHERE id = $1 FOR UPDATE;
 
 -- name: LockPaymentByCheckout :one
-SELECT id, user_id, status, msisdn FROM payments.payments WHERE checkout_request_id = $1 FOR UPDATE;
+SELECT id, user_id, status, msisdn, amount_requested_kes, raw_callback FROM payments.payments WHERE checkout_request_id = $1 FOR UPDATE;
 
 -- name: MarkSTKSent :execrows
 UPDATE payments.payments
@@ -25,10 +25,11 @@ UPDATE payments.payments
        checkout_request_id = sqlc.arg(checkout_request_id), updated_at = sqlc.arg(at)
  WHERE id = sqlc.arg(id) AND status = 'initiated';
 
+-- The first callback is kept (ADR 0028): a later one, repeated or forged, cannot replace the amount and receipt it carries.
 -- name: RecordCallback :exec
 UPDATE payments.payments
    SET status = CASE WHEN status IN ('initiated','stk_sent') THEN 'callback_received' ELSE status END,
-       raw_callback = sqlc.arg(raw_callback), updated_at = sqlc.arg(at)
+       raw_callback = coalesce(raw_callback, sqlc.arg(raw_callback)), updated_at = sqlc.arg(at)
  WHERE id = sqlc.arg(id);
 
 -- name: SetPaymentOutcome :exec
@@ -62,9 +63,10 @@ SELECT id FROM payments.payments
 WHERE status IN ('initiated','stk_sent','callback_received') AND created_at < $1
 ORDER BY created_at LIMIT 100;
 
--- A callback that arrived before the push job recorded its checkout id was kept as an orphan.
+-- A callback that arrived before the push job recorded its checkout id was kept as an orphan. The first one counts,
+-- as for callbacks stored on the payment (ADR 0028).
 -- name: OrphanCallback :one
-SELECT raw_payload FROM payments.stk_orphan_callbacks WHERE checkout_request_id = $1 ORDER BY received_at DESC LIMIT 1;
+SELECT raw_payload FROM payments.stk_orphan_callbacks WHERE checkout_request_id = $1 ORDER BY received_at, id LIMIT 1;
 
 -- name: LockPaymentByReceipt :one
 SELECT id, user_id, status, amount_confirmed_kes FROM payments.payments WHERE mpesa_receipt = $1 FOR UPDATE;

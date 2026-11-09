@@ -25,10 +25,10 @@ submission; P2 hardens.
 | ID | P | Slice | Problem | Acceptance | Depends on | Status |
 |---|---|---|---|---|---|---|
 | REG-01 | P0 | S1 | No global operating gate; plays cannot be stopped | Every money path and job refuses in `disabled`; `live` refuses without two staff approvals and licence evidence; `sandbox` refuses with production Daraja URLs; mode changes are audited and alerted | — | not_started |
-| PAY-01 | P0 | S2 | Late/orphan callbacks credited without M-Pesa verification (SEC-01) | A callback alone never credits; verified by Transaction Status or held for review | — | not_started |
-| PAY-02 | P0 | S2 | Callback amount trusted and overwritable (SEC-02) | First callback is kept; amount ≠ requested goes to review | — | not_started |
-| PAY-03 | P1 | S2 | Hook secret in traces and logs (SEC-03) | Span names and logs redact the segment | — | not_started |
-| PAY-04 | P1 | S2 | No DB state machine for top-ups (SEC-04) | Illegal transitions rejected by a trigger | — | not_started |
+| PAY-01 | P0 | S2 | Late/orphan callbacks credited without M-Pesa verification (SEC-01) | A callback alone never credits; verified by Transaction Status or held for review | — | done (ADR 0028) |
+| PAY-02 | P0 | S2 | Callback amount trusted and overwritable (SEC-02) | First callback is kept; amount ≠ requested goes to review | — | done (ADR 0028) |
+| PAY-03 | P1 | S2 | Hook secret in traces and logs (SEC-03) | Span names and logs redact the segment | — | done (ADR 0028) |
+| PAY-04 | P1 | S2 | No DB state machine for top-ups (SEC-04) | Illegal transitions rejected by a trigger | — | done (ADR 0028) |
 | ID-01 | P0 | S3 | No server-side age evidence before money in | Sign-up requires date of birth and declaration; under 18 refused; `live` needs verified ID before top-up and play | REG-01 | not_started |
 | ID-02 | P1 | S3 | Payouts and pushes don't re-check eligibility | `Send`, `Approve` and the push job re-check | — | not_started |
 | ID-03 | P1 | S3 | No status history; self-exclusion keeps sessions | Append-only history; exclusion revokes sessions | — | not_started |
@@ -62,6 +62,7 @@ What has to be decided or built:
 | PostgreSQL | Render Postgres 18, single-role mode | Managed Postgres or self-run on a VM; the four app roles of `00008` (ends single-role mode, SEC-08); encryption at rest; point-in-time backups kept in Kenya |
 | Valkey | Render Key Value | Managed or self-run Valkey (rate limits, attestation challenges) |
 | TLS and client address | Cloudflare in front, `CF-Connecting-IP` | Whatever fronts the service; `TRUSTED_PROXY_HEADER` re-measured (`docs/runbooks/trusted-proxy.md`) |
+| M-Pesa hooks | Secret path only (ADR 0028) | Optionally an allowlist of Safaricom's published callback addresses, once the client address is trustworthy on the new host (deferred from S2, SEC-03) |
 | Deploys | Render Blueprint, `deploy-prod.yml` | A deploy workflow for the new host behind the `production` environment |
 | Secrets | Render env vars | The host's secret store; `DATA_KEY`, `IDENTITY_KEY`, `AUTH_KEY` carried over unchanged |
 | Data | Render database | `pg_dump`/restore during a short maintenance window with operations stopped (ADR 0027), verified by the reconciliations |

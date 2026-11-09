@@ -471,9 +471,19 @@ func (s *Service) HandleCallback(ctx context.Context, raw []byte) error {
 		}
 		if final(p.Status) {
 			// a paid callback for a top-up that settled uncredited (the sandbox calls back late, or never; a verify
-			// job gave up) is the receipt itself: credited now, nothing to verify
-			_, err := s.lateCallback(ctx, tx, settledTopUp{ID: p.ID, UserID: p.UserID, Status: p.Status, Msisdn: p.Msisdn}, cb, raw, now)
+			// job gave up): M-Pesa is asked to confirm its receipt before anything is credited (ADR 0028)
+			_, err := s.lateCallback(ctx, tx, settledTopUp{ID: p.ID, UserID: p.UserID, Status: p.Status, Msisdn: p.Msisdn, AmountRequested: p.AmountRequestedKes}, cb, raw, now)
 			return err
+		}
+		if p.RawCallback != nil {
+			// Safaricom repeats callbacks; the first is kept and its verification is already scheduled (ADR 0028). One
+			// that says something else is not used, and is recorded for an operator.
+			if first, err := daraja.ParseSTKCallback(p.RawCallback); err != nil || first != cb {
+				slog.WarnContext(ctx, "a second, different stk callback; the first is kept", "payment", p.ID)
+				return s.audit.Record(ctx, tx, audit.Event{ActorType: audit.System, Action: "payment.topup.callback_ignored", EntityType: "payment",
+					EntityID: p.ID, Details: map[string]any{"result_code": cb.ResultCode, "amount_kes": cb.AmountKES, "receipt": cb.Receipt}})
+			}
+			return nil
 		}
 		if err := q.RecordCallback(ctx, store.RecordCallbackParams{RawCallback: raw, At: now, ID: p.ID}); err != nil {
 			return err
@@ -608,8 +618,20 @@ func (s *Service) calledBack(ctx context.Context, raw []byte, checkoutID *string
 	return err == nil, err
 }
 
-// credit runs after the status query said the customer paid. The amount and receipt come from the stored callback;
-// without one there is nothing safe to credit yet.
+// callbackProblem says why a paid callback cannot be credited as it stands: a prompt asks for an exact amount, so a
+// callback naming another amount, or a receipt that is not an M-Pesa receipt, did not come from that payment.
+func callbackProblem(cb daraja.STKCallback, requested int64) string {
+	switch {
+	case !receiptRE.MatchString(cb.Receipt):
+		return "receipt_invalid"
+	case cb.AmountKES != requested:
+		return "amount_mismatch"
+	}
+	return ""
+}
+
+// credit runs after the status query said the customer paid. The amount and receipt come from the first stored
+// callback, which must name the amount the prompt asked for; without one there is nothing safe to credit yet.
 func (s *Service) credit(ctx context.Context, paymentID string, expired bool) (time.Duration, error) {
 	var retry time.Duration
 	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
@@ -643,6 +665,11 @@ func (s *Service) credit(ctx context.Context, paymentID string, expired bool) (t
 				return nil
 			}
 			return s.settle(ctx, tx, p.UserID, paymentID, "unconfirmed", "paid_without_callback", nil, now)
+		}
+		if reason := callbackProblem(cb, p.AmountRequestedKes); reason != "" {
+			// M-Pesa says the prompt was paid, but the callback does not describe it: an operator looks (ADR 0028)
+			slog.WarnContext(ctx, "the stk callback does not match the top-up; left for an operator", "payment", paymentID, "reason", reason)
+			return s.settle(ctx, tx, p.UserID, paymentID, "unconfirmed", reason, nil, now)
 		}
 		used, err := q.ReceiptUsedElsewhere(ctx, store.ReceiptUsedElsewhereParams{MpesaReceipt: &cb.Receipt, ID: paymentID})
 		if err != nil {

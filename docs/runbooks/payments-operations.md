@@ -19,7 +19,9 @@ logged: `ERROR payments reconciliation found mismatches` or `WARN ... items need
   open suspense), `liability_vs_wallets`, `suspense_vs_items`, `suspense_without_journal`). They should never happen: stop and investigate (a bug or tampering).
 - **Attention** lists work for an operator:
   - `unconfirmed`: settlement gave up without M-Pesa's confirmation (`paid_without_callback`: the status query said
-    paid but no receipt arrived; `still_pending_at_expiry`; `query_rejected`). Open the top-up in the back office
+    paid but no receipt arrived; `still_pending_at_expiry`; `query_rejected`; `amount_mismatch` or `receipt_invalid`:
+    the callback named another amount than the prompt, or no M-Pesa receipt, so it was not used (ADR 0028). Trust
+    only the statement for these, and if the amount differs, suspect a leaked hook secret and rotate it). Open the top-up in the back office
     (Top-ups → the row): a late callback or the player's receipt may already have settled it. Otherwise import the
     M-Pesa statement (below), or resolve it from the receipt by hand, or dismiss it as not on the statement.
   - `receipt_claims`: receipts players gave for uncredited top-ups that M-Pesa has not confirmed (`claimed`,
@@ -80,8 +82,11 @@ is not reaching M-Pesa: check that the line is the phone's M-Pesa SIM, try anoth
 
 Money is credited only against an M-Pesa receipt. For a top-up that settled uncredited the receipt comes from one of:
 
-1. **A late callback.** Safaricom retries callbacks; one that arrives after the top-up settled credits it at once
-   (audit `payment.topup.credited`, `source: late_callback`). Nothing to do.
+1. **A late callback.** Safaricom retries callbacks. One that arrives after the top-up settled becomes the top-up's
+   receipt claim (audit `payment.topup.late_callback`), and M-Pesa is asked to confirm it, as in 2 (ADR 0028). Nothing
+   to do unless the claim ends `unverified`, or Transaction Status is not configured: then check the statement. In the
+   sandbox (`DARAJA_SANDBOX_SETTLE`) it credits at once. A late callback naming another amount than the prompt is
+   ignored and audited (`payment.topup.callback_ignored`).
 2. **The player's M-Pesa message.** The app asks the player for the receipt code once a top-up settles uncredited
    (`POST /v1/payments/{id}/receipt`). With the paybill initiator configured (`DARAJA_C2B_SHORTCODE`,
    `DARAJA_INITIATOR_NAME`, `DARAJA_SECURITY_CREDENTIAL`) the platform asks M-Pesa about the receipt (Transaction
@@ -97,7 +102,8 @@ Money is credited only against an M-Pesa receipt. For a top-up that settled uncr
    (`payments.statement_imports`: file hash, counts, report, outcomes) and audited (`payment.statement.imported`).
 4. **You, one top-up at a time**, from the top-up's page in the back office (`GET /v1/staff/topups/{id}` shows the
    callback, the claim and M-Pesa's answer, orphan callbacks, the jobs, the audit trail, the player's standing):
-   - *Ask M-Pesa again* (`recheck`): credits an orphan or late callback; otherwise reports the status query:
+   - *Ask M-Pesa again* (`recheck`): sends an orphan or late callback's receipt to M-Pesa for confirmation
+     (`verifying`); otherwise reports the status query:
      `paid_without_receipt` means the receipt is still needed; a failure code is recorded.
    - *Credit from a receipt* (`resolve`): with the receipt and the amount on the statement, and a note.
    - *Not on the statement* (`dismiss`): the top-up fails as `not_on_statement`; a claimed receipt is rejected with

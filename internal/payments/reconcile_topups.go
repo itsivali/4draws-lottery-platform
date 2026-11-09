@@ -242,6 +242,14 @@ func (s *Service) settleClaim(ctx context.Context, tx pgx.Tx, paymentID string, 
 		payer: payer, now: now, actor: audit.Event{ActorType: audit.System}, source: "receipt_claim"})
 }
 
+// verifyingDesc says how a late callback's receipt is confirmed.
+func (s *Service) verifyingDesc() string {
+	if s.c2b == nil {
+		return "M-Pesa cannot be asked here (no Transaction Status): confirm the receipt on the statement before crediting it"
+	}
+	return "M-Pesa is being asked to confirm the callback's receipt"
+}
+
 func (s *Service) c2bShortCode() string {
 	if s.c2b == nil {
 		return ""
@@ -258,46 +266,84 @@ func deref(p *string) string {
 	return *p
 }
 
-// lateCallback credits a top-up that had settled uncredited when Safaricom's paid callback finally arrives (the
-// callback is the receipt), in the caller's transaction with the payment locked. It returns false when the callback
-// does not pay the top-up: a failure code, a receipt already used, or a payment already holding money.
-func (s *Service) lateCallback(ctx context.Context, tx pgx.Tx, p settledTopUp, cb daraja.STKCallback, raw []byte, now time.Time) (bool, error) {
+// Outcomes of a late callback.
+const (
+	lateCredited  = "credited"  // the sandbox: Safaricom's callback settles (Config.SandboxSettle)
+	lateVerifying = "verifying" // M-Pesa is asked to confirm the callback's receipt (or an operator, without Transaction Status)
+)
+
+// lateCallback handles a paid callback for a top-up that had settled uncredited, in the caller's transaction with the
+// payment locked. The callback is a claim, not proof (ADR 0006, ADR 0028): its receipt becomes the top-up's receipt
+// claim and M-Pesa's Transaction Status confirms the amount, business and payer before anything is credited
+// (settleClaim). Only with Config.SandboxSettle, where callbacks settle top-ups anyway, is it credited at once. It
+// returns "" when the callback leads nowhere: a failure code, a callback that does not describe the top-up, a receipt
+// already used, or a receipt M-Pesa was already asked about.
+func (s *Service) lateCallback(ctx context.Context, tx pgx.Tx, p settledTopUp, cb daraja.STKCallback, raw []byte, now time.Time) (string, error) {
 	if !uncredited(p.Status) || !cb.Paid() || p.Msisdn == nil {
-		return false, nil
+		return "", nil
 	}
 	q := store.New(tx)
+	if reason := callbackProblem(cb, p.AmountRequested); reason != "" {
+		slog.WarnContext(ctx, "a late stk callback does not match the top-up; not used", "payment", p.ID, "reason", reason)
+		return "", s.audit.Record(ctx, tx, audit.Event{ActorType: audit.System, Action: "payment.topup.callback_ignored", EntityType: "payment",
+			EntityID: p.ID, Details: map[string]any{"reason": reason, "amount_kes": cb.AmountKES, "receipt": cb.Receipt, "was": p.Status}})
+	}
 	used, err := q.ReceiptUsedElsewhere(ctx, store.ReceiptUsedElsewhereParams{MpesaReceipt: &cb.Receipt, ID: p.ID})
 	if err != nil || used {
-		return false, err
+		return "", err
 	}
 	if err := q.RecordCallback(ctx, store.RecordCallbackParams{RawCallback: raw, At: now, ID: p.ID}); err != nil {
-		return false, err
+		return "", err
 	}
 	d, err := q.GetPaymentDetail(ctx, p.ID)
 	if err != nil {
-		return false, err
+		return "", err
 	}
-	if c := claimOf(d); c != nil && (c.Status == ClaimClaimed || c.Status == ClaimChecking || c.Status == ClaimUnverified) {
+	c := claimOf(d)
+	if !s.cfg.SandboxSettle {
+		switch {
+		case c != nil && (c.Status == ClaimClaimed || c.Status == ClaimChecking):
+			// the player's receipt is being checked already; a different one in the callback is for an operator
+			if c.Receipt != cb.Receipt {
+				return lateVerifying, s.audit.Record(ctx, tx, audit.Event{ActorType: audit.System, Action: "payment.topup.late_callback", EntityType: "payment",
+					EntityID: p.ID, Details: map[string]any{"receipt": cb.Receipt, "amount_kes": cb.AmountKES, "was": p.Status, "note": "the player claimed receipt " + c.Receipt}})
+			}
+			return lateVerifying, nil
+		case c != nil && c.Receipt == cb.Receipt:
+			return "", nil // M-Pesa already answered about this receipt (or an operator decided): Safaricom repeating itself
+		}
+		if err := q.ClaimReceipt(ctx, store.ClaimReceiptParams{Receipt: &cb.Receipt, At: &now, ID: p.ID}); err != nil {
+			return "", err
+		}
+		if err := s.enq.EnqueueClaimCheck(ctx, tx, p.ID); err != nil {
+			return "", err
+		}
+		slog.InfoContext(ctx, "stk callback arrived after the top-up settled; asking M-Pesa to confirm it", "payment", p.ID, "was", p.Status)
+		return lateVerifying, s.audit.Record(ctx, tx, audit.Event{ActorType: audit.System, Action: "payment.topup.late_callback", EntityType: "payment",
+			EntityID: p.ID, Details: map[string]any{"receipt": cb.Receipt, "amount_kes": cb.AmountKES, "was": p.Status}})
+	}
+	if c != nil && (c.Status == ClaimClaimed || c.Status == ClaimChecking || c.Status == ClaimUnverified) {
 		status, note := ClaimConfirmed, ""
 		if c.Receipt != cb.Receipt {
 			status, note = ClaimRejected, "M-Pesa's callback carried receipt "+cb.Receipt
 		}
 		if err := q.SetClaimStatus(ctx, store.SetClaimStatusParams{Status: &status, Note: nilIfEmpty(note), At: now, ID: p.ID}); err != nil {
-			return false, err
+			return "", err
 		}
 	}
 	if err := s.creditPayment(ctx, tx, creditInput{paymentID: p.ID, user: p.UserID, target: *p.Msisdn, amount: cb.AmountKES, receipt: cb.Receipt,
 		payer: cb.MSISDN, now: now, actor: audit.Event{ActorType: audit.System}, source: "late_callback"}); err != nil {
-		return false, err
+		return "", err
 	}
-	slog.InfoContext(ctx, "stk callback arrived after the top-up settled; credited", "payment", p.ID, "was", p.Status)
-	return true, nil
+	slog.InfoContext(ctx, "stk callback arrived after the top-up settled; credited (sandbox)", "payment", p.ID, "was", p.Status)
+	return lateCredited, nil
 }
 
 // settledTopUp is what lateCallback needs of a locked payment.
 type settledTopUp struct {
 	ID, UserID, Status string
 	Msisdn             *string
+	AmountRequested    int64
 }
 
 func nilIfEmpty(s string) *string {
@@ -311,7 +357,7 @@ func nilIfEmpty(s string) *string {
 type Recheck struct {
 	// Outcome: credited (a paid callback had arrived and is now credited), paid_without_receipt (M-Pesa says paid; the
 	// receipt is needed), failed, cancelled, pending, no_prompt (the prompt was never accepted), asking (M-Pesa is being
-	// asked about the player's receipt).
+	// asked about the player's receipt), verifying (a paid callback had arrived; its receipt is being confirmed).
 	Outcome    string `json:"outcome"`
 	Status     string `json:"status"` // the payment's status afterwards
 	ResultCode *int32 `json:"result_code"`
@@ -358,12 +404,17 @@ func (s *Service) Recheck(ctx context.Context, paymentID, operator string) (Rech
 		}
 		if raw != nil {
 			if cb, err := daraja.ParseSTKCallback(raw); err == nil && cb.Paid() && uncredited(p.Status) {
-				credited, err := s.lateCallback(ctx, tx, settledTopUp{ID: p.ID, UserID: p.UserID, Status: p.Status, Msisdn: p.Msisdn}, cb, raw, now)
+				late, err := s.lateCallback(ctx, tx, settledTopUp{ID: p.ID, UserID: p.UserID, Status: p.Status, Msisdn: p.Msisdn, AmountRequested: p.AmountRequestedKes}, cb, raw, now)
 				if err != nil {
 					return err
 				}
-				if credited {
+				switch late {
+				case lateCredited:
 					out = Recheck{Outcome: "credited", Status: "credited", ResultCode: ptr(int32(0))}
+				case lateVerifying:
+					out = Recheck{Outcome: "verifying", Status: p.Status, ResultDesc: s.verifyingDesc()}
+				}
+				if out.Outcome != "" {
 					return s.audit.Record(ctx, tx, audit.Event{ActorType: audit.Staff, ActorID: operator, Action: "payment.topup.rechecked",
 						EntityType: "payment", EntityID: paymentID, Details: map[string]any{"outcome": out.Outcome}})
 				}

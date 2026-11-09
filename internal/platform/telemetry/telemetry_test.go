@@ -91,3 +91,25 @@ func TestNew_WithoutAnExporterStillWorks(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestMiddleware_NeverRecordsTheHookSecret(t *testing.T) {
+	tel, rec := newTel(t)
+	h := tel.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/hooks/c2b/s3cr3t/confirm" { // the handler still routes on the real path
+			t.Errorf("handler saw %s", r.URL.Path)
+		}
+	}))
+	hit(h, http.MethodPost, "/hooks/c2b/s3cr3t/confirm")
+	spans := rec.Ended()
+	if len(spans) != 1 {
+		t.Fatalf("%d spans, want 1", len(spans))
+	}
+	if name := spans[0].Name(); name != "POST /hooks/c2b/{secret}/confirm" {
+		t.Errorf("span name = %q", name)
+	}
+	for _, a := range spans[0].Attributes() {
+		if strings.Contains(a.Value.String(), "s3cr3t") {
+			t.Errorf("attribute %s = %q carries the secret", a.Key, a.Value.String())
+		}
+	}
+}

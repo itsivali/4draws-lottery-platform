@@ -52,6 +52,14 @@ Read this first at the start of every session.
   Daraja, `REGULATORY_LICENCE_REFERENCE` and two admins (`docs/runbooks/operating-mode.md`). **Render must have
   `OPERATING_MODE=sandbox`** (render.yaml sets it; check the dashboard after the Blueprint syncs), or the demo stops
   taking top-ups and plays. `GET /v1/status` shows the mode.
+- **M-Pesa callbacks are claims (ADR 0028, 2026-11-07):**
+  - The first callback is kept, and a different later one is audited and ignored.
+  - A callback naming another amount than the prompt, or no valid receipt, is not credited (`unconfirmed`,
+    `amount_mismatch`/`receipt_invalid`).
+  - A late or orphan callback is confirmed with Transaction Status before it credits. In the sandbox
+    (`DARAJA_SANDBOX_SETTLE`) it still credits at once.
+  - The database enforces the top-up state machine (migration 00046).
+  - The hook secret is redacted from traces and logs.
 
 ## Before the API is exposed to players
 

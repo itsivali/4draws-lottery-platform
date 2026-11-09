@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/itsivali/lottery-platform/internal/audit"
@@ -455,7 +456,7 @@ func TestTopUp_ACallbackIsNotTrustedUntilTheStatusQueryConfirmsIt(t *testing.T) 
 
 	forged, _ := json.Marshal(map[string]any{"Body": map[string]any{"stkCallback": map[string]any{
 		"MerchantRequestID": "x", "CheckoutRequestID": e.mock.Pushes()[0].CheckoutRequestID, "ResultCode": 0, "ResultDesc": "ok",
-		"CallbackMetadata": map[string]any{"Item": []map[string]any{{"Name": "Amount", "Value": 100}, {"Name": "MpesaReceiptNumber", "Value": "FORGED1"}}},
+		"CallbackMetadata": map[string]any{"Item": []map[string]any{{"Name": "Amount", "Value": 100}, {"Name": "MpesaReceiptNumber", "Value": "FORGED0001"}}},
 	}}})
 	if err := e.svc.HandleCallback(context.Background(), forged); err != nil {
 		t.Fatal(err)
@@ -497,15 +498,67 @@ func TestTopUp_APaidPromptWhoseCallbackIsLostBecomesUnconfirmedNotCredited(t *te
 	}
 }
 
-func TestTopUp_TheAmountCreditedIsTheAmountPaidNotTheAmountRequested(t *testing.T) {
+// ADR 0028 (replaces "the amount credited is the amount paid"): a prompt asks for an exact amount and the customer
+// cannot change it, so a callback naming another amount did not come from that payment. It is not credited.
+func TestTopUp_ACallbackNamingAnotherAmountIsLeftForAnOperatorNotCredited(t *testing.T) {
 	e := setup(t)
 	user, _ := e.player(t)
 	e.mock.SetNextFault(darajamock.Fault{PaidAmountKES: 40})
 	tu := e.topUp(t, user, 100)
 	e.pushAndComplete(t)
-	got := e.get(t, user, tu.ID)
-	if got.AmountConfirmedKES == nil || *got.AmountConfirmedKES != 40 || e.balance(t, user) != 40 {
-		t.Fatalf("payment = %+v balance = %d", got, e.balance(t, user))
+	if st, reason := e.status(t, tu.ID); st != "unconfirmed" || reason == nil || *reason != "amount_mismatch" {
+		t.Fatalf("status = %s/%v, want unconfirmed/amount_mismatch", st, reason)
+	}
+	if e.balance(t, user) != 0 {
+		t.Fatalf("credited %d from a callback that does not match the prompt", e.balance(t, user))
+	}
+}
+
+func TestTopUp_TheFirstCallbackIsKeptAndALaterDifferentOneIsIgnored(t *testing.T) {
+	e := setup(t)
+	ctx := context.Background()
+	user, msisdn := e.player(t)
+	e.mock.SetNextFault(darajamock.Fault{DropCallback: true})
+	tu := e.topUp(t, user, 100)
+	e.pushAndComplete(t)
+	checkout := e.mock.Pushes()[0].CheckoutRequestID
+	if err := e.svc.HandleCallback(ctx, stkCallback(checkout, 100, "REALRCPT01", msisdn)); err != nil {
+		t.Fatal(err)
+	}
+	// someone holding the hook secret sends a second callback before verification runs: it changes nothing
+	if err := e.svc.HandleCallback(ctx, stkCallback(checkout, 100000, "FORGED0001", msisdn)); err != nil {
+		t.Fatal(err)
+	}
+	e.run(t)
+	if e.balance(t, user) != 100 || e.receipt(t, tu.ID) != "REALRCPT01" {
+		t.Fatalf("balance %d receipt %q: the first callback should have been credited", e.balance(t, user), e.receipt(t, tu.ID))
+	}
+	var n int
+	if err := e.pool.QueryRow(ctx, `SELECT count(*) FROM audit.audit_log WHERE action = 'payment.topup.callback_ignored' AND entity_id = $1`, tu.ID).Scan(&n); err != nil || n != 1 {
+		t.Fatalf("callback_ignored audit rows = %d (%v), want 1", n, err)
+	}
+	// a repeat of the same callback (Safaricom retries) is not worth an audit row
+	if err := e.svc.HandleCallback(ctx, stkCallback(checkout, 100, "REALRCPT01", msisdn)); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.pool.QueryRow(ctx, `SELECT count(*) FROM audit.audit_log WHERE action = 'payment.topup.callback_ignored' AND entity_id = $1`, tu.ID).Scan(&n); err != nil || n != 1 {
+		t.Fatalf("callback_ignored audit rows = %d (%v), want still 1", n, err)
+	}
+}
+
+func TestTopUp_AReceiptThatIsNotAnMpesaReceiptIsNotCredited(t *testing.T) {
+	e := setup(t)
+	ctx := context.Background()
+	user, msisdn := e.player(t)
+	e.mock.SetNextFault(darajamock.Fault{DropCallback: true})
+	tu := e.topUp(t, user, 100)
+	e.pushAndComplete(t)
+	if err := e.svc.HandleCallback(ctx, stkCallback(e.mock.Pushes()[0].CheckoutRequestID, 100, "x'; --", msisdn)); err != nil {
+		t.Fatal(err)
+	}
+	e.run(t)
+	if st, reason := e.status(t, tu.ID); st != "unconfirmed" || reason == nil || *reason != "receipt_invalid" || e.balance(t, user) != 0 {
+		t.Fatalf("status = %s/%v balance %d", st, reason, e.balance(t, user))
 	}
 }
 
@@ -649,7 +702,7 @@ func TestTopUp_ACallbackThatBeatThePushBookkeepingIsStillUsed(t *testing.T) {
 	checkout := e.mock.Pushes()[0].CheckoutRequestID
 	raw, _ := json.Marshal(map[string]any{"Body": map[string]any{"stkCallback": map[string]any{
 		"CheckoutRequestID": checkout, "ResultCode": 0, "ResultDesc": "ok",
-		"CallbackMetadata": map[string]any{"Item": []map[string]any{{"Name": "Amount", "Value": 100}, {"Name": "MpesaReceiptNumber", "Value": "EARLY1"},
+		"CallbackMetadata": map[string]any{"Item": []map[string]any{{"Name": "Amount", "Value": 100}, {"Name": "MpesaReceiptNumber", "Value": "EARLY00001"},
 			{"Name": "PhoneNumber", "Value": json.Number(msisdn)}}},
 	}}})
 	if _, err := e.pool.Exec(ctx, `INSERT INTO payments.stk_orphan_callbacks (checkout_request_id, raw_payload) VALUES ($1, $2)`, checkout, raw); err != nil {
@@ -672,7 +725,7 @@ func TestTopUp_APayerNumberThatDiffersFromThePushTargetIsCreditedButProvesNothin
 	e.pushAndComplete(t)
 	raw, _ := json.Marshal(map[string]any{"Body": map[string]any{"stkCallback": map[string]any{
 		"CheckoutRequestID": e.mock.Pushes()[0].CheckoutRequestID, "ResultCode": 0, "ResultDesc": "ok",
-		"CallbackMetadata": map[string]any{"Item": []map[string]any{{"Name": "Amount", "Value": 100}, {"Name": "MpesaReceiptNumber", "Value": "OTHER1"},
+		"CallbackMetadata": map[string]any{"Item": []map[string]any{{"Name": "Amount", "Value": 100}, {"Name": "MpesaReceiptNumber", "Value": "OTHER00001"},
 			{"Name": "PhoneNumber", "Value": json.Number("254799999999")}}},
 	}}})
 	if err := e.svc.HandleCallback(ctx, raw); err != nil {
@@ -1058,7 +1111,7 @@ func TestSandboxSettle_CreditsOnlyRealPaymentsFromTheCallbackAndNeverAsksTheStat
 		wantProved  bool
 	}{
 		// a real sandbox payment (2026-10-29: Daisy Irungu's, receipt UJT6YBR9IQ) credits with Safaricom's receipt
-		"paid": {fault: darajamock.Fault{PaidAmountKES: 90}, wantStatus: "credited", wantBalance: 90, wantProved: true},
+		"paid": {wantStatus: "credited", wantBalance: 100, wantProved: true},
 		// owner, 2026-10-30: only real payments are credited; a prompt that timed out moved no money
 		"timeout callback":   {fault: darajamock.Fault{ResultCode: 1037}, wantStatus: "failed"},
 		"wrong pin":          {fault: darajamock.Fault{ResultCode: 2001}, wantStatus: "failed"},
@@ -1178,4 +1231,44 @@ func TestTopUp_ANewPromptWaitsOutTheCooldownAndSaysHowLong(t *testing.T) {
 		t.Fatalf("after the cooldown: wait %v", w)
 	}
 	e.topUp(t, user, 100)
+}
+
+// SEC-04 / ADR 0028: the database refuses what the code must never do, whoever runs the statement.
+func TestPayments_TheDatabaseRefusesIllegalTransitionsAndRewritesOfWhatMpesaSaid(t *testing.T) {
+	e := setup(t)
+	ctx := context.Background()
+	user, _ := e.player(t)
+	tu := e.topUp(t, user, 100)
+	e.pushAndComplete(t)
+	if st, _ := e.status(t, tu.ID); st != "credited" {
+		t.Fatalf("status = %s", st)
+	}
+	refused := func(sql string, args ...any) {
+		t.Helper()
+		_, err := e.pool.Exec(ctx, sql, args...)
+		var pgErr *pgconn.PgError
+		// restrict_violation from the trigger; a DELETE is refused earlier by the grants (insufficient_privilege)
+		if !errors.As(err, &pgErr) || (pgErr.Code != "23001" && pgErr.Code != "42501") {
+			t.Errorf("%s: err = %v, want restrict_violation", sql, err)
+		}
+	}
+	refused(`UPDATE payments.payments SET status = 'failed' WHERE id = $1`, tu.ID)
+	refused(`UPDATE payments.payments SET status = 'stk_sent' WHERE id = $1`, tu.ID)
+	refused(`UPDATE payments.payments SET amount_confirmed_kes = 100000 WHERE id = $1`, tu.ID)
+	refused(`UPDATE payments.payments SET mpesa_receipt = 'OTHER00001' WHERE id = $1`, tu.ID)
+	refused(`UPDATE payments.payments SET raw_callback = '{}' WHERE id = $1`, tu.ID)
+	refused(`UPDATE payments.payments SET amount_requested_kes = 5 WHERE id = $1`, tu.ID)
+	refused(`UPDATE payments.payments SET checkout_request_id = 'ws_CO_other' WHERE id = $1`, tu.ID)
+	refused(`DELETE FROM payments.payments WHERE id = $1`, tu.ID)
+
+	// a failed top-up can still be credited when M-Pesa shows it was paid, but never be pushed again
+	tu2 := e.topUp(t, user, 50)
+	if _, err := e.pool.Exec(ctx, `UPDATE payments.payments SET status = 'failed' WHERE id = $1`, tu2.ID); err != nil {
+		t.Fatal(err)
+	}
+	refused(`UPDATE payments.payments SET status = 'initiated' WHERE id = $1`, tu2.ID)
+	refused(`UPDATE payments.payments SET status = 'reversed', reversed_at = now(), reversal_reason = 'x' WHERE id = $1`, tu2.ID)
+	if _, err := e.pool.Exec(ctx, `UPDATE payments.payments SET status = 'unconfirmed' WHERE id = $1`, tu2.ID); err != nil {
+		t.Fatalf("an uncredited top-up may be corrected: %v", err)
+	}
 }

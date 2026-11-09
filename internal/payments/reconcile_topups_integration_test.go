@@ -46,7 +46,17 @@ func stkCallback(checkout string, amount int64, receipt, msisdn string) []byte {
 	return b
 }
 
-func TestReconcile_APaidCallbackArrivingAfterTheTopUpSettledCreditsIt(t *testing.T) {
+func lateAudits(t *testing.T, e *env, id, action string) int {
+	t.Helper()
+	var n int
+	if err := e.pool.QueryRow(context.Background(), `SELECT count(*) FROM audit.audit_log WHERE action = $1 AND entity_id = $2`, action, id).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	return n
+}
+
+// ADR 0028: a late callback is a claim, not proof. M-Pesa's Transaction Status confirms its receipt first.
+func TestReconcile_APaidCallbackArrivingAfterTheTopUpSettledIsConfirmedByMpesaThenCredited(t *testing.T) {
 	e := setup(t)
 	user, msisdn := e.player(t)
 	tu, checkout := paidWithoutCallback(t, e, user, 100)
@@ -55,29 +65,112 @@ func TestReconcile_APaidCallbackArrivingAfterTheTopUpSettledCreditsIt(t *testing
 		t.Fatal("the mock issued no receipt")
 	}
 
-	// Safaricom finally delivers the callback (it retries for a while)
+	// Safaricom finally delivers the callback (it retries for a while): nothing is credited on its word
 	if err := e.svc.HandleCallback(context.Background(), stkCallback(checkout, 100, receipt, msisdn)); err != nil {
 		t.Fatal(err)
 	}
+	if st, _ := e.status(t, tu.ID); st != "unconfirmed" || e.balance(t, user) != 0 {
+		t.Fatalf("status %s balance %d: credited before M-Pesa confirmed the receipt", st, e.balance(t, user))
+	}
+	if got := e.get(t, user, tu.ID); got.Claim == nil || got.Claim.Receipt != receipt || got.Claim.Status != payments.ClaimClaimed {
+		t.Fatalf("the callback's receipt should be the claim being checked: %+v", got.Claim)
+	}
+	// a second delivery while it is checked changes nothing
+	if err := e.svc.HandleCallback(context.Background(), stkCallback(checkout, 100, receipt, msisdn)); err != nil {
+		t.Fatal(err)
+	}
+	// the claim job asks M-Pesa, which confirms the receipt: credited and the phone proved like any other
+	e.run(t)
 	if st, _ := e.status(t, tu.ID); st != "credited" {
 		t.Fatalf("status = %s, want credited", st)
 	}
-	if e.balance(t, user) != 100 || !e.phoneVerified(t, user) {
-		t.Fatalf("balance %d, phone proved %v: the late callback credits and proves like any other", e.balance(t, user), e.phoneVerified(t, user))
+	if e.balance(t, user) != 100 || !e.phoneVerified(t, user) || e.receipt(t, tu.ID) != receipt {
+		t.Fatalf("balance %d, phone proved %v receipt %q", e.balance(t, user), e.phoneVerified(t, user), e.receipt(t, tu.ID))
 	}
-	if got := e.get(t, user, tu.ID); got.Status != payments.StatusCredited || got.AmountConfirmedKES == nil || *got.AmountConfirmedKES != 100 {
-		t.Fatalf("player sees %+v", got)
+	if reqs := e.mock.StatusRequests(); len(reqs) != 1 || reqs[0] != receipt {
+		t.Fatalf("transaction status requests = %v, want one for %s", reqs, receipt)
 	}
-	// a second delivery changes nothing
+	if late, credited := lateAudits(t, e, tu.ID, "payment.topup.late_callback"), lateAudits(t, e, tu.ID, "payment.topup.credited"); late != 1 || credited != 1 {
+		t.Fatalf("audit: late_callback %d credited %d, want 1 and 1", late, credited)
+	}
+	// and once credited, another delivery changes nothing
 	if err := e.svc.HandleCallback(context.Background(), stkCallback(checkout, 100, receipt, msisdn)); err != nil {
 		t.Fatal(err)
 	}
+	e.run(t)
 	if e.balance(t, user) != 100 {
 		t.Fatalf("balance %d after a duplicate late callback", e.balance(t, user))
 	}
-	var n int
-	if err := e.pool.QueryRow(context.Background(), `SELECT count(*) FROM audit.audit_log WHERE action = 'payment.topup.credited' AND entity_id = $1 AND details->>'source' = 'late_callback'`, tu.ID).Scan(&n); err != nil || n != 1 {
-		t.Fatalf("late_callback audit rows = %d (%v), want 1", n, err)
+}
+
+// SEC-01: anyone holding the hook secret could credit an expired top-up with a made-up receipt. Now M-Pesa is asked.
+func TestReconcile_AForgedLateCallbackIsNotCredited(t *testing.T) {
+	e := setup(t)
+	user, msisdn := e.player(t)
+	tu, checkout := paidWithoutCallback(t, e, user, 100)
+
+	if err := e.svc.HandleCallback(context.Background(), stkCallback(checkout, 100, "FAKE123456", msisdn)); err != nil {
+		t.Fatal(err)
+	}
+	e.run(t)
+	if st, _ := e.status(t, tu.ID); st != "unconfirmed" || e.balance(t, user) != 0 {
+		t.Fatalf("status %s balance %d: a receipt M-Pesa does not know was credited", st, e.balance(t, user))
+	}
+	if got := e.get(t, user, tu.ID); got.Claim == nil || got.Claim.Status != payments.ClaimUnverified {
+		t.Fatalf("claim = %+v, want unverified for an operator", got.Claim)
+	}
+	// Safaricom (or the forger) repeating it does not ask M-Pesa again
+	before := len(e.mock.StatusRequests())
+	if err := e.svc.HandleCallback(context.Background(), stkCallback(checkout, 100, "FAKE123456", msisdn)); err != nil {
+		t.Fatal(err)
+	}
+	e.run(t)
+	if after := len(e.mock.StatusRequests()); after != before {
+		t.Fatalf("status requests %d -> %d for a receipt M-Pesa already answered about", before, after)
+	}
+
+	// a late callback naming another amount is not even asked about
+	tu2, checkout2 := paidWithoutCallback(t, e, user, 50)
+	if err := e.svc.HandleCallback(context.Background(), stkCallback(checkout2, 5000, e.mock.ReceiptOf(checkout2), msisdn)); err != nil {
+		t.Fatal(err)
+	}
+	e.run(t)
+	if got := e.get(t, user, tu2.ID); got.Claim != nil || e.balance(t, user) != 0 || lateAudits(t, e, tu2.ID, "payment.topup.callback_ignored") != 1 {
+		t.Fatalf("claim %+v balance %d", got.Claim, e.balance(t, user))
+	}
+}
+
+func TestReconcile_InTheSandboxALateCallbackStillSettlesFromSafaricomsReceipt(t *testing.T) {
+	e := sandbox(t)
+	user, msisdn := e.player(t)
+	e.mock.SetNextFault(darajamock.Fault{DropCallback: true})
+	tu := e.topUp(t, user, 100)
+	e.pushAndComplete(t)
+	e.clk.Advance(payments.DefaultExpiry + time.Second)
+	if _, err := e.svc.Verify(context.Background(), tu.ID); err != nil {
+		t.Fatal(err)
+	}
+	checkout := e.mock.Pushes()[0].CheckoutRequestID
+	if err := e.svc.HandleCallback(context.Background(), stkCallback(checkout, 100, e.mock.ReceiptOf(checkout), msisdn)); err != nil {
+		t.Fatal(err)
+	}
+	if st, _ := e.status(t, tu.ID); st != "credited" || e.balance(t, user) != 100 {
+		t.Fatalf("status %s balance %d", st, e.balance(t, user))
+	}
+	// but not one that names another amount
+	e.mock.SetNextFault(darajamock.Fault{DropCallback: true})
+	tu2 := e.topUp(t, user, 30)
+	e.pushAndComplete(t)
+	e.clk.Advance(payments.DefaultExpiry + time.Second)
+	if _, err := e.svc.Verify(context.Background(), tu2.ID); err != nil {
+		t.Fatal(err)
+	}
+	p := e.mock.Pushes()
+	if err := e.svc.HandleCallback(context.Background(), stkCallback(p[len(p)-1].CheckoutRequestID, 3000, "SANDBOX001", msisdn)); err != nil {
+		t.Fatal(err)
+	}
+	if st, _ := e.status(t, tu2.ID); st == "credited" || e.balance(t, user) != 100 {
+		t.Fatalf("status %s balance %d", st, e.balance(t, user))
 	}
 }
 
@@ -180,7 +273,7 @@ func TestReconcile_AClaimIsRefusedWhileSettlingOrOnceCredited(t *testing.T) {
 	}
 }
 
-func TestReconcile_RecheckCreditsAnOrphanAndRecordsWhatMpesaSays(t *testing.T) {
+func TestReconcile_RecheckVerifiesAnOrphanAndRecordsWhatMpesaSays(t *testing.T) {
 	e := setup(t)
 	user, msisdn := e.player(t)
 
@@ -197,8 +290,12 @@ func TestReconcile_RecheckCreditsAnOrphanAndRecordsWhatMpesaSays(t *testing.T) {
 		t.Fatal(err)
 	}
 	rc, err = e.svc.Recheck(context.Background(), tu.ID, "staff:1")
-	if err != nil || rc.Outcome != "credited" || rc.Status != "credited" || e.balance(t, user) != 100 {
-		t.Fatalf("recheck 2: %+v %v balance %d", rc, err, e.balance(t, user))
+	if err != nil || rc.Outcome != "verifying" || rc.Status != "unconfirmed" || e.balance(t, user) != 0 {
+		t.Fatalf("recheck 2: %+v %v balance %d (M-Pesa confirms the orphan's receipt first)", rc, err, e.balance(t, user))
+	}
+	e.run(t)
+	if st, _ := e.status(t, tu.ID); st != "credited" || e.balance(t, user) != 100 {
+		t.Fatalf("after M-Pesa confirmed the orphan: status %s balance %d", st, e.balance(t, user))
 	}
 	if _, err := e.svc.Recheck(context.Background(), tu.ID, "staff:1"); !errors.Is(err, payments.ErrSettledAlready) {
 		t.Fatalf("recheck of a credited top-up: %v", err)
@@ -397,5 +494,44 @@ func TestStatement_MatchesPaidRowsToUncreditedPromptsAndCreditsWhatIsConfirmed(t
 	rep2, err := e.svc.MatchStatement(context.Background(), []byte(body))
 	if err != nil || len(rep2.ToCredit) != 0 || rep2.Counts["credited"] != 3 { // tu1, tu3 and tu4 (which took ST22222222)
 		t.Fatalf("second match: %v %+v", err, rep2.Counts)
+	}
+}
+
+func TestReconcile_ALateCallbackLeavesThePlayersOpenClaimToMpesa(t *testing.T) {
+	e := setup(t)
+	ctx := context.Background()
+	user, msisdn := e.player(t)
+	tu, checkout := paidWithoutCallback(t, e, user, 100)
+	receipt := e.mock.ReceiptOf(checkout)
+	if _, err := e.svc.ClaimReceipt(ctx, user, tu.ID, receipt); err != nil {
+		t.Fatal(err)
+	}
+	// the same receipt arrives in a late callback: the claim already open is not doubled
+	if err := e.svc.HandleCallback(ctx, stkCallback(checkout, 100, receipt, msisdn)); err != nil {
+		t.Fatal(err)
+	}
+	if n := lateAudits(t, e, tu.ID, "payment.topup.late_callback"); n != 0 {
+		t.Fatalf("late_callback audits = %d for the receipt already claimed", n)
+	}
+	e.run(t)
+	if st, _ := e.status(t, tu.ID); st != "credited" || e.balance(t, user) != 100 || len(e.mock.StatusRequests()) != 1 {
+		t.Fatalf("status %s balance %d requests %v", st, e.balance(t, user), e.mock.StatusRequests())
+	}
+
+	// a different receipt in the callback while the player's claim is open: the claim is checked, the callback recorded
+	tu2, checkout2 := paidWithoutCallback(t, e, user, 50)
+	if _, err := e.svc.ClaimReceipt(ctx, user, tu2.ID, e.mock.ReceiptOf(checkout2)); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.svc.HandleCallback(ctx, stkCallback(checkout2, 50, "OTHERRCPT1", msisdn)); err != nil {
+		t.Fatal(err)
+	}
+	var note string
+	if err := e.pool.QueryRow(ctx, `SELECT details->>'note' FROM audit.audit_log WHERE action = 'payment.topup.late_callback' AND entity_id = $1`, tu2.ID).Scan(&note); err != nil || !strings.Contains(note, "the player claimed receipt") {
+		t.Fatalf("audit note %q (%v)", note, err)
+	}
+	e.run(t)
+	if got := e.get(t, user, tu2.ID); got.Status != payments.StatusCredited || got.Claim == nil || got.Claim.Receipt != e.mock.ReceiptOf(checkout2) {
+		t.Fatalf("payment %+v", got)
 	}
 }

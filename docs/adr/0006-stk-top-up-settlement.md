@@ -1,6 +1,6 @@
 # 0006. How an STK top-up is settled
 
-Status: accepted
+Status: accepted; amended by 0028 (the first callback is kept and must name the requested amount)
 Date: 2026-10-22
 
 ## Context

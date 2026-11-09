@@ -2069,9 +2069,11 @@ paths:
       tags: [back-office]
       summary: Ask M-Pesa about a top-up again
       description: |
-        Role: `staff` (admins too). A paid callback that arrived late or as an orphan is credited; otherwise the
+        Role: `staff` (admins too). A paid callback that arrived late or as an orphan is verified; otherwise the
         status query is asked: a failure is recorded, a success reported as needing the receipt (`paid_without_receipt`).
-        Outcomes: `credited`, `paid_without_receipt`, `failed`, `cancelled`, `pending`, `no_prompt`, `asking`.
+        Outcomes: `credited` (sandbox only), `verifying` (a paid callback had arrived: its receipt is confirmed with M-Pesa's
+        Transaction Status before crediting, ADR 0028), `paid_without_receipt`, `failed`, `cancelled`, `pending`,
+        `no_prompt`, `asking`.
       security: [{ staffBearer: [] }]
       parameters:
         - { $ref: "#/components/parameters/IdempotencyKey" }

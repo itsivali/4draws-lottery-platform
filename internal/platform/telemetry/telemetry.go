@@ -13,6 +13,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	otelprom "go.opentelemetry.io/otel/exporters/prometheus"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
@@ -20,6 +21,8 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.37.0"
 	"go.opentelemetry.io/otel/trace"
+
+	"github.com/itsivali/lottery-platform/internal/platform/httpx"
 )
 
 // Config selects what to export.
@@ -46,7 +49,8 @@ func New(ctx context.Context, cfg Config) (*Telemetry, error) {
 	if err != nil {
 		return nil, err
 	}
-	opts := []sdktrace.TracerProviderOption{sdktrace.WithResource(res)}
+	// redaction runs first, so no processor or exporter ever sees a hook secret
+	opts := []sdktrace.TracerProviderOption{sdktrace.WithResource(res), sdktrace.WithSpanProcessor(redactor{})}
 	if cfg.OTLPEndpoint != "" {
 		eo := []otlptracehttp.Option{otlptracehttp.WithEndpoint(cfg.OTLPEndpoint)}
 		if cfg.OTLPInsecure {
@@ -82,8 +86,25 @@ func (t *Telemetry) Shutdown(ctx context.Context) error {
 func (t *Telemetry) Middleware(next http.Handler) http.Handler {
 	return otelhttp.NewHandler(next, "http",
 		otelhttp.WithTracerProvider(t.tp), otelhttp.WithMeterProvider(t.mp),
-		otelhttp.WithSpanNameFormatter(func(_ string, r *http.Request) string { return r.Method + " " + r.URL.Path }))
+		otelhttp.WithSpanNameFormatter(func(_ string, r *http.Request) string { return r.Method + " " + httpx.RedactPath(r.URL.Path) }))
 }
+
+// redactor replaces the M-Pesa hooks' secret path segment in the url.path attribute as each span starts (ADR 0028):
+// the secret authenticates Safaricom's callbacks, and traces leave the platform.
+type redactor struct{}
+
+func (redactor) OnStart(_ context.Context, s sdktrace.ReadWriteSpan) {
+	for _, a := range s.Attributes() {
+		if a.Key == semconv.URLPathKey {
+			if v := a.Value.AsString(); httpx.RedactPath(v) != v {
+				s.SetAttributes(attribute.String(string(a.Key), httpx.RedactPath(v)))
+			}
+		}
+	}
+}
+func (redactor) OnEnd(sdktrace.ReadOnlySpan)      {}
+func (redactor) Shutdown(context.Context) error   { return nil }
+func (redactor) ForceFlush(context.Context) error { return nil }
 
 // MetricsHandler serves the Prometheus exposition. Mount it on an internal listener, never the public port.
 func (t *Telemetry) MetricsHandler() http.Handler {

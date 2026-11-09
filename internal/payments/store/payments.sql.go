@@ -842,14 +842,16 @@ func (q *Queries) LockPayment(ctx context.Context, id string) (LockPaymentRow, e
 }
 
 const lockPaymentByCheckout = `-- name: LockPaymentByCheckout :one
-SELECT id, user_id, status, msisdn FROM payments.payments WHERE checkout_request_id = $1 FOR UPDATE
+SELECT id, user_id, status, msisdn, amount_requested_kes, raw_callback FROM payments.payments WHERE checkout_request_id = $1 FOR UPDATE
 `
 
 type LockPaymentByCheckoutRow struct {
-	ID     string
-	UserID string
-	Status string
-	Msisdn *string
+	ID                 string
+	UserID             string
+	Status             string
+	Msisdn             *string
+	AmountRequestedKes int64
+	RawCallback        []byte
 }
 
 func (q *Queries) LockPaymentByCheckout(ctx context.Context, checkoutRequestID *string) (LockPaymentByCheckoutRow, error) {
@@ -860,6 +862,8 @@ func (q *Queries) LockPaymentByCheckout(ctx context.Context, checkoutRequestID *
 		&i.UserID,
 		&i.Status,
 		&i.Msisdn,
+		&i.AmountRequestedKes,
+		&i.RawCallback,
 	)
 	return i, err
 }
@@ -1079,10 +1083,11 @@ func (q *Queries) OpenSuspense(ctx context.Context) ([]string, error) {
 }
 
 const orphanCallback = `-- name: OrphanCallback :one
-SELECT raw_payload FROM payments.stk_orphan_callbacks WHERE checkout_request_id = $1 ORDER BY received_at DESC LIMIT 1
+SELECT raw_payload FROM payments.stk_orphan_callbacks WHERE checkout_request_id = $1 ORDER BY received_at, id LIMIT 1
 `
 
-// A callback that arrived before the push job recorded its checkout id was kept as an orphan.
+// A callback that arrived before the push job recorded its checkout id was kept as an orphan. The first one counts,
+// as for callbacks stored on the payment (ADR 0028).
 func (q *Queries) OrphanCallback(ctx context.Context, checkoutRequestID string) ([]byte, error) {
 	row := q.db.QueryRow(ctx, orphanCallback, checkoutRequestID)
 	var raw_payload []byte
@@ -1417,7 +1422,7 @@ func (q *Queries) RecordC2BStatusResult(ctx context.Context, arg RecordC2BStatus
 const recordCallback = `-- name: RecordCallback :exec
 UPDATE payments.payments
    SET status = CASE WHEN status IN ('initiated','stk_sent') THEN 'callback_received' ELSE status END,
-       raw_callback = $1, updated_at = $2
+       raw_callback = coalesce(raw_callback, $1), updated_at = $2
  WHERE id = $3
 `
 
@@ -1427,6 +1432,7 @@ type RecordCallbackParams struct {
 	ID          string
 }
 
+// The first callback is kept (ADR 0028): a later one, repeated or forged, cannot replace the amount and receipt it carries.
 func (q *Queries) RecordCallback(ctx context.Context, arg RecordCallbackParams) error {
 	_, err := q.db.Exec(ctx, recordCallback, arg.RawCallback, arg.At, arg.ID)
 	return err
