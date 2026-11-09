@@ -56,7 +56,7 @@ func TestApprove_IsRefusedWhileTheAccountCannotBePaid(t *testing.T) {
 	if _, err := e.pool.Exec(ctx, `UPDATE identity.users SET status = 'suspended' WHERE id = $1`, u); err != nil {
 		t.Fatal(err)
 	}
-	_, err := e.svc.Approve(ctx, held.ID, "operator:alice")
+	_, err := e.svc.Approve(ctx, held.ID, "staff:alice")
 	if !errors.Is(err, payouts.ErrPayeeIneligible) || !errors.Is(err, identity.ErrAccountSuspended) {
 		t.Fatalf("approve for a suspended account: %v", err)
 	}
@@ -66,8 +66,10 @@ func TestApprove_IsRefusedWhileTheAccountCannotBePaid(t *testing.T) {
 	if _, err := e.pool.Exec(ctx, `UPDATE identity.users SET status = 'active' WHERE id = $1`, u); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := e.svc.Approve(ctx, held.ID, "operator:alice"); err != nil {
-		t.Fatal(err)
+	for _, who := range []string{"staff:alice", "staff:bob"} {
+		if _, err := e.svc.Approve(ctx, held.ID, who); err != nil {
+			t.Fatal(err)
+		}
 	}
 	if st := e.run(t, held.ID); st != "succeeded" {
 		t.Fatalf("approved once reinstated: %s", st)
@@ -84,8 +86,10 @@ func TestApprove_IsRefusedWhileTheAccountCannotBePaid(t *testing.T) {
 	if _, err := e.pool.Exec(ctx, `UPDATE identity.users SET status = 'active' WHERE id = $1`, u); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := e.svc.Approve(ctx, again.ID, "operator:alice"); err != nil {
-		t.Fatal(err)
+	for _, who := range []string{"staff:alice", "staff:bob"} {
+		if _, err := e.svc.Approve(ctx, again.ID, who); err != nil {
+			t.Fatal(err)
+		}
 	}
 	if st := e.run(t, again.ID); st != "succeeded" {
 		t.Fatalf("released: %s", st)

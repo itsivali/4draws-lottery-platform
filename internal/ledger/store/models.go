@@ -468,6 +468,12 @@ type PaymentsStkOrphanCallback struct {
 	ReceivedAt        pgtype.Timestamptz
 }
 
+type PayoutsApproval struct {
+	PayoutID   string
+	Staff      string
+	ApprovedAt pgtype.Timestamptz
+}
+
 type PayoutsB2cCallback struct {
 	ID         string
 	Kind       string
@@ -514,6 +520,16 @@ type PayoutsReconciliationRun struct {
 	RanAt  pgtype.Timestamptz
 	Ok     bool
 	Report []byte
+}
+
+type PayoutsSettlementProposal struct {
+	ID         int64
+	PayoutID   string
+	Paid       bool
+	Receipt    *string
+	Reason     *string
+	Staff      string
+	ProposedAt pgtype.Timestamptz
 }
 
 type PlatformIdempotencyKey struct {

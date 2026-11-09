@@ -10,7 +10,7 @@ deleted. They reach KRA through **remittance batches**, prepared by one person a
    no gaps. The batch records its control totals (events, gross, tax, first and last event) and the SHA-256 of its file.
 
    ```sh
-   go run ./cmd/lotteryctl tax batch -operator <alice's staff id>
+   go run ./cmd/lotteryctl tax batch -operator <alice's back-office email>
    go run ./cmd/lotteryctl tax file -batch 7 > kra-withholding-batch-7.jsonl
    ```
 
@@ -21,7 +21,7 @@ deleted. They reach KRA through **remittance batches**, prepared by one person a
 3. **Record the remittance** (a **different** operator from the preparer):
 
    ```sh
-   go run ./cmd/lotteryctl tax remit -batch 7 -prn 2026XXXXXXXX -amount 340 -operator <bob's staff id>
+   go run ./cmd/lotteryctl tax remit -batch 7 -prn 2026XXXXXXXX -amount 340 -operator <bob's back-office email>
    ```
 
    This is refused if the amount is not exactly the batch's tax, if the same person prepared the batch, if the PRN is

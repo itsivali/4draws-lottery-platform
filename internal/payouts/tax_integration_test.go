@@ -86,15 +86,15 @@ func (e *env) paidPrizes(t *testing.T, amounts ...int64) {
 func TestTaxBatches_PreparedByOnePersonRemittedByAnotherAndPostedOnce(t *testing.T) {
 	ctx := context.Background()
 	e := setup(t)
-	if _, _, err := e.svc.PrepareBatch(ctx, "operator:alice", 100); !errors.Is(err, payouts.ErrNothingToBatch) {
+	if _, _, err := e.svc.PrepareBatch(ctx, "staff:alice", 100); !errors.Is(err, payouts.ErrNothingToBatch) {
 		t.Fatalf("empty batch: %v", err)
 	}
 	e.paidPrizes(t, 105, 63) // tax 21 + 13
 	if _, _, err := e.svc.PrepareBatch(ctx, " ", 100); !errors.Is(err, payouts.ErrOperator) {
 		t.Fatalf("no operator: %v", err)
 	}
-	b, file, err := e.svc.PrepareBatch(ctx, "operator:alice", 100)
-	if err != nil || b.No != 1 || b.Events != 2 || b.TaxKES != 34 || b.GrossKES != 168 || b.PreparedBy != "operator:alice" || b.PRN != "" {
+	b, file, err := e.svc.PrepareBatch(ctx, "staff:alice", 100)
+	if err != nil || b.No != 1 || b.Events != 2 || b.TaxKES != 34 || b.GrossKES != 168 || b.PreparedBy != "staff:alice" || b.PRN != "" {
 		t.Fatalf("batch %+v %v", b, err)
 	}
 	if sum := sha256.Sum256(file); hex.EncodeToString(sum[:]) != b.SHA256 {
@@ -118,11 +118,11 @@ func TestTaxBatches_PreparedByOnePersonRemittedByAnotherAndPostedOnce(t *testing
 		amount  int64
 		want    error
 	}{
-		"the preparer":  {1, "PRN-1", "operator:alice", 34, payouts.ErrSamePerson},
-		"short":         {1, "PRN-1", "operator:bob", 33, payouts.ErrRemittanceAmount},
-		"no prn":        {1, " ", "operator:bob", 34, payouts.ErrOperator},
+		"the preparer":  {1, "PRN-1", "staff:alice", 34, payouts.ErrSamePerson},
+		"short":         {1, "PRN-1", "staff:bob", 33, payouts.ErrRemittanceAmount},
+		"no prn":        {1, " ", "staff:bob", 34, payouts.ErrOperator},
 		"no operator":   {1, "PRN-1", "", 34, payouts.ErrOperator},
-		"unknown batch": {7, "PRN-1", "operator:bob", 34, payouts.ErrNotFound},
+		"unknown batch": {7, "PRN-1", "staff:bob", 34, payouts.ErrNotFound},
 	} {
 		if _, err := e.svc.RecordRemittance(ctx, tc.no, tc.prn, tc.amount, tc.op); !errors.Is(err, tc.want) {
 			t.Errorf("%s: %v, want %v", name, err, tc.want)
@@ -131,14 +131,14 @@ func TestTaxBatches_PreparedByOnePersonRemittedByAnotherAndPostedOnce(t *testing
 	if e.account(t, "TAX_PAYABLE") != 34 {
 		t.Fatalf("a refused remittance moved tax: %d", e.account(t, "TAX_PAYABLE"))
 	}
-	r, err := e.svc.RecordRemittance(ctx, 1, " PRN-1 ", 34, "operator:bob")
-	if err != nil || r.PRN != "PRN-1" || r.RemittedBy != "operator:bob" || r.RemittedAt == nil {
+	r, err := e.svc.RecordRemittance(ctx, 1, " PRN-1 ", 34, "staff:bob")
+	if err != nil || r.PRN != "PRN-1" || r.RemittedBy != "staff:bob" || r.RemittedAt == nil {
 		t.Fatalf("remit %+v %v", r, err)
 	}
 	if e.account(t, "TAX_PAYABLE") != 0 || e.account(t, "OPERATOR_BANK") != 34 {
 		t.Fatalf("tax %d bank %d", e.account(t, "TAX_PAYABLE"), e.account(t, "OPERATOR_BANK"))
 	}
-	if _, err := e.svc.RecordRemittance(ctx, 1, "PRN-2", 34, "operator:bob"); !errors.Is(err, payouts.ErrRemitted) {
+	if _, err := e.svc.RecordRemittance(ctx, 1, "PRN-2", 34, "staff:bob"); !errors.Is(err, payouts.ErrRemitted) {
 		t.Fatalf("remitted twice: %v", err)
 	}
 	rep := e.reconcileOK(t)
@@ -147,11 +147,11 @@ func TestTaxBatches_PreparedByOnePersonRemittedByAnotherAndPostedOnce(t *testing
 	}
 	// the next batch is numbered 2 and cannot reuse a PRN
 	e.paidPrizes(t, 50)
-	b2, _, err := e.svc.PrepareBatch(ctx, "operator:alice", 100)
+	b2, _, err := e.svc.PrepareBatch(ctx, "staff:alice", 100)
 	if err != nil || b2.No != 2 || b2.TaxKES != 10 {
 		t.Fatalf("second batch %+v %v", b2, err)
 	}
-	if _, err := e.svc.RecordRemittance(ctx, 2, "PRN-1", 10, "operator:bob"); !errors.Is(err, payouts.ErrPRNUsed) {
+	if _, err := e.svc.RecordRemittance(ctx, 2, "PRN-1", 10, "staff:bob"); !errors.Is(err, payouts.ErrPRNUsed) {
 		t.Fatalf("PRN reused: %v", err)
 	}
 	if list, err := e.svc.Batches(ctx, 10); err != nil || len(list) != 2 || list[0].No != 2 {
@@ -169,7 +169,7 @@ func TestTaxBatches_TheDatabaseKeepsBatchesAndEventsAsTheyWere(t *testing.T) {
 	ctx := context.Background()
 	e := setup(t)
 	e.paidPrizes(t, 105)
-	b, _, err := e.svc.PrepareBatch(ctx, "operator:alice", 100)
+	b, _, err := e.svc.PrepareBatch(ctx, "staff:alice", 100)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -186,7 +186,7 @@ func TestTaxBatches_TheDatabaseKeepsBatchesAndEventsAsTheyWere(t *testing.T) {
 			t.Errorf("%s: accepted", name)
 		}
 	}
-	if _, err := e.svc.RecordRemittance(ctx, b.No, "PRN-9", b.TaxKES, "operator:bob"); err != nil {
+	if _, err := e.svc.RecordRemittance(ctx, b.No, "PRN-9", b.TaxKES, "staff:bob"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := e.pool.Exec(ctx, `UPDATE audit.kra_batches SET prn = 'other' WHERE id = $1`, b.ID); err == nil {
@@ -198,7 +198,7 @@ func TestTaxBatches_AlteredEventsAreCaughtAndNeverRemitted(t *testing.T) {
 	ctx := context.Background()
 	e := setup(t)
 	e.paidPrizes(t, 105, 63)
-	b, _, err := e.svc.PrepareBatch(ctx, "operator:alice", 100)
+	b, _, err := e.svc.PrepareBatch(ctx, "staff:alice", 100)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -206,7 +206,7 @@ func TestTaxBatches_AlteredEventsAreCaughtAndNeverRemitted(t *testing.T) {
 	if _, _, err := e.svc.BatchFile(ctx, b.No); !errors.Is(err, payouts.ErrBatchAltered) {
 		t.Fatalf("altered file: %v", err)
 	}
-	if _, err := e.svc.RecordRemittance(ctx, b.No, "PRN-1", b.TaxKES, "operator:bob"); !errors.Is(err, payouts.ErrBatchAltered) {
+	if _, err := e.svc.RecordRemittance(ctx, b.No, "PRN-1", b.TaxKES, "staff:bob"); !errors.Is(err, payouts.ErrBatchAltered) {
 		t.Fatalf("remitted an altered batch: %v", err)
 	}
 	r, err := e.svc.Reconcile(ctx)
@@ -239,18 +239,18 @@ func TestTaxBatches_AFailureMidBatchLeavesEverythingUnbatched(t *testing.T) {
 	flaky := &flakyClock{inner: e.clk}
 	ls := ledger.NewStore()
 	broken := payouts.NewService(e.pool, flaky, nil, e.q, nil, wallet.NewService(ls), ls, audit.NewWriter(), payouts.Config{}, wallet.ErrInsufficientFunds)
-	if _, _, err := broken.PrepareBatch(ctx, "operator:alice", 100); err == nil {
+	if _, _, err := broken.PrepareBatch(ctx, "staff:alice", 100); err == nil {
 		t.Fatal("a batch without a clock")
 	}
 	if list, _ := e.svc.Batches(ctx, 10); len(list) != 0 {
 		t.Fatalf("batches %+v", list)
 	}
-	b, _, err := e.svc.PrepareBatch(ctx, "operator:alice", 100)
+	b, _, err := e.svc.PrepareBatch(ctx, "staff:alice", 100)
 	if err != nil || b.No != 1 || b.Events != 1 {
 		t.Fatalf("batch after the failure %+v %v", b, err)
 	}
 	flaky.left.Store(0)
-	if _, err := broken.RecordRemittance(ctx, 1, "PRN-1", b.TaxKES, "operator:bob"); err == nil {
+	if _, err := broken.RecordRemittance(ctx, 1, "PRN-1", b.TaxKES, "staff:bob"); err == nil {
 		t.Fatal("remitted without a clock")
 	}
 	if e.account(t, "TAX_PAYABLE") != b.TaxKES {

@@ -245,3 +245,20 @@ SELECT
 SELECT msisdn::text FROM payments.payments
 WHERE user_id = $1 AND status = 'credited' AND msisdn IS NOT NULL
 ORDER BY created_at DESC, id DESC LIMIT 1;
+
+-- name: InsertApproval :execrows
+-- One staff member's approval of a held payout; a second approval by the same person changes nothing (ADR 0032).
+INSERT INTO payouts.approvals (payout_id, staff, approved_at) VALUES (sqlc.arg(payout_id), sqlc.arg(staff), sqlc.arg(at))
+ON CONFLICT DO NOTHING;
+
+-- name: Approvals :many
+SELECT staff FROM payouts.approvals WHERE payout_id = $1 ORDER BY approved_at, staff;
+
+-- name: InsertSettlementProposal :exec
+INSERT INTO payouts.settlement_proposals (payout_id, paid, receipt, reason, staff, proposed_at)
+VALUES (sqlc.arg(payout_id), sqlc.arg(paid), sqlc.narg(receipt), sqlc.narg(reason), sqlc.arg(staff), sqlc.arg(at));
+
+-- name: LatestSettlementProposal :one
+-- The open proposal for a manual payout: the latest one.
+SELECT paid, receipt, reason, staff, proposed_at FROM payouts.settlement_proposals
+WHERE payout_id = $1 ORDER BY id DESC LIMIT 1;

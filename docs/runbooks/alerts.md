@@ -50,7 +50,7 @@ every page of the back office.
 
 ```sh
 go run ./cmd/lotteryctl alerts list [-kind topup.unconfirmed] [-state open|acknowledged|resolved|all]   # -all is -state all
-go run ./cmd/lotteryctl alerts ack -alert <id> -note "what was found and done" -operator <staff id>
+go run ./cmd/lotteryctl alerts ack -alert <id> -note "what was found and done" -operator <your back-office email>
 go run ./cmd/lotteryctl alerts watch          # run the checks and send what is due now
 ```
 
@@ -64,7 +64,7 @@ later clean run does not close it. Only a person closes it:
 ```sh
 go run ./cmd/lotteryctl alerts list              # open alerts
 go run ./cmd/lotteryctl draws reconcile          # or payments / game / payouts reconcile: what is wrong
-go run ./cmd/lotteryctl alerts ack -alert <id> -note "what was found and done" -operator <alice's staff id>
+go run ./cmd/lotteryctl alerts ack -alert <id> -note "what was found and done" -operator <alice's back-office email>
 ```
 
 Acknowledging is audited with the note. For other pages it only stops the reminders; they stay open until their

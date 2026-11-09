@@ -47,7 +47,18 @@ export function PayoutsPage() {
     },
     {
       id: 'state', header: 'State', accessorFn: (p) => p.state,
-      cell: ({ row }) => <div className="grid justify-items-start gap-1"><Pill tone={tone(row.original.state)}>{row.original.state}</Pill>{row.original.reason ? <span className="text-sm text-muted-foreground">{row.original.reason}</span> : null}</div>,
+      cell: ({ row }) => {
+        const p = row.original
+        const approvers = [...(p.refund ? [p.refund.requested_by] : []), ...(p.approvals ?? [])]
+        return (
+          <div className="grid justify-items-start gap-1">
+            <Pill tone={tone(p.state)}>{p.state}</Pill>
+            {p.reason ? <span className="text-sm text-muted-foreground">{p.reason}</span> : null}
+            {p.state === 'held' && approvers.length > 0 ? <span className="text-sm">{p.approvals?.length ? <>Approved by {p.approvals.map((a) => <Mono key={a}>{a}</Mono>)}</> : 'Asked for by the admin'}; one more person approves it</span> : null}
+            {p.proposal ? <span className="text-sm">Proposed by <Mono>{p.proposal.by}</Mono>: {p.proposal.paid ? <>paid, receipt <Mono>{p.proposal.receipt}</Mono></> : <>not paid ({p.proposal.reason})</>}; a second person confirms it</span> : null}
+          </div>
+        )
+      },
     },
     { id: 'created', header: 'Created', accessorFn: (p) => p.created_at, cell: ({ row }) => <span className="text-muted-foreground">{eat(row.original.created_at)}</span> },
     {
@@ -55,15 +66,22 @@ export function PayoutsPage() {
       cell: ({ row }) => {
         const p = row.original
         if (!operator) return null
+        const mine = `staff:${me.id}`
+        const approvers = [...(p.refund ? [p.refund.requested_by] : []), ...(p.approvals ?? [])]
+        const approvedByMe = approvers.includes(mine)
+        const last = approvers.length >= 1
         const dangerOutline = 'border-destructive/50 text-destructive hover:bg-destructive/10 hover:text-destructive'
         return (
           <Actions>
             {p.state === 'held' ? (
               <>
-                <Button type="button" size="sm" disabled={busy} onClick={() => {
-                  ask({ title: `Approve ${kes(p.net_kes)}?`, body: <p>It is sent through M-Pesa now.</p>, confirmLabel: 'Approve and send', success: 'Approved; it is being sent.',
-                    act: () => api.post(`/v1/staff/payouts/${p.id}/approve`) })
-                }}>Approve</Button>
+                <Button type="button" size="sm" disabled={busy || approvedByMe} title={approvedByMe ? 'A second person must approve it' : undefined} onClick={() => {
+                  ask(last
+                    ? { title: `Approve ${kes(p.net_kes)}?`, body: <p>The second approval: it is sent through M-Pesa now.</p>, confirmLabel: 'Approve and send', success: 'Approved; it is being sent.',
+                      act: () => api.post(`/v1/staff/payouts/${p.id}/approve`) }
+                    : { title: `Approve ${kes(p.net_kes)}?`, body: <p>The first of two approvals: nothing is sent until a second staff member approves it too.</p>, confirmLabel: 'Approve', success: 'Approved. A second person approves it before it is sent.',
+                      act: () => api.post(`/v1/staff/payouts/${p.id}/approve`) })
+                }}>{approvedByMe ? 'You approved' : 'Approve'}</Button>
                 <Button type="button" size="sm" variant="outline" className={dangerOutline} disabled={busy} onClick={() => {
                   ask({ title: `Reject ${kes(p.net_kes)}?`, body: <p>A withdrawal’s amount returns to the player’s wallet.</p>,
                     fields: [{ name: 'reason', label: 'Reason', required: true }], confirmLabel: 'Reject', danger: true, success: 'Rejected.',
@@ -74,13 +92,13 @@ export function PayoutsPage() {
             {p.state === 'manual' ? (
               <>
                 <Button type="button" size="sm" disabled={busy} onClick={() => {
-                  ask({ title: 'Paid according to the statement?', body: <p>Record the M-Pesa receipt from the statement.</p>,
-                    fields: [{ name: 'receipt', label: 'M-Pesa receipt', required: true }], confirmLabel: 'Record as paid', success: 'Recorded as paid.',
+                  ask({ title: 'Paid according to the statement?', body: <p>Record the M-Pesa receipt from the statement. It is settled when a second person records the same receipt.</p>,
+                    fields: [{ name: 'receipt', label: 'M-Pesa receipt', required: true }], confirmLabel: 'Record as paid', success: 'Recorded. It is settled once two people agree.',
                     act: (v) => api.post(`/v1/staff/payouts/${p.id}/settle`, { paid: true, receipt: v.receipt }) })
                 }}>Paid</Button>
                 <Button type="button" size="sm" variant="outline" className={dangerOutline} disabled={busy} onClick={() => {
                   ask({ title: 'Not paid according to the statement?', body: <p>A withdrawal’s amount returns to the wallet; a prize returns to its pool.</p>,
-                    fields: [{ name: 'reason', label: 'What the statement shows', required: true }], confirmLabel: 'Record as not paid', danger: true, success: 'Recorded as not paid.',
+                    fields: [{ name: 'reason', label: 'What the statement shows', required: true }], confirmLabel: 'Record as not paid', danger: true, success: 'Recorded. It is settled once two people agree.',
                     act: (v) => api.post(`/v1/staff/payouts/${p.id}/settle`, { paid: false, reason: v.reason }) })
                 }}>Not paid</Button>
               </>
@@ -89,12 +107,13 @@ export function PayoutsPage() {
         )
       },
     },
-  ], [api, ask, busy, operator])
+  ], [api, ask, busy, operator, me.id])
 
   return (
     <section>
       <PageHeader title="Payouts">
-        Large withdrawals wait for approval. A payout whose M-Pesa answer was unclear is settled from the M-Pesa statement.
+        Large withdrawals wait for two different people to approve them. A payout whose M-Pesa answer was unclear is settled from
+        the M-Pesa statement, by one person proposing and a second confirming.
       </PageHeader>
       <Tabs value={state} onValueChange={setState}>
         <TabsList aria-label="Payout state" className="h-auto flex-wrap">

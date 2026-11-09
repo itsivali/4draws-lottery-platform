@@ -53,6 +53,10 @@ export interface Payout {
   reason?: string
   /** a refund to source (ADR 0031): why, which admin asked, and the number that paid in */
   refund?: { reason: string; requested_by: string; msisdn: string }
+  /** a held payout: who approved it so far; two different people release it (ADR 0032) */
+  approvals?: string[]
+  /** a manual payout: the settlement one person proposed, waiting for a second to confirm it (ADR 0032) */
+  proposal?: { paid: boolean; receipt?: string; reason?: string; by: string; at: string }
   created_at: string
 }
 

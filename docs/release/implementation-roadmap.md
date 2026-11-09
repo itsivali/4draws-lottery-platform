@@ -34,7 +34,7 @@ submission; P2 hardens.
 | ID-03 | P1 | S3 | No status history; self-exclusion keeps sessions | Append-only history; exclusion revokes sessions | — | done (S3b, ADR 0030) |
 | ID-04 | P1 | S3 | Balances that can't be paid have no exit | Staff refund-to-source with reason and audit | — | done (S3c, ADR 0031) |
 | ID-05 | P1 | S3 | No jurisdiction signal | Country recorded; non-KE refused in `live` | REG-01 | done (S3c, ADR 0031) |
-| OPS-01 | P1 | S4 | Single-person payout and settle powers; CLI official spoofing | Second person enforced in the API and CLI | — | not_started |
+| OPS-01 | P1 | S4 | Single-person payout and settle powers; CLI official spoofing | Second person enforced in the API and CLI | — | done (ADR 0032) |
 | AML-01 | P1 | S5 | No transaction monitoring or cases | Configurable rules raise cases; holds honoured | ID-02 | not_started |
 | AND-01 | P0 (store) | S6 | Release signed with debug key; versionCode fixed | Release fails without upload key; build number from CI | — | not_started |
 | IOS-01 | P0 (store) | S7 | No privacy manifest, URL types, export flag | Present and correct | — | not_started |

@@ -23,6 +23,30 @@ func (q *Queries) AccountBalance(ctx context.Context, code string) (int64, error
 	return column_1, err
 }
 
+const approvals = `-- name: Approvals :many
+SELECT staff FROM payouts.approvals WHERE payout_id = $1 ORDER BY approved_at, staff
+`
+
+func (q *Queries) Approvals(ctx context.Context, payoutID string) ([]string, error) {
+	rows, err := q.db.Query(ctx, approvals, payoutID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var staff string
+		if err := rows.Scan(&staff); err != nil {
+			return nil, err
+		}
+		items = append(items, staff)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const approvePayout = `-- name: ApprovePayout :exec
 UPDATE payouts.payouts SET status = 'pending', reason = NULL, approved_by = $1, updated_at = $2
 WHERE id = $3 AND status = 'held'
@@ -158,6 +182,26 @@ func (q *Queries) GetPayout(ctx context.Context, id string) (PayoutsPayout, erro
 		&i.RefundRequestedBy,
 	)
 	return i, err
+}
+
+const insertApproval = `-- name: InsertApproval :execrows
+INSERT INTO payouts.approvals (payout_id, staff, approved_at) VALUES ($1, $2, $3)
+ON CONFLICT DO NOTHING
+`
+
+type InsertApprovalParams struct {
+	PayoutID string
+	Staff    string
+	At       time.Time
+}
+
+// One staff member's approval of a held payout; a second approval by the same person changes nothing (ADR 0032).
+func (q *Queries) InsertApproval(ctx context.Context, arg InsertApprovalParams) (int64, error) {
+	result, err := q.db.Exec(ctx, insertApproval, arg.PayoutID, arg.Staff, arg.At)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const insertCallback = `-- name: InsertCallback :exec
@@ -308,6 +352,32 @@ type InsertReconciliationRunParams struct {
 
 func (q *Queries) InsertReconciliationRun(ctx context.Context, arg InsertReconciliationRunParams) error {
 	_, err := q.db.Exec(ctx, insertReconciliationRun, arg.RanAt, arg.Ok, arg.Report)
+	return err
+}
+
+const insertSettlementProposal = `-- name: InsertSettlementProposal :exec
+INSERT INTO payouts.settlement_proposals (payout_id, paid, receipt, reason, staff, proposed_at)
+VALUES ($1, $2, $3, $4, $5, $6)
+`
+
+type InsertSettlementProposalParams struct {
+	PayoutID string
+	Paid     bool
+	Receipt  *string
+	Reason   *string
+	Staff    string
+	At       time.Time
+}
+
+func (q *Queries) InsertSettlementProposal(ctx context.Context, arg InsertSettlementProposalParams) error {
+	_, err := q.db.Exec(ctx, insertSettlementProposal,
+		arg.PayoutID,
+		arg.Paid,
+		arg.Receipt,
+		arg.Reason,
+		arg.Staff,
+		arg.At,
+	)
 	return err
 }
 
@@ -499,6 +569,33 @@ func (q *Queries) KRAEventMismatch(ctx context.Context) ([]string, error) {
 		return nil, err
 	}
 	return items, nil
+}
+
+const latestSettlementProposal = `-- name: LatestSettlementProposal :one
+SELECT paid, receipt, reason, staff, proposed_at FROM payouts.settlement_proposals
+WHERE payout_id = $1 ORDER BY id DESC LIMIT 1
+`
+
+type LatestSettlementProposalRow struct {
+	Paid       bool
+	Receipt    *string
+	Reason     *string
+	Staff      string
+	ProposedAt time.Time
+}
+
+// The open proposal for a manual payout: the latest one.
+func (q *Queries) LatestSettlementProposal(ctx context.Context, payoutID string) (LatestSettlementProposalRow, error) {
+	row := q.db.QueryRow(ctx, latestSettlementProposal, payoutID)
+	var i LatestSettlementProposalRow
+	err := row.Scan(
+		&i.Paid,
+		&i.Receipt,
+		&i.Reason,
+		&i.Staff,
+		&i.ProposedAt,
+	)
+	return i, err
 }
 
 const livePayoutTotals = `-- name: LivePayoutTotals :one

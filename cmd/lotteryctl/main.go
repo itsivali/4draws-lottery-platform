@@ -1,7 +1,7 @@
 // Command lotteryctl is the admin CLI: migrations and the payments operator actions (reverse a top-up M-Pesa took
 // back, resolve an unconfirmed top-up from the statement, credit or refund a paybill payment held in suspense, check an
-// unverified paybill payment again, run the internal reconciliation), manual KYC review and the emergency staff password. It needs DATABASE_URL; operator actions are
-// audited as staff "operator:<name>". Registering the paybill URLs and simulating a sandbox payment need the api's
+// unverified paybill payment again, run the internal reconciliation), manual KYC review and the emergency staff password. It needs DATABASE_URL; operator actions
+// (-operator EMAIL) sign the staff member in with their back-office password and are audited as staff "staff:<id>" (ADR 0032). Registering the paybill URLs and simulating a sandbox payment need the api's
 // Daraja configuration.
 package main
 
@@ -15,7 +15,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"regexp"
 	"strings"
 	"time"
 
@@ -47,40 +46,40 @@ import (
 const usage = `usage:
   lotteryctl migrate up|down
   lotteryctl payments reconcile
-  lotteryctl payments reverse -receipt R -reason TEXT -operator NAME
-  lotteryctl payments resolve -payment ID -receipt R -amount KES -operator NAME
-  lotteryctl payments suspense-credit -receipt R -user ID -operator NAME
-  lotteryctl payments suspense-refund -receipt R -refund-ref REF -operator NAME
-  lotteryctl payments c2b-recheck -receipt R -operator NAME
+  lotteryctl payments reverse -receipt R -reason TEXT -operator EMAIL
+  lotteryctl payments resolve -payment ID -receipt R -amount KES -operator EMAIL
+  lotteryctl payments suspense-credit -receipt R -user ID -operator EMAIL
+  lotteryctl payments suspense-refund -receipt R -refund-ref REF -operator EMAIL
+  lotteryctl payments c2b-recheck -receipt R -operator EMAIL
   lotteryctl payments c2b-register
   lotteryctl payments c2b-simulate -amount KES -msisdn 2547XXXXXXXX -account ACCOUNT
-  lotteryctl kyc pending -operator NAME
-  lotteryctl kyc approve|reject -user ID -reason TEXT -operator NAME
+  lotteryctl kyc pending -operator EMAIL
+  lotteryctl kyc approve|reject -user ID -reason TEXT -operator EMAIL
   lotteryctl game reconcile
   lotteryctl game simulate [-days N] [-slots N] [-lucky N] [-price KES]   (no database needed)
   lotteryctl draws list
   lotteryctl draws show -draw ID
-  lotteryctl draws sign|approve -draw ID -operator NAME
-  lotteryctl draws void -draw ID -reason TEXT -operator NAME
+  lotteryctl draws sign|approve -draw ID -operator EMAIL
+  lotteryctl draws void -draw ID -reason TEXT -operator EMAIL
   lotteryctl draws entries -draw ID     (the full entry list as JSON lines, for tools/verifier draw -entries)
   lotteryctl draws reconcile
   lotteryctl draws overdue
   lotteryctl payouts list -state held|manual|sent|timed_out|result_received|pending|succeeded|failed
-  lotteryctl payouts approve -payout ID -operator NAME
-  lotteryctl payouts reject -payout ID -reason TEXT -operator NAME
-  lotteryctl payouts settle-paid -payout ID -receipt R -operator NAME        (a manual payout found on the statement)
-  lotteryctl payouts settle-failed -payout ID -reason TEXT -operator NAME    (a manual payout not on the statement)
-  lotteryctl payouts retry-prize -result ID -operator NAME                   (a prize whose payout failed)
+  lotteryctl payouts approve -payout ID -operator EMAIL
+  lotteryctl payouts reject -payout ID -reason TEXT -operator EMAIL
+  lotteryctl payouts settle-paid -payout ID -receipt R -operator EMAIL        (a manual payout found on the statement)
+  lotteryctl payouts settle-failed -payout ID -reason TEXT -operator EMAIL    (a manual payout not on the statement)
+  lotteryctl payouts retry-prize -result ID -operator EMAIL                   (a prize whose payout failed)
   lotteryctl payouts reconcile
-  lotteryctl tax batch -operator NAME                    (freeze the withholding not yet batched into the next numbered batch)
+  lotteryctl tax batch -operator EMAIL                    (freeze the withholding not yet batched into the next numbered batch)
   lotteryctl tax file -batch N                           (the batch's file, rebuilt and checked against its SHA-256)
-  lotteryctl tax remit -batch N -prn PRN -amount KES -operator NAME   (record the KRA payment; not the preparer)
+  lotteryctl tax remit -batch N -prn PRN -amount KES -operator EMAIL   (record the KRA payment; not the preparer)
   lotteryctl tax batches
   lotteryctl alerts list [-all] [-kind K] [-state open|acknowledged|resolved|all]   (-all is -state all)
-  lotteryctl alerts ack -alert ID -note TEXT -operator NAME   (stops reminders; closes a payout freeze)
+  lotteryctl alerts ack -alert ID -note TEXT -operator EMAIL   (stops reminders; closes a payout freeze)
   lotteryctl alerts watch                                (run the checks and send what is due now)
   lotteryctl compliance status                          (the operating mode as recorded, live requests waiting, the latest changes)
-  lotteryctl compliance stop -reason TEXT -operator NAME   (emergency: stop top-ups, plays, withdrawals and payouts; an admin
+  lotteryctl compliance stop -reason TEXT -operator EMAIL   (emergency: stop top-ups, plays, withdrawals and payouts; an admin
                                                          resumes in the back office, where going live takes two admins)
   lotteryctl staff password -email E [-password P] [-admin]   (emergency: a temporary back-office password for E, read
                                                               from stdin without -password; -admin also makes E an
@@ -161,7 +160,7 @@ func parse(args []string) (command, error) {
 	fs := flag.NewFlagSet(c.name, flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	fs.StringVar(&c.receipt, "receipt", "", "M-Pesa receipt")
-	fs.StringVar(&c.operator, "operator", "", "your staff id: the uuid of your staff account (audited as staff:<id>)")
+	fs.StringVar(&c.operator, "operator", "", "your back-office email address: you are asked for your password, and the action is audited as staff:<your id>")
 	fs.StringVar(&c.reason, "reason", "", "why the top-up was reversed")
 	fs.StringVar(&c.payment, "payment", "", "payment id")
 	fs.StringVar(&c.user, "user", "", "player (user id) to credit")
@@ -206,17 +205,16 @@ func parse(args []string) (command, error) {
 		return command{}, bad
 	}
 	if c.operator != "" {
-		// the staff member's id (their member id in the back office's Staff page), recorded as the back office records it, so a two-person rule
-		// (draw sign-off, KRA remittance) cannot be met by one person acting once here and once in the back office
-		if !staffID.MatchString(c.operator) {
-			return command{}, errors.New("-operator must be your staff id (the uuid of your staff account), not a name")
+		// the staff member's back-office email address: run signs them in with their password and records the action
+		// under their staff id, as the back office does, so a two-person rule (payout approval and settlement, draw
+		// sign-off, KRA remittance) is met only by two people who each proved who they are (ADR 0032)
+		c.operator = strings.ToLower(strings.TrimSpace(c.operator))
+		if !strings.Contains(c.operator, "@") {
+			return command{}, errors.New("-operator is your back-office email address; you are asked for your password")
 		}
-		c.operator = "staff:" + c.operator
 	}
 	return c, nil
 }
-
-var staffID = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 
 func main() {
 	cmd, err := parse(os.Args[1:])
@@ -243,6 +241,15 @@ func run(ctx context.Context, cmd command, out io.Writer) error {
 		return db.MigrateUp(ctx, cfg.DatabaseURL)
 	case "migrate down":
 		return db.MigrateDown(ctx, cfg.DatabaseURL)
+	}
+
+	if cmd.operator != "" {
+		op, done, err := signIn(ctx, cfg, cmd.operator)
+		if err != nil {
+			return err
+		}
+		defer done()
+		cmd.operator = op
 	}
 
 	switch cmd.name {

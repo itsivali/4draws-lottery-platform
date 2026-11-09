@@ -1,5 +1,5 @@
 import type { ColumnDef } from '@tanstack/react-table'
-import { Download, KeyRound, Search, Undo2, UserRound, UserRoundCheck, UserRoundX } from 'lucide-react'
+import { Ban, Download, KeyRound, Search, Undo2, UserRound, UserRoundCheck, UserRoundX } from 'lucide-react'
 import { useCallback, useMemo, useState, type ReactNode } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { ProblemError } from '../api'
@@ -83,6 +83,31 @@ function playerActions(p: Player, post: (path: string, body: unknown) => Promise
         }}><UserRoundCheck aria-hidden="true" /> Reinstate</Button>
       )}
     </>
+  )
+}
+
+/**
+ * A self-exclusion the player asked staff for, by phone or in person (ADR 0032). It is the player's own exclusion:
+ * nobody can lift or shorten it afterwards, staff included.
+ */
+function selfExcludeAction(p: PlayerTimeline['player'], restricted: boolean, post: (path: string, body: unknown) => Promise<unknown>, ask: (s: ActionSpec) => void, busy: boolean): ReactNode {
+  if (p.status === 'closed' || restricted) return null
+  const who = msisdn(p.msisdn)
+  return (
+    <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => {
+      ask({
+        title: `Self-exclude ${who}?`,
+        body: <p>Only at the player’s own request, after checking it is them (name and ID number shown here). Play and top-ups stop, every session ends, and nobody can lift or shorten it, you included. They can still withdraw their balance.</p>,
+        fields: [
+          { name: 'term', label: 'For how long', type: 'radio', required: true, options: [
+            { value: '6m', label: '6 months' }, { value: '1y', label: '1 year' }, { value: 'permanent', label: 'Permanently' },
+          ] },
+          { name: 'reason', label: 'How they asked (goes in the audit log)', required: true },
+        ],
+        confirmLabel: 'Self-exclude', danger: true, success: `${who} is self-excluded.`,
+        act: (v) => post(`/v1/staff/players/${p.user_id}/self-exclusion`, { term: v.term, reason: v.reason }),
+      })
+    }}><Ban aria-hidden="true" /> Record self-exclusion</Button>
   )
 }
 
@@ -285,6 +310,7 @@ function PlayerSheet({ id, tick, post, ask, busy }: { id: string; tick: number; 
           <>
             <div className="flex flex-wrap gap-2">
               {playerActions(p, post, ask, busy)}
+              {selfExcludeAction(p, t.limits.restriction?.kind === 'self_exclusion', post, ask, busy)}
               {admin ? refundAction(p, t.wallet.balance_kes, post, ask, busy) : null}
               <Button type="button" size="sm" variant="outline" disabled={exporting} onClick={() => void download()}>
                 <Download aria-hidden="true" />{exporting ? 'Preparing…' : 'Download player pack (CSV)'}

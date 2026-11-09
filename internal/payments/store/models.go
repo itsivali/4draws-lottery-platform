@@ -470,6 +470,12 @@ type PaymentsStkOrphanCallback struct {
 	ReceivedAt        time.Time
 }
 
+type PayoutsApproval struct {
+	PayoutID   string
+	Staff      string
+	ApprovedAt time.Time
+}
+
 type PayoutsB2cCallback struct {
 	ID         string
 	Kind       string
@@ -516,6 +522,16 @@ type PayoutsReconciliationRun struct {
 	RanAt  time.Time
 	Ok     bool
 	Report []byte
+}
+
+type PayoutsSettlementProposal struct {
+	ID         int64
+	PayoutID   string
+	Paid       bool
+	Receipt    *string
+	Reason     *string
+	Staff      string
+	ProposedAt time.Time
 }
 
 type PlatformIdempotencyKey struct {

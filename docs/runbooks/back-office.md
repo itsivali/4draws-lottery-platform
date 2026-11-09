@@ -2,7 +2,8 @@
 
 The back office (`apps/backoffice`) is how staff run the operations that `lotteryctl` performs (ADR 0013, 0018). Every
 action is checked against the staff member's role by the API and audited as `staff:<id>`. `lotteryctl` still works for
-emergencies (`-operator <your staff id>`, audited as `staff:<id>` like the back office).
+emergencies (`-operator <your back-office email>`: it asks for your back-office password, signs you in and audits the
+action as `staff:<id>` like the back office; ADR 0032).
 
 ## Sign-in and roles
 

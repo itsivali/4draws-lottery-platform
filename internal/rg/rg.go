@@ -5,6 +5,7 @@ package rg
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -185,6 +186,20 @@ func (s *Service) Timeout(ctx context.Context, userID, duration string) error {
 
 // SelfExclude blocks the player for 6 months, 1 year or permanently, and ends every session they have (WithSessionEnder).
 func (s *Service) SelfExclude(ctx context.Context, userID, term string) error {
+	return s.selfExclude(ctx, userID, term, audit.Event{ActorType: audit.Player, ActorID: userID})
+}
+
+// SelfExcludeFor records a self-exclusion a player asked staff for (by phone, in person; ADR 0032), audited as the
+// staff member with the reason. It is the player's exclusion, with the same terms and effects; nobody can lift or
+// shorten it, staff included.
+func (s *Service) SelfExcludeFor(ctx context.Context, userID, term, staff, reason string) error {
+	if strings.TrimSpace(staff) == "" || strings.TrimSpace(reason) == "" {
+		return ErrReasonRequired
+	}
+	return s.selfExclude(ctx, userID, term, audit.Event{ActorType: audit.Staff, ActorID: staff, Details: map[string]any{"reason": strings.TrimSpace(reason)}})
+}
+
+func (s *Service) selfExclude(ctx context.Context, userID, term string, actor audit.Event) error {
 	var end func(time.Time) *time.Time
 	switch term {
 	case "6m":
@@ -196,10 +211,17 @@ func (s *Service) SelfExclude(ctx context.Context, userID, term string) error {
 	default:
 		return ErrInvalidDuration
 	}
-	return s.restrict(ctx, userID, KindSelfExclusion, "rg.self_exclusion", term, end)
+	return s.restrictAs(ctx, userID, KindSelfExclusion, "rg.self_exclusion", term, end, actor)
 }
 
+// ErrReasonRequired: staff recording a player's request must say who and why.
+var ErrReasonRequired = errors.New("rg: a staff member and a reason are required")
+
 func (s *Service) restrict(ctx context.Context, userID, kind, action, term string, end func(time.Time) *time.Time) error {
+	return s.restrictAs(ctx, userID, kind, action, term, end, audit.Event{ActorType: audit.Player, ActorID: userID})
+}
+
+func (s *Service) restrictAs(ctx context.Context, userID, kind, action, term string, end func(time.Time) *time.Time, actor audit.Event) error {
 	return pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		now, err := s.clk.Now(ctx, tx)
 		if err != nil {
@@ -214,8 +236,12 @@ func (s *Service) restrict(ctx context.Context, userID, kind, action, term strin
 				return err
 			}
 		}
-		return s.audit.Record(ctx, tx, audit.Event{ActorType: audit.Player, ActorID: userID, Action: action, EntityType: "user", EntityID: userID,
-			Details: map[string]any{"term": term}})
+		details := map[string]any{"term": term}
+		for k, v := range actor.Details {
+			details[k] = v
+		}
+		actor.Action, actor.EntityType, actor.EntityID, actor.Details = action, "user", userID, details
+		return s.audit.Record(ctx, tx, actor)
 	})
 }
 

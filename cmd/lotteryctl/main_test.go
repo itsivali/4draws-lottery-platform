@@ -8,8 +8,8 @@ import (
 	"testing"
 )
 
-// opID is a staff member's id (their Keycloak subject), as -operator takes it.
-const opID = "0192f000-0000-7000-8000-00000000a11c"
+// opID is a staff member's back-office email address, as -operator takes it (ADR 0032: run signs them in).
+const opID = "ops@example.com"
 
 func TestParse(t *testing.T) {
 	tests := []struct {
@@ -23,13 +23,13 @@ func TestParse(t *testing.T) {
 		{[]string{"migrate", "sideways"}, command{}, true},
 		{[]string{"payments", "reconcile"}, command{name: "payments reconcile"}, false},
 		{[]string{"payments", "reverse", "-receipt", "TJK1AB2CD3", "-reason", "dispute upheld", "-operator", opID},
-			command{name: "payments reverse", receipt: "TJK1AB2CD3", reason: "dispute upheld", operator: "staff:" + opID}, false},
+			command{name: "payments reverse", receipt: "TJK1AB2CD3", reason: "dispute upheld", operator: opID}, false},
 		{[]string{"payments", "reverse", "-receipt", "R", "-operator", opID}, command{}, true}, // no reason
 		{[]string{"payments", "reverse", "-receipt", "R", "-reason", "x"}, command{}, true},    // no operator
 		{[]string{"payments", "reverse", "-reason", "x", "-operator", opID}, command{}, true},  // no receipt
 		{[]string{"payments", "reverse", "-receipt", "R", "-reason", "x", "-operator", opID, "extra"}, command{}, true},
 		{[]string{"payments", "resolve", "-payment", "0192f000-0000-7000-8000-000000000001", "-receipt", "TJK1", "-amount", "150", "-operator", opID},
-			command{name: "payments resolve", payment: "0192f000-0000-7000-8000-000000000001", receipt: "TJK1", amount: 150, operator: "staff:" + opID}, false},
+			command{name: "payments resolve", payment: "0192f000-0000-7000-8000-000000000001", receipt: "TJK1", amount: 150, operator: opID}, false},
 		{[]string{"payments", "resolve", "-payment", "p", "-receipt", "R", "-operator", opID}, command{}, true},                   // no amount
 		{[]string{"payments", "resolve", "-payment", "p", "-receipt", "R", "-amount", "abc", "-operator", opID}, command{}, true}, // bad amount
 		{[]string{"payments", "refund"}, command{}, true},
@@ -37,12 +37,12 @@ func TestParse(t *testing.T) {
 		{[]string{"staff", "password", "-email", "o@example.com", "-password", "a long temporary one"}, command{name: "staff password", email: "o@example.com", password: "a long temporary one"}, false},
 		{[]string{"staff", "password", "-password", "a long temporary one"}, command{}, true}, // no email
 		{[]string{"payments", "suspense-credit", "-receipt", "MCC0000001", "-user", "u-1", "-operator", opID},
-			command{name: "payments suspense-credit", receipt: "MCC0000001", user: "u-1", operator: "staff:" + opID}, false},
+			command{name: "payments suspense-credit", receipt: "MCC0000001", user: "u-1", operator: opID}, false},
 		{[]string{"payments", "suspense-credit", "-receipt", "R", "-operator", opID}, command{}, true}, // no user
 		{[]string{"payments", "suspense-refund", "-receipt", "R", "-refund-ref", "TJK9", "-operator", opID},
-			command{name: "payments suspense-refund", receipt: "R", refundRef: "TJK9", operator: "staff:" + opID}, false},
+			command{name: "payments suspense-refund", receipt: "R", refundRef: "TJK9", operator: opID}, false},
 		{[]string{"payments", "suspense-refund", "-receipt", "R", "-operator", opID}, command{}, true}, // no refund reference
-		{[]string{"payments", "c2b-recheck", "-receipt", "R", "-operator", opID}, command{name: "payments c2b-recheck", receipt: "R", operator: "staff:" + opID}, false},
+		{[]string{"payments", "c2b-recheck", "-receipt", "R", "-operator", opID}, command{name: "payments c2b-recheck", receipt: "R", operator: opID}, false},
 		{[]string{"payments", "c2b-recheck", "-receipt", "R", "-operator", opID, "-amount", "5"}, command{}, true}, // flag it does not take
 		{[]string{"payments", "c2b-register"}, command{name: "payments c2b-register"}, false},
 		{[]string{"payments", "c2b-register", "-receipt", "R"}, command{}, true},
@@ -50,10 +50,10 @@ func TestParse(t *testing.T) {
 			command{name: "payments c2b-simulate", amount: 50, msisdn: "254708374149", account: "0712345678"}, false},
 		{[]string{"payments", "c2b-simulate", "-amount", "-5", "-msisdn", "254708374149", "-account", "x"}, command{}, true},
 		{[]string{"payments", "reconcile", "-operator", opID}, command{}, true},
-		{[]string{"kyc", "pending", "-operator", opID}, command{name: "kyc pending", operator: "staff:" + opID}, false},
+		{[]string{"kyc", "pending", "-operator", opID}, command{name: "kyc pending", operator: opID}, false},
 		{[]string{"kyc", "pending"}, command{}, true},
 		{[]string{"kyc", "approve", "-user", "u-1", "-reason", "ID checked", "-operator", opID},
-			command{name: "kyc approve", user: "u-1", reason: "ID checked", operator: "staff:" + opID}, false},
+			command{name: "kyc approve", user: "u-1", reason: "ID checked", operator: opID}, false},
 		{[]string{"kyc", "reject", "-user", "u-1", "-operator", opID}, command{}, true}, // no reason
 		{[]string{"kyc", "promote", "-user", "u-1"}, command{}, true},
 		{[]string{"game", "reconcile"}, command{name: "game reconcile"}, false},
@@ -65,12 +65,12 @@ func TestParse(t *testing.T) {
 		{[]string{"game", "simulate", "-operator", opID}, command{}, true},
 		{[]string{"draws", "list"}, command{name: "draws list"}, false},
 		{[]string{"draws", "show", "-draw", "d-1"}, command{name: "draws show", draw: "d-1"}, false},
-		{[]string{"draws", "sign", "-draw", "d-1", "-operator", opID}, command{name: "draws sign", draw: "d-1", operator: "staff:" + opID}, false},
+		{[]string{"draws", "sign", "-draw", "d-1", "-operator", opID}, command{name: "draws sign", draw: "d-1", operator: opID}, false},
 		{[]string{"draws", "sign", "-draw", "d-1"}, command{}, true}, // no official
-		{[]string{"draws", "approve", "-draw", "d-1", "-operator", opID}, command{name: "draws approve", draw: "d-1", operator: "staff:" + opID}, false},
+		{[]string{"draws", "approve", "-draw", "d-1", "-operator", opID}, command{name: "draws approve", draw: "d-1", operator: opID}, false},
 		{[]string{"draws", "void", "-draw", "d-1", "-operator", opID}, command{}, true}, // no reason
 		{[]string{"draws", "void", "-draw", "d-1", "-reason", "wrong entries", "-operator", opID},
-			command{name: "draws void", draw: "d-1", reason: "wrong entries", operator: "staff:" + opID}, false},
+			command{name: "draws void", draw: "d-1", reason: "wrong entries", operator: opID}, false},
 		{[]string{"draws", "entries", "-draw", "d-1"}, command{name: "draws entries", draw: "d-1"}, false},
 		{[]string{"draws", "entries"}, command{}, true}, // which draw
 		{[]string{"draws", "reconcile"}, command{name: "draws reconcile"}, false},
@@ -78,16 +78,16 @@ func TestParse(t *testing.T) {
 		{[]string{"draws", "overdue", "-draw", "d-1"}, command{}, true}, // takes no flags
 		{[]string{"payouts", "list", "-state", "manual"}, command{name: "payouts list", state: "manual"}, false},
 		{[]string{"payouts", "list"}, command{}, true},
-		{[]string{"payouts", "retry-prize", "-result", "r-1", "-operator", opID}, command{name: "payouts retry-prize", result: "r-1", operator: "staff:" + opID}, false},
+		{[]string{"payouts", "retry-prize", "-result", "r-1", "-operator", opID}, command{name: "payouts retry-prize", result: "r-1", operator: opID}, false},
 		{[]string{"payouts", "retry-prize", "-result", "r-1"}, command{}, true}, // no operator
 		{[]string{"payouts", "reconcile"}, command{name: "payouts reconcile"}, false},
 		{[]string{"tax", "export"}, command{}, true},
-		{[]string{"tax", "batch", "-operator", opID}, command{name: "tax batch", operator: "staff:" + opID}, false},
+		{[]string{"tax", "batch", "-operator", opID}, command{name: "tax batch", operator: opID}, false},
 		{[]string{"tax", "batch"}, command{}, true},
 		{[]string{"tax", "file", "-batch", "3"}, command{name: "tax file", batch: 3}, false},
 		{[]string{"tax", "file", "-batch", "-1"}, command{}, true},
 		{[]string{"tax", "remit", "-batch", "3", "-prn", "2026X", "-amount", "340", "-operator", opID},
-			command{name: "tax remit", batch: 3, prn: "2026X", amount: 340, operator: "staff:" + opID}, false},
+			command{name: "tax remit", batch: 3, prn: "2026X", amount: 340, operator: opID}, false},
 		{[]string{"tax", "remit", "-batch", "3", "-prn", "2026X", "-operator", opID}, command{}, true},
 		{[]string{"tax", "batches"}, command{name: "tax batches"}, false},
 		{[]string{"alerts", "list"}, command{name: "alerts list"}, false},
@@ -95,17 +95,17 @@ func TestParse(t *testing.T) {
 		{[]string{"alerts", "list", "-kind", "jobs.failing", "-state", "resolved"}, command{name: "alerts list", kind: "jobs.failing", state: "resolved"}, false},
 		{[]string{"alerts", "ack", "-alert", "a1", "-note", "x", "-operator", opID, "-kind", "k"}, command{}, true},
 		{[]string{"alerts", "ack", "-alert", "a1", "-note", "checked", "-operator", opID},
-			command{name: "alerts ack", alert: "a1", note: "checked", operator: "staff:" + opID}, false},
+			command{name: "alerts ack", alert: "a1", note: "checked", operator: opID}, false},
 		{[]string{"alerts", "ack", "-alert", "a1", "-operator", opID}, command{}, true},
 		{[]string{"alerts", "watch", "-all"}, command{}, true},
 		{[]string{"tax", "export", "-state", "x"}, command{}, true},
-		{[]string{"payouts", "approve", "-payout", "p-1", "-operator", opID}, command{name: "payouts approve", payout: "p-1", operator: "staff:" + opID}, false},
+		{[]string{"payouts", "approve", "-payout", "p-1", "-operator", opID}, command{name: "payouts approve", payout: "p-1", operator: opID}, false},
 		{[]string{"payouts", "reject", "-payout", "p-1", "-operator", opID}, command{}, true}, // no reason
 		{[]string{"payouts", "settle-paid", "-payout", "p-1", "-receipt", "MBC0000001", "-operator", opID},
-			command{name: "payouts settle-paid", payout: "p-1", receipt: "MBC0000001", operator: "staff:" + opID}, false},
+			command{name: "payouts settle-paid", payout: "p-1", receipt: "MBC0000001", operator: opID}, false},
 		{[]string{"payouts", "settle-paid", "-payout", "p-1", "-operator", opID}, command{}, true}, // no receipt
 		{[]string{"payouts", "settle-failed", "-payout", "p-1", "-reason", "not on the statement", "-operator", opID},
-			command{name: "payouts settle-failed", payout: "p-1", reason: "not on the statement", operator: "staff:" + opID}, false},
+			command{name: "payouts settle-failed", payout: "p-1", reason: "not on the statement", operator: opID}, false},
 		{[]string{"bogus"}, command{}, true},
 		{nil, command{}, true},
 	}
@@ -136,14 +136,15 @@ func TestRun_GameSimulateNeedsNoDatabase(t *testing.T) {
 	}
 }
 
-func TestParse_TheOperatorIsAStaffIDSoBothPathsOfATwoPersonRuleNameTheSamePerson(t *testing.T) {
-	for _, bad := range []string{"willis", "operator:willis", "staff:" + opID, "0192F000-0000-7000-8000-00000000A11C"} {
+// ADR 0032: -operator names the back-office account to sign in as; a bare name or a typed staff id proves nothing.
+func TestParse_TheOperatorIsTheEmailAddressToSignInWith(t *testing.T) {
+	for _, bad := range []string{"willis", "operator:willis", "0192f000-0000-7000-8000-00000000a11c"} {
 		if _, err := parse([]string{"payments", "reverse", "-receipt", "R", "-reason", "x", "-operator", bad}); err == nil {
 			t.Errorf("-operator %q accepted", bad)
 		}
 	}
-	c, err := parse([]string{"payments", "reverse", "-receipt", "R", "-reason", "x", "-operator", opID})
-	if err != nil || c.operator != "staff:"+opID {
+	c, err := parse([]string{"payments", "reverse", "-receipt", "R", "-reason", "x", "-operator", " Ops@Example.com "})
+	if err != nil || c.operator != opID {
 		t.Fatalf("%+v %v", c, err)
 	}
 }

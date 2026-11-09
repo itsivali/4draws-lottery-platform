@@ -121,6 +121,7 @@ var staffRoutes = []staffRoute{
 	{http.MethodPost, "/v1/staff/players/0192f000-0000-7000-8000-000000000001/reinstate", staff.Staff},
 	{http.MethodPost, "/v1/staff/players/0192f000-0000-7000-8000-000000000001/password", staff.Staff},
 	{http.MethodPost, "/v1/staff/players/0192f000-0000-7000-8000-000000000001/refund", staff.Admin},
+	{http.MethodPost, "/v1/staff/players/0192f000-0000-7000-8000-000000000001/self-exclusion", staff.Staff},
 	{http.MethodGet, "/v1/staff/activity/export", staff.Admin},
 	{http.MethodGet, "/v1/staff/players/0192f000-0000-7000-8000-000000000001", staff.Staff},
 	{http.MethodGet, "/v1/staff/players/0192f000-0000-7000-8000-000000000001/export", staff.Staff},
@@ -348,8 +349,15 @@ func TestStaffAPI_AnAccountClosesOnlyOnceItsMoneyIsOut(t *testing.T) {
 	for _, st := range []string{"sending", "sent", "manual"} {
 		e.ownerExec(t, `UPDATE payouts.payouts SET status = $2 WHERE id = $1`, payout, st)
 	}
-	op := e.member(staff.Staff)
-	if r := e.do(t, http.MethodPost, "/v1/staff/payouts/"+payout+"/settle", op, map[string]any{"paid": true, "receipt": "SGH0000001"}); r.Code != http.StatusOK || r.Body["status"] != "succeeded" && r.Body["status"] != "paid" {
+	// ADR 0032: one staff member proposes, a second confirms
+	op, second := e.member(staff.Staff), e.member(staff.Staff)
+	if r := e.do(t, http.MethodPost, "/v1/staff/payouts/"+payout+"/settle", op, map[string]any{"paid": true, "receipt": "SGH0000001"}); r.Code != http.StatusOK || r.Body["state"] != "manual" || r.Body["proposal"] == nil {
+		t.Fatalf("proposal: %d %s", r.Code, r.Raw)
+	}
+	if r := e.do(t, http.MethodPost, "/v1/staff/payouts/"+payout+"/settle", op, map[string]any{"paid": true, "receipt": "SGH0000001"}); r.Code != http.StatusConflict || r.Body["title"] == nil {
+		t.Fatalf("confirmed by the proposer: %d %s", r.Code, r.Raw)
+	}
+	if r := e.do(t, http.MethodPost, "/v1/staff/payouts/"+payout+"/settle", second, map[string]any{"paid": true, "receipt": "SGH0000001"}); r.Code != http.StatusOK || r.Body["state"] != "succeeded" {
 		t.Fatalf("settle: %d %s", r.Code, r.Raw)
 	}
 	r = e.do(t, http.MethodPost, "/v1/staff/closures/"+user+"/close", support, map[string]any{})
@@ -388,8 +396,10 @@ func TestStaffAPI_AnAccountWithAStakeInADrawIsNotClosedUntilTheDrawIsSettled(t *
 	for _, st := range []string{"sending", "sent", "manual"} {
 		e.ownerExec(t, `UPDATE payouts.payouts SET status = $2 WHERE id = $1`, w.Body["id"], st)
 	}
-	if r := e.do(t, http.MethodPost, "/v1/staff/payouts/"+w.Body["id"].(string)+"/settle", e.member(staff.Staff), map[string]any{"paid": true, "receipt": "SGH0000002"}); r.Code != http.StatusOK {
-		t.Fatalf("settle: %d %s", r.Code, r.Raw)
+	for _, m := range []string{e.member(staff.Staff), e.member(staff.Staff)} { // two people (ADR 0032)
+		if r := e.do(t, http.MethodPost, "/v1/staff/payouts/"+w.Body["id"].(string)+"/settle", m, map[string]any{"paid": true, "receipt": "SGH0000002"}); r.Code != http.StatusOK {
+			t.Fatalf("settle: %d %s", r.Code, r.Raw)
+		}
 	}
 	e.do(t, http.MethodPost, "/v1/account/closure", s.access, nil)
 	r := e.do(t, http.MethodPost, "/v1/staff/closures/"+user+"/close", e.member(staff.Staff), map[string]any{})

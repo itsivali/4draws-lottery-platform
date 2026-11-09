@@ -2,7 +2,8 @@
 
 Operators use the back office (`docs/runbooks/back-office.md`, *Payments*), audited as `staff:<id>`. The `lotteryctl`
 commands below remain for emergencies, with the database URL (the external URL from the Render dashboard; never commit
-it); they take `-operator <your staff id>` and are audited as `staff:<id>`.
+it); they take `-operator <your back-office email>`, ask for your back-office password (members who sign in only with
+Google or Apple set one first) and are audited as `staff:<id>` (ADR 0032).
 
 ```sh
 export DATABASE_URL='postgres://...'          # external connection string of lottery-db
@@ -112,7 +113,7 @@ Money is credited only against an M-Pesa receipt. For a top-up that settled uncr
 From the command line:
 
 ```sh
-go run ./cmd/lotteryctl payments resolve -payment <payment id> -receipt <M-Pesa receipt> -amount <KES on the statement> -operator <your staff id>
+go run ./cmd/lotteryctl payments resolve -payment <payment id> -receipt <M-Pesa receipt> -amount <KES on the statement> -operator <your back-office email>
 ```
 
 Credits exactly like a confirmed callback (excise booked to the operator, debt recovered, phone proved). Refused if the
@@ -122,7 +123,7 @@ already credited another payment. A receipt credits one payment, ever.
 ## Reverse a top-up M-Pesa took back
 
 ```sh
-go run ./cmd/lotteryctl payments reverse -receipt <M-Pesa receipt> -reason "<why>" -operator <your staff id>
+go run ./cmd/lotteryctl payments reverse -receipt <M-Pesa receipt> -reason "<why>" -operator <your back-office email>
 ```
 
 Takes back what the player received (ADR 0007): from the wallet as far as it goes, the rest as debt. Refused unless
@@ -156,7 +157,7 @@ POST to `/hooks/c2b/<secret>/validate` must answer `C2B00016`) before suspecting
 After identifying the payer (for example they call support and prove the account is theirs):
 
 ```sh
-go run ./cmd/lotteryctl payments suspense-credit -receipt <M-Pesa receipt> -user <user id> -operator <your staff id>
+go run ./cmd/lotteryctl payments suspense-credit -receipt <M-Pesa receipt> -user <user id> -operator <your back-office email>
 ```
 
 Refused for players who may not receive it (KYC, suspended, time-out or self-exclusion, deposit limit): refund those.
@@ -167,7 +168,7 @@ It credits like any deposit (excise booked to the operator, debt recovered) and 
 Send the money back from the M-Pesa org portal (or a B2C payment), then record it with that transaction's reference:
 
 ```sh
-go run ./cmd/lotteryctl payments suspense-refund -receipt <M-Pesa receipt> -refund-ref <refund reference> -operator <your staff id>
+go run ./cmd/lotteryctl payments suspense-refund -receipt <M-Pesa receipt> -refund-ref <refund reference> -operator <your back-office email>
 ```
 
 Self-excluded and timed-out players' payments must be refunded, not credited.
@@ -175,7 +176,7 @@ Self-excluded and timed-out players' payments must be refunded, not credited.
 ### Check an unverified paybill payment again
 
 ```sh
-go run ./cmd/lotteryctl payments c2b-recheck -receipt <M-Pesa receipt> -operator <your staff id>
+go run ./cmd/lotteryctl payments c2b-recheck -receipt <M-Pesa receipt> -operator <your back-office email>
 ```
 
 The worker asks Daraja again within a minute or two.

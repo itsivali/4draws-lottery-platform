@@ -508,6 +508,24 @@ describe('players: the timeline (owner, 2026-10-31)', () => {
     expect(JSON.parse(post?.[1]?.body as string)).toEqual({ reason: 'identity refused by the registry' })
   })
 
+  it('staff record a self-exclusion the player asked for, with its term and how they asked (ADR 0032)', async () => {
+    const asked: URL[] = []
+    const base = server(asked)
+    const { fetch } = renderSignedIn(<PlayersPage />, { roles: ['staff'], path: '/players?player=u1', route: (method, url) =>
+      method === 'POST' && url.pathname === '/v1/staff/players/u1/self-exclusion' ? { status: 200, body: { user_id: 'u1', term: '1y' } } : base(method, url) })
+    const user = userEvent.setup()
+    const sheet = await screen.findByRole('dialog', { name: 'Amina Otieno' })
+    await user.click(within(sheet).getByRole('button', { name: 'Record self-exclusion' }))
+    const dialog = screen.getByRole('dialog', { name: 'Self-exclude 0796 992 457?' })
+    expect(within(dialog).getByText(/nobody can lift or shorten it/)).toBeInTheDocument()
+    await user.click(within(dialog).getByLabelText('1 year'))
+    await user.type(within(dialog).getByLabelText(/^How they asked/), 'called from the registered number, ID checked')
+    await user.click(within(dialog).getByRole('button', { name: 'Self-exclude' }))
+    expect(await screen.findByRole('status')).toHaveTextContent('0796 992 457 is self-excluded.')
+    const post = fetch.mock.calls.find(([, init]) => init?.method === 'POST')
+    expect(JSON.parse(post?.[1]?.body as string)).toEqual({ term: '1y', reason: 'called from the registered number, ID checked' })
+  })
+
   it('opens from a ?player= link, and closing it keeps the list', async () => {
     const asked: URL[] = []
     renderSignedIn(<PlayersPage />, { roles: ['staff'], route: server(asked), path: '/players?player=u1' })
@@ -560,6 +578,35 @@ describe('paging', () => {
     await waitFor(() => { expect(asked).toEqual(['first', 'd2', 'first', 'd2']) })
     await waitFor(() => { expect(within(table).getAllByRole('row')).toHaveLength(4) })
     expect(fetch.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1)
+  })
+
+  it('two people approve a held payout and settle a manual one (ADR 0032)', async () => {
+    const base = { user_id: 'u1', kind: 'withdrawal', status: 'processing', gross_kes: 120000, tax_kes: 0, net_kes: 120000, debt_repaid_kes: 0, created_at: '2026-10-26T09:00:00Z' }
+    const { fetch } = renderSignedIn(<PayoutsPage />, {
+      roles: ['staff'],
+      route: (method, url) => {
+        if (method === 'POST') return { status: 200, body: { ...base, id: 'po-new', state: 'held', approvals: ['staff:s1'] } }
+        if (url.searchParams.get('state') === 'manual') return { status: 200, body: { payouts: [{ ...base, id: 'po-m', state: 'manual', proposal: { paid: true, receipt: 'SGH0000001', by: 'staff:s2', at: '2026-10-26T10:00:00Z' } }], next_after: null } }
+        return { status: 200, body: { payouts: [
+          { ...base, id: 'po-new', state: 'held' },
+          { ...base, id: 'po-mine', state: 'held', approvals: ['staff:s1'] },
+        ], next_after: null } }
+      },
+    })
+    const user = userEvent.setup()
+    const fresh = await screen.findByRole('row', { name: /po-new/ })
+    await user.click(within(fresh).getByRole('button', { name: 'Approve' }))
+    const dialog = screen.getByRole('dialog', { name: 'Approve KES 120,000?' })
+    expect(within(dialog).getByText(/first of two approvals/)).toBeInTheDocument()
+    await user.click(within(dialog).getByRole('button', { name: 'Approve' }))
+    expect(await screen.findByRole('status')).toHaveTextContent('A second person approves it before it is sent.')
+    expect(fetch.mock.calls.some(([u, init]) => init?.method === 'POST' && (typeof u === 'string' ? u : u instanceof URL ? u.href : u.url).endsWith('/v1/staff/payouts/po-new/approve'))).toBe(true)
+    const mine = screen.getByRole('row', { name: /po-mine/ })
+    expect(within(mine).getByRole('button', { name: 'You approved' })).toBeDisabled()
+    expect(within(mine).getByText(/one more person approves it/)).toBeInTheDocument()
+    await user.click(screen.getByRole('tab', { name: 'Needs manual settlement' }))
+    expect(await screen.findByText(/a second person confirms it/)).toBeInTheDocument()
+    expect(screen.getByText('staff:s2')).toBeInTheDocument()
   })
 
   it('a held refund to source says why, who asked and where it goes (ADR 0031)', async () => {

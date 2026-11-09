@@ -124,25 +124,25 @@ func TestOperator_RefusesBadInputAndUnknownPayouts(t *testing.T) {
 	ctx := context.Background()
 	e := setup(t)
 	unknown := "0192f000-0000-7000-8000-000000000000"
-	if _, err := e.svc.Approve(ctx, unknown, "operator:a"); err == nil {
+	if _, err := e.svc.Approve(ctx, unknown, "staff:a"); err == nil {
 		t.Error("approved an unknown payout")
 	}
-	if _, err := e.svc.Reject(ctx, unknown, "operator:a", ""); err == nil {
+	if _, err := e.svc.Reject(ctx, unknown, "staff:a", ""); err == nil {
 		t.Error("rejected without a reason")
 	}
-	if _, err := e.svc.Reject(ctx, "not-a-uuid", "operator:a", "x"); err == nil {
+	if _, err := e.svc.Reject(ctx, "not-a-uuid", "staff:a", "x"); err == nil {
 		t.Error("rejected an unknown payout")
 	}
-	if _, err := e.svc.Settle(ctx, unknown, "operator:a", false, "", ""); err == nil {
+	if _, err := e.svc.Settle(ctx, unknown, "staff:a", false, "", ""); err == nil {
 		t.Error("settled without a reason")
 	}
 	u := e.player(t, 1000)
 	p := e.withdraw(t, u, 300, "k")
-	if _, err := e.svc.Approve(ctx, p.ID, "operator:a"); err == nil {
+	if _, err := e.svc.Approve(ctx, p.ID, "staff:a"); err == nil {
 		t.Error("approved a payout that was not held")
 	}
 	off := setupWith(t, false, payouts.Config{})
-	if _, err := off.svc.Approve(ctx, unknown, "operator:a"); err == nil {
+	if _, err := off.svc.Approve(ctx, unknown, "staff:a"); err == nil {
 		t.Error("approved without B2C")
 	}
 	if err := off.svc.Send(ctx, unknown); err == nil {

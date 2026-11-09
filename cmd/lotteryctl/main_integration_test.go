@@ -9,8 +9,13 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/itsivali/lottery-platform/internal/audit"
+	"github.com/itsivali/lottery-platform/internal/platform/clock"
 	"github.com/itsivali/lottery-platform/internal/platform/config"
+	"github.com/itsivali/lottery-platform/internal/platform/crypto"
+	"github.com/itsivali/lottery-platform/internal/platform/db"
 	"github.com/itsivali/lottery-platform/internal/platform/testpg"
+	"github.com/itsivali/lottery-platform/internal/staff"
 )
 
 func TestRun_PaymentsReconcilePrintsACleanReportOnAFreshDatabase(t *testing.T) {
@@ -29,8 +34,64 @@ func TestRun_PaymentsReconcilePrintsACleanReportOnAFreshDatabase(t *testing.T) {
 	if err := json.Unmarshal(out.Bytes(), &r); err != nil || !r.OK || len(r.Mismatches) != 0 {
 		t.Fatalf("report = %s (%v)", out.String(), err)
 	}
-	if err := run(context.Background(), command{name: "payments reverse", receipt: "NOPE", reason: "x", operator: "staff:" + opID}, &out); err == nil {
-		t.Fatal("reversing an unknown receipt succeeded")
+}
+
+// ADR 0032: an operator action signs the staff member in with their back-office password; the action is audited under
+// their staff id, never under a name they typed.
+func TestRun_OperatorActionsSignTheStaffMemberIn(t *testing.T) {
+	t.Setenv("DATABASE_URL", testpg.Migrated(t))
+	t.Setenv("AUTH_KEY", "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=")
+	t.Setenv("TOKEN_SEED", "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=")
+	t.Setenv("DATA_KEYS", "1:MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=")
+	t.Setenv("IDENTITY_KEY", "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=")
+	t.Setenv("VALKEY_ADDR", "valkey:6379")
+	t.Setenv("TRUSTED_PROXY_HEADER", "none")
+	for _, k := range []string{"DATA_KEY", "DARAJA_CONSUMER_KEY", "STAFF_BOOTSTRAP_ADMIN", "STAFF_BOOTSTRAP_PASSWORD"} {
+		t.Setenv(k, "")
+	}
+	ctx := context.Background()
+	var out bytes.Buffer
+	if err := run(ctx, command{name: "staff password", email: opID, password: "a long temporary phrase", admin: true}, &out); err != nil {
+		t.Fatal(err)
+	}
+	typed := "a long temporary phrase"
+	readPassword = func(string) (string, error) { return typed, nil }
+	t.Cleanup(func() { readPassword = func(string) (string, error) { return "", nil } })
+	reverse := command{name: "payments reverse", receipt: "NOPE", reason: "x", operator: opID}
+	if err := run(ctx, reverse, &out); err == nil || !strings.Contains(err.Error(), "temporary") {
+		t.Fatalf("with a temporary password: %v", err)
+	}
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	pool, err := db.Open(ctx, cfg.DatabaseURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pool.Close()
+	svc := staff.NewService(pool, clock.Postgres{}, nil, audit.NewWriter(), crypto.MAC(cfg.API.AuthKey, "staff-password-pepper"))
+	sess, err := svc.SignInWithPassword(ctx, opID, typed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.ChangePassword(ctx, sess.Member, sess.Token, typed, "my own chosen passphrase"); err != nil {
+		t.Fatal(err)
+	}
+	if err := run(ctx, reverse, &out); err == nil || !strings.Contains(err.Error(), "sign-in refused") {
+		t.Fatalf("with a wrong password: %v", err)
+	}
+	typed = "my own chosen passphrase"
+	err = run(ctx, reverse, &out)
+	if err == nil || strings.Contains(err.Error(), "sign-in") {
+		t.Fatalf("signed in, reversing an unknown receipt: %v", err)
+	}
+	var actor string
+	if err := pool.QueryRow(ctx, `SELECT actor_id FROM audit.audit_log WHERE action = 'staff.sign_in' ORDER BY id DESC LIMIT 1`).Scan(&actor); err != nil {
+		t.Fatal(err)
+	}
+	if actor != sess.Member.Operator() {
+		t.Fatalf("signed in as %q, want %q", actor, sess.Member.Operator())
 	}
 }
 

@@ -10,7 +10,7 @@ Daily, weekly, monthly and quarterly draws (phase 4, `docs/checkpoints/phase-4.m
 
    ```sh
    go run ./cmd/lotteryctl draws show -draw <id>        # entries, entry_list_hash, seed_commit, drand_round_at
-   go run ./cmd/lotteryctl draws sign -draw <id> -operator <your staff id>
+   go run ./cmd/lotteryctl draws sign -draw <id> -operator <your back-office email>
    ```
 
    A draw not signed by two officials before its round is voided and re-run automatically with the next 09:00 round.
@@ -18,12 +18,12 @@ Daily, weekly, monthly and quarterly draws (phase 4, `docs/checkpoints/phase-4.m
    then two officials approve; approval moves the pool into `PRIZE_POOL_*`:
 
    ```sh
-   go run ./cmd/lotteryctl draws approve -draw <id> -operator <your staff id>
+   go run ./cmd/lotteryctl draws approve -draw <id> -operator <your back-office email>
    ```
 
 ## Voiding
 
-Only a frozen or signed draw, and only before its round: `draws void -draw <id> -reason "<why>" -operator <your staff id>`
+Only a frozen or signed draw, and only before its round: `draws void -draw <id> -reason "<why>" -operator <your back-office email>`
 (needs the api's configuration: the re-run's seed is encrypted with `DATA_KEY`). A conducted draw cannot be voided.
 
 ## When drand is down

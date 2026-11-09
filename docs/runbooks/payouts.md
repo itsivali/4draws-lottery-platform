@@ -15,7 +15,7 @@ registering. Without the shortcode `POST /v1/payouts/withdrawals` answers 503.
 
 | State | Meaning | Who acts |
 |---|---|---|
-| held | above KES 100,000, or the account could not be paid when its turn came (reason `payee_ineligible: …`, ADR 0030): waits for an operator | operator: approve or reject |
+| held | waits for **two different** staff approvals (ADR 0032): above KES 100,000, or the account could not be paid when its turn came (reason `payee_ineligible: …`, ADR 0030): waits for an operator | operator: approve or reject |
 | pending | the send job is queued | worker |
 | sending | committed just before the B2C request | worker; if stuck it becomes timed_out, **never sent again** |
 | sent | Daraja accepted the request | worker waits for the result, then asks Transaction Status |
@@ -29,8 +29,8 @@ registering. Without the shortcode `POST /v1/payouts/withdrawals` answers 503.
 
 ```sh
 go run ./cmd/lotteryctl payouts list -state held
-go run ./cmd/lotteryctl payouts approve -payout <id> -operator <your staff id>      # needs the api's B2C configuration
-go run ./cmd/lotteryctl payouts reject -payout <id> -reason "<why>" -operator <your staff id>
+go run ./cmd/lotteryctl payouts approve -payout <id> -operator <your back-office email>      # needs the api's B2C configuration; a second person approves too
+go run ./cmd/lotteryctl payouts reject -payout <id> -reason "<why>" -operator <your back-office email>
 go run ./cmd/lotteryctl payouts list -state manual
 ```
 
@@ -43,8 +43,12 @@ wallet, a prize goes back to its pool, still owed.
 For a payout in `manual`, find it on the B2C account statement (the originator conversation id is the payout's
 `originator_conversation_id`; the amount is `net_kes`, to the payout's number):
 
-- found → `payouts settle-paid -payout <id> -receipt <receipt> -operator <your staff id>`
-- not there (and the payout is more than a day old) → `payouts settle-failed -payout <id> -reason "<why>" -operator <your staff id>`;
+Settling takes two people (ADR 0032): the first records what the statement shows (a proposal, shown on the payout), a
+second checks the statement and makes exactly the same decision, which applies it. A different decision replaces the
+proposal; the proposer cannot confirm their own.
+
+- found → `payouts settle-paid -payout <id> -receipt <receipt> -operator <your back-office email>`
+- not there (and the payout is more than a day old) → `payouts settle-failed -payout <id> -reason "<why>" -operator <your back-office email>`;
   the amount returns to the wallet.
 
 Never settle a payout as failed while it might still complete: that would refund money that left.
@@ -86,7 +90,7 @@ confirmed paid, the draw becomes `paid`.
   and the next run pays it.
 - A prize whose payout **failed** (confirmed not paid) is back in its pool and is **not** retried automatically (a number
   that cannot receive M-Pesa would loop). Check the winner's number, then:
-  `go run ./cmd/lotteryctl payouts retry-prize -result <draw result id> -operator <your staff id>`.
+  `go run ./cmd/lotteryctl payouts retry-prize -result <draw result id> -operator <your back-office email>`.
 
 ## Tax withheld (KRA)
 

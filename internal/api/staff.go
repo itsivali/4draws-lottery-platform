@@ -12,6 +12,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/itsivali/lottery-platform/internal/alerts"
 	"github.com/itsivali/lottery-platform/internal/compliance"
@@ -233,6 +234,8 @@ func (h *handlers) mountStaff(r chi.Router) {
 	// a balance the account cannot withdraw goes back to the number that paid it in (ADR 0031): an admin asks, a
 	// second staff member approves the held payout
 	r.With(admin).Post("/players/{user}/refund", h.staffRefundToSource)
+	// a player who asks staff to exclude them (ADR 0032); there is no route to lift or shorten an exclusion
+	r.With(anyStaff).Post("/players/{user}/self-exclusion", h.staffSelfExclude)
 }
 
 // needs answers 503 when the service behind a route is not configured.
@@ -323,7 +326,7 @@ func staffError(w http.ResponseWriter, err error) {
 		{payouts.ErrPayable, m{http.StatusConflict, "payable", "The account can withdraw its balance itself; a refund is only for balances it cannot"}},
 		{payouts.ErrNothingToRefund, m{http.StatusConflict, "nothing-to-refund", "The wallet holds nothing to refund"}},
 		{payouts.ErrNoSource, m{http.StatusConflict, "no-source", "No credited top-up names a number to refund to"}},
-		{payouts.ErrSameApprover, m{http.StatusConflict, "two-person-rule", "Someone other than the admin who asked for the refund must approve it"}},
+		{payouts.ErrSameApprover, m{http.StatusConflict, "two-person-rule", "A second staff member must do this: you already approved, proposed or asked for it"}},
 		{payouts.ErrInDebt, m{http.StatusConflict, "in-debt", "The player owes money from a reversed top-up; settle it first"}},
 		{payouts.ErrNotRetryable, m{http.StatusConflict, "state", "Only a prize whose payout failed can be paid again"}},
 		{payouts.ErrNothingToBatch, m{http.StatusConflict, "nothing-to-batch", "No withholding tax waits to be batched"}},
@@ -769,6 +772,34 @@ func (h *handlers) staffPayoutAction(action string) http.HandlerFunc {
 			return
 		}
 		httpx.WriteJSON(w, http.StatusOK, p)
+	}
+}
+
+func (h *handlers) staffSelfExclude(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Term   string `json:"term"`
+		Reason string `json:"reason"`
+	}
+	if !httpx.DecodeJSON(w, r, &in) {
+		return
+	}
+	if h.RG == nil {
+		unavailable(w, "Responsible gaming")
+		return
+	}
+	err := h.RG.SelfExcludeFor(r.Context(), chi.URLParam(r, "user"), in.Term, member(r).Operator(), in.Reason)
+	var pe *pgconn.PgError
+	switch {
+	case err == nil:
+		httpx.WriteJSON(w, http.StatusOK, map[string]any{"user_id": chi.URLParam(r, "user"), "term": in.Term})
+	case errors.Is(err, rg.ErrInvalidDuration):
+		httpx.WriteProblem(w, http.StatusBadRequest, "invalid-term", "The term is 6m, 1y or permanent", "")
+	case errors.Is(err, rg.ErrReasonRequired):
+		httpx.WriteProblem(w, http.StatusBadRequest, "reason-required", "A reason is required", "")
+	case errors.As(err, &pe) && (pe.Code == "22P02" || pe.Code == "23503"):
+		httpx.WriteProblem(w, http.StatusNotFound, "not-found", "No such player", "")
+	default:
+		staffError(w, err)
 	}
 }
 

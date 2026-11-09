@@ -355,8 +355,11 @@ func TestWithdrawal_AnInterruptedSendIsCheckedNeverSentAgain(t *testing.T) {
 	if st := e.run(t, p.ID); st != "manual" || len(e.mock.Payouts()) != 0 {
 		t.Fatalf("state %s, sent %d times", st, len(e.mock.Payouts()))
 	}
-	// an operator finds no payment on the statement: the money comes back
-	if _, err := e.svc.Settle(ctx, p.ID, "operator:alice", false, "", "not on the statement"); err != nil || e.balance(t, u) != 950 {
+	// an operator finds no payment on the statement and a second confirms: the money comes back
+	if _, err := e.svc.Settle(ctx, p.ID, "staff:alice", false, "", "not on the statement"); err != nil || e.balance(t, u) != 650 {
+		t.Fatalf("proposal: %v balance %d (nothing moves on one person's word)", err, e.balance(t, u))
+	}
+	if _, err := e.svc.Settle(ctx, p.ID, "staff:bob", false, "", "not on the statement either"); err != nil || e.balance(t, u) != 950 {
 		t.Fatalf("settle: %v balance %d", err, e.balance(t, u))
 	}
 }
@@ -459,17 +462,28 @@ func TestWithdrawal_LargeAmountsWaitForAnOperator(t *testing.T) {
 	if _, err := e.svc.Approve(ctx, held.ID, ""); !errors.Is(err, payouts.ErrOperator) {
 		t.Fatalf("approve without operator: %v", err)
 	}
-	if _, err := e.svc.Settle(ctx, held.ID, "operator:alice", true, "MBC0000009", ""); !errors.Is(err, payouts.ErrState) {
+	if _, err := e.svc.Settle(ctx, held.ID, "staff:alice", true, "MBC0000009", ""); !errors.Is(err, payouts.ErrState) {
 		t.Fatalf("settle a held payout: %v", err)
 	}
-	if _, err := e.svc.Approve(ctx, held.ID, "operator:alice"); err != nil {
+	// ADR 0032: two different people release it
+	one, err := e.svc.Approve(ctx, held.ID, "staff:alice")
+	if err != nil || one.State != "held" || len(one.Approvals) != 1 || len(e.q.take()) != 0 {
+		t.Fatalf("one approval: %+v %v", one, err)
+	}
+	if _, err := e.svc.Approve(ctx, held.ID, "staff:alice"); !errors.Is(err, payouts.ErrSameApprover) {
+		t.Fatalf("approved twice by one person: %v", err)
+	}
+	if _, err := e.svc.Approve(ctx, held.ID, "operator:carol"); !errors.Is(err, payouts.ErrOperator) {
+		t.Fatalf("an approver who is not a staff member: %v", err)
+	}
+	if _, err := e.svc.Approve(ctx, held.ID, "staff:bob"); err != nil {
 		t.Fatal(err)
 	}
 	if st := e.run(t, held.ID); st != "succeeded" {
 		t.Fatalf("approved: %s", st)
 	}
 	rejected := e.withdraw(t, u, 110_000, "big-2")
-	if _, err := e.svc.Reject(ctx, rejected.ID, "operator:bob", "unusual activity"); err != nil || e.balance(t, u) != 117_500 {
+	if _, err := e.svc.Reject(ctx, rejected.ID, "staff:bob", "unusual activity"); err != nil || e.balance(t, u) != 117_500 {
 		t.Fatalf("reject: %v balance %d", err, e.balance(t, u))
 	}
 	if st, _, reason := e.state(t, rejected.ID); st != "failed" || reason != "rejected: unusual activity" {
@@ -494,20 +508,38 @@ func TestWithdrawal_OperatorSettlesAManualPayoutFromTheStatement(t *testing.T) {
 	if list, _, _ := e.svc.InState(ctx, "manual", 10, ""); len(list) != 1 || list[0].ID != p.ID {
 		t.Fatalf("manual list %+v", list)
 	}
-	if _, err := e.svc.Settle(ctx, p.ID, "operator:alice", true, "", ""); !errors.Is(err, payouts.ErrReceiptRequired) {
+	if _, err := e.svc.Settle(ctx, p.ID, "staff:alice", true, "", ""); !errors.Is(err, payouts.ErrReceiptRequired) {
 		t.Fatalf("no receipt: %v", err)
 	}
-	if _, err := e.svc.Settle(ctx, p.ID, "operator:alice", true, "MBCSTMT001", ""); err != nil {
+	// ADR 0032: one person proposes, a second confirms exactly the same decision
+	got, err := e.svc.Settle(ctx, p.ID, "staff:alice", true, "MBCSTMT001", "")
+	if err != nil || got.State != "manual" || got.Proposal == nil || got.Proposal.By != "staff:alice" || got.Proposal.Receipt != "MBCSTMT001" {
+		t.Fatalf("proposal: %+v %v", got, err)
+	}
+	if _, err := e.svc.Settle(ctx, p.ID, "staff:alice", true, "MBCSTMT001", ""); !errors.Is(err, payouts.ErrSameApprover) {
+		t.Fatalf("confirmed by the proposer: %v", err)
+	}
+	// a different decision replaces the proposal; it is the one a second person must confirm
+	if got, err := e.svc.Settle(ctx, p.ID, "staff:bob", true, "MBCSTMT002", ""); err != nil || got.State != "manual" || got.Proposal.Receipt != "MBCSTMT002" {
+		t.Fatalf("a different receipt: %+v %v", got, err)
+	}
+	if _, err := e.svc.Settle(ctx, p.ID, "staff:alice", true, "MBCSTMT001", ""); err != nil {
+		t.Fatal(err)
+	}
+	if st, _, _ := e.state(t, p.ID); st != "manual" {
+		t.Fatalf("settled on a decision nobody confirmed: %s", st)
+	}
+	if _, err := e.svc.Settle(ctx, p.ID, "staff:bob", true, "MBCSTMT001", ""); err != nil {
 		t.Fatal(err)
 	}
 	if st, receipt, _ := e.state(t, p.ID); st != "succeeded" || receipt != "MBCSTMT001" || e.balance(t, u) != 650 {
 		t.Fatalf("settled %s %s balance %d", st, receipt, e.balance(t, u))
 	}
 	var by string
-	if err := e.pool.QueryRow(ctx, `SELECT settled_by FROM payouts.payouts WHERE id = $1`, p.ID).Scan(&by); err != nil || by != "operator:alice" {
+	if err := e.pool.QueryRow(ctx, `SELECT settled_by FROM payouts.payouts WHERE id = $1`, p.ID).Scan(&by); err != nil || by != "staff:bob" {
 		t.Fatalf("settled by %q %v", by, err)
 	}
-	if _, err := e.svc.Settle(ctx, p.ID, "operator:alice", false, "", "changed my mind"); !errors.Is(err, payouts.ErrState) {
+	if _, err := e.svc.Settle(ctx, p.ID, "staff:alice", false, "", "changed my mind"); !errors.Is(err, payouts.ErrState) {
 		t.Fatalf("a final payout was settled again: %v", err)
 	}
 }
@@ -784,8 +816,8 @@ func TestPayouts_AFailureMidStepLeavesNothingBehind(t *testing.T) {
 	e.q.take()
 	for name, step := range map[string]func() error{
 		"send":    func() error { return broken.Send(ctx, p.ID) },
-		"approve": func() error { _, err := broken.Approve(ctx, held.ID, "operator:a"); return err },
-		"reject":  func() error { _, err := broken.Reject(ctx, held.ID, "operator:a", "x"); return err },
+		"approve": func() error { _, err := broken.Approve(ctx, held.ID, "staff:a"); return err },
+		"reject":  func() error { _, err := broken.Reject(ctx, held.ID, "staff:a", "x"); return err },
 		"callback": func() error {
 			return broken.HandleCallback(ctx, payouts.CallbackResult, []byte(`{"Result":{"ResultCode":1,"OriginatorConversationID":"x-0000001"}}`))
 		},

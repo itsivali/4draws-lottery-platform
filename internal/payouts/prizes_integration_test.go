@@ -152,11 +152,11 @@ func TestPrizes_PaidWithTaxWithheldReportedAndTheDrawMarkedPaid(t *testing.T) {
 	}
 	// the withheld tax goes to the KRA feed once per payout, exported once
 	// the withheld tax goes to the KRA feed once per payout, batched once
-	batch, file, err := e.svc.PrepareBatch(ctx, "operator:alice", 100)
+	batch, file, err := e.svc.PrepareBatch(ctx, "staff:alice", 100)
 	if err != nil || batch.Events != 2 || batch.TaxKES != 34 {
 		t.Fatalf("batch %+v %v", batch, err)
 	}
-	if _, _, err := e.svc.PrepareBatch(ctx, "operator:alice", 100); !errors.Is(err, payouts.ErrNothingToBatch) {
+	if _, _, err := e.svc.PrepareBatch(ctx, "staff:alice", 100); !errors.Is(err, payouts.ErrNothingToBatch) {
 		t.Fatalf("second batch: %v", err)
 	}
 	if ev := batchEvents(t, file); ev[0].EventType != "withholding_tax" {
@@ -200,18 +200,18 @@ func TestPrizes_AFailedPrizeGoesBackToItsPoolAndAnOperatorPaysItAgain(t *testing
 	if _, err := e.svc.RetryPrize(ctx, results[0], ""); !errors.Is(err, payouts.ErrOperator) {
 		t.Fatalf("no operator: %v", err)
 	}
-	again, err := e.svc.RetryPrize(ctx, results[0], "operator:alice")
+	again, err := e.svc.RetryPrize(ctx, results[0], "staff:alice")
 	if err != nil || again.ID == first.ID {
 		t.Fatalf("retry %+v %v", again, err)
 	}
-	if _, err := e.svc.RetryPrize(ctx, results[0], "operator:alice"); !errors.Is(err, payouts.ErrNotRetryable) {
+	if _, err := e.svc.RetryPrize(ctx, results[0], "staff:alice"); !errors.Is(err, payouts.ErrNotRetryable) {
 		t.Fatalf("second retry while one is live: %v", err)
 	}
 	if st := e.run(t, again.ID); st != "succeeded" || e.account(t, "PRIZE_POOL_DAILY") != 0 {
 		t.Fatalf("retry %s pool %d", st, e.account(t, "PRIZE_POOL_DAILY"))
 	}
 	e.reconcileOK(t)
-	if _, err := e.svc.RetryPrize(ctx, "0192f000-0000-7000-8000-000000000000", "operator:alice"); !errors.Is(err, payouts.ErrNotFound) {
+	if _, err := e.svc.RetryPrize(ctx, "0192f000-0000-7000-8000-000000000000", "staff:alice"); !errors.Is(err, payouts.ErrNotFound) {
 		t.Fatalf("unknown prize: %v", err)
 	}
 }
@@ -234,7 +234,7 @@ func TestPrizes_WinnersWhoCannotBePaidWaitAndLargePrizesAreHeld(t *testing.T) {
 	if err := e.pool.QueryRow(ctx, `SELECT count(*) FROM payouts.payouts WHERE draw_result_id = $1`, results[2]).Scan(&n); err != nil || n != 0 {
 		t.Fatalf("suspended winner paid: %d %v", n, err)
 	}
-	if _, err := e.svc.RetryPrize(ctx, results[2], "operator:alice"); !errors.Is(err, payouts.ErrNotRetryable) {
+	if _, err := e.svc.RetryPrize(ctx, results[2], "staff:alice"); !errors.Is(err, payouts.ErrNotRetryable) {
 		t.Fatalf("retry of a prize never attempted: %v", err)
 	}
 	e.reconcileOK(t)
@@ -344,7 +344,7 @@ func TestPrizes_RefusalsAndFailuresLeaveNothingBehind(t *testing.T) {
 	}
 	// retries need B2C and a winner who can be paid
 	off := setupWith(t, false, payouts.Config{})
-	if _, err := off.svc.RetryPrize(ctx, results[0], "operator:a"); !errors.Is(err, payouts.ErrUnavailable) {
+	if _, err := off.svc.RetryPrize(ctx, results[0], "staff:a"); !errors.Is(err, payouts.ErrUnavailable) {
 		t.Fatalf("retry without b2c: %v", err)
 	}
 }
@@ -364,7 +364,7 @@ func TestPrizes_RetryRefusedForAWinnerWhoCannotBePaid(t *testing.T) {
 	if _, err := e.pool.Exec(ctx, `UPDATE identity.users SET status = 'suspended' WHERE id = $1`, a); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := e.svc.RetryPrize(ctx, results[0], "operator:a"); err == nil {
+	if _, err := e.svc.RetryPrize(ctx, results[0], "staff:a"); err == nil {
 		t.Fatal("retried a prize for a suspended winner")
 	}
 	e.reconcileOK(t)
@@ -446,7 +446,7 @@ func TestPrizes_RepayTheWinnersDebtAfterTaxBeforeAnythingIsSent(t *testing.T) {
 	}
 	e.reconcileOK(t)
 	// tax withheld on every prize is reported, the wholly repaid one too
-	_, file, err := e.svc.PrepareBatch(ctx, "operator:alice", 100)
+	_, file, err := e.svc.PrepareBatch(ctx, "staff:alice", 100)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -505,7 +505,7 @@ func TestPrizes_AFailedPrizeOwesItsDebtAgainAndTheRetryRepaysIt(t *testing.T) {
 	}); err != nil || e.debt(t, a) != 11 {
 		t.Fatalf("recovery %v debt %d", err, e.debt(t, a))
 	}
-	again, err := e.svc.RetryPrize(ctx, results[0], "operator:alice")
+	again, err := e.svc.RetryPrize(ctx, results[0], "staff:alice")
 	if err != nil || again.DebtKES != 11 || again.NetKES != 389 {
 		t.Fatalf("retry %+v %v", again, err)
 	}

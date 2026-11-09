@@ -200,6 +200,15 @@ func (s *Service) WithdrawalBounds() (minKES, maxKES int64) {
 	return s.cfg.MinWithdrawalKES, s.cfg.MaxWithdrawalKES
 }
 
+// Proposal is one staff member's settlement of a manual payout, waiting for a second to confirm it (ADR 0032).
+type Proposal struct {
+	Paid    bool      `json:"paid"`
+	Receipt string    `json:"receipt,omitempty"`
+	Reason  string    `json:"reason,omitempty"`
+	By      string    `json:"by"`
+	At      time.Time `json:"at"`
+}
+
 // Payout is what is known about a payout. Status is what the player sees; State is the internal state.
 type Payout struct {
 	ID       string `json:"id"`
@@ -214,7 +223,11 @@ type Payout struct {
 	Receipt  string `json:"receipt,omitempty"`
 	Reason   string `json:"reason,omitempty"`
 	// Refund is set on a refund to source (ADR 0031): why, and which admin asked for it. Staff views only.
-	Refund    *Refund   `json:"refund,omitempty"`
+	Refund *Refund `json:"refund,omitempty"`
+	// Approvals are the staff members who approved a held payout so far (ADR 0032; staff views only).
+	Approvals []string `json:"approvals,omitempty"`
+	// Proposal is the open settlement proposal of a manual payout, waiting for a second person (staff views only).
+	Proposal  *Proposal `json:"proposal,omitempty"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }

@@ -121,7 +121,7 @@ describe('payouts', () => {
     })
     const user = userEvent.setup()
     await user.click(await screen.findByRole('button', { name: 'Approve' }))
-    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Approve and send' }))
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Approve' }))
     expect(await screen.findByText(/No answer from the server/)).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Check again' }))
     expect(await screen.findByRole('status')).toHaveTextContent('Confirmed by the server.')

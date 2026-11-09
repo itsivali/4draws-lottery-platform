@@ -80,6 +80,13 @@ Read this first at the start of every session.
   - Sign-ups, top-ups, plays and withdrawals record the country Cloudflare reports (`GEO_COUNTRY_HEADER=CF-IPCountry`
     on Render). In `live`, everything but KE is refused, except withdrawals; `live` will not start without the header.
 
+- **Two people for payouts (ADR 0032, 2026-11-09):**
+  - A held payout is sent after two different staff approvals; a manual payout is settled when a second person
+    confirms the first one's decision (migration 00051).
+  - `lotteryctl -operator` is the back-office email address; it asks for the password and records the action under
+    the signed-in staff id.
+  - Staff can record a self-exclusion a player asks for; nothing lifts one.
+
 ## Before the API is exposed to players
 
 1. **Trusted proxy: fixed.** Measured on the live service (`docs/runbooks/trusted-proxy.md`): the rightmost

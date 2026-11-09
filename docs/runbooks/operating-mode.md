@@ -23,7 +23,7 @@ The effective mode is the lower of:
 Back office → System status → **Stop money operations**, with a reason. Or, without the back office:
 
 ```sh
-lotteryctl compliance stop -reason "what happened" -operator <your staff id>
+lotteryctl compliance stop -reason "what happened" -operator <your back-office email>
 ```
 
 The `operations.stopped` alert pages until an admin resumes. Players see "Top-ups, plays and withdrawals are paused";

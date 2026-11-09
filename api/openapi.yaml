@@ -1702,6 +1702,38 @@ paths:
         "403": { $ref: "#/components/responses/Problem" }
         "404": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
+  /v1/staff/players/{user}/self-exclusion:
+    post:
+      operationId: staffPlayerSelfExclusion
+      tags: [back-office]
+      summary: Record a self-exclusion the player asked staff for
+      description: >-
+        Role: `staff` (ADR 0032). Only at the player's own request (by phone or in person, after checking who is
+        asking). It is the player's exclusion with the same terms and effects (every session ends, play and top-ups are
+        refused, withdrawals stay open), audited as `rg.self_exclusion` under the staff member with the reason. There is
+        no way to lift or shorten an exclusion, for staff either.
+      security: [{ staffBearer: [] }]
+      parameters: [{ name: user, in: path, required: true, schema: { type: string } }, { $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [term, reason]
+              properties:
+                term: { type: string, enum: ["6m", "1y", permanent] }
+                reason: { type: string, minLength: 1 }
+      responses:
+        "200":
+          description: Recorded
+          content:
+            application/json:
+              schema: { type: object }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
   /v1/staff/players/{user}/refund:
     post:
       operationId: staffPlayerRefundToSource
@@ -2619,9 +2651,11 @@ paths:
     post:
       operationId: staffPayoutApprove
       tags: [back-office]
-      summary: Approve a held payout (it is then sent)
+      summary: Approve a held payout (two different approvals send it)
       description: >-
-        Role: `staff` (admins too). The account is checked again (ADR 0030): while it cannot be paid (suspended,
+        Role: `staff` (admins too). Two different staff members approve before it is sent (ADR 0032; the admin who
+        asked for a refund to source counts as the first). The first approval returns the payout still `held`, with
+        `approvals`; approving twice is 409 `two-person-rule`. The account is checked again (ADR 0030): while it cannot be paid (suspended,
         closed, identity no longer verified, or another number proved) the approval is refused with 409
         `payee-ineligible`, whose detail says why, and the payout stays held, to be rejected or approved later. A payout
         the send job finds unpayable also comes back to held, with a `payee_ineligible: …` reason.
@@ -2679,8 +2713,12 @@ paths:
     post:
       operationId: staffPayoutSettle
       tags: [back-office]
-      summary: Settle a payout in manual from the M-Pesa statement
-      description: "Role: `staff` (admins too)."
+      summary: Settle a payout in manual from the M-Pesa statement (two people)
+      description: >-
+        Role: `staff` (admins too). Two people settle (ADR 0032): the first call records a proposal (the payout comes
+        back still `manual`, with `proposal`); a second staff member making exactly the same decision (paid with the
+        same receipt, or not paid) applies it. A different decision replaces the proposal; the proposer confirming
+        their own is 409 `two-person-rule`.
       security: [{ staffBearer: [] }]
       parameters:
         - { $ref: "#/components/parameters/IdempotencyKey" }
