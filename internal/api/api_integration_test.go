@@ -158,7 +158,8 @@ func setupWith(t *testing.T, mutate func(*apiDeps)) *env {
 	mock := kyc.NewMock()
 	enq := &kycQueue{}
 	pay := &payQueue{}
-	dm := httptest.NewServer(darajamock.New(darajamock.Options{ConsumerKey: "ck", ConsumerSecret: "cs", ShortCode: "174379", Passkey: "pk"}))
+	dm := httptest.NewServer(darajamock.New(darajamock.Options{ConsumerKey: "ck", ConsumerSecret: "cs", ShortCode: "174379", Passkey: "pk",
+		B2CShortCode: "600992", Initiator: "i", SecurityCredential: "c"}))
 	t.Cleanup(dm.Close)
 	dc, err := daraja.New(daraja.Config{BaseURL: dm.URL, ConsumerKey: "ck", ConsumerSecret: "cs", ShortCode: "174379", Passkey: "pk",
 		CallbackURL: "http://api/hooks/mpesa/stk/" + callbackPath}, dm.Client(), clk)

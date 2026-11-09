@@ -67,8 +67,8 @@ const usage = `usage:
   lotteryctl payouts list -state held|manual|sent|timed_out|result_received|pending|succeeded|failed
   lotteryctl payouts approve -payout ID -operator EMAIL
   lotteryctl payouts reject -payout ID -reason TEXT -operator EMAIL
-  lotteryctl payouts settle-paid -payout ID -receipt R -operator EMAIL        (a manual payout found on the statement)
-  lotteryctl payouts settle-failed -payout ID -reason TEXT -operator EMAIL    (a manual payout not on the statement)
+  lotteryctl payouts settle-paid -payout ID -receipt R -operator EMAIL        (a manual payout found on the statement: M-Pesa is asked; paid once it confirms the receipt)
+  lotteryctl payouts settle-failed -payout ID -reason TEXT -operator EMAIL    (a manual payout not on the statement: a second person confirms)
   lotteryctl payouts retry-prize -result ID -operator EMAIL                   (a prize whose payout failed)
   lotteryctl payouts reconcile
   lotteryctl tax batch -operator EMAIL                    (freeze the withholding not yet batched into the next numbered batch)
@@ -544,9 +544,9 @@ func payoutsCmd(ctx context.Context, cfg config.Config, cmd command, out io.Writ
 		return err
 	}
 	var d payouts.Daraja
-	if cmd.name == "payouts approve" || cmd.name == "payouts retry-prize" {
+	if cmd.name == "payouts approve" || cmd.name == "payouts retry-prize" || cmd.name == "payouts settle-paid" {
 		if !cfg.Payments.B2CEnabled() {
-			return errors.New("this sends a payout: set the api's payments configuration with DARAJA_B2C_SHORTCODE")
+			return errors.New("this sends a payout or asks M-Pesa about one: set the api's payments configuration with DARAJA_B2C_SHORTCODE")
 		}
 		if d, err = app.NewDaraja(cfg.Payments); err != nil {
 			return err

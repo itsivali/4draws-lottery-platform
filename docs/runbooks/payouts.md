@@ -43,9 +43,15 @@ wallet, a prize goes back to its pool, still owed.
 For a payout in `manual`, find it on the B2C account statement (the originator conversation id is the payout's
 `originator_conversation_id`; the amount is `net_kes`, to the payout's number):
 
-Settling takes two people (ADR 0032): the first records what the statement shows (a proposal, shown on the payout), a
-second checks the statement and makes exactly the same decision, which applies it. A different decision replaces the
-proposal; the proposer cannot confirm their own.
+Settling (ADR 0032, 0034):
+
+- **Paid** is proved by M-Pesa only. Record the receipt you found on the statement: M-Pesa is asked about it
+  (Transaction Status from our B2C shortcode) and the payout is settled as paid only when M-Pesa confirms that receipt
+  as a completed payment of the payout's amount to the payout's number. Otherwise it stays in manual with why
+  (*not confirmed by M-Pesa: …*); record another receipt once you have checked. While M-Pesa is being asked (up to 10
+  minutes) nothing else can be recorded on the payout.
+- **Not paid** takes two people: the first records it (a proposal, shown on the payout), a second confirms it. The
+  proposer cannot confirm their own.
 
 - found → `payouts settle-paid -payout <id> -receipt <receipt> -operator <your back-office email>`
 - not there (and the payout is more than a day old) → `payouts settle-failed -payout <id> -reason "<why>" -operator <your back-office email>`;

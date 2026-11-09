@@ -64,12 +64,20 @@ func (s *Service) controls(ctx context.Context, p *Payout) error {
 		p.Approvals = a
 	case "manual":
 		prop, err := q.LatestSettlementProposal(ctx, p.ID)
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil
-		} else if err != nil {
+		switch {
+		case err == nil && !prop.Paid:
+			p.Proposal = &Proposal{Paid: prop.Paid, Reason: deref(prop.Reason), By: prop.Staff, At: prop.ProposedAt}
+		case err != nil && !errors.Is(err, pgx.ErrNoRows):
 			return err
 		}
-		p.Proposal = &Proposal{Paid: prop.Paid, Receipt: deref(prop.Receipt), Reason: deref(prop.Reason), By: prop.Staff, At: prop.ProposedAt}
+	}
+	if p.State == "manual" || p.State == "succeeded" {
+		c, err := q.LatestReceiptCheck(ctx, p.ID)
+		if err == nil {
+			p.Check = checkView(c)
+		} else if !errors.Is(err, pgx.ErrNoRows) {
+			return err
+		}
 	}
 	return nil
 }
@@ -144,11 +152,12 @@ func (s *Service) Reject(ctx context.Context, id, operator, reason string) (Payo
 	})
 }
 
-// Settle decides a payout whose outcome could not be confirmed, from the M-Pesa statement: paid (with its receipt) or
-// not paid (the money comes back). Only a payout in manual can be settled this way, and only by two people (ADR
-// 0032): the first call proposes; a second staff member making exactly the same decision (paid with the same receipt,
-// or not paid) applies it. A different decision replaces the proposal, and the person who proposed cannot confirm their
-// own (ErrSameApprover). The payout comes back with the open proposal, if any.
+// Settle decides a payout whose outcome could not be confirmed (manual), from the M-Pesa statement (ADR 0032, 0034).
+//   - Paid: the receipt is proved by M-Pesa only. It is recorded as a claim and M-Pesa is asked about it (Transaction
+//     Status); the payout is settled as paid when M-Pesa confirms that receipt as a completed payment of the payout's
+//     amount to its number, and stays manual otherwise. The payout comes back with the check, waiting for M-Pesa.
+//   - Not paid (the money comes back): two people. The first call proposes; a second staff member confirming it
+//     applies it; the proposer cannot confirm their own. Refused while a receipt check waits for M-Pesa.
 func (s *Service) Settle(ctx context.Context, id, operator string, paid bool, receipt, reason string) (Payout, error) {
 	receipt, reason = strings.TrimSpace(receipt), strings.TrimSpace(reason)
 	if paid && receipt == "" {
@@ -160,37 +169,37 @@ func (s *Service) Settle(ctx context.Context, id, operator string, paid bool, re
 	if !strings.HasPrefix(operator, "staff:") {
 		return Payout{}, ErrOperator
 	}
+	if paid {
+		return s.claimReceipt(ctx, id, operator, strings.ToUpper(receipt))
+	}
 	return s.staffTx(ctx, id, operator, []string{"manual"}, func(tx pgx.Tx, p store.PayoutsPayout) error {
 		now, err := s.clk.Now(ctx, tx)
 		if err != nil {
 			return err
 		}
 		q := store.New(tx)
+		// M-Pesa may be about to confirm a receipt: wait for its answer before deciding the money never left
+		if c, err := q.LatestReceiptCheck(ctx, p.ID); err == nil && c.Outcome == nil && now.Sub(c.RequestedAt) < ReceiptCheckWait {
+			return ErrCheckPending
+		} else if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return err
+		}
 		prev, err := q.LatestSettlementProposal(ctx, p.ID)
 		switch {
-		case err == nil && prev.Paid == paid && (!paid || deref(prev.Receipt) == receipt):
+		case err == nil && !prev.Paid:
 			if prev.Staff == operator {
 				return ErrSameApprover
 			}
 			// confirmed by a second person
-			if paid {
-				return s.succeed(ctx, tx, p, receipt, staff(operator), now)
-			}
 			return s.fail(ctx, tx, p, "settled: "+deref(prev.Reason), staff(operator), now)
 		case err != nil && !errors.Is(err, pgx.ErrNoRows):
 			return err
 		}
-		params := store.InsertSettlementProposalParams{PayoutID: p.ID, Paid: paid, Staff: operator, At: now}
-		if paid {
-			params.Receipt = &receipt
-		} else {
-			params.Reason = &reason
-		}
-		if err := q.InsertSettlementProposal(ctx, params); err != nil {
+		if err := q.InsertSettlementProposal(ctx, store.InsertSettlementProposalParams{PayoutID: p.ID, Paid: false, Reason: &reason, Staff: operator, At: now}); err != nil {
 			return err
 		}
 		return s.audit.Record(ctx, tx, audit.Event{ActorType: audit.Staff, ActorID: operator, Action: "payout.settlement_proposed", EntityType: "payout",
-			EntityID: p.ID, Details: map[string]any{"paid": paid, "receipt": receipt, "reason": reason, "replaces": err == nil}})
+			EntityID: p.ID, Details: map[string]any{"paid": false, "reason": reason}})
 	})
 }
 

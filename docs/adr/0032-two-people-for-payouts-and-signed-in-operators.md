@@ -1,6 +1,6 @@
 # 0032. Two people release and settle payouts; operators prove who they are; staff record a player's self-exclusion
 
-Status: accepted (amends 0019, 0023)
+Status: accepted (amends 0019, 0023); settling as paid amended by 0034
 Date: 2026-11-09
 
 ## Context

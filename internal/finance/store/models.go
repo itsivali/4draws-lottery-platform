@@ -517,6 +517,18 @@ type PayoutsPayout struct {
 	RefundRequestedBy        pgtype.Text
 }
 
+type PayoutsReceiptCheck struct {
+	ID               int64
+	PayoutID         string
+	Receipt          string
+	Staff            string
+	StatusOriginator pgtype.Text
+	RequestedAt      time.Time
+	Outcome          pgtype.Text
+	Detail           pgtype.Text
+	DecidedAt        pgtype.Timestamptz
+}
+
 type PayoutsReconciliationRun struct {
 	ID     string
 	RanAt  time.Time

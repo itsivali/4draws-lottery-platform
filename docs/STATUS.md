@@ -86,6 +86,8 @@ Read this first at the start of every session.
   - `lotteryctl -operator` is the back-office email address; it asks for the password and records the action under
     the signed-in staff id.
   - Staff can record a self-exclusion a player asks for; nothing lifts one.
+- **A payout's receipt is proved by M-Pesa (ADR 0034, 2026-11-09):** a manual payout is settled as paid only when
+  Transaction Status confirms the receipt staff found on the statement (amount and number included); migration 00052.
 
 ## Before the API is exposed to players
 

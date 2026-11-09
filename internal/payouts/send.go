@@ -233,6 +233,10 @@ func (s *Service) Verify(ctx context.Context, id string) (time.Duration, error) 
 	if err != nil {
 		return 0, err
 	}
+	if p.Status == "manual" {
+		// staff claimed a receipt from the statement: M-Pesa's answer about it decides (ADR 0034)
+		return 0, s.checkReceipt(ctx, p)
+	}
 	if !open(p.Status) {
 		return 0, nil
 	}

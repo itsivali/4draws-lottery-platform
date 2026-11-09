@@ -55,8 +55,10 @@ export interface Payout {
   refund?: { reason: string; requested_by: string; msisdn: string }
   /** a held payout: who approved it so far; two different people release it (ADR 0032) */
   approvals?: string[]
-  /** a manual payout: the settlement one person proposed, waiting for a second to confirm it (ADR 0032) */
+  /** a manual payout: the "not paid" settlement one person proposed, waiting for a second to confirm it (ADR 0032) */
   proposal?: { paid: boolean; receipt?: string; reason?: string; by: string; at: string }
+  /** a manual payout: the receipt staff claimed from the statement and M-Pesa's answer; '' while it is asked (ADR 0034) */
+  check?: { receipt: string; by: string; at: string; outcome: '' | 'confirmed' | 'refuted' | 'no_answer'; detail?: string }
   created_at: string
 }
 

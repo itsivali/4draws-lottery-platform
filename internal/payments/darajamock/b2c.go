@@ -50,6 +50,15 @@ func (s *Server) SetNextB2CFault(f B2CFault) {
 	s.mu.Unlock()
 }
 
+// HealStatus makes Transaction Status answer about every payout again: an outage of status answers ends.
+func (s *Server) HealStatus() {
+	s.mu.Lock()
+	for _, t := range s.b2cTxns {
+		t.fault.StatusDrop, t.fault.StatusHTTP = false, 0
+	}
+	s.mu.Unlock()
+}
+
 // Payouts returns the payouts the mock accepted, in order.
 func (s *Server) Payouts() []Payout {
 	s.mu.Lock()

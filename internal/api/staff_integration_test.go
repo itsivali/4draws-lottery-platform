@@ -349,17 +349,20 @@ func TestStaffAPI_AnAccountClosesOnlyOnceItsMoneyIsOut(t *testing.T) {
 	for _, st := range []string{"sending", "sent", "manual"} {
 		e.ownerExec(t, `UPDATE payouts.payouts SET status = $2 WHERE id = $1`, payout, st)
 	}
-	// ADR 0032: one staff member proposes, a second confirms
-	op, second := e.member(staff.Staff), e.member(staff.Staff)
-	if r := e.do(t, http.MethodPost, "/v1/staff/payouts/"+payout+"/settle", op, map[string]any{"paid": true, "receipt": "SGH0000001"}); r.Code != http.StatusOK || r.Body["state"] != "manual" || r.Body["proposal"] == nil {
-		t.Fatalf("proposal: %d %s", r.Code, r.Raw)
+	// a receipt from the statement is claimed and M-Pesa is asked about it (ADR 0034); the payout waits for the answer
+	op := e.member(staff.Staff)
+	if r := e.do(t, http.MethodPost, "/v1/staff/payouts/"+payout+"/settle", op, map[string]any{"paid": true, "receipt": "bad"}); r.Code != http.StatusBadRequest {
+		t.Fatalf("a malformed receipt: %d %s", r.Code, r.Raw)
 	}
-	if r := e.do(t, http.MethodPost, "/v1/staff/payouts/"+payout+"/settle", op, map[string]any{"paid": true, "receipt": "SGH0000001"}); r.Code != http.StatusConflict || r.Body["title"] == nil {
-		t.Fatalf("confirmed by the proposer: %d %s", r.Code, r.Raw)
+	if r := e.do(t, http.MethodPost, "/v1/staff/payouts/"+payout+"/settle", op, map[string]any{"paid": true, "receipt": "SGH0000001"}); r.Code != http.StatusOK ||
+		r.Body["state"] != "manual" || r.Body["check"] == nil || r.Body["check"].(map[string]any)["receipt"] != "SGH0000001" {
+		t.Fatalf("claim: %d %s", r.Code, r.Raw)
 	}
-	if r := e.do(t, http.MethodPost, "/v1/staff/payouts/"+payout+"/settle", second, map[string]any{"paid": true, "receipt": "SGH0000001"}); r.Code != http.StatusOK || r.Body["state"] != "succeeded" {
-		t.Fatalf("settle: %d %s", r.Code, r.Raw)
+	if r := e.do(t, http.MethodPost, "/v1/staff/payouts/"+payout+"/settle", e.member(staff.Staff), map[string]any{"paid": false, "reason": "not there"}); r.Code != http.StatusConflict {
+		t.Fatalf("not paid while M-Pesa is asked: %d %s", r.Code, r.Raw)
 	}
+	// M-Pesa's answer is the payouts tests' business; here the payout is settled as the worker would
+	e.ownerExec(t, `UPDATE payouts.payouts SET status = 'succeeded', mpesa_receipt = 'SGH0000001', settled_at = now() WHERE id = $1`, payout)
 	r = e.do(t, http.MethodPost, "/v1/staff/closures/"+user+"/close", support, map[string]any{})
 	if r.Code != http.StatusOK || r.Body["closed_at"] == nil {
 		t.Fatalf("close: %d %s", r.Code, r.Raw)
@@ -396,11 +399,8 @@ func TestStaffAPI_AnAccountWithAStakeInADrawIsNotClosedUntilTheDrawIsSettled(t *
 	for _, st := range []string{"sending", "sent", "manual"} {
 		e.ownerExec(t, `UPDATE payouts.payouts SET status = $2 WHERE id = $1`, w.Body["id"], st)
 	}
-	for _, m := range []string{e.member(staff.Staff), e.member(staff.Staff)} { // two people (ADR 0032)
-		if r := e.do(t, http.MethodPost, "/v1/staff/payouts/"+w.Body["id"].(string)+"/settle", m, map[string]any{"paid": true, "receipt": "SGH0000002"}); r.Code != http.StatusOK {
-			t.Fatalf("settle: %d %s", r.Code, r.Raw)
-		}
-	}
+	// settled as the worker would once M-Pesa confirmed the receipt (ADR 0034)
+	e.ownerExec(t, `UPDATE payouts.payouts SET status = 'succeeded', mpesa_receipt = 'SGH0000002', settled_at = now() WHERE id = $1`, w.Body["id"])
 	e.do(t, http.MethodPost, "/v1/account/closure", s.access, nil)
 	r := e.do(t, http.MethodPost, "/v1/staff/closures/"+user+"/close", e.member(staff.Staff), map[string]any{})
 	if r.Code != http.StatusConflict || !hasType(r, "closure-blocked") || !strings.Contains(r.Raw, "draw") {

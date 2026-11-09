@@ -200,7 +200,8 @@ func (s *Service) WithdrawalBounds() (minKES, maxKES int64) {
 	return s.cfg.MinWithdrawalKES, s.cfg.MaxWithdrawalKES
 }
 
-// Proposal is one staff member's settlement of a manual payout, waiting for a second to confirm it (ADR 0032).
+// Proposal is one staff member's "not paid" settlement of a manual payout, waiting for a second to confirm it (ADR
+// 0032). A "paid" settlement is a receipt check instead, decided by M-Pesa (ADR 0034).
 type Proposal struct {
 	Paid    bool      `json:"paid"`
 	Receipt string    `json:"receipt,omitempty"`
@@ -227,9 +228,11 @@ type Payout struct {
 	// Approvals are the staff members who approved a held payout so far (ADR 0032; staff views only).
 	Approvals []string `json:"approvals,omitempty"`
 	// Proposal is the open settlement proposal of a manual payout, waiting for a second person (staff views only).
-	Proposal  *Proposal `json:"proposal,omitempty"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	Proposal *Proposal `json:"proposal,omitempty"`
+	// Check is the latest receipt staff claimed for a manual payout and M-Pesa\'s answer (ADR 0034; staff views only).
+	Check     *ReceiptCheck `json:"check,omitempty"`
+	CreatedAt time.Time     `json:"created_at"`
+	UpdatedAt time.Time     `json:"updated_at"`
 }
 
 func view(p store.PayoutsPayout) Payout {

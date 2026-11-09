@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -495,12 +496,14 @@ func TestWithdrawal_LargeAmountsWaitForAnOperator(t *testing.T) {
 	}
 }
 
-func TestWithdrawal_OperatorSettlesAManualPayoutFromTheStatement(t *testing.T) {
+// ADR 0034: a manual payout is settled as paid only when M-Pesa confirms the receipt staff found on the statement.
+// A receipt M-Pesa does not confirm leaves it manual, with why; the one it confirms settles it, under the claimant.
+func TestWithdrawal_AReceiptFromTheStatementSettlesAManualPayoutOnlyWhenMPesaConfirmsIt(t *testing.T) {
 	ctx := context.Background()
 	e := setup(t)
 	u := e.player(t, 1000)
-	claim := 0
-	e.mock.SetNextB2CFault(darajamock.B2CFault{ResultCode: 1, ClaimResultCode: &claim})
+	// the money moved, but M-Pesa's status answers were lost: nobody could confirm it
+	e.mock.SetNextB2CFault(darajamock.B2CFault{StatusDrop: true})
 	p := e.withdraw(t, u, 300, "k")
 	if st := e.run(t, p.ID); st != "manual" {
 		t.Fatalf("state %s", st)
@@ -508,39 +511,55 @@ func TestWithdrawal_OperatorSettlesAManualPayoutFromTheStatement(t *testing.T) {
 	if list, _, _ := e.svc.InState(ctx, "manual", 10, ""); len(list) != 1 || list[0].ID != p.ID {
 		t.Fatalf("manual list %+v", list)
 	}
+	e.mock.HealStatus()
+	real := e.mock.Payouts()[0].Receipt
 	if _, err := e.svc.Settle(ctx, p.ID, "staff:alice", true, "", ""); !errors.Is(err, payouts.ErrReceiptRequired) {
 		t.Fatalf("no receipt: %v", err)
 	}
-	// ADR 0032: one person proposes, a second confirms exactly the same decision
-	got, err := e.svc.Settle(ctx, p.ID, "staff:alice", true, "MBCSTMT001", "")
-	if err != nil || got.State != "manual" || got.Proposal == nil || got.Proposal.By != "staff:alice" || got.Proposal.Receipt != "MBCSTMT001" {
-		t.Fatalf("proposal: %+v %v", got, err)
+	if _, err := e.svc.Settle(ctx, p.ID, "staff:alice", true, "not-a-receipt", ""); !errors.Is(err, payouts.ErrInvalidReceipt) {
+		t.Fatalf("a malformed receipt: %v", err)
 	}
-	if _, err := e.svc.Settle(ctx, p.ID, "staff:alice", true, "MBCSTMT001", ""); !errors.Is(err, payouts.ErrSameApprover) {
-		t.Fatalf("confirmed by the proposer: %v", err)
+
+	// a receipt M-Pesa does not know: refuted, still manual, nothing moved
+	got, err := e.svc.Settle(ctx, p.ID, "staff:alice", true, "MBC9999999", "")
+	if err != nil || got.State != "manual" || got.Check == nil || got.Check.Outcome != "" || got.Check.Receipt != "MBC9999999" {
+		t.Fatalf("claimed: %+v %v", got, err)
 	}
-	// a different decision replaces the proposal; it is the one a second person must confirm
-	if got, err := e.svc.Settle(ctx, p.ID, "staff:bob", true, "MBCSTMT002", ""); err != nil || got.State != "manual" || got.Proposal.Receipt != "MBCSTMT002" {
-		t.Fatalf("a different receipt: %+v %v", got, err)
+	// while M-Pesa has not answered, nothing else is decided
+	if _, err := e.svc.Settle(ctx, p.ID, "staff:bob", true, real, ""); !errors.Is(err, payouts.ErrCheckPending) {
+		t.Fatalf("a second claim while waiting: %v", err)
 	}
-	if _, err := e.svc.Settle(ctx, p.ID, "staff:alice", true, "MBCSTMT001", ""); err != nil {
+	if _, err := e.svc.Settle(ctx, p.ID, "staff:bob", false, "", "not on the statement"); !errors.Is(err, payouts.ErrCheckPending) {
+		t.Fatalf("not paid while waiting: %v", err)
+	}
+	if st := e.run(t, p.ID); st != "manual" {
+		t.Fatalf("after M-Pesa refuted the receipt: %s", st)
+	}
+	list, _, _ := e.svc.InState(ctx, "manual", 10, "")
+	if len(list) != 1 || list[0].Check == nil || list[0].Check.Outcome != "refuted" || list[0].Check.Detail == "" || e.balance(t, u) != 650 {
+		t.Fatalf("refuted: %+v balance %d", list, e.balance(t, u))
+	}
+
+	// the real receipt: M-Pesa confirms it, and one person's claim settles it
+	if _, err := e.svc.Settle(ctx, p.ID, "staff:alice", true, strings.ToLower(real), ""); err != nil {
 		t.Fatal(err)
 	}
-	if st, _, _ := e.state(t, p.ID); st != "manual" {
-		t.Fatalf("settled on a decision nobody confirmed: %s", st)
+	if st := e.run(t, p.ID); st != "succeeded" {
+		t.Fatalf("after M-Pesa confirmed the receipt: %s", st)
 	}
-	if _, err := e.svc.Settle(ctx, p.ID, "staff:bob", true, "MBCSTMT001", ""); err != nil {
-		t.Fatal(err)
-	}
-	if st, receipt, _ := e.state(t, p.ID); st != "succeeded" || receipt != "MBCSTMT001" || e.balance(t, u) != 650 {
+	if st, receipt, _ := e.state(t, p.ID); st != "succeeded" || receipt != real || e.balance(t, u) != 650 {
 		t.Fatalf("settled %s %s balance %d", st, receipt, e.balance(t, u))
 	}
 	var by string
-	if err := e.pool.QueryRow(ctx, `SELECT settled_by FROM payouts.payouts WHERE id = $1`, p.ID).Scan(&by); err != nil || by != "staff:bob" {
+	if err := e.pool.QueryRow(ctx, `SELECT settled_by FROM payouts.payouts WHERE id = $1`, p.ID).Scan(&by); err != nil || by != "staff:alice" {
 		t.Fatalf("settled by %q %v", by, err)
 	}
 	if _, err := e.svc.Settle(ctx, p.ID, "staff:alice", false, "", "changed my mind"); !errors.Is(err, payouts.ErrState) {
 		t.Fatalf("a final payout was settled again: %v", err)
+	}
+	// a decided check is never rewritten
+	if _, err := e.pool.Exec(ctx, `UPDATE payouts.receipt_checks SET outcome = 'confirmed' WHERE outcome = 'refuted'`); err == nil {
+		t.Fatal("a refuted receipt was turned into a confirmed one")
 	}
 }
 

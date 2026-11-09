@@ -116,6 +116,28 @@ func (q *Queries) Callbacks(ctx context.Context, payoutID *string) ([]CallbacksR
 	return items, nil
 }
 
+const decideCheck = `-- name: DecideCheck :exec
+UPDATE payouts.receipt_checks SET outcome = $1, detail = $2, decided_at = $3
+WHERE id = $4 AND outcome IS NULL
+`
+
+type DecideCheckParams struct {
+	Outcome *string
+	Detail  *string
+	At      *time.Time
+	ID      int64
+}
+
+func (q *Queries) DecideCheck(ctx context.Context, arg DecideCheckParams) error {
+	_, err := q.db.Exec(ctx, decideCheck,
+		arg.Outcome,
+		arg.Detail,
+		arg.At,
+		arg.ID,
+	)
+	return err
+}
+
 const failureJournalMismatch = `-- name: FailureJournalMismatch :many
 SELECT p.id FROM payouts.payouts p
 WHERE (p.status = 'failed') <> EXISTS (SELECT 1 FROM ledger.ledger_journals j WHERE j.reference_type = 'payout' AND j.reference_id = p.id
@@ -336,6 +358,31 @@ func (q *Queries) InsertPayout(ctx context.Context, arg InsertPayoutParams) (str
 		arg.At,
 	)
 	var id string
+	err := row.Scan(&id)
+	return id, err
+}
+
+const insertReceiptCheck = `-- name: InsertReceiptCheck :one
+INSERT INTO payouts.receipt_checks (payout_id, receipt, staff, requested_at)
+VALUES ($1, $2, $3, $4)
+RETURNING id
+`
+
+type InsertReceiptCheckParams struct {
+	PayoutID string
+	Receipt  string
+	Staff    string
+	At       time.Time
+}
+
+func (q *Queries) InsertReceiptCheck(ctx context.Context, arg InsertReceiptCheckParams) (int64, error) {
+	row := q.db.QueryRow(ctx, insertReceiptCheck,
+		arg.PayoutID,
+		arg.Receipt,
+		arg.Staff,
+		arg.At,
+	)
+	var id int64
 	err := row.Scan(&id)
 	return id, err
 }
@@ -569,6 +616,28 @@ func (q *Queries) KRAEventMismatch(ctx context.Context) ([]string, error) {
 		return nil, err
 	}
 	return items, nil
+}
+
+const latestReceiptCheck = `-- name: LatestReceiptCheck :one
+SELECT id, payout_id, receipt, staff, status_originator, requested_at, outcome, detail, decided_at FROM payouts.receipt_checks WHERE payout_id = $1 ORDER BY id DESC LIMIT 1
+`
+
+// A manual payout's latest receipt check (ADR 0034).
+func (q *Queries) LatestReceiptCheck(ctx context.Context, payoutID string) (PayoutsReceiptCheck, error) {
+	row := q.db.QueryRow(ctx, latestReceiptCheck, payoutID)
+	var i PayoutsReceiptCheck
+	err := row.Scan(
+		&i.ID,
+		&i.PayoutID,
+		&i.Receipt,
+		&i.Staff,
+		&i.StatusOriginator,
+		&i.RequestedAt,
+		&i.Outcome,
+		&i.Detail,
+		&i.DecidedAt,
+	)
+	return i, err
 }
 
 const latestSettlementProposal = `-- name: LatestSettlementProposal :one
@@ -1202,6 +1271,20 @@ func (q *Queries) ResultPayouts(ctx context.Context, drawResultID *string) (Resu
 	var i ResultPayoutsRow
 	err := row.Scan(&i.Attempts, &i.Live)
 	return i, err
+}
+
+const setCheckOriginator = `-- name: SetCheckOriginator :exec
+UPDATE payouts.receipt_checks SET status_originator = $1 WHERE id = $2 AND status_originator IS NULL
+`
+
+type SetCheckOriginatorParams struct {
+	Originator *string
+	ID         int64
+}
+
+func (q *Queries) SetCheckOriginator(ctx context.Context, arg SetCheckOriginatorParams) error {
+	_, err := q.db.Exec(ctx, setCheckOriginator, arg.Originator, arg.ID)
+	return err
 }
 
 const setPayoutStatus = `-- name: SetPayoutStatus :exec

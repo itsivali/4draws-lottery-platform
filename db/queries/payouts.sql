@@ -262,3 +262,19 @@ VALUES (sqlc.arg(payout_id), sqlc.arg(paid), sqlc.narg(receipt), sqlc.narg(reaso
 -- The open proposal for a manual payout: the latest one.
 SELECT paid, receipt, reason, staff, proposed_at FROM payouts.settlement_proposals
 WHERE payout_id = $1 ORDER BY id DESC LIMIT 1;
+
+-- name: InsertReceiptCheck :one
+INSERT INTO payouts.receipt_checks (payout_id, receipt, staff, requested_at)
+VALUES (sqlc.arg(payout_id), sqlc.arg(receipt), sqlc.arg(staff), sqlc.arg(at))
+RETURNING id;
+
+-- name: SetCheckOriginator :exec
+UPDATE payouts.receipt_checks SET status_originator = sqlc.arg(originator) WHERE id = sqlc.arg(id) AND status_originator IS NULL;
+
+-- name: DecideCheck :exec
+UPDATE payouts.receipt_checks SET outcome = sqlc.arg(outcome), detail = sqlc.narg(detail), decided_at = sqlc.arg(at)
+WHERE id = sqlc.arg(id) AND outcome IS NULL;
+
+-- name: LatestReceiptCheck :one
+-- A manual payout's latest receipt check (ADR 0034).
+SELECT * FROM payouts.receipt_checks WHERE payout_id = $1 ORDER BY id DESC LIMIT 1;

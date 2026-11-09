@@ -2713,12 +2713,15 @@ paths:
     post:
       operationId: staffPayoutSettle
       tags: [back-office]
-      summary: Settle a payout in manual from the M-Pesa statement (two people)
+      summary: Settle a payout in manual from the M-Pesa statement
       description: >-
-        Role: `staff` (admins too). Two people settle (ADR 0032): the first call records a proposal (the payout comes
-        back still `manual`, with `proposal`); a second staff member making exactly the same decision (paid with the
-        same receipt, or not paid) applies it. A different decision replaces the proposal; the proposer confirming
-        their own is 409 `two-person-rule`.
+        Role: `staff` (admins too). Paid (ADR 0034): the receipt is proved by M-Pesa only. It is recorded as a check
+        and M-Pesa is asked about it; the payout comes back still `manual` with `check` (outcome empty while M-Pesa
+        answers) and is settled as paid when M-Pesa confirms that receipt as a completed payment of the payout's amount
+        to its number, else the check is `refuted` (or `no_answer`) with why. 400 `invalid-receipt`, 409
+        `receipt-used`, 409 `check-pending` while M-Pesa is asked, 503 `daraja-unavailable` when it would not take
+        the question. Not paid (ADR 0032): two people; the first call records a proposal, a second staff member
+        confirming it applies it; the proposer confirming their own is 409 `two-person-rule`.
       security: [{ staffBearer: [] }]
       parameters:
         - { $ref: "#/components/parameters/IdempotencyKey" }

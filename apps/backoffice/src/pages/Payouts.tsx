@@ -55,7 +55,13 @@ export function PayoutsPage() {
             <Pill tone={tone(p.state)}>{p.state}</Pill>
             {p.reason ? <span className="text-sm text-muted-foreground">{p.reason}</span> : null}
             {p.state === 'held' && approvers.length > 0 ? <span className="text-sm">{p.approvals?.length ? <>Approved by {p.approvals.map((a) => <Mono key={a}>{a}</Mono>)}</> : 'Asked for by the admin'}; one more person approves it</span> : null}
-            {p.proposal ? <span className="text-sm">Proposed by <Mono>{p.proposal.by}</Mono>: {p.proposal.paid ? <>paid, receipt <Mono>{p.proposal.receipt}</Mono></> : <>not paid ({p.proposal.reason})</>}; a second person confirms it</span> : null}
+            {p.proposal ? <span className="text-sm">Proposed by <Mono>{p.proposal.by}</Mono>: not paid ({p.proposal.reason}); a second person confirms it</span> : null}
+            {p.check && p.state === 'manual' ? (
+              <span className="text-sm">
+                Receipt <Mono>{p.check.receipt}</Mono>{' '}
+                {p.check.outcome === '' ? 'is being checked with M-Pesa' : p.check.outcome === 'refuted' ? <>was not confirmed by M-Pesa{p.check.detail ? `: ${p.check.detail}` : ''}</> : 'got no answer from M-Pesa; record it again'}
+              </span>
+            ) : null}
           </div>
         )
       },
@@ -91,12 +97,12 @@ export function PayoutsPage() {
             ) : null}
             {p.state === 'manual' ? (
               <>
-                <Button type="button" size="sm" disabled={busy} onClick={() => {
-                  ask({ title: 'Paid according to the statement?', body: <p>Record the M-Pesa receipt from the statement. It is settled when a second person records the same receipt.</p>,
-                    fields: [{ name: 'receipt', label: 'M-Pesa receipt', required: true }], confirmLabel: 'Record as paid', success: 'Recorded. It is settled once two people agree.',
+                <Button type="button" size="sm" disabled={busy || p.check?.outcome === ''} onClick={() => {
+                  ask({ title: 'Paid according to the statement?', body: <p>Record the M-Pesa receipt from the statement. M-Pesa is asked about it, and the payout is settled as paid only when M-Pesa confirms that receipt paid this amount to this number.</p>,
+                    fields: [{ name: 'receipt', label: 'M-Pesa receipt', required: true }], confirmLabel: 'Check with M-Pesa', success: 'Receipt recorded; M-Pesa is checking it.',
                     act: (v) => api.post(`/v1/staff/payouts/${p.id}/settle`, { paid: true, receipt: v.receipt }) })
                 }}>Paid</Button>
-                <Button type="button" size="sm" variant="outline" className={dangerOutline} disabled={busy} onClick={() => {
+                <Button type="button" size="sm" variant="outline" className={dangerOutline} disabled={busy || p.check?.outcome === ''} onClick={() => {
                   ask({ title: 'Not paid according to the statement?', body: <p>A withdrawal’s amount returns to the wallet; a prize returns to its pool.</p>,
                     fields: [{ name: 'reason', label: 'What the statement shows', required: true }], confirmLabel: 'Record as not paid', danger: true, success: 'Recorded. It is settled once two people agree.',
                     act: (v) => api.post(`/v1/staff/payouts/${p.id}/settle`, { paid: false, reason: v.reason }) })
@@ -113,7 +119,7 @@ export function PayoutsPage() {
     <section>
       <PageHeader title="Payouts">
         Large withdrawals wait for two different people to approve them. A payout whose M-Pesa answer was unclear is settled from
-        the M-Pesa statement, by one person proposing and a second confirming.
+        the M-Pesa statement: paid when M-Pesa confirms the receipt found there, not paid when two people agree.
       </PageHeader>
       <Tabs value={state} onValueChange={setState}>
         <TabsList aria-label="Payout state" className="h-auto flex-wrap">

@@ -517,6 +517,18 @@ type PayoutsPayout struct {
 	RefundRequestedBy        *string
 }
 
+type PayoutsReceiptCheck struct {
+	ID               int64
+	PayoutID         string
+	Receipt          string
+	Staff            string
+	StatusOriginator *string
+	RequestedAt      time.Time
+	Outcome          *string
+	Detail           *string
+	DecidedAt        *time.Time
+}
+
 type PayoutsReconciliationRun struct {
 	ID     string
 	RanAt  time.Time

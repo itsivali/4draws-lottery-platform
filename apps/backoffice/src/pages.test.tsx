@@ -580,13 +580,17 @@ describe('paging', () => {
     expect(fetch.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1)
   })
 
-  it('two people approve a held payout and settle a manual one (ADR 0032)', async () => {
+  it('two people approve a held payout; a manual one is settled by M-Pesa or two people (ADR 0032, 0034)', async () => {
     const base = { user_id: 'u1', kind: 'withdrawal', status: 'processing', gross_kes: 120000, tax_kes: 0, net_kes: 120000, debt_repaid_kes: 0, created_at: '2026-10-26T09:00:00Z' }
     const { fetch } = renderSignedIn(<PayoutsPage />, {
       roles: ['staff'],
       route: (method, url) => {
         if (method === 'POST') return { status: 200, body: { ...base, id: 'po-new', state: 'held', approvals: ['staff:s1'] } }
-        if (url.searchParams.get('state') === 'manual') return { status: 200, body: { payouts: [{ ...base, id: 'po-m', state: 'manual', proposal: { paid: true, receipt: 'SGH0000001', by: 'staff:s2', at: '2026-10-26T10:00:00Z' } }], next_after: null } }
+        if (url.searchParams.get('state') === 'manual') return { status: 200, body: { payouts: [
+          { ...base, id: 'po-m', state: 'manual', proposal: { paid: false, reason: 'not on the statement', by: 'staff:s2', at: '2026-10-26T10:00:00Z' } },
+          { ...base, id: 'po-r', state: 'manual', check: { receipt: 'SGH0000009', by: 'staff:s1', at: '2026-10-26T10:00:00Z', outcome: 'refuted', detail: 'M-Pesa reported KES 100' } },
+          { ...base, id: 'po-w', state: 'manual', check: { receipt: 'SGH0000008', by: 'staff:s1', at: '2026-10-26T10:00:00Z', outcome: '' } },
+        ], next_after: null } }
         return { status: 200, body: { payouts: [
           { ...base, id: 'po-new', state: 'held' },
           { ...base, id: 'po-mine', state: 'held', approvals: ['staff:s1'] },
@@ -607,6 +611,10 @@ describe('paging', () => {
     await user.click(screen.getByRole('tab', { name: 'Needs manual settlement' }))
     expect(await screen.findByText(/a second person confirms it/)).toBeInTheDocument()
     expect(screen.getByText('staff:s2')).toBeInTheDocument()
+    expect(within(screen.getByRole('row', { name: /po-r/ })).getByText(/was not confirmed by M-Pesa: M-Pesa reported KES 100/)).toBeInTheDocument()
+    const waiting = screen.getByRole('row', { name: /po-w/ })
+    expect(within(waiting).getByText(/is being checked with M-Pesa/)).toBeInTheDocument()
+    expect(within(waiting).getByRole('button', { name: 'Paid' })).toBeDisabled() // M-Pesa decides; nothing else while it answers (ADR 0034)
   })
 
   it('a held refund to source says why, who asked and where it goes (ADR 0031)', async () => {
