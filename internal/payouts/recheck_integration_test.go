@@ -7,6 +7,8 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/itsivali/lottery-platform/internal/aml"
+	"github.com/itsivali/lottery-platform/internal/audit"
 	"github.com/itsivali/lottery-platform/internal/identity"
 	"github.com/itsivali/lottery-platform/internal/payouts"
 )
@@ -96,5 +98,49 @@ func TestApprove_IsRefusedWhileTheAccountCannotBePaid(t *testing.T) {
 	}
 	if _, _, reason := e.state(t, again.ID); reason != "" {
 		t.Fatalf("reason after release %q, want none", reason)
+	}
+}
+
+// ADR 0033: while a monitoring case holds a player's money, no withdrawal starts, and a payout already made is held
+// rather than sent (its money stays reserved); once the case closes it can be approved.
+func TestHold_AMonitoringHoldStopsMoneyGoingOut(t *testing.T) {
+	ctx := context.Background()
+	e := setup(t)
+	monitor := aml.NewService(e.pool, e.clk, audit.NewWriter())
+	e.svc.WithHolds(monitor)
+	u := e.player(t, 1_000)
+	p := e.withdraw(t, u, 500, "before-hold")
+	c, err := monitor.OpenManual(ctx, u, "staff:alice", "in and out")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := monitor.Hold(ctx, c.ID, "staff:alice", "pending review"); err != nil {
+		t.Fatal(err)
+	}
+	if st := e.run(t, p.ID); st != "held" {
+		t.Fatalf("payout made before the hold: %s, want held", st)
+	}
+	if _, _, reason := e.state(t, p.ID); reason != "payee_ineligible: under review" {
+		t.Fatalf("reason %q", reason)
+	}
+	if _, _, err := e.svc.RequestWithdrawal(ctx, u, 100, "while-held"); !errors.Is(err, aml.ErrUnderReview) {
+		t.Fatalf("withdrawal while held: %v", err)
+	}
+	if _, err := e.svc.Approve(ctx, p.ID, "staff:carol"); !errors.Is(err, aml.ErrUnderReview) {
+		t.Fatalf("approval while held: %v", err)
+	}
+	if _, err := monitor.Close(ctx, c.ID, "staff:bob", "explained: refund of a mistaken top-up"); err != nil {
+		t.Fatal(err)
+	}
+	for _, who := range []string{"staff:carol", "staff:dave"} {
+		if _, err := e.svc.Approve(ctx, p.ID, who); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if st := e.run(t, p.ID); st != "succeeded" {
+		t.Fatalf("after the case closed: %s", st)
+	}
+	if n := len(e.mock.Payouts()); n != 1 {
+		t.Fatalf("%d B2C requests", n)
 	}
 }

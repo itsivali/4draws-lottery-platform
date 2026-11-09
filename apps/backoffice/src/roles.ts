@@ -19,6 +19,7 @@ export const sections: Section[] = [
   { path: '/payments', label: 'Payments', roles: ['staff'] },
   { path: '/tax', label: 'KRA tax', roles: ['staff'] },
   { path: '/alerts', label: 'Alerts', roles: ['staff'] },
+  { path: '/compliance', label: 'Compliance', roles: ['staff'] },
   { path: '/system', label: 'System status', roles: ['staff'] },
   { path: '/activity', label: 'Activity log', roles: ['admin'] },
   { path: '/closures', label: 'Account closures', roles: ['staff'] },

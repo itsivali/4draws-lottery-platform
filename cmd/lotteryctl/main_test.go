@@ -148,3 +148,26 @@ func TestParse_TheOperatorIsTheEmailAddressToSignInWith(t *testing.T) {
 		t.Fatalf("%+v %v", c, err)
 	}
 }
+
+// ADR 0033: the monitoring rules are shown, run and set from the CLI; setting one names who and why.
+func TestParse_AMLCommands(t *testing.T) {
+	for _, ok := range [][]string{
+		{"aml", "rules"},
+		{"aml", "scan"},
+		{"aml", "set-rule", "-rule", "deposit_velocity", "-params", `{"window_hours":24}`, "-note", "approved", "-operator", opID},
+		{"aml", "set-rule", "-rule", "shared_device", "-params", `{"min_accounts":3,"quiet_days":90}`, "-note", "off for now", "-off", "-approval", "CO-1", "-operator", opID},
+	} {
+		if _, err := parse(ok); err != nil {
+			t.Errorf("%v: %v", ok, err)
+		}
+	}
+	for _, bad := range [][]string{
+		{"aml", "set-rule", "-rule", "deposit_velocity", "-params", "{}", "-operator", opID}, // no note
+		{"aml", "set-rule", "-rule", "deposit_velocity", "-params", "{}", "-note", "x"},      // nobody signed in
+		{"aml", "scan", "-off"},
+	} {
+		if _, err := parse(bad); err == nil {
+			t.Errorf("%v accepted", bad)
+		}
+	}
+}

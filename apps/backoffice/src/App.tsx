@@ -1,6 +1,6 @@
 import {
   Banknote, Bell, ChartSpline, ChevronsUpDown, Dices, Gauge, History, IdCard, KeyRound, Landmark, LayoutDashboard, LogOut, Receipt, Search, Siren, Smartphone, Ticket,
-  UserPen, UserRound, UserX, Users, Wallet,
+  ShieldAlert, UserPen, UserRound, UserX, Users, Wallet,
 } from 'lucide-react'
 import { useEffect, useState, type ComponentType } from 'react'
 import { BrandGlyph } from './components/BrandGlyph'
@@ -13,6 +13,7 @@ import { useSession } from './context'
 import { ActivityPage } from './pages/Activity'
 import { AlertsPage } from './pages/Alerts'
 import { ClosuresPage } from './pages/Closures'
+import { CompliancePage } from './pages/Compliance'
 import { DrawsPage } from './pages/Draws'
 import { FinancePage } from './pages/Finance'
 import { KycPage } from './pages/Kyc'
@@ -54,6 +55,7 @@ const pages: Record<string, () => React.JSX.Element> = {
   '/tax': TaxPage,
   '/alerts': AlertsPage,
   '/closures': ClosuresPage,
+  '/compliance': CompliancePage,
 }
 
 const icons: Record<string, ComponentType<{ className?: string }>> = {
@@ -71,6 +73,7 @@ const icons: Record<string, ComponentType<{ className?: string }>> = {
   '/tax': Receipt,
   '/alerts': Bell,
   '/closures': UserX,
+  '/compliance': ShieldAlert,
   '/staff': Users,
 }
 
@@ -78,7 +81,7 @@ const icons: Record<string, ComponentType<{ className?: string }>> = {
 const groups: { label: string; paths: string[] }[] = [
   { label: 'Money', paths: ['/finance', '/topups', '/payments', '/payouts', '/tax'] },
   { label: 'Apps', paths: ['/metrics'] },
-  { label: 'Players', paths: ['/players', '/plays', '/kyc', '/closures'] },
+  { label: 'Players', paths: ['/players', '/plays', '/kyc', '/compliance', '/closures'] },
   { label: 'Operations', paths: ['/draws', '/alerts', '/system'] },
   { label: 'Administration', paths: ['/staff', '/activity'] },
 ]

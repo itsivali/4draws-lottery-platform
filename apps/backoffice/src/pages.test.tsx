@@ -2,11 +2,12 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { App } from './App'
+import { CompliancePage } from './pages/Compliance'
 import { DrawsPage } from './pages/Draws'
 import { PayoutsPage } from './pages/Payouts'
 import { PlayersPage } from './pages/Players'
 import { problem, renderSignedIn } from './test/render'
-import type { Draw, FinanceSummary, Player, PlayerTimeline, ReconciliationRun, StaffMember } from './types'
+import type { AmlCase, AmlRule, Draw, FinanceSummary, Player, PlayerTimeline, ReconciliationRun, StaffMember } from './types'
 
 const zero = { deposits_kes: 0, stakes_kes: 0, prizes_awarded_kes: 0, prizes_paid_kes: 0, withdrawals_kes: 0, reversals_kes: 0, excise_kes: 0, tax_withheld_kes: 0, tax_remitted_kes: 0, ggr_kes: 0 }
 const none = { count: 0, kes: 0 }
@@ -653,5 +654,35 @@ describe('paging', () => {
     expect(screen.queryByText('held-2')).not.toBeInTheDocument()
     expect(asked).toEqual(['held:', 'held:held-1', 'failed:'])
     expect(screen.getByRole('button', { name: 'Load more' })).toBeInTheDocument()
+  })
+})
+
+describe('compliance (ADR 0033)', () => {
+  it('lists cases with what the rule saw, holds money with a reason, and shows rules pending approval', async () => {
+    const open: AmlCase = { id: 'c1', user_id: 'u1', msisdn: '254796992457', rule: 'deposit_velocity', status: 'open', hold: false,
+      evidence: { deposited_kes: 150000, deposits: 12 }, opened_at: '2026-11-09T09:00:00Z', updated_at: '2026-11-09T09:00:00Z' }
+    const mineHeld: AmlCase = { ...open, id: 'c2', user_id: 'u2', msisdn: '254712000002', rule: 'manual', hold: true, hold_by: 'staff:s1', evidence: { reason: 'the bank called' } }
+    const rules: AmlRule[] = [{ rule: 'deposit_velocity', enabled: true, params: { window_hours: 24, max_kes: 100000 }, pending_approval: true, default: true }]
+    const { fetch } = renderSignedIn(<CompliancePage />, { roles: ['staff'], route: (method, url) => {
+      if (method === 'POST') return { status: 200, body: { ...open, hold: true, hold_by: 'staff:s1' } }
+      if (url.pathname === '/v1/staff/aml/rules') return { status: 200, body: { rules } }
+      return { status: 200, body: { cases: [open, mineHeld], next_after: null } }
+    } })
+    const user = userEvent.setup()
+    const row = await screen.findByRole('row', { name: /0796 992 457/ })
+    expect(within(row).getByText('Much money in, quickly')).toBeInTheDocument()
+    expect(within(row).getByText('KES 150,000 in 12 top-ups')).toBeInTheDocument()
+    expect(await screen.findByText('pending compliance-owner approval')).toBeInTheDocument()
+    const held = screen.getByRole('row', { name: /0712 000 002/ })
+    expect(within(held).getByRole('button', { name: 'Lift hold' })).toBeDisabled() // someone else lifts a hold you placed
+    expect(within(held).getByRole('button', { name: 'Close' })).toBeDisabled()
+    await user.click(within(row).getByRole('button', { name: 'Hold money' }))
+    const dialog = screen.getByRole('dialog', { name: 'Hold this player’s money?' })
+    expect(within(dialog).getByText(/never tell them why/)).toBeInTheDocument()
+    await user.type(within(dialog).getByLabelText(/^Why/), 'deposits far above their usual')
+    await user.click(within(dialog).getByRole('button', { name: 'Hold the money' }))
+    expect(await screen.findByRole('status')).toHaveTextContent('Money held.')
+    const post = fetch.mock.calls.find(([, init]) => init?.method === 'POST')
+    expect(JSON.parse(post?.[1]?.body as string)).toEqual({ note: 'deposits far above their usual' })
   })
 })

@@ -17,6 +17,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/itsivali/lottery-platform/internal/aml"
 	"github.com/itsivali/lottery-platform/internal/audit"
 	"github.com/itsivali/lottery-platform/internal/compliance"
 	"github.com/itsivali/lottery-platform/internal/ledger"
@@ -177,6 +178,26 @@ type Service struct {
 	// insufficient is the wallet's error for a balance below a debit (payouts does not import the wallet).
 	insufficient error
 	gate         *compliance.Gate // the operating mode (ADR 0027); nil allows everything (tests)
+	holds        Holds            // transaction monitoring's holds (ADR 0033); nil holds nothing
+}
+
+// Holds reports whether an open monitoring case holds a player's money (ADR 0033), in the caller's transaction.
+type Holds interface {
+	OnHold(ctx context.Context, tx pgx.Tx, userID string) (bool, error)
+}
+
+// WithHolds makes withdrawals, refunds, prizes, approvals and sends wait while a monitoring case holds the player's
+// money: nothing is sent, and the money stays reserved or owed.
+func (s *Service) WithHolds(h Holds) *Service {
+	s.holds = h
+	return s
+}
+
+func (s *Service) onHold(ctx context.Context, tx pgx.Tx, userID string) (bool, error) {
+	if s.holds == nil {
+		return false, nil
+	}
+	return s.holds.OnHold(ctx, tx, userID)
 }
 
 // WithGate makes withdrawals, approvals and sends ask the operating mode (ADR 0027). A payout that may not be sent
@@ -307,6 +328,11 @@ func (s *Service) RequestWithdrawal(ctx context.Context, userID string, amount i
 		msisdn, err := s.ids.AssertCanBePaid(ctx, tx, userID)
 		if err != nil {
 			return err
+		}
+		if held, err := s.onHold(ctx, tx, userID); err != nil {
+			return err
+		} else if held {
+			return aml.ErrUnderReview
 		}
 		if debt, err := s.wallet.Debt(ctx, tx, userID); err != nil {
 			return err

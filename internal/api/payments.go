@@ -13,6 +13,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/itsivali/lottery-platform/internal/aml"
 	"github.com/itsivali/lottery-platform/internal/compliance"
 	"github.com/itsivali/lottery-platform/internal/identity"
 	"github.com/itsivali/lottery-platform/internal/payments"
@@ -129,6 +130,8 @@ func (h *handlers) startTopUp(w http.ResponseWriter, r *http.Request) {
 			"top-ups are between KES "+strconv.FormatInt(h.Payments.MinTopUpKES(), 10)+" and KES "+strconv.Itoa(daraja.MaxSTKAmountKES))
 	case errors.Is(err, compliance.ErrOperationsStopped):
 		operationsStopped(w)
+	case errors.Is(err, aml.ErrUnderReview):
+		underReview(w)
 	case errors.Is(err, payments.ErrUnavailable):
 		paymentsUnavailable(w)
 	case errors.As(err, &le):
@@ -141,6 +144,13 @@ func (h *handlers) startTopUp(w http.ResponseWriter, r *http.Request) {
 	default:
 		internalError(w, err)
 	}
+}
+
+// underReview refuses a player whose money a monitoring case holds (ADR 0033) without saying why: telling them they
+// are being looked into could itself be an offence (tipping off).
+func underReview(w http.ResponseWriter) {
+	httpx.WriteProblem(w, http.StatusForbidden, "account-unavailable", "This isn't available on your account right now",
+		"contact support if you need help")
 }
 
 func paymentsUnavailable(w http.ResponseWriter) {

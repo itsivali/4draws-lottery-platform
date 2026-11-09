@@ -22,6 +22,7 @@ import (
 	"github.com/riverqueue/river/riverdriver/riverpgxv5"
 
 	"github.com/itsivali/lottery-platform/internal/alerts"
+	"github.com/itsivali/lottery-platform/internal/aml"
 	"github.com/itsivali/lottery-platform/internal/app"
 	"github.com/itsivali/lottery-platform/internal/audit"
 	"github.com/itsivali/lottery-platform/internal/compliance"
@@ -79,6 +80,9 @@ const usage = `usage:
   lotteryctl alerts ack -alert ID -note TEXT -operator EMAIL   (stops reminders; closes a payout freeze)
   lotteryctl alerts watch                                (run the checks and send what is due now)
   lotteryctl compliance status                          (the operating mode as recorded, live requests waiting, the latest changes)
+  lotteryctl aml rules                      (the monitoring rules as they stand, and whether their thresholds are approved)
+  lotteryctl aml scan                       (run the rules now; the worker runs them hourly)
+  lotteryctl aml set-rule -rule R -params JSON -note TEXT [-approval REF] [-off] -operator EMAIL
   lotteryctl compliance stop -reason TEXT -operator EMAIL   (emergency: stop top-ups, plays, withdrawals and payouts; an admin
                                                          resumes in the back office, where going live takes two admins)
   lotteryctl staff password -email E [-password P] [-admin]   (emergency: a temporary back-office password for E, read
@@ -92,7 +96,8 @@ type command struct {
 	draw, payout, state, result        string
 	prn, alert, note, kind             string
 	email, password                    string
-	all, admin                         bool
+	rule, params, approval             string
+	all, admin, off                    bool
 	batch                              int64
 	amount                             int64
 	days, slots, lucky                 int
@@ -137,6 +142,9 @@ var flagsOf = map[string][]string{
 	"alerts watch":             nil,
 	"staff password":           {"email"},
 	"compliance status":        nil,
+	"aml rules":                nil,
+	"aml scan":                 nil,
+	"aml set-rule":             {"rule", "params", "note", "operator"},
 	"compliance stop":          {"reason", "operator"},
 }
 
@@ -145,6 +153,7 @@ var optionalOf = map[string][]string{
 	"game simulate":  {"days", "slots", "lucky", "price"},
 	"alerts list":    {"all", "kind", "state"},
 	"staff password": {"password", "admin"},
+	"aml set-rule":   {"approval", "off"},
 }
 
 func parse(args []string) (command, error) {
@@ -180,6 +189,10 @@ func parse(args []string) (command, error) {
 	fs.BoolVar(&c.all, "all", false, "include resolved alerts")
 	fs.StringVar(&c.email, "email", "", "a staff member's email address")
 	fs.StringVar(&c.password, "password", "", "the temporary password (omit it to type it on stdin, so it stays out of the shell history)")
+	fs.StringVar(&c.rule, "rule", "", "monitoring rule (deposit_velocity, in_out_little_play, failed_topups, shared_id_number, shared_device)")
+	fs.StringVar(&c.params, "params", "", `the rule's thresholds as JSON, e.g. {"window_hours":24,"max_kes":100000,"max_count":10,"quiet_days":30}`)
+	fs.StringVar(&c.approval, "approval", "", "the compliance owner's approval reference for these thresholds (omit: pending approval)")
+	fs.BoolVar(&c.off, "off", false, "turn the rule off")
 	fs.BoolVar(&c.admin, "admin", false, "also make the member an administrator (creating them if needed)")
 	fs.IntVar(&c.days, "days", 0, "simulated player-days per number of plays")
 	fs.IntVar(&c.slots, "slots", 0, "slot count")
@@ -270,6 +283,8 @@ func run(ctx context.Context, cmd command, out io.Writer) error {
 		return staffPassword(ctx, cfg, cmd, os.Stdin, out)
 	case "compliance status", "compliance stop":
 		return complianceCmd(ctx, cfg, cmd, out)
+	case "aml rules", "aml scan", "aml set-rule":
+		return amlCmd(ctx, cfg, cmd, out)
 	}
 
 	pool, err := db.Open(ctx, cfg.DatabaseURL)
@@ -676,6 +691,45 @@ func alertsCmd(ctx context.Context, cfg config.Config, cmd command, out io.Write
 	}
 	if err != nil {
 		return err
+	}
+	enc := json.NewEncoder(out)
+	enc.SetIndent("", "  ")
+	return enc.Encode(res)
+}
+
+// amlCmd shows, sets and runs the transaction-monitoring rules (ADR 0033).
+func amlCmd(ctx context.Context, cfg config.Config, cmd command, out io.Writer) error {
+	pool, err := db.Open(ctx, cfg.DatabaseURL)
+	if err != nil {
+		return err
+	}
+	defer pool.Close()
+	svc := aml.NewService(pool, clock.Postgres{}, audit.NewWriter())
+	var res any
+	switch cmd.name {
+	case "aml rules":
+		if res, err = svc.Settings(ctx); err != nil {
+			return err
+		}
+	case "aml scan":
+		n, err := svc.Scan(ctx)
+		if err != nil {
+			return err
+		}
+		res = map[string]any{"opened": n}
+	case "aml set-rule":
+		var p aml.Params
+		dec := json.NewDecoder(strings.NewReader(cmd.params))
+		dec.DisallowUnknownFields()
+		if err := dec.Decode(&p); err != nil {
+			return fmt.Errorf("-params: %w", err)
+		}
+		if err := svc.SetRule(ctx, aml.Rule(cmd.rule), !cmd.off, p, cmd.approval, cmd.operator, cmd.note); err != nil {
+			return err
+		}
+		if res, err = svc.Settings(ctx); err != nil {
+			return err
+		}
 	}
 	enc := json.NewEncoder(out)
 	enc.SetIndent("", "  ")

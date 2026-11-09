@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 
+	"github.com/itsivali/lottery-platform/internal/aml"
 	"github.com/itsivali/lottery-platform/internal/audit"
 	"github.com/itsivali/lottery-platform/internal/compliance"
 	"github.com/itsivali/lottery-platform/internal/identity"
@@ -249,6 +250,12 @@ func payeeProblem(err error) bool {
 // the one the payout was made out to (ADR 0030). A refusal wraps ErrPayeeIneligible; other errors are returned as they
 // are.
 func (s *Service) assertPayee(ctx context.Context, tx pgx.Tx, p store.PayoutsPayout) error {
+	// a monitoring case holds the player's money (ADR 0033): refunds included
+	if held, err := s.onHold(ctx, tx, p.UserID); err != nil {
+		return err
+	} else if held {
+		return fmt.Errorf("%w: %w", ErrPayeeIneligible, aml.ErrUnderReview)
+	}
 	if p.RefundReason != nil {
 		// a refund to source goes to the number that paid in, to an account that by definition cannot be paid
 		// (ADR 0031): the second person approving it is the check
@@ -270,6 +277,8 @@ func (s *Service) assertPayee(ctx context.Context, tx pgx.Tx, p store.PayoutsPay
 // payeeReason is how a payee refusal is recorded on the payout.
 func payeeReason(err error) string {
 	switch {
+	case errors.Is(err, aml.ErrUnderReview):
+		return "payee_ineligible: under review"
 	case errors.Is(err, identity.ErrAccountSuspended):
 		return "payee_ineligible: account not active"
 	case errors.Is(err, identity.ErrKYCRequired):

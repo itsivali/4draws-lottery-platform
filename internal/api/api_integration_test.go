@@ -24,6 +24,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/itsivali/lottery-platform/internal/alerts"
+	"github.com/itsivali/lottery-platform/internal/aml"
 	"github.com/itsivali/lottery-platform/internal/api"
 	"github.com/itsivali/lottery-platform/internal/audit"
 	"github.com/itsivali/lottery-platform/internal/compliance"
@@ -203,7 +204,9 @@ func setupWith(t *testing.T, mutate func(*apiDeps)) *env {
 	// the operating mode as the deployed demo runs it (ADR 0027): sandbox, so every money path asks and is allowed
 	gate := compliance.NewGate(pool, clk, aw, compliance.Config{Mode: compliance.Sandbox})
 	sGate := compliance.NewGate(staffPool, clk, aw, compliance.Config{Mode: compliance.Sandbox})
+	monitor := aml.NewService(pool, clk, aw) // its holds, as the players' services see them (ADR 0033)
 	staffServices := api.StaffServices{
+		AML:       aml.NewService(staffPool, clk, aw),
 		Identity:  sIDs,
 		KYC:       kyc.NewService(staffPool, clk, mock, kr, []byte("0123456789abcdef0123456789abcdef"), aw, enq),
 		Payments:  payments.NewService(staffPool, clk, dc, pay, sIDs, sRG, wallet.NewService(ls), ls, aw, payments.Config{}).WithGate(sGate),
@@ -232,12 +235,12 @@ func setupWith(t *testing.T, mutate func(*apiDeps)) *env {
 		Identity:      ids,
 		KYC:           kyc.NewService(pool, clk, mock, kr, []byte("0123456789abcdef0123456789abcdef"), aw, enq),
 		RG:            rgs,
-		Payments:      payments.NewService(pool, clk, dc, pay, ids, rgs, wallet.NewService(ls), ls, aw, payments.Config{}).WithC2B(dc, payments.C2BConfig{ShortCode: "600982"}).WithGate(gate),
+		Payments:      payments.NewService(pool, clk, dc, pay, ids, rgs, wallet.NewService(ls), ls, aw, payments.Config{}).WithC2B(dc, payments.C2BConfig{ShortCode: "600982"}).WithGate(gate).WithHolds(monitor),
 		Live:          live,
 		Game:          game.NewService(pool, clk, ids, rgs, wallet.NewService(ls), kr, wallet.ErrInsufficientFunds).WithGate(gate),
 		Draws:         draws.NewService(pool, clk, kr, drawBeacon{}, ls),
 		Payouts: payouts.NewService(pool, clk, dc, payoutQueue{pay}, ids, wallet.NewService(ls), ls, aw, payouts.Config{},
-			wallet.ErrInsufficientFunds).WithGate(gate),
+			wallet.ErrInsufficientFunds).WithGate(gate).WithHolds(monitor),
 		Gate:         gate,
 		Wallet:       wallet.NewReader(pool),
 		CallbackPath: callbackPath,

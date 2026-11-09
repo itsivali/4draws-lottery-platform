@@ -10,8 +10,8 @@ const submission = { user_id: 'u1', msisdn: '254712345678', national_id: '123456
 
 describe('roles', () => {
   it('a member sees only the sections their roles open', () => {
-    expect(visibleSections(['staff']).map((s) => s.path)).toEqual(['/finance', '/players', '/plays', '/topups', '/kyc', '/draws', '/payouts', '/payments', '/tax', '/alerts', '/system', '/closures'])
-    expect(visibleSections(['admin']).map((s) => s.path)).toEqual(['/finance', '/metrics', '/players', '/plays', '/topups', '/kyc', '/draws', '/payouts', '/payments', '/tax', '/alerts', '/system', '/activity', '/closures', '/staff'])
+    expect(visibleSections(['staff']).map((s) => s.path)).toEqual(['/finance', '/players', '/plays', '/topups', '/kyc', '/draws', '/payouts', '/payments', '/tax', '/alerts', '/compliance', '/system', '/closures'])
+    expect(visibleSections(['admin']).map((s) => s.path)).toEqual(['/finance', '/metrics', '/players', '/plays', '/topups', '/kyc', '/draws', '/payouts', '/payments', '/tax', '/alerts', '/compliance', '/system', '/activity', '/closures', '/staff'])
   })
 
   it('the navigation and the routes follow the roles', async () => {

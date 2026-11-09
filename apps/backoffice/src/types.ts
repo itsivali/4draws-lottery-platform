@@ -517,3 +517,32 @@ export interface OperatingState {
   live_requests: LiveRequest[]
   history: OperatingChange[]
 }
+
+/** A transaction-monitoring case (ADR 0033). */
+export interface AmlCase {
+  id: string
+  user_id: string
+  msisdn?: string
+  rule: 'deposit_velocity' | 'in_out_little_play' | 'failed_topups' | 'shared_id_number' | 'shared_device' | 'manual'
+  status: 'open' | 'closed'
+  hold: boolean
+  hold_by?: string
+  evidence: Record<string, unknown>
+  opened_by?: string
+  outcome?: string
+  opened_at: string
+  updated_at: string
+  closed_at?: string
+  closed_by?: string
+  events?: { action: string; staff?: string; note?: string; at: string }[]
+}
+
+/** A monitoring rule as it stands; pending_approval until the compliance owner approves its thresholds. */
+export interface AmlRule {
+  rule: Exclude<AmlCase['rule'], 'manual'>
+  enabled: boolean
+  params: Record<string, number>
+  approval_reference?: string
+  pending_approval: boolean
+  default: boolean
+}

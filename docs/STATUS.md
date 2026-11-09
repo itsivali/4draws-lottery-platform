@@ -88,6 +88,10 @@ Read this first at the start of every session.
   - Staff can record a self-exclusion a player asks for; nothing lifts one.
 - **A payout's receipt is proved by M-Pesa (ADR 0034, 2026-11-09):** a manual payout is settled as paid only when
   Transaction Status confirms the receipt staff found on the statement (amount and number included); migration 00052.
+- **Transaction monitoring (ADR 0033, 2026-11-09):** five rules run hourly and open cases on the back office's
+  Compliance page; a case can hold a player's money (no top-ups, paybill, withdrawals or payouts), lifted by someone
+  else. Thresholds are placeholders pending the compliance owner (`docs/runbooks/compliance-monitoring.md`); migration
+  00053.
 
 ## Before the API is exposed to players
 

@@ -23,6 +23,7 @@ import (
 	"github.com/valkey-io/valkey-go"
 
 	"github.com/itsivali/lottery-platform/internal/alerts"
+	"github.com/itsivali/lottery-platform/internal/aml"
 	"github.com/itsivali/lottery-platform/internal/api"
 	"github.com/itsivali/lottery-platform/internal/audit"
 	"github.com/itsivali/lottery-platform/internal/compliance"
@@ -72,6 +73,7 @@ type App struct {
 	draws     *draws.Service
 	payouts   *payouts.Service
 	gate      *compliance.Gate
+	aml       *aml.Service
 	live      *payments.Live
 	stopLive  context.CancelFunc
 	workers   *river.Client[pgx.Tx]
@@ -122,7 +124,7 @@ func New(ctx context.Context, cfg config.Config, pool *pgxpool.Pool) (*App, erro
 	}
 	svc := buildServices(pool, sh)
 	idSvc, rgSvc := svc.identity, svc.rg
-	a.kyc, a.payments, a.game, a.payouts, a.draws, a.gate = svc.kyc, svc.payments, svc.game, svc.payouts, svc.draws, svc.gate
+	a.kyc, a.payments, a.game, a.payouts, a.draws, a.gate, a.aml = svc.kyc, svc.payments, svc.game, svc.payouts, svc.draws, svc.gate, svc.aml
 
 	staffAuth, staffSvc, err := a.staff(ctx, sh, svc)
 	if err != nil {
@@ -183,6 +185,7 @@ type services struct {
 	payouts  *payouts.Service
 	draws    *draws.Service
 	gate     *compliance.Gate
+	aml      *aml.Service
 }
 
 // buildServices builds the domain services on pool. Anything not configured fails closed instead of pretending to work.
@@ -209,6 +212,8 @@ func buildServices(pool *pgxpool.Pool, sh shared) services {
 	s.rg = rg.NewService(pool, sh.clk, sh.aw, rg.Config{CoolingOff: 24 * time.Hour}).WithSessionEnder(s.identity)
 	// every money path asks the operating mode (ADR 0027) inside its own transaction
 	s.gate = compliance.NewGate(pool, sh.clk, sh.aw, compliance.Config{Mode: compliance.Mode(cfg.Operating.Mode), LicenceReference: cfg.Operating.LicenceReference})
+	// transaction monitoring (ADR 0033): its holds stop top-ups, paybill payments, withdrawals and payouts
+	s.aml = aml.NewService(pool, sh.clk, sh.aw)
 
 	// Without Daraja configuration the payments service still answers reads but refuses top-ups (fail closed).
 	var dc payments.Daraja
@@ -218,7 +223,7 @@ func buildServices(pool *pgxpool.Pool, sh shared) services {
 	ls := ledger.NewStore()
 	s.payments = payments.NewService(pool, sh.clk, dc, payments.NewRiverEnqueuer(sh.insertOnly), s.identity, s.rg, wallet.NewService(ls), ls, sh.aw,
 		payments.Config{MinTopUpKES: cfg.Payments.MinTopUpKES, SandboxSettle: cfg.Payments.SandboxSettle,
-			TopUpCooldown: cfg.Payments.TopUpCooldown, ShortCode: cfg.Payments.ShortCode}).WithGate(s.gate)
+			TopUpCooldown: cfg.Payments.TopUpCooldown, ShortCode: cfg.Payments.ShortCode}).WithGate(s.gate).WithHolds(s.aml)
 	if p := cfg.Payments; p.C2BEnabled() {
 		s.payments.WithC2B(sh.daraja, payments.C2BConfig{ShortCode: p.C2BShortCode})
 	}
@@ -230,7 +235,7 @@ func buildServices(pool *pgxpool.Pool, sh shared) services {
 		pd = sh.daraja
 	}
 	s.payouts = payouts.NewService(pool, sh.clk, pd, payouts.NewRiverEnqueuer(sh.insertOnly), s.identity, wallet.NewService(ls), ls, sh.aw, payouts.Config{},
-		wallet.ErrInsufficientFunds).WithGate(s.gate)
+		wallet.ErrInsufficientFunds).WithGate(s.gate).WithHolds(s.aml)
 
 	// Draws use the League of Entropy's quicknet, verified against the pinned key, through its public relays.
 	s.draws = draws.NewService(pool, sh.clk, sh.keyring, drand.New(drand.Quicknet, drand.DefaultRelays, sh.hc), ls)
@@ -276,7 +281,7 @@ func (a *App) staff(ctx context.Context, sh shared, base services) (staff.Authen
 	return members, api.StaffServices{
 		Identity: svc.identity, KYC: svc.kyc, Payments: svc.payments, Draws: svc.draws, Payouts: svc.payouts, Game: svc.game,
 		Alerts: a.alertsOn(pool, svc.draws), Members: members, Finance: finance.NewService(pool, sh.clk, sh.aw), Metrics: metrics.NewService(pool, sh.clk),
-		Oversight: oversight.NewService(pool, sh.clk, oversightSettings(sh.cfg)), RG: svc.rg, Gate: svc.gate,
+		Oversight: oversight.NewService(pool, sh.clk, oversightSettings(sh.cfg)), RG: svc.rg, Gate: svc.gate, AML: svc.aml,
 	}, nil
 }
 
@@ -390,9 +395,10 @@ func (a *App) StartWorkers(ctx context.Context) error {
 	draws.AddWorkers(workers, a.draws)
 	payouts.AddWorkers(workers, a.payouts)
 	alerts.AddWorkers(workers, a.alerts())
+	aml.AddWorkers(workers, a.aml)
 	wc, err := river.NewClient(riverpgxv5.New(a.pool), &river.Config{
 		Schema: db.RiverSchema, Workers: workers,
-		PeriodicJobs: slices.Concat(payments.PeriodicJobs(), game.PeriodicJobs(), draws.PeriodicJobs(), payouts.PeriodicJobs(), alerts.PeriodicJobs()),
+		PeriodicJobs: slices.Concat(payments.PeriodicJobs(), game.PeriodicJobs(), draws.PeriodicJobs(), payouts.PeriodicJobs(), alerts.PeriodicJobs(), aml.PeriodicJobs()),
 		Queues:       map[string]river.QueueConfig{river.QueueDefault: {MaxWorkers: 10}},
 	})
 	if err != nil {

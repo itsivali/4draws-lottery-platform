@@ -10,6 +10,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/itsivali/lottery-platform/internal/aml"
 	"github.com/itsivali/lottery-platform/internal/compliance"
 	"github.com/itsivali/lottery-platform/internal/identity"
 	"github.com/itsivali/lottery-platform/internal/payments/daraja"
@@ -75,6 +76,8 @@ func (h *handlers) withdraw(w http.ResponseWriter, r *http.Request) {
 			"your next top-up repays it first")
 	case errors.Is(err, compliance.ErrOperationsStopped):
 		operationsStopped(w)
+	case errors.Is(err, aml.ErrUnderReview):
+		underReview(w)
 	case errors.Is(err, payouts.ErrUnavailable):
 		payoutsUnavailable(w)
 	case errors.Is(err, identity.ErrKYCRequired), errors.Is(err, identity.ErrPhoneNotVerified), errors.Is(err, identity.ErrAccountSuspended):

@@ -16,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/itsivali/lottery-platform/internal/aml"
 	"github.com/itsivali/lottery-platform/internal/audit"
 	"github.com/itsivali/lottery-platform/internal/compliance"
 	"github.com/itsivali/lottery-platform/internal/identity"
@@ -207,6 +208,25 @@ type Service struct {
 	cfg    Config
 	c2b    *c2bSetup        // nil: paybill payments are not configured
 	gate   *compliance.Gate // the operating mode (ADR 0027); nil allows everything (tests)
+	holds  Holds            // transaction monitoring's holds (ADR 0033); nil holds nothing
+}
+
+// Holds reports whether an open monitoring case holds a player's money (ADR 0033), in the caller's transaction.
+type Holds interface {
+	OnHold(ctx context.Context, tx pgx.Tx, userID string) (bool, error)
+}
+
+// WithHolds makes top-ups, their prompts and paybill validations refuse a player whose money a monitoring case holds.
+func (s *Service) WithHolds(h Holds) *Service {
+	s.holds = h
+	return s
+}
+
+func (s *Service) onHold(ctx context.Context, tx pgx.Tx, userID string) (bool, error) {
+	if s.holds == nil {
+		return false, nil
+	}
+	return s.holds.OnHold(ctx, tx, userID)
 }
 
 // WithGate makes new top-ups, their prompts and paybill validations ask the operating mode (ADR 0027). Money that has
@@ -270,6 +290,11 @@ func (s *Service) StartTopUp(ctx context.Context, userID string, amount int64, k
 		msisdn, err := s.ids.AssertCanTopUp(ctx, tx, userID)
 		if err != nil {
 			return err
+		}
+		if held, err := s.onHold(ctx, tx, userID); err != nil {
+			return err
+		} else if held {
+			return aml.ErrUnderReview
 		}
 		if err := s.rg.AssertNotRestricted(ctx, tx, userID); err != nil {
 			return err
@@ -839,6 +864,11 @@ func (s *Service) pushRefusal(ctx context.Context, tx pgx.Tx, userID, paymentID 
 		return "account_ineligible", nil
 	case err != nil:
 		return "", err
+	}
+	if held, err := s.onHold(ctx, tx, userID); err != nil {
+		return "", err
+	} else if held {
+		return "account_under_review", nil
 	}
 	if err := s.rg.AssertNotRestricted(ctx, tx, userID); err != nil {
 		if r := (*rg.RestrictedError)(nil); errors.As(err, &r) {

@@ -7,6 +7,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/itsivali/lottery-platform/internal/aml"
 	"github.com/itsivali/lottery-platform/internal/audit"
 	"github.com/itsivali/lottery-platform/internal/compliance"
 	"github.com/itsivali/lottery-platform/internal/ledger"
@@ -70,6 +71,11 @@ func (s *Service) RefundToSource(ctx context.Context, userID, operator, reason, 
 			return ErrPayable
 		case !payeeProblem(notPayable):
 			return notPayable
+		}
+		if held, err := s.onHold(ctx, tx, userID); err != nil {
+			return err
+		} else if held {
+			return aml.ErrUnderReview
 		}
 		if debt, err := s.wallet.Debt(ctx, tx, userID); err != nil {
 			return err

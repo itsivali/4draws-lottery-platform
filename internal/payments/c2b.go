@@ -119,6 +119,12 @@ func (s *Service) ValidateC2B(ctx context.Context, raw []byte) (string, error) {
 		switch m.reason {
 		case "":
 			code = C2BAccept
+			// a monitoring case holds the player's money (ADR 0033): Safaricom is told to refuse it, without a reason
+			if held, err := s.onHold(ctx, tx, m.user); err != nil {
+				return err
+			} else if held {
+				code = C2BOtherError
+			}
 		case "unknown_account", "kyc_required", "account_suspended":
 			code = C2BInvalidAccount
 		case "bad_amount":

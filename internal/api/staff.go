@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/itsivali/lottery-platform/internal/alerts"
+	"github.com/itsivali/lottery-platform/internal/aml"
 	"github.com/itsivali/lottery-platform/internal/compliance"
 	"github.com/itsivali/lottery-platform/internal/draws"
 	"github.com/itsivali/lottery-platform/internal/finance"
@@ -55,6 +56,8 @@ type StaffServices struct {
 	RG *rg.Service
 	// Gate is the operating mode (ADR 0027): its state, stop, resume and the two-admin live approval.
 	Gate *compliance.Gate
+	// AML is transaction monitoring (ADR 0033): its cases, holds and rule settings.
+	AML *aml.Service
 }
 
 type staffKey struct{}
@@ -226,6 +229,7 @@ func (h *handlers) mountStaff(r chi.Router) {
 	r.With(admin).Get("/activity/export", h.needs(h.StaffServices.Oversight != nil, "Activity log", h.staffActivityExport))
 
 	r.With(anyStaff).Get("/players", h.staffPlayers)
+	h.mountAML(r, anyStaff)
 	r.With(anyStaff).Get("/players/{user}", h.needs(h.StaffServices.Oversight != nil, "Players", h.staffPlayer))
 	r.With(anyStaff).Get("/players/{user}/export", h.needs(h.StaffServices.Oversight != nil, "Players", h.staffPlayerExport))
 	r.With(anyStaff).Post("/players/{user}/suspend", h.staffSuspend(true))

@@ -68,6 +68,42 @@ type AuditKraOutbox struct {
 	BatchID    *string
 }
 
+type ComplianceAmlCase struct {
+	ID        string
+	UserID    string
+	Rule      string
+	Status    string
+	Hold      bool
+	HoldBy    *string
+	Evidence  []byte
+	OpenedBy  *string
+	Outcome   *string
+	OpenedAt  time.Time
+	UpdatedAt time.Time
+	ClosedAt  *time.Time
+	ClosedBy  *string
+}
+
+type ComplianceAmlCaseEvent struct {
+	ID     int64
+	CaseID string
+	Action string
+	Staff  *string
+	Note   *string
+	At     time.Time
+}
+
+type ComplianceAmlRuleSetting struct {
+	ID                int64
+	Rule              string
+	Enabled           bool
+	Params            []byte
+	ApprovalReference *string
+	SetBy             string
+	Note              string
+	SetAt             time.Time
+}
+
 type ComplianceGeoSignal struct {
 	ID         int64
 	UserID     *string

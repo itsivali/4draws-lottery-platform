@@ -1702,6 +1702,271 @@ paths:
         "403": { $ref: "#/components/responses/Problem" }
         "404": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
+  /v1/staff/aml/rules:
+    get:
+      operationId: staffAMLRules
+      tags: [back-office]
+      summary: The transaction-monitoring rules as they stand
+      description: >-
+        Role: `staff` (ADR 0033). Each rule's on/off state and thresholds; `pending_approval` until the compliance
+        owner's approval reference is recorded (thresholds are set with `lotteryctl aml set-rule`).
+      security: [{ staffBearer: [] }]
+      responses:
+        "200":
+          description: The rules
+          content:
+            application/json:
+              schema: { type: object, properties: { rules: { type: array, items: { type: object } } } }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+  /v1/staff/aml/cases:
+    get:
+      operationId: staffAMLCases
+      tags: [back-office]
+      summary: Monitoring cases in a view, oldest first
+      description: "Role: `staff`. `view` is open (default), held or closed; pass `next_after` as `after` for the next page."
+      security: [{ staffBearer: [] }]
+      parameters:
+        - { name: view, in: query, required: false, schema: { type: string, enum: [open, held, closed] } }
+        - { $ref: "#/components/parameters/Limit" }
+        - { name: after, in: query, required: false, schema: { type: string } }
+      responses:
+        "200":
+          description: The cases
+          content:
+            application/json:
+              schema: { type: object, properties: { cases: { type: array, items: { type: object } }, next_after: { type: [string, "null"] } } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+    post:
+      operationId: staffAMLOpen
+      tags: [back-office]
+      summary: Open a case about a player
+      description: "Role: `staff`. With why; a player has at most one open case opened by staff (409 `case-open`)."
+      security: [{ staffBearer: [] }]
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [user_id, note], properties: { user_id: { type: string }, note: { type: string } } }
+      responses:
+        "201":
+          description: The case
+          content:
+            application/json:
+              schema:
+                type: object
+                description: A monitoring case (ADR 0033).
+                properties:
+                  id: { type: string }
+                  user_id: { type: string }
+                  msisdn: { type: string }
+                  rule: { type: string, enum: [deposit_velocity, in_out_little_play, failed_topups, shared_id_number, shared_device, manual] }
+                  status: { type: string, enum: [open, closed] }
+                  hold: { type: boolean }
+                  hold_by: { type: string }
+                  evidence: { type: object, description: "What the rule saw, with its thresholds and whether they await approval." }
+                  outcome: { type: string }
+                  opened_at: { type: string, format: date-time }
+                  closed_at: { type: string, format: date-time }
+                  events: { type: array, items: { type: object } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /v1/staff/aml/cases/{id}:
+    get:
+      operationId: staffAMLCase
+      tags: [back-office]
+      summary: A case with everything done on it
+      description: "Role: `staff`."
+      security: [{ staffBearer: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200":
+          description: The case
+          content:
+            application/json:
+              schema:
+                type: object
+                description: A monitoring case (ADR 0033).
+                properties:
+                  id: { type: string }
+                  user_id: { type: string }
+                  msisdn: { type: string }
+                  rule: { type: string, enum: [deposit_velocity, in_out_little_play, failed_topups, shared_id_number, shared_device, manual] }
+                  status: { type: string, enum: [open, closed] }
+                  hold: { type: boolean }
+                  hold_by: { type: string }
+                  evidence: { type: object, description: "What the rule saw, with its thresholds and whether they await approval." }
+                  outcome: { type: string }
+                  opened_at: { type: string, format: date-time }
+                  closed_at: { type: string, format: date-time }
+                  events: { type: array, items: { type: object } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /v1/staff/aml/cases/{id}/hold:
+    post:
+      operationId: staffAMLCaseHold
+      tags: [back-office]
+      summary: Hold the player's money while the case is open
+      description: "Role: `staff` (ADR 0033). No top-ups, paybill payments, withdrawals, refunds or payouts until it is lifted; the player is told only that it is not available right now (403 `account-unavailable`)."
+      security: [{ staffBearer: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }, { $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [note], properties: { note: { type: string, minLength: 1, maxLength: 2000 } } }
+      responses:
+        "200":
+          description: The case
+          content:
+            application/json:
+              schema:
+                type: object
+                description: A monitoring case (ADR 0033).
+                properties:
+                  id: { type: string }
+                  user_id: { type: string }
+                  msisdn: { type: string }
+                  rule: { type: string, enum: [deposit_velocity, in_out_little_play, failed_topups, shared_id_number, shared_device, manual] }
+                  status: { type: string, enum: [open, closed] }
+                  hold: { type: boolean }
+                  hold_by: { type: string }
+                  evidence: { type: object, description: "What the rule saw, with its thresholds and whether they await approval." }
+                  outcome: { type: string }
+                  opened_at: { type: string, format: date-time }
+                  closed_at: { type: string, format: date-time }
+                  events: { type: array, items: { type: object } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /v1/staff/aml/cases/{id}/release:
+    post:
+      operationId: staffAMLCaseRelease
+      tags: [back-office]
+      summary: Lift the hold
+      description: "Role: `staff` (ADR 0033). Someone other than who placed it (409 `two-person-rule`)."
+      security: [{ staffBearer: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }, { $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [note], properties: { note: { type: string, minLength: 1, maxLength: 2000 } } }
+      responses:
+        "200":
+          description: The case
+          content:
+            application/json:
+              schema:
+                type: object
+                description: A monitoring case (ADR 0033).
+                properties:
+                  id: { type: string }
+                  user_id: { type: string }
+                  msisdn: { type: string }
+                  rule: { type: string, enum: [deposit_velocity, in_out_little_play, failed_topups, shared_id_number, shared_device, manual] }
+                  status: { type: string, enum: [open, closed] }
+                  hold: { type: boolean }
+                  hold_by: { type: string }
+                  evidence: { type: object, description: "What the rule saw, with its thresholds and whether they await approval." }
+                  outcome: { type: string }
+                  opened_at: { type: string, format: date-time }
+                  closed_at: { type: string, format: date-time }
+                  events: { type: array, items: { type: object } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /v1/staff/aml/cases/{id}/note:
+    post:
+      operationId: staffAMLCaseNote
+      tags: [back-office]
+      summary: Add a note
+      description: "Role: `staff` (ADR 0033). What was found or done."
+      security: [{ staffBearer: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }, { $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [note], properties: { note: { type: string, minLength: 1, maxLength: 2000 } } }
+      responses:
+        "200":
+          description: The case
+          content:
+            application/json:
+              schema:
+                type: object
+                description: A monitoring case (ADR 0033).
+                properties:
+                  id: { type: string }
+                  user_id: { type: string }
+                  msisdn: { type: string }
+                  rule: { type: string, enum: [deposit_velocity, in_out_little_play, failed_topups, shared_id_number, shared_device, manual] }
+                  status: { type: string, enum: [open, closed] }
+                  hold: { type: boolean }
+                  hold_by: { type: string }
+                  evidence: { type: object, description: "What the rule saw, with its thresholds and whether they await approval." }
+                  outcome: { type: string }
+                  opened_at: { type: string, format: date-time }
+                  closed_at: { type: string, format: date-time }
+                  events: { type: array, items: { type: object } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /v1/staff/aml/cases/{id}/close:
+    post:
+      operationId: staffAMLCaseClose
+      tags: [back-office]
+      summary: Close the case with its outcome
+      description: "Role: `staff` (ADR 0033). Final; lifts any hold, so someone other than who placed it closes a held case (409 `two-person-rule`)."
+      security: [{ staffBearer: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }, { $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [note], properties: { note: { type: string, minLength: 1, maxLength: 2000 } } }
+      responses:
+        "200":
+          description: The case
+          content:
+            application/json:
+              schema:
+                type: object
+                description: A monitoring case (ADR 0033).
+                properties:
+                  id: { type: string }
+                  user_id: { type: string }
+                  msisdn: { type: string }
+                  rule: { type: string, enum: [deposit_velocity, in_out_little_play, failed_topups, shared_id_number, shared_device, manual] }
+                  status: { type: string, enum: [open, closed] }
+                  hold: { type: boolean }
+                  hold_by: { type: string }
+                  evidence: { type: object, description: "What the rule saw, with its thresholds and whether they await approval." }
+                  outcome: { type: string }
+                  opened_at: { type: string, format: date-time }
+                  closed_at: { type: string, format: date-time }
+                  events: { type: array, items: { type: object } }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
   /v1/staff/players/{user}/self-exclusion:
     post:
       operationId: staffPlayerSelfExclusion

@@ -77,6 +77,12 @@ func (s *Service) createPrize(ctx context.Context, tx pgx.Tx, p prize, key strin
 		slog.WarnContext(ctx, "prize winner cannot be paid now; the prize stays owed", "result", p.resultID, "err", err)
 		return errCannotPay
 	}
+	if held, err := s.onHold(ctx, tx, p.userID); err != nil {
+		return err
+	} else if held {
+		slog.WarnContext(ctx, "prize winner's money is held by a monitoring case; the prize stays owed", "result", p.resultID)
+		return errCannotPay
+	}
 	now, err := s.clk.Now(ctx, tx)
 	if err != nil {
 		return err
