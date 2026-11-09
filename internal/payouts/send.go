@@ -28,10 +28,10 @@ func open(status string) bool {
 	return false
 }
 
-// Send makes the B2C request for a pending payout, exactly once. The payout is marked sending (and committed) before
-// the request, so a crash during it leaves a payout that is checked, never one that is sent again. A refusal fails the
-// payout and returns the money; an unknown outcome leaves it timed_out for verification. Nothing is sent while payouts
-// are frozen.
+// Send makes the B2C request for a pending payout, exactly once, to an account that may still be paid (else the
+// payout goes back to held). The payout is marked sending (and committed) before the request, so a crash during it
+// leaves a payout that is checked, never one that is sent again. A refusal fails the payout and returns the money; an
+// unknown outcome leaves it timed_out for verification. Nothing is sent while payouts are frozen.
 func (s *Service) Send(ctx context.Context, id string) error {
 	if s.daraja == nil {
 		return ErrUnavailable
@@ -64,6 +64,14 @@ func (s *Service) Send(ctx context.Context, id string) error {
 		}
 		now, err := s.clk.Now(ctx, tx)
 		if err != nil {
+			return err
+		}
+		// the account may have changed since the payout was made (ADR 0030): suspended, closed, no longer verified, or
+		// another number proved. Nothing is sent; the payout goes back to held, for an operator to approve once the
+		// account may be paid again, or to reject (the money comes back).
+		if err := s.assertPayee(ctx, tx, p); errors.Is(err, ErrPayeeIneligible) {
+			return s.hold(ctx, tx, p, payeeReason(err), now)
+		} else if err != nil {
 			return err
 		}
 		claimed = true
@@ -417,6 +425,16 @@ func (s *Service) giveBack(ctx context.Context, tx pgx.Tx, p store.PayoutsPayout
 	default:
 		return fmt.Errorf("payouts: payout %s: unknown kind %s", p.ID, p.Kind)
 	}
+}
+
+// hold takes a payout that was about to be sent back to held: nothing was sent, and an operator decides.
+func (s *Service) hold(ctx context.Context, tx pgx.Tx, p store.PayoutsPayout, reason string, now time.Time) error {
+	if err := store.New(tx).SetPayoutStatus(ctx, store.SetPayoutStatusParams{Status: "held", Reason: &reason, At: now, ID: p.ID}); err != nil {
+		return err
+	}
+	slog.WarnContext(ctx, "payout held: the account cannot be paid now", "payout", p.ID, "reason", reason)
+	return s.audit.Record(ctx, tx, audit.Event{ActorType: audit.System, Action: "payout.held", EntityType: "payout", EntityID: p.ID,
+		Details: map[string]any{"reason": reason, "gross_kes": p.GrossKes}})
 }
 
 // toManual hands the payout to an operator: its outcome could not be confirmed.

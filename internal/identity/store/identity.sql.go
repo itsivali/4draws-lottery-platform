@@ -71,6 +71,23 @@ func (q *Queries) CountOtherAccountsOnDevice(ctx context.Context, arg CountOther
 	return count, err
 }
 
+const endSessionsFor = `-- name: EndSessionsFor :exec
+UPDATE identity.sessions SET revoked_at = $1, revoked_reason = $2
+WHERE user_id = $3 AND revoked_at IS NULL
+`
+
+type EndSessionsForParams struct {
+	At     *time.Time
+	Reason *string
+	UserID string
+}
+
+// Ends every open session of an account with the given reason (a self-exclusion, ADR 0030).
+func (q *Queries) EndSessionsFor(ctx context.Context, arg EndSessionsForParams) error {
+	_, err := q.db.Exec(ctx, endSessionsFor, arg.At, arg.Reason, arg.UserID)
+	return err
+}
+
 const findAuthIdentity = `-- name: FindAuthIdentity :one
 SELECT user_id FROM identity.auth_identities WHERE provider = $1 AND subject = $2
 `
@@ -549,6 +566,24 @@ func (q *Queries) MarkRefreshUsed(ctx context.Context, arg MarkRefreshUsedParams
 	return err
 }
 
+const nameStatusChange = `-- name: NameStatusChange :exec
+SELECT set_config('identity.status_actor_type', $1::text, true),
+       set_config('identity.status_actor', $2::text, true),
+       set_config('identity.status_reason', $3::text, true)
+`
+
+type NameStatusChangeParams struct {
+	ActorType string
+	ActorID   string
+	Reason    string
+}
+
+// Who changes an account's status in this transaction, and why: the status-history trigger (00049) records them.
+func (q *Queries) NameStatusChange(ctx context.Context, arg NameStatusChangeParams) error {
+	_, err := q.db.Exec(ctx, nameStatusChange, arg.ActorType, arg.ActorID, arg.Reason)
+	return err
+}
+
 const openClosureRequests = `-- name: OpenClosureRequests :many
 SELECT c.user_id, c.requested_at, u.msisdn, u.status FROM identity.closure_requests c
 JOIN identity.users u ON u.id = c.user_id
@@ -878,6 +913,48 @@ func (q *Queries) SetUserSuspended(ctx context.Context, arg SetUserSuspendedPara
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const statusHistory = `-- name: StatusHistory :many
+SELECT from_status, to_status, actor_type, actor_id, reason, changed_at
+FROM identity.user_status_history WHERE user_id = $1 ORDER BY id
+`
+
+type StatusHistoryRow struct {
+	FromStatus *string
+	ToStatus   string
+	ActorType  *string
+	ActorID    *string
+	Reason     *string
+	ChangedAt  time.Time
+}
+
+// An account's status changes, oldest first.
+func (q *Queries) StatusHistory(ctx context.Context, userID string) ([]StatusHistoryRow, error) {
+	rows, err := q.db.Query(ctx, statusHistory, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []StatusHistoryRow
+	for rows.Next() {
+		var i StatusHistoryRow
+		if err := rows.Scan(
+			&i.FromStatus,
+			&i.ToStatus,
+			&i.ActorType,
+			&i.ActorID,
+			&i.Reason,
+			&i.ChangedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const upsertDevice = `-- name: UpsertDevice :one

@@ -277,6 +277,7 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
       formError: _formError,
       formDetail: _formDetail,
       expired: ref.watch(sessionManagerProvider).endReason == SessionEndReason.expired,
+      selfExcluded: ref.watch(sessionManagerProvider).endReason == SessionEndReason.selfExcluded,
       justReset: GoRouterState.of(context).uri.queryParameters['reset'] == '1',
       providers: _prepared ? providers : SignInProviders.none,
       googleButton: _prepared ? signIn.googleButton() : null,
@@ -495,6 +496,7 @@ class _Form extends StatelessWidget {
     required this.formError,
     required this.formDetail,
     required this.expired,
+    this.selfExcluded = false,
     required this.justReset,
     required this.providers,
     required this.googleButton,
@@ -528,6 +530,7 @@ class _Form extends StatelessWidget {
   final String? formError;
   final String? formDetail;
   final bool expired;
+  final bool selfExcluded;
   final bool justReset;
   final SignInProviders providers;
   final Widget? googleButton;
@@ -587,6 +590,18 @@ class _Form extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            if (selfExcluded && !phoneStep) ...[
+              const InlineBanner(
+                tone: StatusTone.pending,
+                icon: Icons.self_improvement_rounded,
+                live: true,
+                title: 'You are self-excluded',
+                message:
+                    'You were signed out on every device. You can sign in to withdraw your balance; '
+                    'plays and top-ups stay closed until your self-exclusion ends.',
+              ),
+              const SizedBox(height: Space.xl),
+            ],
             if (expired && !phoneStep) ...[
               // the session timed out (owner, 2026-10-30: say so on the sign-in screen)
               const InlineBanner(

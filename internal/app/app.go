@@ -204,7 +204,7 @@ func buildServices(pool *pgxpool.Pool, sh shared) services {
 	if m := cfg.Mail; m.WebAppURL != "" { // forgotten passwords are reset through an emailed link (ADR 0021)
 		s.identity.WithPasswordResets(identity.PasswordResets{Sender: mailer(m), WebAppURL: m.WebAppURL})
 	}
-	s.rg = rg.NewService(pool, sh.clk, sh.aw, rg.Config{CoolingOff: 24 * time.Hour})
+	s.rg = rg.NewService(pool, sh.clk, sh.aw, rg.Config{CoolingOff: 24 * time.Hour}).WithSessionEnder(s.identity)
 	// every money path asks the operating mode (ADR 0027) inside its own transaction
 	s.gate = compliance.NewGate(pool, sh.clk, sh.aw, compliance.Config{Mode: compliance.Mode(cfg.Operating.Mode), LicenceReference: cfg.Operating.LicenceReference})
 

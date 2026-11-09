@@ -122,11 +122,23 @@ type Session struct {
 	DeviceVerdict string     `json:"device_verdict"`
 }
 
-// PlayerIdentity is the account's identity history: submissions, sign-ins and a closure request.
+// StatusChange is one change of the account's status (ADR 0030); From is nil for its first.
+type StatusChange struct {
+	ID        int64     `json:"id"`
+	From      *string   `json:"from"`
+	To        string    `json:"to"`
+	ActorType *string   `json:"actor_type"`
+	Actor     *string   `json:"actor"`
+	Reason    *string   `json:"reason"`
+	At        time.Time `json:"at"`
+}
+
+// PlayerIdentity is the account's identity history: submissions, sign-ins, status changes and a closure request.
 type PlayerIdentity struct {
-	KYC                []KYCCheck `json:"kyc"`
-	Sessions           []Session  `json:"sessions"`
-	ClosureRequestedAt *time.Time `json:"closure_requested_at"`
+	KYC                []KYCCheck     `json:"kyc"`
+	Sessions           []Session      `json:"sessions"`
+	StatusHistory      []StatusChange `json:"status_history"`
+	ClosureRequestedAt *time.Time     `json:"closure_requested_at"`
 }
 
 // DepositLimit is a deposit limit in force, or a raise waiting out its cooling-off (Pending).
@@ -169,6 +181,7 @@ const (
 	lastPayouts   = 20
 	lastKYC       = 20
 	lastSessions  = 10
+	lastStatuses  = 20
 	lastEvents    = 50
 )
 
@@ -207,6 +220,9 @@ FROM kyc.kyc_checks WHERE user_id = $1::uuid ORDER BY created_at DESC, id DESC L
 SELECT s.id::text, coalesce(s.platform, d.platform, ''), s.created_at, s.revoked_at, s.revoked_reason, coalesce(d.attestation_verdict, 'none')
 FROM identity.sessions s LEFT JOIN identity.devices d ON d.id = s.device_id
 WHERE s.user_id = $1::uuid ORDER BY s.created_at DESC, s.id DESC LIMIT $2`
+	playerStatusSQL = `
+SELECT id, from_status, to_status, actor_type, actor_id, reason, changed_at
+FROM identity.user_status_history WHERE user_id = $1::uuid ORDER BY id DESC LIMIT $2`
 	playerEventsSQL = `
 SELECT ` + eventColumns + ` FROM audit.audit_log
 WHERE actor_id = $1 OR entity_id = $1 OR details->>'user_id' = $1 ORDER BY id DESC LIMIT $2`
@@ -225,7 +241,7 @@ func (s *Service) Player(ctx context.Context, userID string, all bool, viewer st
 	p := &Player{TopUps: []PlayerTopUp{}, Payouts: []PlayerPayout{}, Events: []Event{}}
 	p.Wallet.Transactions = []WalletTx{}
 	p.Plays.Last = []PlayerPlay{}
-	p.Identity.KYC, p.Identity.Sessions = []KYCCheck{}, []Session{}
+	p.Identity.KYC, p.Identity.Sessions, p.Identity.StatusHistory = []KYCCheck{}, []Session{}, []StatusChange{}
 	p.Limits.Deposit = []DepositLimit{}
 	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		row := &p.Player
@@ -290,6 +306,13 @@ func (s *Service) Player(ctx context.Context, userID string, all bool, viewer st
 			var se Session
 			err := r.Scan(&se.ID, &se.Platform, &se.CreatedAt, &se.RevokedAt, &se.RevokedReason, &se.DeviceVerdict)
 			return se, err
+		}); err != nil {
+			return err
+		}
+		if p.Identity.StatusHistory, err = collect(ctx, tx, playerStatusSQL, userID, lim(lastStatuses), func(r pgx.CollectableRow) (StatusChange, error) {
+			var c StatusChange
+			err := r.Scan(&c.ID, &c.From, &c.To, &c.ActorType, &c.Actor, &c.Reason, &c.At)
+			return c, err
 		}); err != nil {
 			return err
 		}
@@ -409,6 +432,10 @@ func WritePlayerCSV(w io.Writer, p *Player) (int, error) {
 			status = "ended"
 		}
 		write("session", se.ID, se.CreatedAt, se.Platform, status, "", deref(se.RevokedReason), map[string]any{"revoked_at": se.RevokedAt, "device_verdict": se.DeviceVerdict})
+	}
+	for _, c := range p.Identity.StatusHistory {
+		write("status_change", strconv.FormatInt(c.ID, 10), c.At, "status", c.To, "", deref(c.Actor),
+			map[string]any{"from": c.From, "actor_type": c.ActorType, "reason": c.Reason})
 	}
 	for _, l := range p.Limits.Deposit {
 		status := "in force"

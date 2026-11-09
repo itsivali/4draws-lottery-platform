@@ -117,6 +117,9 @@ func (s *Service) CloseAccount(ctx context.Context, userID, staffID, staff strin
 		if err := guard(ctx, tx, userID); err != nil {
 			return err
 		}
+		if err := q.NameStatusChange(ctx, store.NameStatusChangeParams{ActorType: string(audit.Staff), ActorID: staff, Reason: "closure requested by the player"}); err != nil {
+			return err
+		}
 		if err := q.SetUserClosed(ctx, store.SetUserClosedParams{ID: userID, At: now}); err != nil {
 			return err
 		}
@@ -228,6 +231,9 @@ func (s *Service) Suspend(ctx context.Context, userID, staff, reason string, sus
 		from, to, action = "suspended", "active", "identity.account_reinstated"
 	}
 	return s.withTx(ctx, func(tx pgx.Tx, q *store.Queries, now time.Time) error {
+		if err := q.NameStatusChange(ctx, store.NameStatusChangeParams{ActorType: string(audit.Staff), ActorID: staff, Reason: reason}); err != nil {
+			return err
+		}
 		n, err := q.SetUserSuspended(ctx, store.SetUserSuspendedParams{Status: to, At: now, ID: userID, FromStatus: from})
 		var pe *pgconn.PgError
 		if errors.As(err, &pe) && pe.Code == "22P02" {
@@ -300,4 +306,44 @@ func timePtr(v any) *time.Time {
 		return &t
 	}
 	return nil
+}
+
+// StatusChange is one change of an account's status, as identity.user_status_history keeps it (ADR 0030). From is
+// empty for the account's first status (its sign-up, or when the history began).
+type StatusChange struct {
+	From      string    `json:"from"`
+	To        string    `json:"to"`
+	ActorType string    `json:"actor_type"`
+	Actor     string    `json:"actor"`
+	Reason    string    `json:"reason"`
+	At        time.Time `json:"at"`
+}
+
+// StatusHistory returns every status the account has had, oldest first.
+func (s *Service) StatusHistory(ctx context.Context, userID string) ([]StatusChange, error) {
+	rows, err := store.New(s.pool).StatusHistory(ctx, userID)
+	var pe *pgconn.PgError
+	if errors.As(err, &pe) && pe.Code == "22P02" {
+		return nil, ErrNoSuchPlayer
+	}
+	if err != nil {
+		return nil, err
+	}
+	out := make([]StatusChange, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, StatusChange{From: deref(r.FromStatus), To: r.ToStatus, ActorType: deref(r.ActorType), Actor: deref(r.ActorID),
+			Reason: deref(r.Reason), At: r.ChangedAt})
+	}
+	return out, nil
+}
+
+// EndSessionsForSelfExclusion ends every session of the account, in the caller's transaction: a player who excludes
+// themself is signed out everywhere, at once (ADR 0030). They may sign in again, to withdraw what is theirs; play and
+// top-ups stay refused.
+func (s *Service) EndSessionsForSelfExclusion(ctx context.Context, tx pgx.Tx, userID string) error {
+	now, err := s.clk.Now(ctx, tx)
+	if err != nil {
+		return err
+	}
+	return store.New(tx).EndSessionsFor(ctx, store.EndSessionsForParams{At: &now, Reason: ptr("self_exclusion"), UserID: userID})
 }

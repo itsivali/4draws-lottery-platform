@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../app/providers.dart';
 import '../../../app/theme/tokens.dart';
 import '../../../core/api/api_failure.dart';
 import '../../../core/api/idempotency.dart';
+import '../../../core/auth/session_manager.dart';
 import '../../../core/formatting/dates.dart';
 import '../../../core/formatting/money.dart';
 import '../../../core/widgets/app_card.dart';
@@ -30,7 +32,12 @@ class ResponsibleGamingScreen extends ConsumerStatefulWidget {
 class _ResponsibleGamingScreenState extends ConsumerState<ResponsibleGamingScreen> {
   String? _busy;
 
-  Future<void> _run(String what, Future<void> Function(String key) action, {required String done}) async {
+  Future<void> _run(
+    String what,
+    Future<void> Function(String key) action, {
+    required String done,
+    Future<void> Function()? after,
+  }) async {
     setState(() => _busy = what);
     final key = newIdempotencyKey();
     try {
@@ -39,6 +46,10 @@ class _ResponsibleGamingScreenState extends ConsumerState<ResponsibleGamingScree
       } on ApiFailure catch (f) {
         if (!f.outcomeUncertain) rethrow;
         await action(key); // a lost answer: the same key is replayed, never applied twice
+      }
+      if (after != null) {
+        await after();
+        return;
       }
       ref
         ..invalidate(accountProvider)
@@ -98,6 +109,7 @@ class _ResponsibleGamingScreenState extends ConsumerState<ResponsibleGamingScree
       facts: [
         ('Self-exclusion', label),
         ('While excluded', 'No plays or top-ups. You can still withdraw your balance.'),
+        ('Signed out', 'On every device, straight away.'),
       ],
       note: 'Self-exclusion cannot be shortened or cancelled.',
       confirmLabel: 'Self-exclude',
@@ -108,6 +120,8 @@ class _ResponsibleGamingScreenState extends ConsumerState<ResponsibleGamingScree
       'exclude',
       (key) => ref.read(accountRepositoryProvider).selfExclude(term: term, idempotencyKey: key),
       done: 'Self-exclusion has started',
+      // the server ended every session (ADR 0030); the sign-in screen says why
+      after: () => ref.read(sessionManagerProvider).endedByServer(SessionEndReason.selfExcluded),
     );
   }
 

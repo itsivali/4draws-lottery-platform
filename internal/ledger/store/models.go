@@ -284,6 +284,17 @@ type IdentityUser struct {
 	Email              *string
 }
 
+type IdentityUserStatusHistory struct {
+	ID         int64
+	UserID     string
+	FromStatus *string
+	ToStatus   string
+	ActorType  *string
+	ActorID    *string
+	Reason     *string
+	ChangedAt  pgtype.Timestamptz
+}
+
 type KycAgeDeclaration struct {
 	UserID         string
 	DateOfBirthEnc []byte

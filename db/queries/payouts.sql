@@ -66,7 +66,8 @@ UPDATE payouts.payouts
  WHERE id = sqlc.arg(id);
 
 -- name: ApprovePayout :exec
-UPDATE payouts.payouts SET status = 'pending', approved_by = sqlc.arg(approved_by), updated_at = sqlc.arg(at)
+-- a reason the payout was held for (ADR 0030) no longer applies once a person released it; the audit log keeps it
+UPDATE payouts.payouts SET status = 'pending', reason = NULL, approved_by = sqlc.arg(approved_by), updated_at = sqlc.arg(at)
 WHERE id = sqlc.arg(id) AND status = 'held';
 
 -- name: InsertCallback :exec

@@ -24,7 +24,7 @@ func (q *Queries) AccountBalance(ctx context.Context, code string) (int64, error
 }
 
 const approvePayout = `-- name: ApprovePayout :exec
-UPDATE payouts.payouts SET status = 'pending', approved_by = $1, updated_at = $2
+UPDATE payouts.payouts SET status = 'pending', reason = NULL, approved_by = $1, updated_at = $2
 WHERE id = $3 AND status = 'held'
 `
 
@@ -34,6 +34,7 @@ type ApprovePayoutParams struct {
 	ID         string
 }
 
+// a reason the payout was held for (ADR 0030) no longer applies once a person released it; the audit log keeps it
 func (q *Queries) ApprovePayout(ctx context.Context, arg ApprovePayoutParams) error {
 	_, err := q.db.Exec(ctx, approvePayout, arg.ApprovedBy, arg.At, arg.ID)
 	return err

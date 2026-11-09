@@ -286,6 +286,17 @@ type IdentityUser struct {
 	Email              pgtype.Text
 }
 
+type IdentityUserStatusHistory struct {
+	ID         int64
+	UserID     string
+	FromStatus pgtype.Text
+	ToStatus   string
+	ActorType  pgtype.Text
+	ActorID    pgtype.Text
+	Reason     pgtype.Text
+	ChangedAt  time.Time
+}
+
 type KycAgeDeclaration struct {
 	UserID         string
 	DateOfBirthEnc []byte

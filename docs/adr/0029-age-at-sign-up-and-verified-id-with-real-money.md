@@ -42,7 +42,7 @@ LN 112/2026 reg 82 asks a licensed operator to verify identity, age and location
   ID, and with real money they cannot top up or play until they have.
 - **What the declaration proves.** It is the player's statement, not proof of age. Proof is the verified ID, which
   real-money operation now requires before any money moves.
-- **Still to do in S3:**
+- **Still to do in S3** (the first three are done in S3b, ADR 0030):
   - re-check eligibility when a payout is sent or approved, and when the STK push job runs;
   - an account status history;
   - self-exclusion revoking sessions;

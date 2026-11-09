@@ -23,6 +23,7 @@ import (
 	"github.com/itsivali/lottery-platform/internal/payments/daraja"
 	"github.com/itsivali/lottery-platform/internal/payments/store"
 	"github.com/itsivali/lottery-platform/internal/platform/clock"
+	"github.com/itsivali/lottery-platform/internal/rg"
 )
 
 // Errors.
@@ -400,8 +401,9 @@ func (s *Service) Push(ctx context.Context, paymentID string) error {
 	if p.Status != "initiated" || p.Msisdn == nil {
 		return nil
 	}
-	// operations stopped since the top-up was recorded: no prompt goes out and the top-up fails (ADR 0027)
-	if stopped, err := s.failIfStopped(ctx, p.UserID, paymentID); err != nil || stopped {
+	// operations stopped (ADR 0027) or the player may no longer top up (ADR 0030) since the top-up was recorded: no
+	// prompt goes out and the top-up fails
+	if stopped, err := s.refuseBeforePush(ctx, p.UserID, paymentID); err != nil || stopped {
 		return err
 	}
 	// Tajirika on the prompt (owner, 2026-10-29, #87). Tested 2026-10-30 (#107): sandbox prompts time out (1037) with
@@ -797,13 +799,13 @@ func (s *Service) settle(ctx context.Context, tx pgx.Tx, userID, paymentID, stat
 		Details: map[string]any{"user_id": userID, "reason": reason}})
 }
 
-// failIfStopped fails a recorded top-up whose prompt has not gone out when the operating mode no longer allows money to
-// move, and reports whether it did.
-func (s *Service) failIfStopped(ctx context.Context, userID, paymentID string) (bool, error) {
+// refuseBeforePush fails a recorded top-up whose prompt has not gone out when it may no longer go out (pushRefusal),
+// and reports whether it did.
+func (s *Service) refuseBeforePush(ctx context.Context, userID, paymentID string) (bool, error) {
 	stopped := false
 	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
-		err := s.gate.Assert(ctx, tx, compliance.OpPush)
-		if !errors.Is(err, compliance.ErrOperationsStopped) {
+		reason, err := s.pushRefusal(ctx, tx, userID, paymentID)
+		if err != nil || reason == "" {
 			return err
 		}
 		p, err := store.New(tx).LockPayment(ctx, paymentID)
@@ -815,10 +817,43 @@ func (s *Service) failIfStopped(ctx context.Context, userID, paymentID string) (
 			return err
 		}
 		stopped = true
-		slog.WarnContext(ctx, "operations are stopped; the top-up's prompt is not sent", "payment", paymentID)
-		return s.settle(ctx, tx, userID, paymentID, "failed", "operations_stopped", nil, now)
+		slog.WarnContext(ctx, "the top-up's prompt is not sent", "payment", paymentID, "reason", reason)
+		return s.settle(ctx, tx, userID, paymentID, "failed", reason, nil, now)
 	})
 	return stopped, err
+}
+
+// pushRefusal decides again, just before the prompt goes out, what StartTopUp decided when the top-up was recorded
+// (ADR 0030): operations may have stopped, the account been suspended or closed (or, with real money, its ID not be
+// verified), the player have excluded themself or taken a time-out, or another number been proved. It returns why the
+// prompt must not be sent, or "".
+func (s *Service) pushRefusal(ctx context.Context, tx pgx.Tx, userID, paymentID string) (string, error) {
+	if err := s.gate.Assert(ctx, tx, compliance.OpPush); errors.Is(err, compliance.ErrOperationsStopped) {
+		return "operations_stopped", nil
+	} else if err != nil {
+		return "", err
+	}
+	msisdn, err := s.ids.AssertCanTopUp(ctx, tx, userID)
+	switch {
+	case errors.Is(err, identity.ErrAccountSuspended), errors.Is(err, identity.ErrKYCRequired):
+		return "account_ineligible", nil
+	case err != nil:
+		return "", err
+	}
+	if err := s.rg.AssertNotRestricted(ctx, tx, userID); err != nil {
+		if r := (*rg.RestrictedError)(nil); errors.As(err, &r) {
+			return "player_restricted", nil
+		}
+		return "", err
+	}
+	p, err := store.New(tx).GetPayment(ctx, paymentID)
+	if err != nil {
+		return "", err
+	}
+	if p.Msisdn != nil && *p.Msisdn != msisdn {
+		return "number_changed", nil
+	}
+	return "", nil
 }
 
 // claimRetry is how long a receipt claim waits for M-Pesa's answer before the sweep asks again.

@@ -15,7 +15,7 @@ registering. Without the shortcode `POST /v1/payouts/withdrawals` answers 503.
 
 | State | Meaning | Who acts |
 |---|---|---|
-| held | above KES 100,000: waits for an operator | operator: approve or reject |
+| held | above KES 100,000, or the account could not be paid when its turn came (reason `payee_ineligible: …`, ADR 0030): waits for an operator | operator: approve or reject |
 | pending | the send job is queued | worker |
 | sending | committed just before the B2C request | worker; if stuck it becomes timed_out, **never sent again** |
 | sent | Daraja accepted the request | worker waits for the result, then asks Transaction Status |
@@ -33,6 +33,12 @@ go run ./cmd/lotteryctl payouts approve -payout <id> -operator <your staff id>  
 go run ./cmd/lotteryctl payouts reject -payout <id> -reason "<why>" -operator <your staff id>
 go run ./cmd/lotteryctl payouts list -state manual
 ```
+
+A payout held with `payee_ineligible: …` was not sent because the account cannot be paid now: it is suspended or
+closed (`account not active`), its identity is no longer verified, its phone is not proved, or another number was
+proved (`number changed`). Approving is refused (409 `payee-ineligible`) until the account may be paid again. If it
+will not be (a closed account, a confirmed fraud), reject it with the reason: a withdrawal's money goes back to the
+wallet, a prize goes back to its pool, still owed.
 
 For a payout in `manual`, find it on the B2C account statement (the originator conversation id is the payout's
 `originator_conversation_id`; the amount is `net_kes`, to the payout's number):

@@ -193,3 +193,19 @@ WHERE user_id = sqlc.arg(user_id) AND id <> sqlc.arg(keep_session_id) AND revoke
 -- The Google or Apple identities that sign in to the account, oldest first.
 -- name: AuthIdentitiesFor :many
 SELECT provider, created_at FROM identity.auth_identities WHERE user_id = $1 ORDER BY created_at, id;
+
+-- name: NameStatusChange :exec
+-- Who changes an account's status in this transaction, and why: the status-history trigger (00049) records them.
+SELECT set_config('identity.status_actor_type', sqlc.arg(actor_type)::text, true),
+       set_config('identity.status_actor', sqlc.arg(actor_id)::text, true),
+       set_config('identity.status_reason', sqlc.arg(reason)::text, true);
+
+-- name: StatusHistory :many
+-- An account's status changes, oldest first.
+SELECT from_status, to_status, actor_type, actor_id, reason, changed_at
+FROM identity.user_status_history WHERE user_id = sqlc.arg(user_id) ORDER BY id;
+
+-- name: EndSessionsFor :exec
+-- Ends every open session of an account with the given reason (a self-exclusion, ADR 0030).
+UPDATE identity.sessions SET revoked_at = sqlc.arg(at), revoked_reason = sqlc.arg(reason)
+WHERE user_id = sqlc.arg(user_id) AND revoked_at IS NULL;

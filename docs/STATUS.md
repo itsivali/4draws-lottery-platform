@@ -66,6 +66,14 @@ Read this first at the start of every session.
   - Identity verification needs a date of birth, taken from sign-up when it is left out.
   - In `live`, top-ups, paybill payments and plays need a verified ID.
   - App builds from before this cannot sign up new accounts until updated.
+- **Eligibility checked again when money moves (ADR 0030, 2026-11-08):**
+  - The payout send job and `Approve` check the account again. One that cannot be paid now (suspended, closed,
+    identity not verified, number changed) is held, not sent (migration 00048 allows `pending → held`).
+  - The top-up prompt job re-checks the operating mode, the account, time-outs and self-exclusion; a refused top-up
+    fails without a prompt.
+  - Every account status change is kept in `identity.user_status_history` (migration 00049), written by a trigger,
+    and shown on the back office player timeline and in the player pack.
+  - Self-exclusion ends every session at once; the app says why on the sign-in screen.
 
 ## Before the API is exposed to players
 

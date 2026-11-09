@@ -369,6 +369,19 @@ function PlayerSheet({ id, tick, post, ask, busy }: { id: string; tick: number; 
                     </Rows>
                   )}
                 </section>
+                <section className="grid gap-2">
+                  <h3 className="text-sm font-semibold">Account status</h3>
+                  {t.identity.status_history.length === 0 ? <Nothing>No status change recorded.</Nothing> : (
+                    <Rows caption="Account status">
+                      {t.identity.status_history.map((x) => (
+                        <tr key={x.id} className="align-top">
+                          <td className="px-3 py-2"><When at={x.at} /></td>
+                          <td className="px-3 py-2"><Stack primary={<Pill tone={x.to === 'active' ? 'success' : 'error'}>{x.from ? `${x.from} → ${x.to}` : x.to}</Pill>} secondary={<>{x.actor_type === 'staff' && x.actor ? <>by <Mono>{x.actor}</Mono></> : x.actor_type ?? 'not named'}{x.reason ? ` · ${x.reason}` : ''}</>} /></td>
+                        </tr>
+                      ))}
+                    </Rows>
+                  )}
+                </section>
                 {t.identity.closure_requested_at ? <p className="text-sm">Asked to close the account on {eat(t.identity.closure_requested_at)}. <Link to="/closures">Open closures</Link></p> : null}
               </TabsContent>
               <TabsContent value="limits" className="mt-3 grid gap-3">

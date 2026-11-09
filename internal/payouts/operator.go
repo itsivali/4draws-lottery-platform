@@ -3,6 +3,7 @@ package payouts
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/jackc/pgx/v5"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/itsivali/lottery-platform/internal/audit"
 	"github.com/itsivali/lottery-platform/internal/compliance"
+	"github.com/itsivali/lottery-platform/internal/identity"
 	"github.com/itsivali/lottery-platform/internal/payouts/store"
 )
 
@@ -46,13 +48,17 @@ func (s *Service) staffTx(ctx context.Context, id, operator string, states []str
 	return view(p), err
 }
 
-// Approve releases a held payout to be sent.
+// Approve releases a held payout to be sent, if the account may still be paid at its number (ErrPayeeIneligible).
 func (s *Service) Approve(ctx context.Context, id, operator string) (Payout, error) {
 	if s.daraja == nil {
 		return Payout{}, ErrUnavailable
 	}
 	return s.staffTx(ctx, id, operator, []string{"held"}, func(tx pgx.Tx, p store.PayoutsPayout) error {
 		if err := s.gate.Assert(ctx, tx, compliance.OpPayout); err != nil {
+			return err
+		}
+		// the account may have changed since the payout was held (ADR 0030): it stays held, for Reject
+		if err := s.assertPayee(ctx, tx, p); err != nil {
 			return err
 		}
 		now, err := s.clk.Now(ctx, tx)
@@ -130,4 +136,39 @@ func (s *Service) InState(ctx context.Context, state string, limit int, after st
 		list = append(list, view(p))
 	}
 	return list, next, nil
+}
+
+// payeeProblems are the refusals of identity.AssertCanBePaid that mean the account, not the system, is the problem.
+var payeeProblems = []error{identity.ErrAccountSuspended, identity.ErrKYCRequired, identity.ErrPhoneNotVerified}
+
+// assertPayee checks again, as money is about to leave, that the account may be paid and that its proved number is
+// the one the payout was made out to (ADR 0030). A refusal wraps ErrPayeeIneligible; other errors are returned as they
+// are.
+func (s *Service) assertPayee(ctx context.Context, tx pgx.Tx, p store.PayoutsPayout) error {
+	msisdn, err := s.ids.AssertCanBePaid(ctx, tx, p.UserID)
+	for _, e := range payeeProblems {
+		if errors.Is(err, e) {
+			return fmt.Errorf("%w: %w", ErrPayeeIneligible, err)
+		}
+	}
+	if err != nil {
+		return err
+	}
+	if msisdn != deref(p.Msisdn) {
+		return fmt.Errorf("%w: the account's proved number is no longer the payout's", ErrPayeeIneligible)
+	}
+	return nil
+}
+
+// payeeReason is how a payee refusal is recorded on the payout.
+func payeeReason(err error) string {
+	switch {
+	case errors.Is(err, identity.ErrAccountSuspended):
+		return "payee_ineligible: account not active"
+	case errors.Is(err, identity.ErrKYCRequired):
+		return "payee_ineligible: identity not verified"
+	case errors.Is(err, identity.ErrPhoneNotVerified):
+		return "payee_ineligible: phone not proved"
+	}
+	return "payee_ineligible: number changed"
 }

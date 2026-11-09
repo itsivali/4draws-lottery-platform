@@ -34,9 +34,12 @@ var (
 	ErrInsufficientFunds = errors.New("payouts: the balance is below the amount")
 	ErrDailyLimit        = errors.New("payouts: no withdrawals left today")
 	ErrState             = errors.New("payouts: the payout is not in a state that allows this")
-	ErrOperator          = errors.New("payouts: an operator's name and a reason are required")
-	ErrReceiptRequired   = errors.New("payouts: the M-Pesa receipt of the payment is required")
-	ErrBadCursor         = errors.New("payouts: bad cursor")
+	// ErrPayeeIneligible: the account may no longer be paid (suspended, closed, no longer verified) or its proved
+	// number is not the one the payout names. It wraps the reason.
+	ErrPayeeIneligible = errors.New("payouts: the account cannot be paid now")
+	ErrOperator        = errors.New("payouts: an operator's name and a reason are required")
+	ErrReceiptRequired = errors.New("payouts: the M-Pesa receipt of the payment is required")
+	ErrBadCursor       = errors.New("payouts: bad cursor")
 )
 
 // Tax rules applied to payouts (versioned in ledger.tax_rules; the rates are placeholders, phase 5 checkpoint).

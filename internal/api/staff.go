@@ -255,6 +255,11 @@ func staffError(w http.ResponseWriter, err error) {
 		httpx.WriteProblem(w, status, slug, title, "")
 		return
 	}
+	if errors.Is(err, payouts.ErrPayeeIneligible) {
+		httpx.WriteProblem(w, http.StatusConflict, "payee-ineligible", "The account cannot be paid now; the payout stays held",
+			strings.TrimPrefix(err.Error(), payouts.ErrPayeeIneligible.Error()+": "))
+		return
+	}
 	if errors.Is(err, staff.ErrWeakPassword) {
 		httpx.WriteProblem(w, http.StatusBadRequest, "weak-password", "Password too weak", strings.TrimPrefix(err.Error(), "password: too weak: "))
 		return

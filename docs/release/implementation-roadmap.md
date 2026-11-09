@@ -30,8 +30,8 @@ submission; P2 hardens.
 | PAY-03 | P1 | S2 | Hook secret in traces and logs (SEC-03) | Span names and logs redact the segment | — | done (ADR 0028) |
 | PAY-04 | P1 | S2 | No DB state machine for top-ups (SEC-04) | Illegal transitions rejected by a trigger | — | done (ADR 0028) |
 | ID-01 | P0 | S3 | No server-side age evidence before money in | Sign-up requires date of birth and declaration; under 18 refused; `live` needs verified ID before top-up and play | REG-01 | done (S3a, ADR 0029) |
-| ID-02 | P1 | S3 | Payouts and pushes don't re-check eligibility | `Send`, `Approve` and the push job re-check | — | not_started |
-| ID-03 | P1 | S3 | No status history; self-exclusion keeps sessions | Append-only history; exclusion revokes sessions | — | not_started |
+| ID-02 | P1 | S3 | Payouts and pushes don't re-check eligibility | `Send`, `Approve` and the push job re-check | — | done (S3b, ADR 0030) |
+| ID-03 | P1 | S3 | No status history; self-exclusion keeps sessions | Append-only history; exclusion revokes sessions | — | done (S3b, ADR 0030) |
 | ID-04 | P1 | S3 | Balances that can't be paid have no exit | Staff refund-to-source with reason and audit | — | not_started |
 | ID-05 | P1 | S3 | No jurisdiction signal | Country recorded; non-KE refused in `live` | REG-01 | not_started |
 | OPS-01 | P1 | S4 | Single-person payout and settle powers; CLI official spoofing | Second person enforced in the API and CLI | — | not_started |

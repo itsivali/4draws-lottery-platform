@@ -85,6 +85,18 @@ type Service struct {
 	clk   clock.Clock
 	audit *audit.Writer
 	cfg   Config
+	ender SessionEnder
+}
+
+// SessionEnder ends every session of an account in the caller's transaction (the identity module).
+type SessionEnder interface {
+	EndSessionsForSelfExclusion(ctx context.Context, tx pgx.Tx, userID string) error
+}
+
+// WithSessionEnder makes a self-exclusion sign the player out everywhere, in the same transaction (ADR 0030).
+func (s *Service) WithSessionEnder(e SessionEnder) *Service {
+	s.ender = e
+	return s
 }
 
 // NewService returns a Service.
@@ -171,7 +183,7 @@ func (s *Service) Timeout(ctx context.Context, userID, duration string) error {
 	})
 }
 
-// SelfExclude blocks the player for 6 months, 1 year or permanently.
+// SelfExclude blocks the player for 6 months, 1 year or permanently, and ends every session they have (WithSessionEnder).
 func (s *Service) SelfExclude(ctx context.Context, userID, term string) error {
 	var end func(time.Time) *time.Time
 	switch term {
@@ -195,6 +207,12 @@ func (s *Service) restrict(ctx context.Context, userID, kind, action, term strin
 		}
 		if err := store.New(tx).InsertRestriction(ctx, store.InsertRestrictionParams{UserID: userID, Kind: kind, StartsAt: now, EndsAt: end(now)}); err != nil {
 			return err
+		}
+		// a self-excluded player is signed out everywhere at once; a time-out keeps the session (it is a pause)
+		if kind == KindSelfExclusion && s.ender != nil {
+			if err := s.ender.EndSessionsForSelfExclusion(ctx, tx, userID); err != nil {
+				return err
+			}
 		}
 		return s.audit.Record(ctx, tx, audit.Event{ActorType: audit.Player, ActorID: userID, Action: action, EntityType: "user", EntityID: userID,
 			Details: map[string]any{"term": term}})

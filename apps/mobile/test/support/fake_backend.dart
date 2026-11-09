@@ -454,6 +454,9 @@ class FakeBackend {
         return http.Response('', 204);
       case ('POST', '/v1/rg/self-exclusion'):
         restriction = {'kind': 'self_exclusion', 'until': null};
+        // as the server does (ADR 0030): every session ends
+        access = 'access-revoked';
+        refreshFails = true;
         return http.Response('', 204);
       case ('GET', '/v1/fairness'):
         return _ok({

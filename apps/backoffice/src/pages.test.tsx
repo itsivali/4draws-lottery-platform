@@ -437,7 +437,9 @@ describe('players: the timeline (owner, 2026-10-31)', () => {
     plays: { count: 3, last: [{ ticket_id: 't-1', play_date: '2026-10-28', seq: 1, price_kes: 100, status: 'paid', slot: 4, lucky: false, created_at: '2026-10-28T09:05:00Z' }] },
     payouts: [],
     identity: { kyc: [{ id: 'k1', status: 'verified', provider: 'manual', reviewed_by: 'staff:m1', reason: 'ID matches', created_at: '2026-10-27T19:00:00Z' }],
-      sessions: [{ id: 's1', platform: 'android', created_at: '2026-10-28T09:00:00Z', revoked_at: null, revoked_reason: null, device_verdict: 'passed' }], closure_requested_at: null },
+      sessions: [{ id: 's1', platform: 'android', created_at: '2026-10-28T09:00:00Z', revoked_at: null, revoked_reason: null, device_verdict: 'passed' }],
+      status_history: [{ id: 2, from: 'active', to: 'suspended', actor_type: 'staff', actor: 'staff:ops-lead', reason: 'chargeback inquiry', at: '2026-10-29T09:00:00Z' }, { id: 1, from: null, to: 'active', actor_type: 'player', actor: 'u1', reason: 'signed up', at: '2026-10-27T09:00:00Z' }],
+      closure_requested_at: null },
     limits: { deposit: [{ period: 'daily', amount_kes: 500, effective_from: '2026-10-27T19:00:00Z', pending: false }], restriction: null },
     events: [{ id: '7', at: '2026-10-28T09:05:00Z', actor_type: 'player', actor_id: 'u1', action: 'game.play', entity_type: 'ticket', entity_id: 't-1', details: { price_kes: 100 } }],
   }
@@ -470,6 +472,8 @@ describe('players: the timeline (owner, 2026-10-31)', () => {
     await user.click(within(sheet).getByRole('tab', { name: 'Identity & sessions' }))
     expect(within(sheet).getByText('device passed')).toBeInTheDocument()
     expect(within(sheet).getByText(/ID matches/)).toBeInTheDocument()
+    expect(within(sheet).getByText('active → suspended')).toBeInTheDocument()
+    expect(within(sheet).getByText(/chargeback inquiry/)).toBeInTheDocument()
     await user.click(within(sheet).getByRole('tab', { name: 'Limits' }))
     expect(within(sheet).getByText('KES 500')).toBeInTheDocument()
     await user.click(within(sheet).getByRole('tab', { name: 'Activity' }))

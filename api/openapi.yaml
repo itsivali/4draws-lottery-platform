@@ -431,6 +431,9 @@ paths:
       operationId: selfExclude
       tags: [responsible-gaming]
       summary: Self-exclude for 6 months, 1 year or permanently (cannot be shortened)
+      description: >-
+        Every session of the player ends at once, this one included (ADR 0030): the next request with these tokens is
+        401. The player may sign in again to withdraw their balance; plays and top-ups stay refused.
       parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
       requestBody:
         required: true
@@ -2574,7 +2577,11 @@ paths:
       operationId: staffPayoutApprove
       tags: [back-office]
       summary: Approve a held payout (it is then sent)
-      description: "Role: `staff` (admins too)."
+      description: >-
+        Role: `staff` (admins too). The account is checked again (ADR 0030): while it cannot be paid (suspended,
+        closed, identity no longer verified, or another number proved) the approval is refused with 409
+        `payee-ineligible`, whose detail says why, and the payout stays held, to be rejected or approved later. A payout
+        the send job finds unpayable also comes back to held, with a `payee_ineligible: …` reason.
       security: [{ staffBearer: [] }]
       parameters:
         - { $ref: "#/components/parameters/IdempotencyKey" }
@@ -3452,7 +3459,7 @@ paths:
                         created_at: { type: string, format: date-time }
                   identity:
                     type: object
-                    required: [kyc, sessions, closure_requested_at]
+                    required: [kyc, sessions, status_history, closure_requested_at]
                     properties:
                       kyc:
                         type: array
@@ -3479,6 +3486,23 @@ paths:
                             revoked_at: { type: [string, "null"], format: date-time }
                             revoked_reason: { type: [string, "null"] }
                             device_verdict: { type: string, enum: [none, passed, failed] }
+                      status_history:
+                        type: array
+                        description: >-
+                          Every change of the account's status, newest first (ADR 0030), recorded by the database for
+                          every change. `from` is null for the first status (the sign-up, or when the history began);
+                          `actor_type`, `actor` and `reason` are null for a change made outside the services.
+                        items:
+                          type: object
+                          required: [id, from, to, actor_type, actor, reason, at]
+                          properties:
+                            id: { type: integer }
+                            from: { type: [string, "null"], enum: [active, suspended, closed, null] }
+                            to: { type: string, enum: [active, suspended, closed] }
+                            actor_type: { type: [string, "null"], enum: [player, staff, system, null] }
+                            actor: { type: [string, "null"] }
+                            reason: { type: [string, "null"] }
+                            at: { type: string, format: date-time }
                       closure_requested_at: { type: [string, "null"], format: date-time }
                   limits:
                     type: object

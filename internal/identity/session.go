@@ -342,3 +342,10 @@ func (s *Service) Authenticate(ctx context.Context, token string) (Principal, er
 }
 
 func ptr[T any](v T) *T { return &v }
+
+func deref(p *string) string {
+	if p == nil {
+		return ""
+	}
+	return *p
+}

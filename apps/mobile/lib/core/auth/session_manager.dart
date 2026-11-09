@@ -11,7 +11,9 @@ import 'token_store.dart';
 
 enum SessionStatus { restoring, offline, signedIn, signedOut }
 
-enum SessionEndReason { signedOut, expired }
+/// Why the last session ended: the player signed out, it expired, or the player self-excluded (the server ends every
+/// session then, ADR 0030).
+enum SessionEndReason { signedOut, expired, selfExcluded }
 
 /// How the API identifies this install: the platform, and on phones a random per-install fingerprint (the web has
 /// none; the API limits it by address instead).
@@ -171,6 +173,9 @@ class SessionManager implements AccessTokenSource {
     }
     await _end(SessionEndReason.signedOut);
   }
+
+  /// Forgets the session on this device without asking the server, which has ended it already (a self-exclusion).
+  Future<void> endedByServer(SessionEndReason reason) => _end(reason);
 
   Future<void> _end(SessionEndReason reason) async {
     mustChangePassword.value = false;

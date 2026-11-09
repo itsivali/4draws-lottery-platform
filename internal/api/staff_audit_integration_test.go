@@ -224,6 +224,9 @@ func TestStaffAPI_PlayerTimelineAndPack(t *testing.T) {
 	if len(sessions) == 0 || sessions[0].(map[string]any)["platform"] != "android" || sessions[0].(map[string]any)["device_verdict"] == nil {
 		t.Fatalf("sessions: %v", sessions)
 	}
+	if hist := id["status_history"].([]any); len(hist) != 1 || hist[0].(map[string]any)["to"] != "active" || hist[0].(map[string]any)["reason"] != "signed up" {
+		t.Fatalf("status history: %v", hist)
+	}
 	limits := r.Body["limits"].(map[string]any)
 	deposit := limits["deposit"].([]any)
 	if len(deposit) != 1 || deposit[0].(map[string]any)["period"] != "daily" || deposit[0].(map[string]any)["amount_kes"] != float64(500) || deposit[0].(map[string]any)["pending"] != false {
@@ -283,7 +286,7 @@ func TestStaffAPI_PlayerTimelineAndPack(t *testing.T) {
 		sections[row[0]]++
 	}
 	if sections["player"] != 1 || sections["wallet_transaction"] < 3 || sections["top_up"] != 1 || sections["play"] != 2 || sections["kyc_check"] < 1 ||
-		sections["session"] < 1 || sections["deposit_limit"] != 1 || sections["restriction"] != 1 || sections["event"] < 3 {
+		sections["session"] < 1 || sections["status_change"] != 1 || sections["deposit_limit"] != 1 || sections["restriction"] != 1 || sections["event"] < 3 {
 		t.Fatalf("sections: %v", sections)
 	}
 	if !strings.Contains(x.Raw, "Amina Otieno") || !strings.Contains(x.Raw, "24681357") || !strings.Contains(x.Raw, s.msisdn) {

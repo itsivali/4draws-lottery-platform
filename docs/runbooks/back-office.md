@@ -164,10 +164,11 @@ came from.
 from the activity log). The sheet shows the account (name and ID number from the identity submission, else sign-up),
 the balance and anything owed after a reversed top-up, and tabs for the wallet's last 50 movements, the last 20
 top-ups (each opens on *Top-ups*), plays, payouts, the identity history (submissions' outcomes, the last 10
-sign-ins with the device's verdict, a closure request), the deposit limits and any time-out or self-exclusion, and
+sign-ins with the device's verdict, the last 20 account status changes with who made them and why (ADR 0030), a
+closure request), the deposit limits and any time-out or self-exclusion, and
 the last 50 audit records about the player. Suspend, reinstate and temporary password work from the sheet too.
 *Download player pack (CSV)* gives every row of every list in one file for an auditor or a data-subject request:
-columns `section` (player, wallet_transaction, top_up, play, payout, kyc_check, session, deposit_limit, restriction,
+columns `section` (player, wallet_transaction, top_up, play, payout, kyc_check, session, status_change, deposit_limit, restriction,
 event), `id`, `at_eat`, `kind`, `status`, `amount_kes`, `reference`, `details_json`. Opening the sheet is audited
 (`identity.player_viewed`, and `kyc.unmask` for the name); the pack as `identity.player_exported`.
 

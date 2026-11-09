@@ -456,6 +456,8 @@ export interface PlayerTimeline {
     /** submissions' outcomes, newest first, without the personal data they carry */
     kyc: { id: string; status: string; provider: string; reviewed_by: string | null; reason: string | null; created_at: string }[]
     sessions: { id: string; platform: string; created_at: string; revoked_at: string | null; revoked_reason: string | null; device_verdict: string }[]
+    /** every change of the account's status, newest first (ADR 0030); from is null for the first */
+    status_history: { id: number; from: string | null; to: 'active' | 'suspended' | 'closed'; actor_type: 'player' | 'staff' | 'system' | null; actor: string | null; reason: string | null; at: string }[]
     closure_requested_at: string | null
   }
   limits: {
