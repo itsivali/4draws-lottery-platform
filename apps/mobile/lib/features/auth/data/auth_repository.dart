@@ -123,15 +123,27 @@ class AuthRepository {
 
 /// What a new account gives about itself (owner, 2026-10-30): the names and number on the player's national ID.
 class SignUpIdentity {
-  const SignUpIdentity({required this.firstName, required this.secondName, required this.nationalId});
+  const SignUpIdentity({
+    required this.firstName,
+    required this.secondName,
+    required this.nationalId,
+    this.dateOfBirth = '',
+    this.adult = false,
+  });
 
   final String firstName;
   final String secondName;
   final String nationalId;
 
+  /// YYYY-MM-DD; with [adult], the player's 18+ declaration, checked by the server at sign-up (ADR 0029).
+  final String dateOfBirth;
+  final bool adult;
+
   Map<String, Object?> toJson() => {
     'first_name': firstName.trim(),
     'second_name': secondName.trim(),
     'national_id': nationalId.trim(),
+    'date_of_birth': dateOfBirth,
+    'adult_declaration': adult,
   };
 }

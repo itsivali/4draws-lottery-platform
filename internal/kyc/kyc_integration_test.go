@@ -698,9 +698,30 @@ func TestDeclared_SignUpNamesAndIDAreKeptAndManualReviewNeedsNoDateOfBirth(t *te
 	if who, err := e.svc.Identities(ctx, []string{u}, "staff-1"); err != nil || who[u].FullName != "Amina Otieno" || who[u].Status != "declared" {
 		t.Fatalf("identities = %+v, %v", who, err)
 	}
+	// ADR 0029: the date of birth is required, under manual review too; without one declared at sign-up it must be given
+	if _, err := e.svc.Submit(ctx, u, kyc.Submission{IDNumber: "24681357", FullName: "Amina Otieno"}); !errors.Is(err, kyc.ErrInvalidInput) {
+		t.Fatalf("submit without any date of birth: %v", err)
+	}
+	if _, err := e.svc.CheckAge(ctx, kyc.AgeDeclaration{DateOfBirth: "1990-05-17"}); !errors.Is(err, kyc.ErrAgeRequired) {
+		t.Fatalf("age without the declaration: %v", err)
+	}
+	if _, err := e.svc.CheckAge(ctx, kyc.AgeDeclaration{DateOfBirth: "2015-05-17", Adult: true}); !errors.Is(err, kyc.ErrUnderage) {
+		t.Fatalf("a child's date of birth: %v", err)
+	}
+	dob, err := e.svc.CheckAge(ctx, kyc.AgeDeclaration{DateOfBirth: "1990-05-17", Adult: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := pgx.BeginFunc(ctx, e.pool, func(tx pgx.Tx) error { return e.svc.DeclareAge(ctx, tx, u, dob) }); err != nil {
+		t.Fatal(err)
+	}
+	// with the date declared at sign-up, it may be left out
 	st, err := e.svc.Submit(ctx, u, kyc.Submission{IDNumber: "24681357", FullName: "Amina Otieno"})
 	if err != nil || st != kyc.ManualReview {
-		t.Fatalf("submit without a date of birth under manual review = %q, %v", st, err)
+		t.Fatalf("submit with the declared date of birth under manual review = %q, %v", st, err)
+	}
+	if q, err := e.svc.AwaitingReview(ctx, "staff-1"); err != nil || len(q) != 1 || q[0].DateOfBirth != "1990-05-17" {
+		t.Fatalf("the reviewer sees %+v (%v), want the declared date of birth", q, err)
 	}
 	// a registry matches the date of birth, so it is still needed there
 	r := setup(t)
@@ -738,7 +759,7 @@ func TestDeclared_LaterDeclarationIsMadeOnceAndOnlyBeforeASubmission(t *testing.
 	}
 	// after a submission the name on it is the one shown; nothing can be declared any more
 	v := e.user(t)
-	if _, err := e.svc.Submit(ctx, v, kyc.Submission{IDNumber: "24681358", FullName: "Grace Njeri Kamau"}); err != nil {
+	if _, err := e.svc.Submit(ctx, v, kyc.Submission{IDNumber: "24681358", FullName: "Grace Njeri Kamau", DateOfBirth: "1991-02-03"}); err != nil {
 		t.Fatal(err)
 	}
 	if err := e.svc.DeclareLater(ctx, v, kyc.Declaration{FirstName: "Grace", SecondName: "Njeri", IDNumber: "24681358"}); !errors.Is(err, kyc.ErrSubmitted) {

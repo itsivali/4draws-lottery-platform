@@ -286,6 +286,13 @@ type IdentityUser struct {
 	Email              *string
 }
 
+type KycAgeDeclaration struct {
+	UserID         string
+	DateOfBirthEnc []byte
+	AdultDeclared  bool
+	DeclaredAt     time.Time
+}
+
 type KycDeclaredIdentity struct {
 	UserID        string
 	FirstNameEnc  []byte

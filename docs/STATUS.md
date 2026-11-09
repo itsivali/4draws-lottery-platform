@@ -60,6 +60,12 @@ Read this first at the start of every session.
     (`DARAJA_SANDBOX_SETTLE`) it still credits at once.
   - The database enforces the top-up state machine (migration 00046).
   - The hook secret is redacted from traces and logs.
+- **Age at sign-up (ADR 0029, 2026-11-07):**
+  - Sign-up requires `date_of_birth` and `adult_declaration: true`; under 18 is refused by the server. The date is
+    stored encrypted in `kyc.age_declarations` (migration 00047).
+  - Identity verification needs a date of birth, taken from sign-up when it is left out.
+  - In `live`, top-ups, paybill payments and plays need a verified ID.
+  - App builds from before this cannot sign up new accounts until updated.
 
 ## Before the API is exposed to players
 

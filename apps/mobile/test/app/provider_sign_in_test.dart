@@ -43,15 +43,15 @@ void main() {
     expect(find.text('Password'), findsNothing, reason: 'no password is asked of a Google account');
 
     // the number is required, and so is the age confirmation
-    await t.tap(find.widgetWithText(FilledButton, 'Create account'));
+    await tapVisible(t, find.widgetWithText(FilledButton, 'Create account'));
     await t.pumpAndSettle();
     expect(find.text('Enter a Kenyan mobile number such as 0712 345 678.'), findsOneWidget);
     await t.enterText(find.widgetWithText(TextFormField, 'M-Pesa phone number'), '0712 345 678');
-    await t.tap(find.widgetWithText(FilledButton, 'Create account'));
+    await tapVisible(t, find.widgetWithText(FilledButton, 'Create account'));
     await t.pumpAndSettle();
     expect(find.text('Confirm that you are 18 or older to create an account.'), findsOneWidget);
-    await t.tap(find.text('I am 18 or older'));
-    await t.tap(find.widgetWithText(FilledButton, 'Create account'));
+    await tapVisible(t, find.text('I am 18 or older'));
+    await tapVisible(t, find.widgetWithText(FilledButton, 'Create account'));
     await t.pumpAndSettle();
 
     expect(find.text('KES 1,250'), findsOneWidget);
@@ -61,6 +61,8 @@ void main() {
     expect(signup.body, contains('"msisdn":"0712 345 678"'));
     expect(signup.body, contains('"first_name":"Jane"'), reason: 'names and ID number go with the sign-up');
     expect(signup.body, contains('"national_id":"12345678"'));
+    expect(signup.body, contains('"date_of_birth":"1990-05-17"'), reason: 'the date of birth goes with it (ADR 0029)');
+    expect(signup.body, contains('"adult_declaration":true'));
     expect(backend.ssoAccounts, contains('google-id-token'));
   });
 
@@ -86,8 +88,8 @@ void main() {
     await tapGoogle(t);
     await fillIdentity(t);
     await t.enterText(find.widgetWithText(TextFormField, 'M-Pesa phone number'), '0712999999');
-    await t.tap(find.text('I am 18 or older'));
-    await t.tap(find.widgetWithText(FilledButton, 'Create account'));
+    await tapVisible(t, find.text('I am 18 or older'));
+    await tapVisible(t, find.widgetWithText(FilledButton, 'Create account'));
     await t.pumpAndSettle();
     expect(find.text('This number already has an account'), findsOneWidget);
     expect(find.text('Sign in with that number and its password instead.'), findsOneWidget);
@@ -103,8 +105,8 @@ void main() {
     await tapGoogle(t);
     await fillIdentity(t);
     await t.enterText(find.widgetWithText(TextFormField, 'M-Pesa phone number'), '0712345678');
-    await t.tap(find.text('I am 18 or older'));
-    await t.tap(find.widgetWithText(FilledButton, 'Create account'));
+    await tapVisible(t, find.text('I am 18 or older'));
+    await tapVisible(t, find.widgetWithText(FilledButton, 'Create account'));
     await t.pumpAndSettle();
     expect(find.text('Good to see you'), findsOneWidget);
     expect(find.text('Your Google sign-in ran out. Start again.'), findsOneWidget);

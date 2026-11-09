@@ -61,7 +61,9 @@ paths:
         `email-registered`) and is how a forgotten password is reset (ADR 0021). Passwords need 8 to 128 characters and
         must not be common or contain the number. A new account also gives `first_name`, `second_name` and `national_id`
         (400 `invalid-identity` when missing or malformed): kept encrypted, shown back to the player, and the start of
-        the identity verification before the first withdrawal.
+        the identity verification before the first withdrawal. It also gives `date_of_birth` and
+        `adult_declaration: true` (ADR 0029): 400 `age-required` without them, 400 `invalid-date-of-birth` for a date
+        that is not one, 403 `underage` under 18 on today's date in Nairobi. No account is created when refused.
       security: []
       parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
       requestBody:
@@ -3984,6 +3986,8 @@ components:
         first_name: { type: string, description: "Sign-up only: the first name as on the national ID (owner, 2026-10-30)." }
         second_name: { type: string, description: "Sign-up only: the second name as on the national ID." }
         national_id: { type: string, pattern: "^[0-9]{7,9}$", description: "Sign-up only: the national ID number, stored encrypted and verified before the first withdrawal (ADR 0022)." }
+        date_of_birth: { type: string, format: date, description: "Sign-up only (required, ADR 0029): YYYY-MM-DD; 18 or older. Stored encrypted; identity verification starts from it." }
+        adult_declaration: { type: boolean, description: "Sign-up only (must be true, ADR 0029): the player declares they are 18 or older." }
     PasswordChange:
       type: object
       additionalProperties: false
@@ -4016,7 +4020,7 @@ components:
     SsoSignUp:
       type: object
       additionalProperties: false
-      required: [id_token, nonce, msisdn, device, first_name, second_name, national_id]
+      required: [id_token, nonce, msisdn, device, first_name, second_name, national_id, date_of_birth, adult_declaration]
       properties:
         id_token: { type: string }
         nonce: { type: string }
@@ -4025,6 +4029,8 @@ components:
         first_name: { type: string, description: "As on the national ID (owner, 2026-10-30)." }
         second_name: { type: string }
         national_id: { type: string, pattern: "^[0-9]{7,9}$" }
+        date_of_birth: { type: string, format: date, description: "YYYY-MM-DD; 18 or older (ADR 0029)." }
+        adult_declaration: { type: boolean, const: true }
     SignInProviders:
       type: object
       properties:
@@ -4050,8 +4056,9 @@ components:
       type: object
       additionalProperties: false
       description: |
-        `national_id` and `full_name` default to what the account gave at sign-up. `date_of_birth` may be left out
-        under manual review (an M-Pesa line is registered to an adult against their ID); a registry needs it.
+        `national_id`, `full_name` and `date_of_birth` default to what the account gave at sign-up. The date of birth
+        is required (ADR 0029): an account from before sign-up asked for it must give it (400 `invalid-kyc-input`);
+        under 18 is 403 `underage`.
       properties:
         national_id: { type: string, pattern: "^[0-9]{7,9}$" }
         full_name: { type: string, minLength: 2, maxLength: 100 }

@@ -59,15 +59,23 @@ Future<void> playJourney(WidgetTester t, {Size? size}) async {
   await pumpUntilFound(t, find.text('Credited'), step: const Duration(milliseconds: 500));
 }
 
-/// Fills in what a new account gives about itself: first name, second name, national ID number (owner, 2026-10-30).
+/// Fills in what a new account gives about itself: first name, second name, national ID number (owner, 2026-10-30),
+/// and at sign-up the date of birth (ADR 0029).
 Future<void> fillIdentity(
   WidgetTester t, {
   String first = 'Jane',
   String second = 'Wanjiru',
   String id = '12345678',
+  String dateOfBirth = '17/05/1990',
 }) async {
-  for (final (label, value) in [('First name', first), ('Second name', second), ('National ID number', id)]) {
+  for (final (label, value) in [
+    ('First name', first),
+    ('Second name', second),
+    ('National ID number', id),
+    ('Date of birth', dateOfBirth),
+  ]) {
     final f = find.widgetWithText(TextFormField, label);
+    if (f.evaluate().isEmpty) continue; // the date of birth is asked at sign-up only
     await t.ensureVisible(f);
     await t.enterText(f, value);
   }

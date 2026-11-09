@@ -838,3 +838,39 @@ func TestEmail_ResetIsOffUntilConfiguredAndAGoogleAccountAddsAnAddressWithoutAPa
 		t.Fatalf("google account adds an address: %v", err)
 	}
 }
+
+// ADR 0029: with real money (OPERATING_MODE=live) a verified national ID comes before any top-up or play (LN 112/2026
+// reg 82), not only before the first withdrawal.
+func TestEligibility_WithRealMoneyTopUpsAndPlaysNeedAVerifiedID(t *testing.T) {
+	e := setup(t)
+	ctx := context.Background()
+	e.svc.RequireVerifiedIDFirst()
+	m := e.newMSISDN()
+	tok := e.login(t, m, phone)
+	p, _ := e.svc.Authenticate(ctx, tok.Access)
+	e.verifyPhone(t, p.UserID, m)
+	check := func() (error, error, error) {
+		var top, peek, play error
+		_ = pgx.BeginFunc(ctx, e.pool, func(tx pgx.Tx) error {
+			_, top = e.svc.AssertCanTopUp(ctx, tx, p.UserID)
+			_, peek = e.svc.CanTopUp(ctx, tx, p.UserID)
+			play = e.svc.AssertCanPlay(ctx, tx, p.UserID)
+			return nil
+		})
+		return top, peek, play
+	}
+	for _, st := range []string{"none", "pending", "manual_review", "rejected"} {
+		if _, err := e.pool.Exec(ctx, `UPDATE identity.users SET kyc_status = $1 WHERE id = $2`, st, p.UserID); err != nil {
+			t.Fatal(err)
+		}
+		if top, peek, play := check(); !errors.Is(top, identity.ErrKYCRequired) || !errors.Is(peek, identity.ErrKYCRequired) || !errors.Is(play, identity.ErrKYCRequired) {
+			t.Errorf("kyc %s: top-up %v, paybill %v, play %v; want ErrKYCRequired", st, top, peek, play)
+		}
+	}
+	if _, err := e.pool.Exec(ctx, `UPDATE identity.users SET kyc_status='verified', national_id_hash='\x03' WHERE id = $1`, p.UserID); err != nil {
+		t.Fatal(err)
+	}
+	if top, peek, play := check(); top != nil || peek != nil || play != nil {
+		t.Fatalf("verified: top-up %v, paybill %v, play %v", top, peek, play)
+	}
+}

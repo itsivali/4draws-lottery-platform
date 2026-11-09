@@ -29,7 +29,7 @@ submission; P2 hardens.
 | PAY-02 | P0 | S2 | Callback amount trusted and overwritable (SEC-02) | First callback is kept; amount ≠ requested goes to review | — | done (ADR 0028) |
 | PAY-03 | P1 | S2 | Hook secret in traces and logs (SEC-03) | Span names and logs redact the segment | — | done (ADR 0028) |
 | PAY-04 | P1 | S2 | No DB state machine for top-ups (SEC-04) | Illegal transitions rejected by a trigger | — | done (ADR 0028) |
-| ID-01 | P0 | S3 | No server-side age evidence before money in | Sign-up requires date of birth and declaration; under 18 refused; `live` needs verified ID before top-up and play | REG-01 | not_started |
+| ID-01 | P0 | S3 | No server-side age evidence before money in | Sign-up requires date of birth and declaration; under 18 refused; `live` needs verified ID before top-up and play | REG-01 | done (S3a, ADR 0029) |
 | ID-02 | P1 | S3 | Payouts and pushes don't re-check eligibility | `Send`, `Approve` and the push job re-check | — | not_started |
 | ID-03 | P1 | S3 | No status history; self-exclusion keeps sessions | Append-only history; exclusion revokes sessions | — | not_started |
 | ID-04 | P1 | S3 | Balances that can't be paid have no exit | Staff refund-to-source with reason and audit | — | not_started |

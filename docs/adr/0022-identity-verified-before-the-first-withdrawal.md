@@ -1,6 +1,6 @@
 # 0022. Identity is verified before the first withdrawal, not before the first top-up or play
 
-Status: accepted (changes the eligibility split of ADR 0005; ADR 0009's manual review stays)
+Status: accepted (changes the eligibility split of ADR 0005; ADR 0009's manual review stays); amended by 0029: in the live operating mode verified ID comes before money in, and sign-up takes a date of birth
 Date: 2026-10-29
 
 ## Context

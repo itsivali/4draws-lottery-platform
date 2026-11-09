@@ -477,12 +477,7 @@ class FakeBackend {
       }
       final receipt = (body['receipt']! as String).trim().toUpperCase();
       if (!RegExp(r'^[A-Z0-9]{10}$').hasMatch(receipt)) {
-        return _problem(
-          400,
-          'invalid-receipt',
-          'Check the receipt',
-          'an M-Pesa receipt is 10 letters and digits',
-        );
+        return _problem(400, 'invalid-receipt', 'Check the receipt', 'an M-Pesa receipt is 10 letters and digits');
       }
       switch (t['status']) {
         case 'pending':

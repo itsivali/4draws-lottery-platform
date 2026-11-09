@@ -64,7 +64,7 @@ seed() {
     curl -fsS -X POST "$API$1" -H "Idempotency-Key: $(key "$1")" -H 'Content-Type: application/json' \
       ${3:+-H "Authorization: Bearer $3"} -d "$2"
   }
-  creds="{\"first_name\":\"Jane\",\"second_name\":\"Wanjiru\",\"national_id\":\"12345678\",\"msisdn\":\"$SEED_MSISDN\",\"email\":\"$SEED_EMAIL\",\"password\":\"$SEED_PASSWORD\",\"device\":{\"platform\":\"web\"}}"
+  creds="{\"first_name\":\"Jane\",\"second_name\":\"Wanjiru\",\"national_id\":\"12345678\",\"date_of_birth\":\"1990-05-17\",\"adult_declaration\":true,\"msisdn\":\"$SEED_MSISDN\",\"email\":\"$SEED_EMAIL\",\"password\":\"$SEED_PASSWORD\",\"device\":{\"platform\":\"web\"}}"
   token=$(post /v1/auth/signup "$creds" 2>/dev/null | jq -r .access_token) || true
   if [ -z "$token" ] || [ "$token" = null ]; then
     token=$(post /v1/auth/login "$creds" | jq -r .access_token) # already seeded

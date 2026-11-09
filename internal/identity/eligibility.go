@@ -31,24 +31,28 @@ func activeUser(u store.GetUserRow, err error) (store.GetUserRow, error) {
 	return u, nil
 }
 
-// AssertCanTopUp refuses accounts that may not start a top-up: suspended or closed ones. The phone need not be proved
-// yet (the first top-up is what proves it) and the national ID need not be verified: since ADR 0022 identity is
-// checked before the first withdrawal, not before money comes in. It returns the number the account claims, which is
+// AssertCanTopUp refuses accounts that may not start a top-up: suspended or closed ones, and, when real money is in
+// play (RequireVerifiedIDFirst, ADR 0029), an unverified national ID. The phone need not be proved yet (the first
+// top-up is what proves it). In the sandbox the national ID need not be verified: ADR 0022 checks it before the first
+// withdrawal. It returns the number the account claims, which is
 // where the payment prompt must go (never a number the client supplies). Called inside the same transaction as the
 // top-up (invariant 12).
 func (s *Service) AssertCanTopUp(ctx context.Context, tx pgx.Tx, userID string) (string, error) {
-	return canTopUp(s.loadActive(ctx, tx, userID))
+	return s.canTopUp(s.loadActive(ctx, tx, userID))
 }
 
 // CanTopUp answers what AssertCanTopUp would without holding the account row (for read-only transactions, such as
 // deciding whether to accept a paybill payment before it happens).
 func (s *Service) CanTopUp(ctx context.Context, tx pgx.Tx, userID string) (string, error) {
-	return canTopUp(s.peekActive(ctx, tx, userID))
+	return s.canTopUp(s.peekActive(ctx, tx, userID))
 }
 
-func canTopUp(u store.GetUserRow, err error) (string, error) {
+func (s *Service) canTopUp(u store.GetUserRow, err error) (string, error) {
 	if err != nil {
 		return "", err
+	}
+	if s.idFirst && u.KycStatus != "verified" {
+		return "", ErrKYCRequired
 	}
 	return u.Msisdn, nil
 }
@@ -64,12 +68,15 @@ func (s *Service) ProvedPhoneOwner(ctx context.Context, tx pgx.Tx, msisdn string
 	return u.ID, err
 }
 
-// AssertCanPlay is AssertCanTopUp plus a proved phone number, which is what pays out and receives alerts. The national
-// ID is checked at the first withdrawal (ADR 0022), not here. Called inside the same transaction as the debit.
+// AssertCanPlay is AssertCanTopUp plus a proved phone number, which is what pays out and receives alerts. In the
+// sandbox the national ID is checked at the first withdrawal (ADR 0022), not here; with real money, here too (ADR 0029). Called inside the same transaction as the debit.
 func (s *Service) AssertCanPlay(ctx context.Context, tx pgx.Tx, userID string) error {
 	u, err := s.loadActive(ctx, tx, userID)
 	if err != nil {
 		return err
+	}
+	if s.idFirst && u.KycStatus != "verified" {
+		return ErrKYCRequired
 	}
 	if !u.PhoneVerified {
 		return ErrPhoneNotVerified

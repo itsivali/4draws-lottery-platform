@@ -107,6 +107,16 @@ type Service struct {
 	resets    *PasswordResets // nil: forgotten passwords are reset by staff only
 	pepper    []byte          // password pepper, derived from cfg.AuthKey
 	dummyHash string          // verified against when no account exists, so unknown numbers cost the same time as wrong passwords
+	// idFirst: a verified national ID is needed before money comes in or is staked (ADR 0029: the live operating mode,
+	// LN 112/2026 reg 82); otherwise only before the first withdrawal (ADR 0022).
+	idFirst bool
+}
+
+// RequireVerifiedIDFirst makes top-ups and plays need a verified national ID, as real-money operation does (ADR 0029).
+// The app sets it when OPERATING_MODE is live.
+func (s *Service) RequireVerifiedIDFirst() *Service {
+	s.idFirst = true
+	return s
 }
 
 // NewService returns a Service.

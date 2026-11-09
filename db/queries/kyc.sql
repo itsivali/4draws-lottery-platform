@@ -64,3 +64,9 @@ VALUES ($1, $2, $3, $4, $5, $6);
 -- name: DeclaredIdentitiesFor :many
 SELECT user_id, first_name_enc, second_name_enc, id_number_enc FROM kyc.declared_identities
 WHERE user_id = ANY(sqlc.arg(user_ids)::uuid[]);
+
+-- name: InsertAgeDeclaration :exec
+INSERT INTO kyc.age_declarations (user_id, date_of_birth_enc, adult_declared, declared_at) VALUES ($1, $2, true, $3);
+
+-- name: AgeDeclaration :one
+SELECT date_of_birth_enc FROM kyc.age_declarations WHERE user_id = $1;

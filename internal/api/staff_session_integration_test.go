@@ -395,7 +395,7 @@ func TestStaffMetrics_CountSignupsSessionsAndPlaysPerPlatform(t *testing.T) {
 		t.Fatalf("default range: %d, %d cells", r.Code, len(r.Body["days"].([]any)))
 	}
 	// the web app sends no device fingerprint: its sessions still count as web (the platform is kept on the session)
-	if r := e.do(t, http.MethodPost, "/v1/auth/signup", "", map[string]any{"first_name": "Amina", "second_name": "Otieno", "national_id": "24681357", "msisdn": e.msisdn(), "email": e.email(), "password": strongPassword, "device": map[string]any{"platform": "web"}}); r.Code != http.StatusCreated {
+	if r := e.do(t, http.MethodPost, "/v1/auth/signup", "", map[string]any{"first_name": "Amina", "second_name": "Otieno", "national_id": "24681357", "date_of_birth": "1990-05-17", "adult_declaration": true, "msisdn": e.msisdn(), "email": e.email(), "password": strongPassword, "device": map[string]any{"platform": "web"}}); r.Code != http.StatusCreated {
 		t.Fatalf("web signup: %d %s", r.Code, r.Raw)
 	}
 	r = e.do(t, http.MethodGet, "/v1/staff/metrics?from=2026-10-01&to="+time.Now().AddDate(0, 0, 1).Format(time.DateOnly), admin, nil)

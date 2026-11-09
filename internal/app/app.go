@@ -198,6 +198,9 @@ func buildServices(pool *pgxpool.Pool, sh shared) services {
 	if c.Attestation.Mode == "off" {
 		s.identity.WithAttestationOff()
 	}
+	if compliance.Mode(cfg.Operating.Mode) == compliance.Live { // real money: verified ID before money in (ADR 0029)
+		s.identity.RequireVerifiedIDFirst()
+	}
 	if m := cfg.Mail; m.WebAppURL != "" { // forgotten passwords are reset through an emailed link (ADR 0021)
 		s.identity.WithPasswordResets(identity.PasswordResets{Sender: mailer(m), WebAppURL: m.WebAppURL})
 	}

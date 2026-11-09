@@ -12,6 +12,17 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const ageDeclaration = `-- name: AgeDeclaration :one
+SELECT date_of_birth_enc FROM kyc.age_declarations WHERE user_id = $1
+`
+
+func (q *Queries) AgeDeclaration(ctx context.Context, userID string) ([]byte, error) {
+	row := q.db.QueryRow(ctx, ageDeclaration, userID)
+	var date_of_birth_enc []byte
+	err := row.Scan(&date_of_birth_enc)
+	return date_of_birth_enc, err
+}
+
 const awaitingReview = `-- name: AwaitingReview :many
 SELECT u.id AS user_id, u.msisdn, c.id_number_enc, c.full_name_enc, c.date_of_birth_enc, c.created_at
 FROM identity.users u
@@ -154,6 +165,21 @@ func (q *Queries) IDHashOwner(ctx context.Context, arg IDHashOwnerParams) (strin
 	var id string
 	err := row.Scan(&id)
 	return id, err
+}
+
+const insertAgeDeclaration = `-- name: InsertAgeDeclaration :exec
+INSERT INTO kyc.age_declarations (user_id, date_of_birth_enc, adult_declared, declared_at) VALUES ($1, $2, true, $3)
+`
+
+type InsertAgeDeclarationParams struct {
+	UserID         string
+	DateOfBirthEnc []byte
+	DeclaredAt     time.Time
+}
+
+func (q *Queries) InsertAgeDeclaration(ctx context.Context, arg InsertAgeDeclarationParams) error {
+	_, err := q.db.Exec(ctx, insertAgeDeclaration, arg.UserID, arg.DateOfBirthEnc, arg.DeclaredAt)
+	return err
 }
 
 const insertDeclaredIdentity = `-- name: InsertDeclaredIdentity :exec

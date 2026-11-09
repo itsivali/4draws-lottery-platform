@@ -25,6 +25,7 @@ import '../application/auth_providers.dart';
 import '../data/auth_repository.dart';
 import '../data/provider_sign_in.dart';
 import '../data/sign_in_providers.dart';
+import 'date_of_birth_field.dart';
 import 'email_rules.dart';
 import 'identity_fields.dart';
 
@@ -54,6 +55,7 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
   final _firstName = TextEditingController();
   final _secondName = TextEditingController();
   final _nationalId = TextEditingController();
+  final _dateOfBirth = TextEditingController(); // with the 18+ declaration (ADR 0029)
   late var _mode = widget.create ? _Mode.create : _Mode.signIn;
   var _step = _Step.form;
   var _obscure = true;
@@ -80,13 +82,19 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
     _firstName.dispose();
     _secondName.dispose();
     _nationalId.dispose();
+    _dateOfBirth.dispose();
     super.dispose();
   }
 
   void _clearErrors() => _phoneError = _emailError = _passwordError = _identityError = _formError = _formDetail = null;
 
-  SignUpIdentity get _identity =>
-      SignUpIdentity(firstName: _firstName.text, secondName: _secondName.text, nationalId: _nationalId.text);
+  SignUpIdentity get _identity => SignUpIdentity(
+    firstName: _firstName.text,
+    secondName: _secondName.text,
+    nationalId: _nationalId.text,
+    dateOfBirth: DateOfBirthField.iso(_dateOfBirth.text) ?? '',
+    adult: _adult,
+  );
 
   Future<void> _submit() async {
     setState(_clearErrors);
@@ -256,6 +264,7 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
       firstName: _firstName,
       secondName: _secondName,
       nationalId: _nationalId,
+      dateOfBirth: _dateOfBirth,
       identityError: _identityError,
       mode: _mode,
       step: _step,
@@ -473,6 +482,7 @@ class _Form extends StatelessWidget {
     required this.firstName,
     required this.secondName,
     required this.nationalId,
+    required this.dateOfBirth,
     required this.identityError,
     required this.mode,
     required this.step,
@@ -505,6 +515,7 @@ class _Form extends StatelessWidget {
   final TextEditingController firstName;
   final TextEditingController secondName;
   final TextEditingController nationalId;
+  final TextEditingController dateOfBirth;
   final String? identityError;
   final _Mode mode;
   final _Step step;
@@ -559,11 +570,13 @@ class _Form extends StatelessWidget {
       title: const Text('I am 18 or older'),
       subtitle: const Text('Your M-Pesa number is registered to you as an adult, against your ID.'),
     );
-    final identityFields = IdentityFields(
-      firstName: firstName,
-      secondName: secondName,
-      nationalId: nationalId,
-      error: identityError,
+    final identityFields = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        IdentityFields(firstName: firstName, secondName: secondName, nationalId: nationalId, error: identityError),
+        const SizedBox(height: Space.lg),
+        DateOfBirthField(controller: dateOfBirth),
+      ],
     );
     final errorBanner = formError == null
         ? null

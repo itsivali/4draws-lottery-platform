@@ -111,9 +111,34 @@ void main() {
     final first = t.getTopLeft(find.widgetWithText(TextFormField, 'First name')).dy;
     final second = t.getTopLeft(find.widgetWithText(TextFormField, 'Second name')).dy;
     final id = t.getTopLeft(find.widgetWithText(TextFormField, 'National ID number')).dy;
-    expect(first < second && second < id, isTrue, reason: 'in that order');
+    final dob = t.getTopLeft(find.widgetWithText(TextFormField, 'Date of birth')).dy;
+    expect(
+      first < second && second < id && id < dob,
+      isTrue,
+      reason: 'in that order, the date of birth last (ADR 0029)',
+    );
     await t.tap(find.text('Sign in').first);
     await t.pumpAndSettle();
     expect(find.widgetWithText(TextFormField, 'First name'), findsNothing, reason: 'signing in asks for none of it');
+    expect(find.widgetWithText(TextFormField, 'Date of birth'), findsNothing);
+  });
+
+  // ADR 0029: a date of birth under 18 is refused before anything is sent (the server refuses it too)
+  testWidgets('sign-up refuses a date of birth under 18 on the field', (t) async {
+    final backend = FakeBackend();
+    await pumpApp(t, backend, signedIn: false);
+    await t.tap(find.text('Create account').first);
+    await t.pumpAndSettle();
+    final now = DateTime.now();
+    final minor = '${now.day.toString().padLeft(2, '0')}/${now.month.toString().padLeft(2, '0')}/${now.year - 17}';
+    await fillIdentity(t, dateOfBirth: minor);
+    await t.enterText(find.widgetWithText(TextFormField, 'M-Pesa phone number'), '0712345678');
+    await t.enterText(find.widgetWithText(TextFormField, 'Email address'), 'jane@example.com');
+    await t.enterText(find.widgetWithText(TextFormField, 'Password'), 'correct horse battery');
+    await tapVisible(t, find.text('I am 18 or older'));
+    await tapVisible(t, find.widgetWithText(FilledButton, 'Create account'));
+    await t.pumpAndSettle();
+    expect(find.text('You must be 18 or older to play.'), findsOneWidget);
+    expect(backend.requests.where((r) => r.url.path == '/v1/auth/signup'), isEmpty);
   });
 }

@@ -111,7 +111,7 @@ func TestApp_FullJourneyThroughTheRealWiring(t *testing.T) {
 
 	dev := map[string]any{"fingerprint": "fp", "platform": "android"}
 	if c, out := call(t, srv, http.MethodPost, "/v1/auth/signup", "", "k1", "198.51.100.1",
-		map[string]any{"first_name": "Amina", "second_name": "Otieno", "national_id": "24681357", "msisdn": "0712345678", "email": "player@example.com", "password": "correct horse battery", "device": dev}); c != 201 {
+		map[string]any{"first_name": "Amina", "second_name": "Otieno", "national_id": "24681357", "date_of_birth": "1990-05-17", "adult_declaration": true, "msisdn": "0712345678", "email": "player@example.com", "password": "correct horse battery", "device": dev}); c != 201 {
 		t.Fatalf("signup = %d %v", c, out)
 	}
 	c, tok := call(t, srv, http.MethodPost, "/v1/auth/login", "", "k2", "198.51.100.1",

@@ -99,6 +99,13 @@ type credentialsJSON struct {
 	Password string     `json:"password"`
 	Device   deviceJSON `json:"device"`
 	declaredJSON
+	ageJSON
+}
+
+// ageJSON is every new account's date of birth and 18+ declaration (ADR 0029), checked here, before the account exists.
+type ageJSON struct {
+	DateOfBirth      string `json:"date_of_birth"`
+	AdultDeclaration bool   `json:"adult_declaration"`
 }
 
 // declaredJSON is what a new account gives about itself at sign-up (owner, 2026-10-30), verified at the first cash-out.
@@ -128,6 +135,31 @@ func (h *handlers) declaration(w http.ResponseWriter, in declaredJSON) ([]identi
 	return []identity.Created{func(ctx context.Context, tx pgx.Tx, userID string) error { return h.KYC.Declare(ctx, tx, userID, d) }}, true
 }
 
+// signupRecords checks what a new account gives about itself (names and ID number, date of birth and the 18+
+// declaration) and returns what stores it with the account. It answers the problem itself when something is wrong.
+func (h *handlers) signupRecords(w http.ResponseWriter, r *http.Request, d declaredJSON, a ageJSON) ([]identity.Created, bool) {
+	created, ok := h.declaration(w, d)
+	if !ok || h.KYC == nil {
+		return created, ok
+	}
+	dob, err := h.KYC.CheckAge(r.Context(), kyc.AgeDeclaration{DateOfBirth: a.DateOfBirth, Adult: a.AdultDeclaration})
+	switch {
+	case err == nil:
+		return append(created, func(ctx context.Context, tx pgx.Tx, userID string) error {
+			return h.KYC.DeclareAge(ctx, tx, userID, dob)
+		}), true
+	case errors.Is(err, kyc.ErrAgeRequired):
+		httpx.WriteProblem(w, http.StatusBadRequest, "age-required", "Give your date of birth and confirm you are 18 or older", "")
+	case errors.Is(err, kyc.ErrInvalidInput):
+		httpx.WriteProblem(w, http.StatusBadRequest, "invalid-date-of-birth", "Check your date of birth", "use YYYY-MM-DD")
+	case errors.Is(err, kyc.ErrUnderage):
+		httpx.WriteProblem(w, http.StatusForbidden, "underage", "You must be 18 or older to play", "")
+	default:
+		internalError(w, err)
+	}
+	return nil, false
+}
+
 func (h *handlers) signup(w http.ResponseWriter, r *http.Request) {
 	var in credentialsJSON
 	if !httpx.DecodeJSON(w, r, &in) {
@@ -141,7 +173,7 @@ func (h *handlers) signup(w http.ResponseWriter, r *http.Request) {
 	if !h.limit(w, r, "signup:ip:"+h.clientIP(r), 10, time.Hour) || !h.limit(w, r, "signup:msisdn:"+key, 5, 24*time.Hour) {
 		return
 	}
-	created, ok := h.declaration(w, in.declaredJSON)
+	created, ok := h.signupRecords(w, r, in.declaredJSON, in.ageJSON)
 	if !ok {
 		return
 	}
@@ -331,6 +363,7 @@ func (h *handlers) ssoSignup(w http.ResponseWriter, r *http.Request) {
 		MSISDN  string     `json:"msisdn"`
 		Device  deviceJSON `json:"device"`
 		declaredJSON
+		ageJSON
 	}
 	if !httpx.DecodeJSON(w, r, &in) {
 		return
@@ -342,7 +375,7 @@ func (h *handlers) ssoSignup(w http.ResponseWriter, r *http.Request) {
 	if !h.limit(w, r, "signup:ip:"+h.clientIP(r), 10, time.Hour) || !h.limit(w, r, "signup:msisdn:"+key, 5, 24*time.Hour) {
 		return
 	}
-	created, ok := h.declaration(w, in.declaredJSON)
+	created, ok := h.signupRecords(w, r, in.declaredJSON, in.ageJSON)
 	if !ok {
 		return
 	}

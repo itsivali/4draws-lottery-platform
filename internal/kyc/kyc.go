@@ -136,20 +136,15 @@ func (s *Service) Submit(ctx context.Context, userID string, in Submission) (Sta
 	if err != nil {
 		return "", err
 	}
-	// The date of birth may be left out under manual review (owner, 2026-10-30): an M-Pesa line is registered to an
-	// adult against their ID, so staff check the name against the ID number. A registry needs it to match.
-	if in.DateOfBirth != "" || !manual {
-		dob, err := time.Parse(time.DateOnly, in.DateOfBirth)
-		if err != nil || dob.Year() < 1900 {
-			return "", ErrInvalidInput
+	// The date of birth is required (ADR 0029, replacing the owner's 2026-10-30 exception for manual review): without it
+	// nothing shows the player is an adult. Left out, the one declared at sign-up is used.
+	if in.DateOfBirth == "" {
+		if in.DateOfBirth, err = s.declaredDOB(ctx, store.New(s.pool), userID); err != nil {
+			return "", err
 		}
-		today := clock.InNairobi(now)
-		if dob.After(time.Date(today.Year(), today.Month(), today.Day(), 0, 0, 0, 0, time.UTC)) {
-			return "", ErrInvalidInput
-		}
-		if age(dob, time.Date(today.Year(), today.Month(), today.Day(), 0, 0, 0, 0, time.UTC)) < 18 {
-			return "", ErrUnderage
-		}
+	}
+	if _, err := adultDOB(in.DateOfBirth, now); err != nil {
+		return "", err
 	}
 
 	q := store.New(s.pool)

@@ -5,6 +5,7 @@ package api_test
 import (
 	"context"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -183,7 +184,7 @@ func TestAPI_ATopUpWithinTheCooldownIsRefusedWithHowLongToWait(t *testing.T) {
 func TestAPI_SignUpTakesNamesAndIDNumberThatVerificationStartsFrom(t *testing.T) {
 	e := setup(t)
 	dev := map[string]any{"fingerprint": "fp-names", "platform": "android"}
-	base := map[string]any{"msisdn": e.msisdn(), "email": e.email(), "password": strongPassword, "device": dev}
+	base := map[string]any{"msisdn": e.msisdn(), "email": e.email(), "password": strongPassword, "device": dev, "date_of_birth": "1990-05-17", "adult_declaration": true}
 	for name, extra := range map[string]map[string]any{
 		"no names":         {"national_id": "24681357"},
 		"no ID number":     {"first_name": "Amina", "second_name": "Otieno"},
@@ -228,8 +229,8 @@ func TestAPI_SignUpTakesNamesAndIDNumberThatVerificationStartsFrom(t *testing.T)
 	if len(players) != 1 || players[0].(map[string]any)["full_name"] != "Amina Otieno" || players[0].(map[string]any)["national_id"] != "24681357" {
 		t.Fatalf("players: %s", pl.Raw)
 	}
-	// left out, the name and ID number are the ones from sign-up (this deployment's registry also wants the date of
-	// birth; under manual review it may be left out too: kyc tests)
+	// left out, the name and ID number are the ones from sign-up (and the date of birth too, ADR 0029; this one differs
+	// from the declared date, so the given one counts)
 	if s := e.do(t, http.MethodPost, "/v1/kyc", tok, map[string]any{"date_of_birth": "1992-03-04"}); s.Code != http.StatusAccepted {
 		t.Fatalf("submit from sign-up: %d %s", s.Code, s.Raw)
 	}
@@ -391,5 +392,66 @@ func TestAPI_AccountShowsItsSignInMethods(t *testing.T) {
 	other := e.signIn(t)
 	if r := e.do(t, http.MethodGet, "/v1/account/sign-ins", other.access, nil); len(r.Body["providers"].([]any)) != 0 {
 		t.Fatalf("another account's sign-ins: %s", r.Raw)
+	}
+}
+
+// ADR 0029: every new account gives a date of birth and declares it is 18 or older; the server checks both before the
+// account exists, and identity verification later starts from the declared date.
+func TestAPI_SignUpNeedsADateOfBirthAndAnAdultDeclaration(t *testing.T) {
+	e := setup(t)
+	var msisdn string
+	var tried []string
+	base := func(extra map[string]any) map[string]any {
+		msisdn = e.msisdn() // a number of its own each time: sign-ups per number are rate limited
+		tried = append(tried, "254"+msisdn[1:])
+		b := map[string]any{"first_name": "Amina", "second_name": "Otieno", "national_id": "24681357", "msisdn": msisdn, "email": e.email(),
+			"password": strongPassword, "device": map[string]any{"fingerprint": "fp-age", "platform": "android"}}
+		for k, v := range extra {
+			b[k] = v
+		}
+		return b
+	}
+	now, _ := e.clk.Now(context.Background(), nil)
+	adult := now.AddDate(-18, 0, -2).Format(time.DateOnly)
+	minor := now.AddDate(-18, 0, 2).Format(time.DateOnly)
+	for name, tc := range map[string]struct {
+		extra   map[string]any
+		code    int
+		problem string
+	}{
+		"nothing":              {nil, http.StatusBadRequest, "age-required"},
+		"no declaration":       {map[string]any{"date_of_birth": adult}, http.StatusBadRequest, "age-required"},
+		"declared false":       {map[string]any{"date_of_birth": adult, "adult_declaration": false}, http.StatusBadRequest, "age-required"},
+		"declaration, no date": {map[string]any{"adult_declaration": true}, http.StatusBadRequest, "age-required"},
+		"not a date":           {map[string]any{"date_of_birth": "17/05/1990", "adult_declaration": true}, http.StatusBadRequest, "invalid-date-of-birth"},
+		"born in the future":   {map[string]any{"date_of_birth": "2999-01-01", "adult_declaration": true}, http.StatusBadRequest, "invalid-date-of-birth"},
+		"two days short of 18": {map[string]any{"date_of_birth": minor, "adult_declaration": true}, http.StatusForbidden, "underage"},
+	} {
+		if r := e.do(t, http.MethodPost, "/v1/auth/signup", "", base(tc.extra)); r.Code != tc.code || !hasType(r, tc.problem) {
+			t.Errorf("%s: %d %s, want %d %s", name, r.Code, r.Raw, tc.code, tc.problem)
+		}
+	}
+	var n int
+	if err := e.pool.QueryRow(context.Background(), `SELECT count(*) FROM identity.users WHERE msisdn = ANY($1)`, tried).Scan(&n); err != nil || n != 0 {
+		t.Fatalf("refused sign-ups left %d accounts (%v)", n, err)
+	}
+	if r := e.do(t, http.MethodPost, "/v1/auth/sso/google/signup", "", map[string]any{"first_name": "Amina", "second_name": "Otieno", "national_id": "24681357",
+		"id_token": "ok:g-age", "nonce": "n-age", "msisdn": e.msisdn(), "device": map[string]any{"fingerprint": "fp-age-sso", "platform": "android"}}); r.Code != http.StatusBadRequest || !hasType(r, "age-required") {
+		t.Fatalf("sso sign-up without age: %d %s", r.Code, r.Raw)
+	}
+
+	r := e.do(t, http.MethodPost, "/v1/auth/signup", "", base(map[string]any{"date_of_birth": adult, "adult_declaration": true}))
+	if r.Code != http.StatusCreated {
+		t.Fatalf("adult sign-up: %d %s", r.Code, r.Raw)
+	}
+	tok := r.Body["access_token"].(string)
+	var stored []byte
+	if err := e.pool.QueryRow(context.Background(), `SELECT a.date_of_birth_enc FROM kyc.age_declarations a JOIN identity.users u ON u.id = a.user_id WHERE u.msisdn = $1`,
+		"254"+msisdn[1:]).Scan(&stored); err != nil || len(stored) == 0 || strings.Contains(string(stored), adult) {
+		t.Fatalf("declaration stored %q (%v): want it, encrypted", stored, err)
+	}
+	// identity verification starts from the declared date when the player leaves it out
+	if k := e.do(t, http.MethodPost, "/v1/kyc", tok, map[string]any{"national_id": "24681357", "full_name": "Amina Otieno"}); k.Code != http.StatusAccepted {
+		t.Fatalf("kyc without a date after declaring one: %d %s", k.Code, k.Raw)
 	}
 }
