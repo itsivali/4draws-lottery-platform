@@ -37,6 +37,10 @@ type API struct {
 
 	// CORSOrigins are the browser origins (the player web app) allowed to call the API; empty turns CORS off.
 	CORSOrigins []string
+	// GeoCountryHeader is GEO_COUNTRY_HEADER: the header the edge sets with the client's country (Cloudflare's
+	// CF-IPCountry), recorded at sign-up and on money moves and, with real money, required to be KE (ADR 0031). Empty
+	// records nothing. Only honoured behind a trusted proxy, which overwrites whatever the client sent.
+	GeoCountryHeader string
 
 	// Staff configures the back office's staff sign-in (off when unset).
 	Staff Staff
@@ -304,6 +308,15 @@ func loadAPI() (API, error) {
 		}
 		a.TrustedProxyHops = n
 	}
+	if h := strings.TrimSpace(os.Getenv("GEO_COUNTRY_HEADER")); h != "" {
+		if !headerName.MatchString(h) {
+			return API{}, errors.New("config: GEO_COUNTRY_HEADER must be a header name, such as CF-IPCountry")
+		}
+		if a.TrustedProxyHeader == "" {
+			return API{}, errors.New("config: GEO_COUNTRY_HEADER needs a trusted proxy that sets it (TRUSTED_PROXY_HEADER); without one a client could claim any country")
+		}
+		a.GeoCountryHeader = h
+	}
 	if a.CORSOrigins, err = corsOrigins(os.Getenv("CORS_ALLOWED_ORIGINS")); err != nil {
 		return API{}, err
 	}
@@ -407,3 +420,5 @@ func checkGatewayURL(name, raw string) error {
 	}
 	return fmt.Errorf("config: %s must use https (plain http is only allowed for local hosts)", name)
 }
+
+var headerName = regexp.MustCompile(`^[A-Za-z0-9-]{1,64}$`)

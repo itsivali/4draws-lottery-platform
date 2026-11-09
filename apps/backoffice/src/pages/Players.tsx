@@ -1,5 +1,5 @@
 import type { ColumnDef } from '@tanstack/react-table'
-import { Download, KeyRound, Search, UserRound, UserRoundCheck, UserRoundX } from 'lucide-react'
+import { Download, KeyRound, Search, Undo2, UserRound, UserRoundCheck, UserRoundX } from 'lucide-react'
 import { useCallback, useMemo, useState, type ReactNode } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { ProblemError } from '../api'
@@ -10,6 +10,7 @@ import { useSession } from '../context'
 import { saveBlob } from '../download'
 import { eat, kes, msisdn } from '../format'
 import { useLoad } from '../hooks'
+import { can } from '../roles'
 import type { AuditEvent, Player, PlayerTimeline } from '../types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -82,6 +83,25 @@ function playerActions(p: Player, post: (path: string, body: unknown) => Promise
         }}><UserRoundCheck aria-hidden="true" /> Reinstate</Button>
       )}
     </>
+  )
+}
+
+/**
+ * Refund to source (ADR 0031): a balance the account cannot withdraw goes back to the number that paid it in. Admins
+ * ask; the payout waits in Payouts for a second staff member to approve.
+ */
+function refundAction(p: PlayerTimeline['player'], balance: number, post: (path: string, body: unknown) => Promise<unknown>, ask: (s: ActionSpec) => void, busy: boolean): ReactNode {
+  if (p.status === 'closed' || balance <= 0) return null
+  return (
+    <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => {
+      ask({
+        title: `Refund ${kes(balance)} to source?`,
+        body: <p>For a balance this account cannot withdraw (suspended, identity refused or never verified). The whole balance goes back to the number that paid the latest top-up, as a withdrawal (the withdrawal tax applies). It waits in Payouts until someone else approves it; rejecting it there puts the money back.</p>,
+        fields: [{ name: 'reason', label: 'Reason (goes on the payout and in the audit log)', required: true }],
+        confirmLabel: 'Ask for the refund', danger: true, success: 'Refund asked for. A second person approves it in Payouts.',
+        act: (v) => post(`/v1/staff/players/${p.user_id}/refund`, { reason: v.reason }),
+      })
+    }}><Undo2 aria-hidden="true" /> Refund to source</Button>
   )
 }
 
@@ -212,7 +232,8 @@ function Nothing({ children }: { children: ReactNode }) { return <p className="p
 
 /** One player's timeline, loaded when the sheet opens; tick reloads it after an action. */
 function PlayerSheet({ id, tick, post, ask, busy }: { id: string; tick: number; post: (path: string, body: unknown) => Promise<unknown>; ask: (s: ActionSpec) => void; busy: boolean }) {
-  const { api } = useSession()
+  const { api, me } = useSession()
+  const admin = can(me.roles, 'admin')
   const load = useLoad((signal) => api.get<PlayerTimeline>(`/v1/staff/players/${encodeURIComponent(id)}`, undefined, { signal }), [id, tick])
   const [exported, setExported] = useState<{ tone: Tone; text: string } | null>(null)
   const [exporting, setExporting] = useState(false)
@@ -264,6 +285,7 @@ function PlayerSheet({ id, tick, post, ask, busy }: { id: string; tick: number; 
           <>
             <div className="flex flex-wrap gap-2">
               {playerActions(p, post, ask, busy)}
+              {admin ? refundAction(p, t.wallet.balance_kes, post, ask, busy) : null}
               <Button type="button" size="sm" variant="outline" disabled={exporting} onClick={() => void download()}>
                 <Download aria-hidden="true" />{exporting ? 'Preparing…' : 'Download player pack (CSV)'}
               </Button>
@@ -381,6 +403,21 @@ function PlayerSheet({ id, tick, post, ask, busy }: { id: string; tick: number; 
                       ))}
                     </Rows>
                   )}
+                </section>
+                <section className="grid gap-2">
+                  <h3 className="text-sm font-semibold">Where from</h3>
+                  {t.identity.locations.length === 0 ? <Nothing>No location recorded.</Nothing> : (
+                    <Rows caption="Where from">
+                      {t.identity.locations.map((x) => (
+                        <tr key={x.id} className="align-top">
+                          <td className="px-3 py-2"><When at={x.at} /></td>
+                          <td className="px-3 py-2"><Stack primary={<Mono>{x.country ?? 'unknown'}</Mono>} secondary={x.action === 'topup' ? 'top-up' : x.action} /></td>
+                          <td className="px-3 py-2">{x.refused ? <Pill tone="error">refused</Pill> : null}</td>
+                        </tr>
+                      ))}
+                    </Rows>
+                  )}
+                  <p className="text-xs text-muted-foreground">The country the network edge reports for the address. A signal, not proof: a VPN changes it.</p>
                 </section>
                 {t.identity.closure_requested_at ? <p className="text-sm">Asked to close the account on {eat(t.identity.closure_requested_at)}. <Link to="/closures">Open closures</Link></p> : null}
               </TabsContent>

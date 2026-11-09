@@ -11,6 +11,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/itsivali/lottery-platform/internal/compliance"
 	"github.com/itsivali/lottery-platform/internal/identity"
 	"github.com/itsivali/lottery-platform/internal/kyc"
 	"github.com/itsivali/lottery-platform/internal/platform/httpx"
@@ -138,7 +139,22 @@ func (h *handlers) declaration(w http.ResponseWriter, in declaredJSON) ([]identi
 // signupRecords checks what a new account gives about itself (names and ID number, date of birth and the 18+
 // declaration) and returns what stores it with the account. It answers the problem itself when something is wrong.
 func (h *handlers) signupRecords(w http.ResponseWriter, r *http.Request, d declaredJSON, a ageJSON) ([]identity.Created, bool) {
+	// where the sign-up comes from (ADR 0031): a refusal is recorded on its own, an accepted one with the new account
+	country := h.country(r)
+	if !h.Geo.Allowed(compliance.GeoSignup, country) {
+		if err := h.Geo.Record(r.Context(), nil, "", compliance.GeoSignup, country); err != nil {
+			internalError(w, err)
+			return nil, false
+		}
+		outsideKenya(w)
+		return nil, false
+	}
 	created, ok := h.declaration(w, d)
+	if ok && h.Geo != nil {
+		created = append(created, func(ctx context.Context, tx pgx.Tx, userID string) error {
+			return h.Geo.Record(ctx, tx, userID, compliance.GeoSignup, country)
+		})
+	}
 	if !ok || h.KYC == nil {
 		return created, ok
 	}

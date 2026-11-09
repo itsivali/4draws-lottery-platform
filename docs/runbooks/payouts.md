@@ -49,6 +49,21 @@ For a payout in `manual`, find it on the B2C account statement (the originator c
 
 Never settle a payout as failed while it might still complete: that would refund money that left.
 
+## Refund to source (ADR 0031)
+
+For a balance the account cannot withdraw: suspended, identity refused or never verified, phone not proved. An admin
+opens the player in the back office → **Refund to source**, with the reason. The whole balance leaves the wallet at once
+as a withdrawal (the withdrawal tax rule in force applies) to the number of the account's latest credited top-up, and
+waits in *Payouts → Held* marked *Refund to source*. **Someone else** approves it there; the admin who asked cannot
+(409 `two-person-rule`). Rejecting it puts the money back in the wallet.
+
+It is refused while the account can withdraw for itself (`payable`), owes money from a reversed top-up (`in-debt`),
+has an empty wallet, or has no credited top-up to send to (`no-source`; settle such a case outside the platform with
+counsel). Once the refund succeeds the account can be closed.
+
+Questions for counsel, open: whether a refund to an underage account must also return the stakes it played, and
+whether the withdrawal tax applies to a refund.
+
 ## Reasons a payout lands in manual
 
 `unconfirmed` (no confirmation after the status requests), `success_not_confirmed` (Daraja said paid, Transaction

@@ -141,21 +141,23 @@ func New(ctx context.Context, cfg config.Config, pool *pgxpool.Pool) (*App, erro
 		Idem:               idempotency.NewStore(pool),
 		Limiter:            ratelimit.New(vk),
 		TrustedProxyHeader: c.TrustedProxyHeader, TrustedProxyHops: c.TrustedProxyHops,
-		Wallet:          wallet.NewReader(pool),
-		CORSOrigins:     c.CORSOrigins,
-		Staff:           staffAuth,
-		StaffServices:   staffSvc,
-		Challenges:      challenge.NewStore(vk, 5*time.Minute),
-		Gate:            svc.gate,
-		AttestationMode: c.Attestation.Mode,
-		AttestationWeb:  c.Attestation.Web,
+		Wallet:           wallet.NewReader(pool),
+		CORSOrigins:      c.CORSOrigins,
+		Staff:            staffAuth,
+		StaffServices:    staffSvc,
+		Challenges:       challenge.NewStore(vk, 5*time.Minute),
+		Gate:             svc.gate,
+		Geo:              geo(pool, sh.clk, c.GeoCountryHeader, cfg.Operating.Mode),
+		GeoCountryHeader: c.GeoCountryHeader,
+		AttestationMode:  c.Attestation.Mode,
+		AttestationWeb:   c.Attestation.Web,
 		SignIn: api.SignInProviders{GoogleClientID: c.SignIn.GoogleClientID, GoogleIOSClientID: c.SignIn.GoogleIOSClientID,
 			AppleClientID: c.SignIn.AppleClientID, AppleBundleID: c.SignIn.AppleBundleID, AndroidPackage: c.SignIn.AndroidPackage},
 	})
 	slog.InfoContext(ctx, "v1 API enabled", "trusted_proxy_header", c.TrustedProxyHeader, "trusted_proxy_hops", c.TrustedProxyHops,
 		"kyc_registry", c.KYCURL != "", "google", c.SignIn.Google(), "apple", c.SignIn.Apple(),
 		"operating_mode", cfg.Operating.Mode, "payments", cfg.Payments.Enabled, "buy_goods", cfg.Payments.TillNumber != "", "paybill", cfg.Payments.C2BEnabled(), "payouts", cfg.Payments.B2CEnabled(), "daraja", cfg.Payments.BaseURL, "sandbox_settle", cfg.Payments.SandboxSettle, "cors_origins", len(c.CORSOrigins), "staff", c.Staff.Enabled, "staff_pool", c.Staff.DatabaseURL != "",
-		"attestation", c.Attestation.Mode, "app_attest", c.Attestation.AppID != "", "play_integrity", c.Attestation.PlayPackage != "")
+		"attestation", c.Attestation.Mode, "geo_country_header", c.GeoCountryHeader, "app_attest", c.Attestation.AppID != "", "play_integrity", c.Attestation.PlayPackage != "")
 	return a, nil
 }
 
@@ -580,4 +582,12 @@ func oidcVerifier(clk clock.Clock, hc *http.Client, c config.API) identity.IDTok
 		return refusingOIDC{}
 	}
 	return identity.NewOIDCVerifier(clk, hc, providers)
+}
+
+// geo is the location signal (ADR 0031): nothing without the edge's country header; with real money, KE only.
+func geo(pool *pgxpool.Pool, clk clock.Clock, header, mode string) *compliance.Geo {
+	if header == "" {
+		return nil
+	}
+	return compliance.NewGeo(pool, clk, compliance.Mode(mode) == compliance.Live)
 }

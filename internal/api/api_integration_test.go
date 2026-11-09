@@ -133,6 +133,8 @@ type env struct {
 	staff *fakeStaff
 	deps  api.Deps
 	keys  int
+	// header is sent with every request (a test playing the edge, such as Cloudflare's CF-IPCountry)
+	header map[string]string
 }
 
 type apiDeps = api.Deps
@@ -245,6 +247,9 @@ func setupWith(t *testing.T, mutate func(*apiDeps)) *env {
 	if mutate != nil {
 		mutate(&deps)
 	}
+	if deps.GeoCountryHeader != "" && deps.Geo == nil { // a test asking for the location signal gets the live policy (ADR 0031)
+		deps.Geo = compliance.NewGeo(pool, clk, true)
+	}
 	srv := httptest.NewServer(httpx.NewRouterWith(pool, api.Mount(deps)))
 	enq.process = func(ctx context.Context, id string) error { return deps.KYC.Process(ctx, id) }
 	t.Cleanup(srv.Close)
@@ -282,6 +287,9 @@ func (e *env) doKey(t *testing.T, method, path, token, key string, body any) res
 		req.Header.Set("Idempotency-Key", key)
 	}
 	req.Header.Set("Content-Type", "application/json")
+	for k, v := range e.header {
+		req.Header.Set(k, v)
+	}
 	r, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatal(err)

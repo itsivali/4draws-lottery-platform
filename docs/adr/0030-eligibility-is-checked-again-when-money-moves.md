@@ -63,4 +63,5 @@ The compliance gap analysis lists these as ID-02 and ID-03 (`docs/release/implem
   still owed (`RetryPrize` pays it later).
 - **Clients.** The self-exclusion request's own tokens stop working once it returns. Clients must expect a 401 after
   it; the app built from this change handles that.
-- **Still to do in S3:** a way out for balances that cannot be paid (refund to source), and a location signal (S3c).
+- **Still to do in S3:** a way out for balances that cannot be paid (refund to source), and a location signal (S3c,
+  done in ADR 0031).

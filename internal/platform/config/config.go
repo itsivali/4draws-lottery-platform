@@ -68,7 +68,7 @@ func Load() (Config, error) {
 	if cfg.Payments, err = loadPayments(api); err != nil {
 		return Config{}, err
 	}
-	if cfg.Operating, err = loadOperating(cfg.Payments); err != nil {
+	if cfg.Operating, err = loadOperating(cfg.Payments, cfg.API); err != nil {
 		return Config{}, err
 	}
 	if cfg.Alerts, err = loadAlerts(); err != nil {

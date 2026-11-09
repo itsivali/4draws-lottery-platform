@@ -97,7 +97,7 @@ func (h *handlers) startTopUp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	p, _ := principalFrom(r.Context())
-	if !h.limit(w, r, "topup:user:"+p.UserID, 20, time.Hour) {
+	if !h.limit(w, r, "topup:user:"+p.UserID, 20, time.Hour) || !h.geo(w, r, p.UserID, compliance.GeoTopUp) {
 		return
 	}
 	if h.Payments == nil {

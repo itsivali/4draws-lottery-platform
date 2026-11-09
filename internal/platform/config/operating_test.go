@@ -62,8 +62,32 @@ func TestOperating_LiveNeedsProductionDarajaAndALicenceReference(t *testing.T) {
 		t.Fatalf("live without a licence: err = %v, want a refusal", err)
 	}
 	t.Setenv("REGULATORY_LICENCE_REFERENCE", " GRA/OPL/0001 ")
+	// with real money the edge must say which country each request comes from (ADR 0031)
+	t.Setenv("GEO_COUNTRY_HEADER", "")
+	if _, err := config.Load(); err == nil || !strings.Contains(err.Error(), "GEO_COUNTRY_HEADER") {
+		t.Fatalf("live without a country signal: err = %v, want a refusal", err)
+	}
+	t.Setenv("GEO_COUNTRY_HEADER", "CF-IPCountry")
 	cfg, err := config.Load()
 	if err != nil || cfg.Operating.Mode != "live" || cfg.Operating.LicenceReference != "GRA/OPL/0001" {
 		t.Fatalf("live: %+v err = %v", cfg.Operating, err)
+	}
+}
+
+// ADR 0031: the country header is trusted only behind a proxy that sets it; a client could send it itself otherwise.
+func TestGeoCountryHeader_NeedsATrustedProxyAndAHeaderName(t *testing.T) {
+	fullPaymentsEnv(t)
+	t.Setenv("GEO_COUNTRY_HEADER", "CF-IPCountry")
+	if cfg, err := config.Load(); err != nil || cfg.API.GeoCountryHeader != "CF-IPCountry" {
+		t.Fatalf("header %q err = %v", cfg.API.GeoCountryHeader, err)
+	}
+	t.Setenv("GEO_COUNTRY_HEADER", "CF IPCountry")
+	if _, err := config.Load(); err == nil || !strings.Contains(err.Error(), "GEO_COUNTRY_HEADER") {
+		t.Fatalf("malformed header name: err = %v", err)
+	}
+	t.Setenv("GEO_COUNTRY_HEADER", "CF-IPCountry")
+	t.Setenv("TRUSTED_PROXY_HEADER", "none")
+	if _, err := config.Load(); err == nil || !strings.Contains(err.Error(), "GEO_COUNTRY_HEADER") {
+		t.Fatalf("country header without a proxy: err = %v", err)
 	}
 }

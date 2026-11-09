@@ -111,6 +111,8 @@ type Identity interface {
 type Wallet interface {
 	Apply(ctx context.Context, tx pgx.Tx, p ledger.Posting) (int64, error)
 	Debt(ctx context.Context, tx pgx.Tx, user string) (int64, error)
+	// Balance is the wallet balance, 0 for a player without a wallet.
+	Balance(ctx context.Context, tx pgx.Tx, user string) (int64, error)
 	// LockDebt is Debt under the wallet row lock that debt recovery takes.
 	LockDebt(ctx context.Context, tx pgx.Tx, user string) (int64, error)
 }
@@ -200,24 +202,30 @@ func (s *Service) WithdrawalBounds() (minKES, maxKES int64) {
 
 // Payout is what is known about a payout. Status is what the player sees; State is the internal state.
 type Payout struct {
-	ID        string    `json:"id"`
-	UserID    string    `json:"user_id"`
-	Kind      string    `json:"kind"`
-	Status    string    `json:"status"`
-	State     string    `json:"state"`
-	GrossKES  int64     `json:"gross_kes"`
-	TaxKES    int64     `json:"tax_kes"`
-	NetKES    int64     `json:"net_kes"`
-	DebtKES   int64     `json:"debt_repaid_kes"`
-	Receipt   string    `json:"receipt,omitempty"`
-	Reason    string    `json:"reason,omitempty"`
+	ID       string `json:"id"`
+	UserID   string `json:"user_id"`
+	Kind     string `json:"kind"`
+	Status   string `json:"status"`
+	State    string `json:"state"`
+	GrossKES int64  `json:"gross_kes"`
+	TaxKES   int64  `json:"tax_kes"`
+	NetKES   int64  `json:"net_kes"`
+	DebtKES  int64  `json:"debt_repaid_kes"`
+	Receipt  string `json:"receipt,omitempty"`
+	Reason   string `json:"reason,omitempty"`
+	// Refund is set on a refund to source (ADR 0031): why, and which admin asked for it. Staff views only.
+	Refund    *Refund   `json:"refund,omitempty"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
 func view(p store.PayoutsPayout) Payout {
-	return Payout{ID: p.ID, UserID: p.UserID, Kind: p.Kind, Status: publicStatus(p.Status), State: p.Status, GrossKES: p.GrossKes,
+	v := Payout{ID: p.ID, UserID: p.UserID, Kind: p.Kind, Status: publicStatus(p.Status), State: p.Status, GrossKES: p.GrossKes,
 		TaxKES: p.TaxKes, NetKES: p.NetKes, DebtKES: p.DebtOffsetKes, Receipt: deref(p.MpesaReceipt), Reason: deref(p.Reason), CreatedAt: p.CreatedAt, UpdatedAt: p.UpdatedAt}
+	if p.RefundReason != nil {
+		v.Refund = &Refund{Reason: *p.RefundReason, RequestedBy: deref(p.RefundRequestedBy), MSISDN: deref(p.Msisdn)}
+	}
+	return v
 }
 
 func deref(p *string) string {

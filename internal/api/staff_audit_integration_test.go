@@ -227,6 +227,9 @@ func TestStaffAPI_PlayerTimelineAndPack(t *testing.T) {
 	if hist := id["status_history"].([]any); len(hist) != 1 || hist[0].(map[string]any)["to"] != "active" || hist[0].(map[string]any)["reason"] != "signed up" {
 		t.Fatalf("status history: %v", hist)
 	}
+	if locs := id["locations"].([]any); len(locs) != 0 {
+		t.Fatalf("locations without a country header: %v", locs)
+	}
 	limits := r.Body["limits"].(map[string]any)
 	deposit := limits["deposit"].([]any)
 	if len(deposit) != 1 || deposit[0].(map[string]any)["period"] != "daily" || deposit[0].(map[string]any)["amount_kes"] != float64(500) || deposit[0].(map[string]any)["pending"] != false {

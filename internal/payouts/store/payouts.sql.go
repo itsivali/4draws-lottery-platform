@@ -120,7 +120,7 @@ func (q *Queries) FailureJournalMismatch(ctx context.Context) ([]string, error) 
 }
 
 const getPayout = `-- name: GetPayout :one
-SELECT id, user_id, kind, route, status, gross_kes, tax_kes, net_kes, msisdn, draw_result_id, originator_conversation_id, conversation_id, mpesa_receipt, idempotency_key, created_at, updated_at, tax_code, tax_rate, tax_rounding, status_requests, status_requested_at, status_originator, reason, approved_by, settled_by, settled_at, debt_offset_kes FROM payouts.payouts WHERE id = $1
+SELECT id, user_id, kind, route, status, gross_kes, tax_kes, net_kes, msisdn, draw_result_id, originator_conversation_id, conversation_id, mpesa_receipt, idempotency_key, created_at, updated_at, tax_code, tax_rate, tax_rounding, status_requests, status_requested_at, status_originator, reason, approved_by, settled_by, settled_at, debt_offset_kes, refund_reason, refund_requested_by FROM payouts.payouts WHERE id = $1
 `
 
 func (q *Queries) GetPayout(ctx context.Context, id string) (PayoutsPayout, error) {
@@ -154,6 +154,8 @@ func (q *Queries) GetPayout(ctx context.Context, id string) (PayoutsPayout, erro
 		&i.SettledBy,
 		&i.SettledAt,
 		&i.DebtOffsetKes,
+		&i.RefundReason,
+		&i.RefundRequestedBy,
 	)
 	return i, err
 }
@@ -237,32 +239,34 @@ func (q *Queries) InsertKRAEvent(ctx context.Context, arg InsertKRAEventParams) 
 const insertPayout = `-- name: InsertPayout :one
 INSERT INTO payouts.payouts (user_id, kind, route, status, gross_kes, tax_kes, debt_offset_kes, net_kes, msisdn, draw_result_id,
                              originator_conversation_id, idempotency_key, tax_code, tax_rate, tax_rounding, settled_by, settled_at,
-                             created_at, updated_at)
+                             refund_reason, refund_requested_by, created_at, updated_at)
 VALUES ($1, $2, $3, $4, $5, $6,
         $7, $8, $9, $10, platform.uuid_v7()::text,
         $11, $12, ($13::text)::numeric, $14,
-        $15, $16, $17, $17)
+        $15, $16, $17, $18, $19, $19)
 RETURNING id
 `
 
 type InsertPayoutParams struct {
-	UserID         string
-	Kind           string
-	Route          string
-	Status         string
-	GrossKes       int64
-	TaxKes         int64
-	DebtOffsetKes  int64
-	NetKes         int64
-	Msisdn         *string
-	DrawResultID   *string
-	IdempotencyKey string
-	TaxCode        *string
-	TaxRate        string
-	TaxRounding    *string
-	SettledBy      *string
-	SettledAt      *time.Time
-	At             time.Time
+	UserID            string
+	Kind              string
+	Route             string
+	Status            string
+	GrossKes          int64
+	TaxKes            int64
+	DebtOffsetKes     int64
+	NetKes            int64
+	Msisdn            *string
+	DrawResultID      *string
+	IdempotencyKey    string
+	TaxCode           *string
+	TaxRate           string
+	TaxRounding       *string
+	SettledBy         *string
+	SettledAt         *time.Time
+	RefundReason      *string
+	RefundRequestedBy *string
+	At                time.Time
 }
 
 func (q *Queries) InsertPayout(ctx context.Context, arg InsertPayoutParams) (string, error) {
@@ -283,6 +287,8 @@ func (q *Queries) InsertPayout(ctx context.Context, arg InsertPayoutParams) (str
 		arg.TaxRounding,
 		arg.SettledBy,
 		arg.SettledAt,
+		arg.RefundReason,
+		arg.RefundRequestedBy,
 		arg.At,
 	)
 	var id string
@@ -540,7 +546,7 @@ func (q *Queries) LockKRABatchByNo(ctx context.Context, batchNo int64) (AuditKra
 }
 
 const lockPayout = `-- name: LockPayout :one
-SELECT id, user_id, kind, route, status, gross_kes, tax_kes, net_kes, msisdn, draw_result_id, originator_conversation_id, conversation_id, mpesa_receipt, idempotency_key, created_at, updated_at, tax_code, tax_rate, tax_rounding, status_requests, status_requested_at, status_originator, reason, approved_by, settled_by, settled_at, debt_offset_kes FROM payouts.payouts WHERE id = $1 FOR UPDATE
+SELECT id, user_id, kind, route, status, gross_kes, tax_kes, net_kes, msisdn, draw_result_id, originator_conversation_id, conversation_id, mpesa_receipt, idempotency_key, created_at, updated_at, tax_code, tax_rate, tax_rounding, status_requests, status_requested_at, status_originator, reason, approved_by, settled_by, settled_at, debt_offset_kes, refund_reason, refund_requested_by FROM payouts.payouts WHERE id = $1 FOR UPDATE
 `
 
 func (q *Queries) LockPayout(ctx context.Context, id string) (PayoutsPayout, error) {
@@ -574,6 +580,8 @@ func (q *Queries) LockPayout(ctx context.Context, id string) (PayoutsPayout, err
 		&i.SettledBy,
 		&i.SettledAt,
 		&i.DebtOffsetKes,
+		&i.RefundReason,
+		&i.RefundRequestedBy,
 	)
 	return i, err
 }
@@ -712,7 +720,7 @@ func (q *Queries) PayoutsFrozen(ctx context.Context) (bool, error) {
 }
 
 const payoutsInStatus = `-- name: PayoutsInStatus :many
-SELECT p.id, p.user_id, p.kind, p.route, p.status, p.gross_kes, p.tax_kes, p.net_kes, p.msisdn, p.draw_result_id, p.originator_conversation_id, p.conversation_id, p.mpesa_receipt, p.idempotency_key, p.created_at, p.updated_at, p.tax_code, p.tax_rate, p.tax_rounding, p.status_requests, p.status_requested_at, p.status_originator, p.reason, p.approved_by, p.settled_by, p.settled_at, p.debt_offset_kes FROM payouts.payouts p
+SELECT p.id, p.user_id, p.kind, p.route, p.status, p.gross_kes, p.tax_kes, p.net_kes, p.msisdn, p.draw_result_id, p.originator_conversation_id, p.conversation_id, p.mpesa_receipt, p.idempotency_key, p.created_at, p.updated_at, p.tax_code, p.tax_rate, p.tax_rounding, p.status_requests, p.status_requested_at, p.status_originator, p.reason, p.approved_by, p.settled_by, p.settled_at, p.debt_offset_kes, p.refund_reason, p.refund_requested_by FROM payouts.payouts p
 WHERE p.status = $1
   AND ($2::uuid IS NULL
        OR (p.created_at, p.id) > (SELECT a.created_at, a.id FROM payouts.payouts a WHERE a.id = $2::uuid))
@@ -764,6 +772,8 @@ func (q *Queries) PayoutsInStatus(ctx context.Context, arg PayoutsInStatusParams
 			&i.SettledBy,
 			&i.SettledAt,
 			&i.DebtOffsetKes,
+			&i.RefundReason,
+			&i.RefundRequestedBy,
 		); err != nil {
 			return nil, err
 		}
@@ -802,7 +812,7 @@ func (q *Queries) PayoutsWithoutJournal(ctx context.Context) ([]string, error) {
 }
 
 const playerPayouts = `-- name: PlayerPayouts :many
-SELECT id, user_id, kind, route, status, gross_kes, tax_kes, net_kes, msisdn, draw_result_id, originator_conversation_id, conversation_id, mpesa_receipt, idempotency_key, created_at, updated_at, tax_code, tax_rate, tax_rounding, status_requests, status_requested_at, status_originator, reason, approved_by, settled_by, settled_at, debt_offset_kes FROM payouts.payouts WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2
+SELECT id, user_id, kind, route, status, gross_kes, tax_kes, net_kes, msisdn, draw_result_id, originator_conversation_id, conversation_id, mpesa_receipt, idempotency_key, created_at, updated_at, tax_code, tax_rate, tax_rounding, status_requests, status_requested_at, status_originator, reason, approved_by, settled_by, settled_at, debt_offset_kes, refund_reason, refund_requested_by FROM payouts.payouts WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2
 `
 
 type PlayerPayoutsParams struct {
@@ -847,6 +857,8 @@ func (q *Queries) PlayerPayouts(ctx context.Context, arg PlayerPayoutsParams) ([
 			&i.SettledBy,
 			&i.SettledAt,
 			&i.DebtOffsetKes,
+			&i.RefundReason,
+			&i.RefundRequestedBy,
 		); err != nil {
 			return nil, err
 		}
@@ -1019,6 +1031,20 @@ func (q *Queries) RecordKRARemittance(ctx context.Context, arg RecordKRARemittan
 		arg.ID,
 	)
 	return err
+}
+
+const refundSource = `-- name: RefundSource :one
+SELECT msisdn::text FROM payments.payments
+WHERE user_id = $1 AND status = 'credited' AND msisdn IS NOT NULL
+ORDER BY created_at DESC, id DESC LIMIT 1
+`
+
+// The number that paid in the account's latest credited top-up: where a refund to source goes (ADR 0031).
+func (q *Queries) RefundSource(ctx context.Context, userID string) (string, error) {
+	row := q.db.QueryRow(ctx, refundSource, userID)
+	var msisdn string
+	err := row.Scan(&msisdn)
+	return msisdn, err
 }
 
 const remittanceJournalMismatch = `-- name: RemittanceJournalMismatch :many

@@ -439,6 +439,7 @@ describe('players: the timeline (owner, 2026-10-31)', () => {
     identity: { kyc: [{ id: 'k1', status: 'verified', provider: 'manual', reviewed_by: 'staff:m1', reason: 'ID matches', created_at: '2026-10-27T19:00:00Z' }],
       sessions: [{ id: 's1', platform: 'android', created_at: '2026-10-28T09:00:00Z', revoked_at: null, revoked_reason: null, device_verdict: 'passed' }],
       status_history: [{ id: 2, from: 'active', to: 'suspended', actor_type: 'staff', actor: 'staff:ops-lead', reason: 'chargeback inquiry', at: '2026-10-29T09:00:00Z' }, { id: 1, from: null, to: 'active', actor_type: 'player', actor: 'u1', reason: 'signed up', at: '2026-10-27T09:00:00Z' }],
+      locations: [{ id: 3, action: 'play', country: 'UG', refused: true, at: '2026-10-29T10:00:00Z' }, { id: 1, action: 'signup', country: 'KE', refused: false, at: '2026-10-27T09:00:00Z' }],
       closure_requested_at: null },
     limits: { deposit: [{ period: 'daily', amount_kes: 500, effective_from: '2026-10-27T19:00:00Z', pending: false }], restriction: null },
     events: [{ id: '7', at: '2026-10-28T09:05:00Z', actor_type: 'player', actor_id: 'u1', action: 'game.play', entity_type: 'ticket', entity_id: 't-1', details: { price_kes: 100 } }],
@@ -474,17 +475,37 @@ describe('players: the timeline (owner, 2026-10-31)', () => {
     expect(within(sheet).getByText(/ID matches/)).toBeInTheDocument()
     expect(within(sheet).getByText('active → suspended')).toBeInTheDocument()
     expect(within(sheet).getByText(/chargeback inquiry/)).toBeInTheDocument()
+    expect(within(sheet).getByText('UG')).toBeInTheDocument()
+    expect(within(sheet).getByText('refused')).toBeInTheDocument()
     await user.click(within(sheet).getByRole('tab', { name: 'Limits' }))
     expect(within(sheet).getByText('KES 500')).toBeInTheDocument()
     await user.click(within(sheet).getByRole('tab', { name: 'Activity' }))
     expect(within(sheet).getByText('game.play')).toBeInTheDocument()
     expect(within(sheet).getByRole('link', { name: 'Everything, in the activity log' })).toHaveAttribute('href', '/activity?entity_id=u1')
     expect(within(sheet).getByRole('button', { name: 'Suspend' })).toBeInTheDocument()
+    expect(within(sheet).queryByRole('button', { name: 'Refund to source' })).not.toBeInTheDocument() // admins only (ADR 0031)
     await user.click(within(sheet).getByRole('button', { name: 'Download player pack (CSV)' }))
     await waitFor(() => { expect(created).toEqual(['player-u1.csv']) })
     expect(asked.some((u) => u.pathname === '/v1/staff/players/u1/export')).toBe(true)
     expect(await within(sheet).findByRole('status')).toHaveTextContent(/Saved player-u1.csv/)
     click.mockRestore()
+  })
+
+  it('an admin asks for a refund to source with a reason (ADR 0031)', async () => {
+    const asked: URL[] = []
+    const base = server(asked)
+    const { fetch } = renderSignedIn(<PlayersPage />, { roles: ['admin'], path: '/players?player=u1', route: (method, url) =>
+      method === 'POST' && url.pathname === '/v1/staff/players/u1/refund' ? { status: 201, body: { id: 'po-1', state: 'held' } } : base(method, url) })
+    const user = userEvent.setup()
+    const sheet = await screen.findByRole('dialog', { name: 'Amina Otieno' })
+    await user.click(within(sheet).getByRole('button', { name: 'Refund to source' }))
+    const dialog = screen.getByRole('dialog', { name: 'Refund KES 850 to source?' })
+    expect(within(dialog).getByText(/until someone else approves it/)).toBeInTheDocument()
+    await user.type(within(dialog).getByLabelText(/^Reason/), 'identity refused by the registry')
+    await user.click(within(dialog).getByRole('button', { name: 'Ask for the refund' }))
+    expect(await screen.findByRole('status')).toHaveTextContent('Refund asked for.')
+    const post = fetch.mock.calls.find(([, init]) => init?.method === 'POST')
+    expect(JSON.parse(post?.[1]?.body as string)).toEqual({ reason: 'identity refused by the registry' })
   })
 
   it('opens from a ?player= link, and closing it keeps the list', async () => {
@@ -539,6 +560,18 @@ describe('paging', () => {
     await waitFor(() => { expect(asked).toEqual(['first', 'd2', 'first', 'd2']) })
     await waitFor(() => { expect(within(table).getAllByRole('row')).toHaveLength(4) })
     expect(fetch.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1)
+  })
+
+  it('a held refund to source says why, who asked and where it goes (ADR 0031)', async () => {
+    renderSignedIn(<PayoutsPage />, {
+      roles: ['staff'],
+      route: () => ({ status: 200, body: { payouts: [{ id: 'po-1', user_id: 'u1', kind: 'withdrawal', status: 'processing', state: 'held', gross_kes: 950, tax_kes: 0,
+        net_kes: 950, debt_repaid_kes: 0, refund: { reason: 'identity refused', requested_by: 'staff:alice', msisdn: '254708374149' }, created_at: '2026-10-26T09:00:00Z' }], next_after: null } }),
+    })
+    expect(await screen.findByText('Refund to source')).toBeInTheDocument()
+    expect(screen.getByText(/identity refused · asked by/)).toBeInTheDocument()
+    expect(screen.getByText('staff:alice')).toBeInTheDocument()
+    expect(screen.getByText(/to 0708 374 149/)).toBeInTheDocument()
   })
 
   it('payouts page forward with `after`, and a change of state starts again from the first page', async () => {

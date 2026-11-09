@@ -39,3 +39,12 @@ SELECT r.id, r.licence_reference, r.approval_reference, r.evidence_sha256, r.evi
 
 -- name: InsertLiveApproval :exec
 INSERT INTO compliance.live_approvals (request_id, approved_by, created_at) VALUES (sqlc.arg(request_id), sqlc.arg(approved_by), sqlc.arg(at));
+
+-- name: InsertGeoSignal :exec
+INSERT INTO compliance.geo_signals (user_id, action, country, refused, observed_at)
+VALUES (sqlc.narg(user_id), sqlc.arg(action), sqlc.narg(country), sqlc.arg(refused), sqlc.arg(at));
+
+-- name: GeoSignals :many
+-- An account's geo signals, newest first.
+SELECT action, country, refused, observed_at FROM compliance.geo_signals
+WHERE user_id = sqlc.arg(user_id) ORDER BY id DESC LIMIT sqlc.arg(max_rows);

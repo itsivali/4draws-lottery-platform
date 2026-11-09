@@ -39,8 +39,9 @@ Only when the licence is granted, the regulator's conditions are met (`docs/comp
 store approvals exist:
 
 1. Set on the api: production Daraja (`DARAJA_BASE_URL=https://api.safaricom.co.ke`, `DARAJA_ALLOW_PRODUCTION=true`,
-   production credentials), remove `DARAJA_SANDBOX_SETTLE`, set `REGULATORY_LICENCE_REFERENCE` and
-   `OPERATING_MODE=live`. Deploy. The service is now `disabled`: nothing moves.
+   production credentials), remove `DARAJA_SANDBOX_SETTLE`, set `REGULATORY_LICENCE_REFERENCE`,
+   `GEO_COUNTRY_HEADER` (the edge's country header, `CF-IPCountry` behind Cloudflare, ADR 0031; the service refuses to
+   start live without it) and `OPERATING_MODE=live`. Deploy. The service is now `disabled`: nothing moves.
 2. Admin 1: System status → **Request to go live**: the licence reference (exactly as configured), the regulator's
    approval reference, the SHA-256 of the evidence file (`sha256sum licence.pdf`) and where the evidence is kept.
 3. Admin 2 (a different person): checks the evidence against the hash, then **Approve**. The service is live at once.

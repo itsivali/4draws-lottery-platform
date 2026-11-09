@@ -51,6 +51,8 @@ export interface Payout {
   debt_repaid_kes: number
   receipt?: string
   reason?: string
+  /** a refund to source (ADR 0031): why, which admin asked, and the number that paid in */
+  refund?: { reason: string; requested_by: string; msisdn: string }
   created_at: string
 }
 
@@ -458,6 +460,8 @@ export interface PlayerTimeline {
     sessions: { id: string; platform: string; created_at: string; revoked_at: string | null; revoked_reason: string | null; device_verdict: string }[]
     /** every change of the account's status, newest first (ADR 0030); from is null for the first */
     status_history: { id: number; from: string | null; to: 'active' | 'suspended' | 'closed'; actor_type: 'player' | 'staff' | 'system' | null; actor: string | null; reason: string | null; at: string }[]
+    /** where sign-ups and money moves came from, newest first (ADR 0031); country null when the edge said nothing */
+    locations: { id: number; action: 'signup' | 'topup' | 'play' | 'withdrawal'; country: string | null; refused: boolean; at: string }[]
     closure_requested_at: string | null
   }
   limits: {

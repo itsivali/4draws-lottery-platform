@@ -49,7 +49,7 @@ func (h *handlers) withdraw(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	p, _ := principalFrom(r.Context())
-	if !h.limit(w, r, "withdraw:user:"+p.UserID, 10, time.Hour) {
+	if !h.limit(w, r, "withdraw:user:"+p.UserID, 10, time.Hour) || !h.geo(w, r, p.UserID, compliance.GeoWithdrawal) {
 		return
 	}
 	if h.Payouts == nil {

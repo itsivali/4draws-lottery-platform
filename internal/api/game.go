@@ -69,7 +69,7 @@ func (h *handlers) play(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	p, _ := principalFrom(r.Context())
-	if !h.limit(w, r, "play:user:"+p.UserID, 30, time.Hour) {
+	if !h.limit(w, r, "play:user:"+p.UserID, 30, time.Hour) || !h.geo(w, r, p.UserID, compliance.GeoPlay) {
 		return
 	}
 	if h.Game == nil {

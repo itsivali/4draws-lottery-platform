@@ -27,7 +27,7 @@ func productionDaraja(p Payments) bool {
 	return p.AllowProduction || err != nil || u.Hostname() == "api.safaricom.co.ke"
 }
 
-func loadOperating(p Payments) (Operating, error) {
+func loadOperating(p Payments, a API) (Operating, error) {
 	o := Operating{Mode: strings.TrimSpace(os.Getenv("OPERATING_MODE")), LicenceReference: strings.TrimSpace(os.Getenv("REGULATORY_LICENCE_REFERENCE"))}
 	if o.Mode == "" {
 		o.Mode = "disabled" // nothing moves until someone says which money this is
@@ -45,6 +45,9 @@ func loadOperating(p Payments) (Operating, error) {
 		}
 		if o.LicenceReference == "" {
 			return Operating{}, errors.New("config: OPERATING_MODE=live needs REGULATORY_LICENCE_REFERENCE, and two admins approving a live request that names it (ADR 0027)")
+		}
+		if a.Enabled && a.GeoCountryHeader == "" {
+			return Operating{}, errors.New("config: OPERATING_MODE=live needs GEO_COUNTRY_HEADER (the edge's country header, e.g. CF-IPCountry): with real money only players in Kenya are served (ADR 0031)")
 		}
 	default:
 		return Operating{}, fmt.Errorf("config: OPERATING_MODE=%q; use disabled, sandbox or live", o.Mode)

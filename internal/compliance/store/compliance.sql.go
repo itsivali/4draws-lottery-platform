@@ -10,6 +10,49 @@ import (
 	"time"
 )
 
+const geoSignals = `-- name: GeoSignals :many
+SELECT action, country, refused, observed_at FROM compliance.geo_signals
+WHERE user_id = $1 ORDER BY id DESC LIMIT $2
+`
+
+type GeoSignalsParams struct {
+	UserID  *string
+	MaxRows int32
+}
+
+type GeoSignalsRow struct {
+	Action     string
+	Country    *string
+	Refused    bool
+	ObservedAt time.Time
+}
+
+// An account's geo signals, newest first.
+func (q *Queries) GeoSignals(ctx context.Context, arg GeoSignalsParams) ([]GeoSignalsRow, error) {
+	rows, err := q.db.Query(ctx, geoSignals, arg.UserID, arg.MaxRows)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GeoSignalsRow
+	for rows.Next() {
+		var i GeoSignalsRow
+		if err := rows.Scan(
+			&i.Action,
+			&i.Country,
+			&i.Refused,
+			&i.ObservedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getLiveRequest = `-- name: GetLiveRequest :one
 SELECT r.id, r.licence_reference, r.approval_reference, r.evidence_sha256, r.evidence_location, r.reason, r.requested_by,
        r.created_at, a.approved_by, a.created_at AS approved_at
@@ -47,6 +90,30 @@ func (q *Queries) GetLiveRequest(ctx context.Context, id string) (GetLiveRequest
 		&i.ApprovedAt,
 	)
 	return i, err
+}
+
+const insertGeoSignal = `-- name: InsertGeoSignal :exec
+INSERT INTO compliance.geo_signals (user_id, action, country, refused, observed_at)
+VALUES ($1, $2, $3, $4, $5)
+`
+
+type InsertGeoSignalParams struct {
+	UserID  *string
+	Action  string
+	Country *string
+	Refused bool
+	At      time.Time
+}
+
+func (q *Queries) InsertGeoSignal(ctx context.Context, arg InsertGeoSignalParams) error {
+	_, err := q.db.Exec(ctx, insertGeoSignal,
+		arg.UserID,
+		arg.Action,
+		arg.Country,
+		arg.Refused,
+		arg.At,
+	)
+	return err
 }
 
 const insertLiveApproval = `-- name: InsertLiveApproval :exec

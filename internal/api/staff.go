@@ -230,6 +230,9 @@ func (h *handlers) mountStaff(r chi.Router) {
 	r.With(anyStaff).Post("/players/{user}/suspend", h.staffSuspend(true))
 	r.With(anyStaff).Post("/players/{user}/reinstate", h.staffSuspend(false))
 	r.With(anyStaff).Post("/players/{user}/password", h.staffPlayerPassword)
+	// a balance the account cannot withdraw goes back to the number that paid it in (ADR 0031): an admin asks, a
+	// second staff member approves the held payout
+	r.With(admin).Post("/players/{user}/refund", h.staffRefundToSource)
 }
 
 // needs answers 503 when the service behind a route is not configured.
@@ -317,6 +320,11 @@ func staffError(w http.ResponseWriter, err error) {
 		{payouts.ErrOperator, m{http.StatusBadRequest, "reason-required", "A reason is required"}},
 		{payouts.ErrReceiptRequired, m{http.StatusBadRequest, "receipt-required", "The M-Pesa receipt of the payment is required"}},
 		{payouts.ErrUnavailable, m{http.StatusServiceUnavailable, "payouts-unavailable", "Payouts are unavailable"}},
+		{payouts.ErrPayable, m{http.StatusConflict, "payable", "The account can withdraw its balance itself; a refund is only for balances it cannot"}},
+		{payouts.ErrNothingToRefund, m{http.StatusConflict, "nothing-to-refund", "The wallet holds nothing to refund"}},
+		{payouts.ErrNoSource, m{http.StatusConflict, "no-source", "No credited top-up names a number to refund to"}},
+		{payouts.ErrSameApprover, m{http.StatusConflict, "two-person-rule", "Someone other than the admin who asked for the refund must approve it"}},
+		{payouts.ErrInDebt, m{http.StatusConflict, "in-debt", "The player owes money from a reversed top-up; settle it first"}},
 		{payouts.ErrNotRetryable, m{http.StatusConflict, "state", "Only a prize whose payout failed can be paid again"}},
 		{payouts.ErrNothingToBatch, m{http.StatusConflict, "nothing-to-batch", "No withholding tax waits to be batched"}},
 		{payouts.ErrRemitted, m{http.StatusConflict, "state", "The batch is already remitted"}},
@@ -762,6 +770,25 @@ func (h *handlers) staffPayoutAction(action string) http.HandlerFunc {
 		}
 		httpx.WriteJSON(w, http.StatusOK, p)
 	}
+}
+
+func (h *handlers) staffRefundToSource(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Reason string `json:"reason"`
+	}
+	if !httpx.DecodeJSON(w, r, &in) {
+		return
+	}
+	if h.StaffServices.Payouts == nil {
+		unavailable(w, "Payouts")
+		return
+	}
+	p, err := h.StaffServices.Payouts.RefundToSource(r.Context(), chi.URLParam(r, "user"), member(r).Operator(), in.Reason, r.Header.Get("Idempotency-Key"))
+	if err != nil {
+		staffError(w, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusCreated, p)
 }
 
 func (h *handlers) staffRetryPrize(w http.ResponseWriter, r *http.Request) {

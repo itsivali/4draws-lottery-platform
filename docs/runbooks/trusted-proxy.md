@@ -54,3 +54,15 @@ is used instead.
 3. Record the observed headers and the chosen setting here (see "What was measured").
 
 The same behaviour is covered locally by `TestApp_PerClientLimitsUseTheTrustedProxyEntryNotWhatTheClientClaims`.
+
+## The client's country (ADR 0031)
+
+`GEO_COUNTRY_HEADER` names the header the edge sets with the client's country: `CF-IPCountry` behind Cloudflare
+(IP Geolocation must be on in the zone's Network settings; it is by default). It is honoured only with a
+`TRUSTED_PROXY_HEADER`, because without a proxy that overwrites it a client could send any country. Every sign-up,
+top-up, play and withdrawal records the country in `compliance.geo_signals`, shown on the player's timeline. In
+`sandbox` nothing is refused; in `live` sign-ups, top-ups and plays from anywhere but `KE` (an unknown `XX`, Tor `T1`
+or a missing header included) get 451 `outside-kenya`. Withdrawals are never refused for where the player is.
+
+After a host move (S12), check the header still arrives: sign up a test account and look at its timeline's *Where
+from*. An empty country there means the edge is not sending it.

@@ -5,7 +5,7 @@ import { useSession } from '../context'
 import { Actions, DataTable, Stack } from '../components/DataTable'
 import { useConfirmedAction } from '../components/useConfirmedAction'
 import { Empty, Loaded, Mono, PageHeader, Pill, type Tone } from '../components/ui'
-import { eat, kes } from '../format'
+import { eat, kes, msisdn } from '../format'
 import { usePages } from '../hooks'
 import { can } from '../roles'
 import type { Payout } from '../types'
@@ -33,7 +33,14 @@ export function PayoutsPage() {
   const operator = can(me.roles, 'staff')
 
   const columns = useMemo<ColumnDef<Payout>[]>(() => [
-    { id: 'payout', header: 'Payout', accessorFn: (p) => `${p.kind} ${p.id}`, cell: ({ row }) => <Stack primary={<span className="capitalize">{row.original.kind}</span>} secondary={<Mono>{row.original.id}</Mono>} /> },
+    {
+      id: 'payout', header: 'Payout', accessorFn: (p) => `${p.refund ? 'refund' : p.kind} ${p.id}`,
+      cell: ({ row }) => {
+        const r = row.original.refund
+        return <Stack primary={<span className="capitalize">{r ? 'Refund to source' : row.original.kind}</span>}
+          secondary={r ? <>{r.reason} · asked by <Mono>{r.requested_by}</Mono> · to {msisdn(r.msisdn)} · someone else approves</> : <Mono>{row.original.id}</Mono>} />
+      },
+    },
     {
       id: 'amount', header: 'Amount', accessorFn: (p) => p.net_kes, meta: { className: 'tabular-nums' },
       cell: ({ row }) => <Stack primary={`${kes(row.original.net_kes)} to M-Pesa`} secondary={row.original.tax_kes > 0 ? `tax ${kes(row.original.tax_kes)}` : undefined} />,

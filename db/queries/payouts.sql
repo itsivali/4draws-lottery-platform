@@ -1,11 +1,11 @@
 -- name: InsertPayout :one
 INSERT INTO payouts.payouts (user_id, kind, route, status, gross_kes, tax_kes, debt_offset_kes, net_kes, msisdn, draw_result_id,
                              originator_conversation_id, idempotency_key, tax_code, tax_rate, tax_rounding, settled_by, settled_at,
-                             created_at, updated_at)
+                             refund_reason, refund_requested_by, created_at, updated_at)
 VALUES (sqlc.arg(user_id), sqlc.arg(kind), sqlc.arg(route), sqlc.arg(status), sqlc.arg(gross_kes), sqlc.arg(tax_kes),
         sqlc.arg(debt_offset_kes), sqlc.arg(net_kes), sqlc.arg(msisdn), sqlc.narg(draw_result_id), platform.uuid_v7()::text,
         sqlc.arg(idempotency_key), sqlc.arg(tax_code), (sqlc.arg(tax_rate)::text)::numeric, sqlc.arg(tax_rounding),
-        sqlc.narg(settled_by), sqlc.narg(settled_at), sqlc.arg(at), sqlc.arg(at))
+        sqlc.narg(settled_by), sqlc.narg(settled_at), sqlc.narg(refund_reason), sqlc.narg(refund_requested_by), sqlc.arg(at), sqlc.arg(at))
 RETURNING id;
 
 -- name: PayoutByKey :one
@@ -239,3 +239,9 @@ SELECT
   (SELECT count(*) FROM draws.draw_results r JOIN draws.draw_entries e ON e.id = r.entry_id
    WHERE e.user_id = sqlc.arg(user_id)
      AND NOT EXISTS (SELECT 1 FROM payouts.payouts p WHERE p.draw_result_id = r.id AND p.status = 'succeeded'))::int AS unpaid_prizes;
+
+-- name: RefundSource :one
+-- The number that paid in the account's latest credited top-up: where a refund to source goes (ADR 0031).
+SELECT msisdn::text FROM payments.payments
+WHERE user_id = $1 AND status = 'credited' AND msisdn IS NOT NULL
+ORDER BY created_at DESC, id DESC LIMIT 1;

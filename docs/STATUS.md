@@ -74,6 +74,11 @@ Read this first at the start of every session.
   - Every account status change is kept in `identity.user_status_history` (migration 00049), written by a trigger,
     and shown on the back office player timeline and in the player pack.
   - Self-exclusion ends every session at once; the app says why on the sign-in screen.
+- **Refund to source and the country signal (ADR 0031, 2026-11-08):**
+  - An admin can send a balance the account cannot withdraw back to the number that paid it in; it is held until
+    someone else approves it (migration 00050).
+  - Sign-ups, top-ups, plays and withdrawals record the country Cloudflare reports (`GEO_COUNTRY_HEADER=CF-IPCountry`
+    on Render). In `live`, everything but KE is refused, except withdrawals; `live` will not start without the header.
 
 ## Before the API is exposed to players
 

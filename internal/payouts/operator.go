@@ -57,6 +57,9 @@ func (s *Service) Approve(ctx context.Context, id, operator string) (Payout, err
 		if err := s.gate.Assert(ctx, tx, compliance.OpPayout); err != nil {
 			return err
 		}
+		if p.RefundRequestedBy != nil && *p.RefundRequestedBy == operator {
+			return ErrSameApprover
+		}
 		// the account may have changed since the payout was held (ADR 0030): it stays held, for Reject
 		if err := s.assertPayee(ctx, tx, p); err != nil {
 			return err
@@ -141,15 +144,27 @@ func (s *Service) InState(ctx context.Context, state string, limit int, after st
 // payeeProblems are the refusals of identity.AssertCanBePaid that mean the account, not the system, is the problem.
 var payeeProblems = []error{identity.ErrAccountSuspended, identity.ErrKYCRequired, identity.ErrPhoneNotVerified}
 
+func payeeProblem(err error) bool {
+	for _, e := range payeeProblems {
+		if errors.Is(err, e) {
+			return true
+		}
+	}
+	return false
+}
+
 // assertPayee checks again, as money is about to leave, that the account may be paid and that its proved number is
 // the one the payout was made out to (ADR 0030). A refusal wraps ErrPayeeIneligible; other errors are returned as they
 // are.
 func (s *Service) assertPayee(ctx context.Context, tx pgx.Tx, p store.PayoutsPayout) error {
+	if p.RefundReason != nil {
+		// a refund to source goes to the number that paid in, to an account that by definition cannot be paid
+		// (ADR 0031): the second person approving it is the check
+		return nil
+	}
 	msisdn, err := s.ids.AssertCanBePaid(ctx, tx, p.UserID)
-	for _, e := range payeeProblems {
-		if errors.Is(err, e) {
-			return fmt.Errorf("%w: %w", ErrPayeeIneligible, err)
-		}
+	if payeeProblem(err) {
+		return fmt.Errorf("%w: %w", ErrPayeeIneligible, err)
 	}
 	if err != nil {
 		return err

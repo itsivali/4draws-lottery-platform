@@ -68,6 +68,15 @@ type AuditKraOutbox struct {
 	BatchID    pgtype.UUID
 }
 
+type ComplianceGeoSignal struct {
+	ID         int64
+	UserID     pgtype.UUID
+	Action     string
+	Country    pgtype.Text
+	Refused    bool
+	ObservedAt time.Time
+}
+
 type ComplianceLiveApproval struct {
 	RequestID  string
 	ApprovedBy string
@@ -498,6 +507,8 @@ type PayoutsPayout struct {
 	SettledBy                pgtype.Text
 	SettledAt                pgtype.Timestamptz
 	DebtOffsetKes            int64
+	RefundReason             pgtype.Text
+	RefundRequestedBy        pgtype.Text
 }
 
 type PayoutsReconciliationRun struct {

@@ -5,6 +5,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"strings"
 	"time"
@@ -68,6 +69,10 @@ type Deps struct {
 	SignIn SignInProviders
 	// Gate is the operating mode (ADR 0027) GET /v1/status reports; nil answers 503.
 	Gate *compliance.Gate
+	// Geo records the client's country at sign-up and on money moves and, with real money, refuses outside Kenya
+	// (ADR 0031); nil records nothing. GeoCountryHeader is the header the edge sets (GEO_COUNTRY_HEADER).
+	Geo              *compliance.Geo
+	GeoCountryHeader string
 }
 
 type ctxKey struct{}
@@ -162,6 +167,33 @@ func Mount(d Deps) func(chi.Router) {
 }
 
 type handlers struct{ Deps }
+
+// country is the client's country as the edge reports it, or "".
+func (h *handlers) country(r *http.Request) string {
+	if h.GeoCountryHeader == "" {
+		return ""
+	}
+	return compliance.Country(r.Header.Get(h.GeoCountryHeader))
+}
+
+// geo records where an authenticated player's request comes from and writes 451 outside-kenya when it may not go on
+// (ADR 0031).
+func (h *handlers) geo(w http.ResponseWriter, r *http.Request, userID, action string) bool {
+	err := h.Geo.Check(r.Context(), userID, action, h.country(r))
+	switch {
+	case err == nil:
+		return true
+	case errors.Is(err, compliance.ErrOutsideKenya):
+		outsideKenya(w)
+	default:
+		internalError(w, err)
+	}
+	return false
+}
+
+func outsideKenya(w http.ResponseWriter) {
+	httpx.WriteProblem(w, http.StatusUnavailableForLegalReasons, "outside-kenya", "Tajirika is only available in Kenya", "")
+}
 
 func (h *handlers) clientIP(r *http.Request) string {
 	return httpx.ClientIPHops(r, h.TrustedProxyHeader, h.TrustedProxyHops)

@@ -72,6 +72,7 @@ paths:
           application/json:
             schema: { $ref: "#/components/schemas/Credentials" }
       responses:
+        "451": { $ref: "#/components/responses/Problem", description: "`outside-kenya`: with real money only requests the edge places in Kenya are served (ADR 0031)." }
         "201":
           description: Account created and signed in
           content:
@@ -316,6 +317,7 @@ paths:
           application/json:
             schema: { $ref: "#/components/schemas/SsoSignUp" }
       responses:
+        "451": { $ref: "#/components/responses/Problem", description: "`outside-kenya`: with real money only requests the edge places in Kenya are served (ADR 0031)." }
         "201":
           description: Account created and signed in
           content:
@@ -460,6 +462,7 @@ paths:
           application/json:
             schema: { $ref: "#/components/schemas/TopUpRequest" }
       responses:
+        "451": { $ref: "#/components/responses/Problem", description: "`outside-kenya`: with real money only requests the edge places in Kenya are served (ADR 0031)." }
         "202":
           description: Accepted; the prompt is being sent
           content:
@@ -593,6 +596,7 @@ paths:
         play (200) and charges nothing.
       parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
       responses:
+        "451": { $ref: "#/components/responses/Problem", description: "`outside-kenya`: with real money only requests the edge places in Kenya are served (ADR 0031)." }
         "201":
           description: Played
           content:
@@ -1698,6 +1702,40 @@ paths:
         "403": { $ref: "#/components/responses/Problem" }
         "404": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
+  /v1/staff/players/{user}/refund:
+    post:
+      operationId: staffPlayerRefundToSource
+      tags: [back-office]
+      summary: Refund a balance the account cannot withdraw to the number that paid it in
+      description: >-
+        Role: `admin` (ADR 0031). For an account that may not be paid (suspended, identity not verified or refused,
+        phone not proved): the whole wallet balance goes back to the number of its latest credited top-up, as a
+        withdrawal (the withdrawal tax rule applies) that is created held. Someone other than the admin who asked
+        approves it (`POST /v1/staff/payouts/{id}/approve`, else 409 `two-person-rule`) or rejects it (the money goes
+        back to the wallet). 409 `payable` when the account can withdraw itself, `nothing-to-refund` for an empty
+        wallet, `no-source` without a credited top-up, `in-debt` while it owes from a reversed top-up.
+      security: [{ staffBearer: [] }]
+      parameters: [{ name: user, in: path, required: true, schema: { type: string } }, { $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: { type: string, minLength: 1, maxLength: 500 }
+      responses:
+        "201":
+          description: The refund, held for a second person
+          content:
+            application/json:
+              schema: { type: object }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
   /v1/staff/finance:
     get:
       operationId: staffFinance
@@ -2541,7 +2579,12 @@ paths:
                 type: object
                 required: [payouts, next_after]
                 properties:
-                  payouts: { type: array, items: { type: object } }
+                  payouts:
+                    type: array
+                    description: >-
+                      Each payout as the operator sees it; a refund to source (ADR 0031) carries `refund`: its reason,
+                      the admin who asked (`requested_by`, who may not approve it) and the number it goes to (`msisdn`).
+                    items: { type: object }
                   next_after: { type: [string, "null"] }
         "400": { $ref: "#/components/responses/Problem" }
         "401": { $ref: "#/components/responses/Problem" }
@@ -3459,7 +3502,7 @@ paths:
                         created_at: { type: string, format: date-time }
                   identity:
                     type: object
-                    required: [kyc, sessions, status_history, closure_requested_at]
+                    required: [kyc, sessions, status_history, locations, closure_requested_at]
                     properties:
                       kyc:
                         type: array
@@ -3502,6 +3545,20 @@ paths:
                             actor_type: { type: [string, "null"], enum: [player, staff, system, null] }
                             actor: { type: [string, "null"] }
                             reason: { type: [string, "null"] }
+                            at: { type: string, format: date-time }
+                      locations:
+                        type: array
+                        description: >-
+                          Where sign-ups and money moves came from, newest first (ADR 0031): the country the edge
+                          reported (null when it said nothing usable) and whether the request was refused for it.
+                        items:
+                          type: object
+                          required: [id, action, country, refused, at]
+                          properties:
+                            id: { type: integer }
+                            action: { type: string, enum: [signup, topup, play, withdrawal] }
+                            country: { type: [string, "null"] }
+                            refused: { type: boolean }
                             at: { type: string, format: date-time }
                       closure_requested_at: { type: [string, "null"], format: date-time }
                   limits:

@@ -133,11 +133,22 @@ type StatusChange struct {
 	At        time.Time `json:"at"`
 }
 
-// PlayerIdentity is the account's identity history: submissions, sign-ins, status changes and a closure request.
+// GeoSignal is where the edge placed a sign-up or money move (ADR 0031); Country is nil when it said nothing usable.
+type GeoSignal struct {
+	ID      int64     `json:"id"`
+	Action  string    `json:"action"`
+	Country *string   `json:"country"`
+	Refused bool      `json:"refused"`
+	At      time.Time `json:"at"`
+}
+
+// PlayerIdentity is the account's identity history: submissions, sign-ins, status changes, where it was used from
+// and a closure request.
 type PlayerIdentity struct {
 	KYC                []KYCCheck     `json:"kyc"`
 	Sessions           []Session      `json:"sessions"`
 	StatusHistory      []StatusChange `json:"status_history"`
+	Locations          []GeoSignal    `json:"locations"`
 	ClosureRequestedAt *time.Time     `json:"closure_requested_at"`
 }
 
@@ -182,6 +193,7 @@ const (
 	lastKYC       = 20
 	lastSessions  = 10
 	lastStatuses  = 20
+	lastLocations = 20
 	lastEvents    = 50
 )
 
@@ -223,6 +235,9 @@ WHERE s.user_id = $1::uuid ORDER BY s.created_at DESC, s.id DESC LIMIT $2`
 	playerStatusSQL = `
 SELECT id, from_status, to_status, actor_type, actor_id, reason, changed_at
 FROM identity.user_status_history WHERE user_id = $1::uuid ORDER BY id DESC LIMIT $2`
+	playerGeoSQL = `
+SELECT id, action, country, refused, observed_at
+FROM compliance.geo_signals WHERE user_id = $1::uuid ORDER BY id DESC LIMIT $2`
 	playerEventsSQL = `
 SELECT ` + eventColumns + ` FROM audit.audit_log
 WHERE actor_id = $1 OR entity_id = $1 OR details->>'user_id' = $1 ORDER BY id DESC LIMIT $2`
@@ -241,7 +256,7 @@ func (s *Service) Player(ctx context.Context, userID string, all bool, viewer st
 	p := &Player{TopUps: []PlayerTopUp{}, Payouts: []PlayerPayout{}, Events: []Event{}}
 	p.Wallet.Transactions = []WalletTx{}
 	p.Plays.Last = []PlayerPlay{}
-	p.Identity.KYC, p.Identity.Sessions, p.Identity.StatusHistory = []KYCCheck{}, []Session{}, []StatusChange{}
+	p.Identity.KYC, p.Identity.Sessions, p.Identity.StatusHistory, p.Identity.Locations = []KYCCheck{}, []Session{}, []StatusChange{}, []GeoSignal{}
 	p.Limits.Deposit = []DepositLimit{}
 	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		row := &p.Player
@@ -313,6 +328,13 @@ func (s *Service) Player(ctx context.Context, userID string, all bool, viewer st
 			var c StatusChange
 			err := r.Scan(&c.ID, &c.From, &c.To, &c.ActorType, &c.Actor, &c.Reason, &c.At)
 			return c, err
+		}); err != nil {
+			return err
+		}
+		if p.Identity.Locations, err = collect(ctx, tx, playerGeoSQL, userID, lim(lastLocations), func(r pgx.CollectableRow) (GeoSignal, error) {
+			var g GeoSignal
+			err := r.Scan(&g.ID, &g.Action, &g.Country, &g.Refused, &g.At)
+			return g, err
 		}); err != nil {
 			return err
 		}
@@ -436,6 +458,13 @@ func WritePlayerCSV(w io.Writer, p *Player) (int, error) {
 	for _, c := range p.Identity.StatusHistory {
 		write("status_change", strconv.FormatInt(c.ID, 10), c.At, "status", c.To, "", deref(c.Actor),
 			map[string]any{"from": c.From, "actor_type": c.ActorType, "reason": c.Reason})
+	}
+	for _, g := range p.Identity.Locations {
+		status := "allowed"
+		if g.Refused {
+			status = "refused"
+		}
+		write("geo_signal", strconv.FormatInt(g.ID, 10), g.At, g.Action, status, "", deref(g.Country), map[string]any{})
 	}
 	for _, l := range p.Limits.Deposit {
 		status := "in force"
