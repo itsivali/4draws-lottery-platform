@@ -59,3 +59,37 @@ func TestStaffAPI_MonitoringCasesHoldAndRelease(t *testing.T) {
 		t.Fatalf("unknown view: %d %s", r.Code, r.Raw)
 	}
 }
+
+// ADR 0036: an admin records a rule's setting from the back office: its thresholds checked, a note required, and the
+// compliance owner's approval reference ending "pending approval".
+func TestStaffAPI_AnAdminSetsARuleAndRecordsItsApproval(t *testing.T) {
+	e := setup(t)
+	admin := e.member(staff.Admin)
+	set := func(body map[string]any) resp {
+		return e.do(t, http.MethodPut, "/v1/staff/aml/rules/failed_topups", admin, body)
+	}
+	if r := set(map[string]any{"enabled": true, "params": map[string]any{"window_hours": 24, "min_failed": 0, "quiet_days": 7}, "note": "tighter"}); r.Code != http.StatusBadRequest || !hasType(r, "invalid-rule") {
+		t.Fatalf("a zero threshold: %d %s", r.Code, r.Raw)
+	}
+	if r := set(map[string]any{"enabled": true, "params": map[string]any{"window_hours": 24, "min_failed": 3, "quiet_days": 7}, "note": ""}); r.Code != http.StatusBadRequest {
+		t.Fatalf("no note: %d %s", r.Code, r.Raw)
+	}
+	if r := e.do(t, http.MethodPut, "/v1/staff/aml/rules/no_such_rule", admin, map[string]any{"enabled": true, "params": map[string]any{"quiet_days": 7}, "note": "x"}); r.Code != http.StatusBadRequest {
+		t.Fatalf("unknown rule: %d %s", r.Code, r.Raw)
+	}
+	r := set(map[string]any{"enabled": false, "params": map[string]any{"window_hours": 12, "min_failed": 3, "quiet_days": 7},
+		"approval_reference": "CO-2026-11", "note": "compliance owner's memo of 11 November"})
+	if r.Code != http.StatusOK {
+		t.Fatalf("set: %d %s", r.Code, r.Raw)
+	}
+	var got map[string]any
+	for _, x := range r.Body["rules"].([]any) {
+		if x.(map[string]any)["rule"] == "failed_topups" {
+			got = x.(map[string]any)
+		}
+	}
+	params, _ := got["params"].(map[string]any)
+	if got["enabled"] != false || got["pending_approval"] != false || got["approval_reference"] != "CO-2026-11" || params["window_hours"] != float64(12) {
+		t.Fatalf("the rule after: %v", got)
+	}
+}

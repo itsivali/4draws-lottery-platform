@@ -1,7 +1,7 @@
 import { CircleX, KeyRound, LockKeyhole, Mail, MailCheck, ShieldCheck } from 'lucide-react'
 import { useEffect, useId, useRef, useState } from 'react'
 import { ProblemError, type ApiClient } from './api'
-import { BrandGlyph } from './components/BrandGlyph'
+import { AuthShell } from './components/AuthShell'
 import { rememberCredential } from './credentials'
 import type { Config } from './config'
 import { cancelled, renderGoogle, signInWithApple, signInWithDevRealm, type IDToken } from './providers'
@@ -98,30 +98,9 @@ export function SignIn({ config, api, onSignedIn, providers = realProviders, not
   const { apple, dev } = config
   const others = Boolean(config.google || apple || dev)
   return (
-    <main id="main" className="grid min-h-svh lg:grid-cols-[1.1fr_1fr]">
-      <aside aria-hidden="true" className="relative hidden overflow-hidden bg-hero text-white lg:flex lg:flex-col lg:justify-between lg:p-12">
-        <div className="absolute inset-0 bg-[radial-gradient(90%_70%_at_0%_0%,rgb(255_255_255_/_0.28)_0%,transparent_60%),radial-gradient(80%_60%_at_100%_100%,rgb(43_18_84_/_0.55)_0%,transparent_55%)]" />
-        <div className="absolute -bottom-40 -left-24 size-[460px] rounded-full bg-white/10 blur-3xl" />
-        <p className="relative flex items-center gap-3 font-display text-3xl font-extrabold tracking-tight"><span className="flex size-12 items-center justify-center rounded-2xl bg-white/15 shadow-float backdrop-blur"><BrandGlyph className="size-9" /></span> 4draws</p>
-        <div className="relative max-w-lg animate-in fade-in-0 slide-in-from-bottom-4 duration-700 motion-reduce:animate-none">
-          <p className="font-display text-5xl font-extrabold leading-[1.05] tracking-tight">Every action, under your name.</p>
-          <p className="mt-5 text-lg text-white/85">Identity review, draws, payouts, tax and the ledger, with two-person rules where the money moves.</p>
-        </div>
-        <p className="relative text-xs text-white/60">Staff back office · Nairobi time</p>
-      </aside>
-      <div className="relative flex items-center justify-center overflow-hidden bg-muted/40 p-6 md:p-10">
-        <div aria-hidden="true" className="pointer-events-none absolute -right-28 -top-28 size-[380px] rounded-full bg-primary-container/70" />
-        <div aria-hidden="true" className="pointer-events-none absolute -bottom-36 -left-28 size-[360px] rounded-full bg-violet-container/80" />
-        <section className="relative w-full max-w-[440px] rounded-3xl border bg-card p-7 shadow-float animate-in fade-in-0 slide-in-from-bottom-4 duration-500 motion-reduce:animate-none md:p-9" aria-labelledby="signin-title">
-          <div className="mb-7 flex items-center gap-3">
-            <span className="flex size-11 items-center justify-center rounded-2xl bg-hero text-white shadow-card"><BrandGlyph className="size-8" /></span>
-            <div className="leading-tight">
-              <p className="font-display text-lg font-extrabold tracking-tight">4draws</p>
-              <p className="text-xs text-muted-foreground">Staff back office</p>
-            </div>
-          </div>
-          <h1 id="signin-title" className="font-display text-4xl font-extrabold tracking-tight">Sign in</h1>
-          <p className="mt-2 text-sm text-muted-foreground">With the email address an administrator invited and your password. Every action you take is recorded under your name.</p>
+    <AuthShell labelledBy="signin-title">
+          <h1 id="signin-title" className="font-display text-3xl font-extrabold tracking-tight">Sign in</h1>
+          <p className="mt-2 text-[15px] leading-relaxed text-muted-foreground">With the email address an administrator invited and your password. Every action you take is recorded under your name.</p>
           {notice ? (
             <Alert role="status" className="mt-6 border-pending/40 bg-pending/10 [&>svg]:text-pending">
               <ShieldCheck />
@@ -140,7 +119,7 @@ export function SignIn({ config, api, onSignedIn, providers = realProviders, not
               <Label htmlFor={`${id}-email`}>Email address</Label>
               <div className="relative">
                 <Mail aria-hidden="true" className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                <Input id={`${id}-email`} name="username" type="email" inputMode="email" autoComplete="username" required value={email} onChange={(e) => { setEmail(e.target.value) }} className="h-11 rounded-xl bg-muted/40 pl-10 shadow-none" />
+                <Input id={`${id}-email`} name="username" type="email" inputMode="email" autoComplete="username" required value={email} onChange={(e) => { setEmail(e.target.value) }} className="h-12 rounded-xl bg-card pl-10 shadow-none" />
               </div>
             </div>
             <div className="grid gap-1.5">
@@ -152,7 +131,7 @@ export function SignIn({ config, api, onSignedIn, providers = realProviders, not
               </div>
               <div className="relative">
                 <LockKeyhole aria-hidden="true" className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                <Input id={`${id}-password`} name="password" type="password" autoComplete="current-password" required value={password} onChange={(e) => { setPassword(e.target.value) }} className="h-11 rounded-xl bg-muted/40 pl-10 shadow-none" />
+                <Input id={`${id}-password`} name="password" type="password" autoComplete="current-password" required value={password} onChange={(e) => { setPassword(e.target.value) }} className="h-12 rounded-xl bg-card pl-10 shadow-none" />
               </div>
             </div>
             {forgot ? (
@@ -172,7 +151,7 @@ export function SignIn({ config, api, onSignedIn, providers = realProviders, not
                 </div>
               )
             ) : null}
-            <Button type="submit" size="lg" className="mt-1 h-12 w-full rounded-xl text-base shadow-card" disabled={busy || !email.trim() || !password}>
+            <Button type="submit" size="lg" className="mt-1 h-12 w-full rounded-full text-base" disabled={busy || !email.trim() || !password}>
               <KeyRound aria-hidden="true" /> {busy ? 'Signing in…' : 'Sign in'}
             </Button>
           </form>
@@ -202,9 +181,6 @@ export function SignIn({ config, api, onSignedIn, providers = realProviders, not
               {problem.detail ? <AlertDescription>{problem.detail}</AlertDescription> : null}
             </Alert>
           ) : null}
-          <p className="mt-7 text-center text-xs text-muted-foreground">Staff back office · Nairobi time</p>
-        </section>
-      </div>
-    </main>
+    </AuthShell>
   )
 }

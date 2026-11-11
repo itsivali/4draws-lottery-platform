@@ -80,3 +80,39 @@ func TestAPI_AStopRefusesEveryMoneyPathUntilAnAdminResumes(t *testing.T) {
 		t.Fatalf("play after resume: %d %s", r.Code, r.Raw)
 	}
 }
+
+// ADR 0036: a switch pauses one area. Pausing plays refuses plays only; /v1/status lists it; staff pause, an admin
+// resumes.
+func TestAPI_ASwitchPausesOneAreaUntilAnAdminResumesIt(t *testing.T) {
+	e := setup(t)
+	p := e.signIn(t)
+	e.canPlay(t, p, 500)
+	staffer, admin := e.member(staff.Staff), e.member(staff.Admin)
+	if r := e.do(t, http.MethodPost, "/v1/staff/operating/switches/plays/pause", staffer, map[string]any{"reason": ""}); r.Code != http.StatusBadRequest {
+		t.Fatalf("pause without a reason: %d %s", r.Code, r.Raw)
+	}
+	if r := e.do(t, http.MethodPost, "/v1/staff/operating/switches/plays/pause", staffer, map[string]any{"reason": "wheel odds under review"}); r.Code != http.StatusOK || r.Body["paused"] != true {
+		t.Fatalf("pause: %d %s", r.Code, r.Raw)
+	}
+	if r := e.do(t, http.MethodGet, "/v1/status", "", nil); r.Body["money_moves"] != true || !strings.Contains(r.Raw, `"paused":["plays"]`) {
+		t.Fatalf("status: %s", r.Raw)
+	}
+	if r := e.do(t, http.MethodPost, "/v1/plays", p.access, nil); r.Code != http.StatusServiceUnavailable || !hasType(r, "operations-stopped") {
+		t.Fatalf("play while paused: %d %s", r.Code, r.Raw)
+	}
+	if r := e.do(t, http.MethodPost, "/v1/payouts/withdrawals", p.access, map[string]any{"amount_kes": 100}); r.Code != http.StatusCreated {
+		t.Fatalf("a withdrawal is not paused with plays: %d %s", r.Code, r.Raw)
+	}
+	if r := e.do(t, http.MethodGet, "/v1/staff/operating/switches", staffer, nil); r.Code != http.StatusOK || !strings.Contains(r.Raw, "wheel odds under review") {
+		t.Fatalf("switches: %d %s", r.Code, r.Raw)
+	}
+	if r := e.do(t, http.MethodPost, "/v1/staff/operating/switches/plays/resume", staffer, map[string]any{"reason": "ok"}); r.Code != http.StatusForbidden {
+		t.Fatalf("staff resume: %d %s", r.Code, r.Raw)
+	}
+	if r := e.do(t, http.MethodPost, "/v1/staff/operating/switches/plays/resume", admin, map[string]any{"reason": "odds confirmed"}); r.Code != http.StatusOK || r.Body["paused"] != false {
+		t.Fatalf("admin resume: %d %s", r.Code, r.Raw)
+	}
+	if r := e.do(t, http.MethodPost, "/v1/plays", p.access, nil); r.Code != http.StatusCreated {
+		t.Fatalf("play after resume: %d %s", r.Code, r.Raw)
+	}
+}

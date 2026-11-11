@@ -60,10 +60,11 @@ export class ApiClient {
   }
 
   /** The raw body of a download (e.g. a KRA batch file). */
-  async download(path: string, opts: ReadOptions = {}): Promise<{ blob: Blob; sha256: string | null }> {
+  async download(path: string, opts: ReadOptions = {}): Promise<{ blob: Blob; sha256: string | null; rows: number | null }> {
     const res = await this.read(new URL(path, this.baseUrl).toString(), { headers: await this.headers() }, opts.signal)
     if (!res.ok) await this.decode(res)
-    return { blob: await res.blob(), sha256: res.headers.get('X-File-SHA256') }
+    const rows = res.headers.get('X-File-Rows')
+    return { blob: await res.blob(), sha256: res.headers.get('X-File-SHA256'), rows: rows !== null && /^\d+$/.test(rows) ? Number(rows) : null }
   }
 
   post<T = unknown>(path: string, body: unknown = {}, key = newIdempotencyKey()): Promise<T> {

@@ -139,6 +139,12 @@ var staffRoutes = []staffRoute{
 	{http.MethodPost, "/v1/staff/operating/resume", staff.Admin},
 	{http.MethodPost, "/v1/staff/operating/live-requests", staff.Admin},
 	{http.MethodPost, "/v1/staff/operating/live-requests/0192f000-0000-7000-8000-000000000001/approve", staff.Admin},
+	{http.MethodGet, "/v1/staff/operating/switches", staff.Staff},
+	{http.MethodPost, "/v1/staff/operating/switches/plays/pause", staff.Staff},
+	{http.MethodPost, "/v1/staff/operating/switches/plays/resume", staff.Admin},
+	{http.MethodPut, "/v1/staff/aml/rules/deposit_velocity", staff.Admin},
+	{http.MethodPost, "/v1/staff/jobs/1/retry", staff.Admin},
+	{http.MethodPost, "/v1/staff/jobs/1/cancel", staff.Admin},
 }
 
 func TestStaffAPI_EveryRouteNeedsAStaffTokenWithTheRightRole(t *testing.T) {
@@ -620,6 +626,10 @@ func TestStaffAPI_PlaysTopUpsSystemAndActivity(t *testing.T) {
 	settings, _ := r.Body["settings"].(map[string]any)
 	if r.Code != http.StatusOK || settings["daraja"] != "sandbox" || settings["sandbox_settlement"] != true ||
 		r.Body["plays_today"] == nil || len(r.Body["reconciliations"].([]any)) != 4 || settings["play_price_kes"] == nil {
+		t.Fatalf("system: %d %s", r.Code, r.Raw)
+	}
+	if _, ok := r.Body["job_runs"].([]any); !ok { // a list even before any job has run
+
 		t.Fatalf("system: %d %s", r.Code, r.Raw)
 	}
 

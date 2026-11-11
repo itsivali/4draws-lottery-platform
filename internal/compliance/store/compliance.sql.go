@@ -10,6 +10,17 @@ import (
 	"time"
 )
 
+const areaPaused = `-- name: AreaPaused :one
+SELECT paused FROM compliance.area_switches WHERE area = $1 ORDER BY created_at DESC, id DESC LIMIT 1
+`
+
+func (q *Queries) AreaPaused(ctx context.Context, area string) (bool, error) {
+	row := q.db.QueryRow(ctx, areaPaused, area)
+	var paused bool
+	err := row.Scan(&paused)
+	return paused, err
+}
+
 const geoSignals = `-- name: GeoSignals :many
 SELECT action, country, refused, observed_at FROM compliance.geo_signals
 WHERE user_id = $1 ORDER BY id DESC LIMIT $2
@@ -90,6 +101,33 @@ func (q *Queries) GetLiveRequest(ctx context.Context, id string) (GetLiveRequest
 		&i.ApprovedAt,
 	)
 	return i, err
+}
+
+const insertAreaSwitch = `-- name: InsertAreaSwitch :one
+INSERT INTO compliance.area_switches (area, paused, reason, changed_by, created_at)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING id
+`
+
+type InsertAreaSwitchParams struct {
+	Area      string
+	Paused    bool
+	Reason    string
+	ChangedBy string
+	At        time.Time
+}
+
+func (q *Queries) InsertAreaSwitch(ctx context.Context, arg InsertAreaSwitchParams) (string, error) {
+	row := q.db.QueryRow(ctx, insertAreaSwitch,
+		arg.Area,
+		arg.Paused,
+		arg.Reason,
+		arg.ChangedBy,
+		arg.At,
+	)
+	var id string
+	err := row.Scan(&id)
+	return id, err
 }
 
 const insertGeoSignal = `-- name: InsertGeoSignal :exec
@@ -188,6 +226,39 @@ func (q *Queries) InsertModeChange(ctx context.Context, arg InsertModeChangePara
 	var id string
 	err := row.Scan(&id)
 	return id, err
+}
+
+const latestAreaSwitches = `-- name: LatestAreaSwitches :many
+SELECT DISTINCT ON (area) id, area, paused, reason, changed_by, created_at
+FROM compliance.area_switches
+ORDER BY area, created_at DESC, id DESC
+`
+
+func (q *Queries) LatestAreaSwitches(ctx context.Context) ([]ComplianceAreaSwitch, error) {
+	rows, err := q.db.Query(ctx, latestAreaSwitches)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ComplianceAreaSwitch
+	for rows.Next() {
+		var i ComplianceAreaSwitch
+		if err := rows.Scan(
+			&i.ID,
+			&i.Area,
+			&i.Paused,
+			&i.Reason,
+			&i.ChangedBy,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const latestModeChange = `-- name: LatestModeChange :one

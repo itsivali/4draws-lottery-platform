@@ -281,7 +281,7 @@ func (a *App) staff(ctx context.Context, sh shared, base services) (staff.Authen
 	return members, api.StaffServices{
 		Identity: svc.identity, KYC: svc.kyc, Payments: svc.payments, Draws: svc.draws, Payouts: svc.payouts, Game: svc.game,
 		Alerts: a.alertsOn(pool, svc.draws), Members: members, Finance: finance.NewService(pool, sh.clk, sh.aw), Metrics: metrics.NewService(pool, sh.clk),
-		Oversight: oversight.NewService(pool, sh.clk, oversightSettings(sh.cfg)), RG: svc.rg, Gate: svc.gate, AML: svc.aml,
+		Oversight: oversight.NewService(pool, sh.clk, oversightSettings(sh.cfg)), Jobs: oversight.NewJobControl(pool, sh.insertOnly, sh.aw), RG: svc.rg, Gate: svc.gate, AML: svc.aml,
 	}, nil
 }
 
@@ -493,12 +493,13 @@ func AlertChecks(pool *pgxpool.Pool, clk clock.Clock, ds *draws.Service, all con
 const (
 	KindOperationsStopped = "operations.stopped"
 	KindLiveRequest       = "operations.live_request"
+	KindAreaPaused        = "operations.area_paused"
 )
 
-// OperatingCheck pages while staff have stopped money moving and warns for each live request waiting for its second
-// admin. It reads only what is recorded, so the worker and lotteryctl (which may run without OPERATING_MODE) agree.
+// OperatingCheck pages while staff have stopped money moving, and warns for each paused area and each live request
+// waiting for its second admin. It reads only what is recorded, so the worker and lotteryctl (which may run without OPERATING_MODE) agree.
 func OperatingCheck(g *compliance.Gate) alerts.Check {
-	return alerts.Check{Name: "operating", Kinds: []string{KindOperationsStopped, KindLiveRequest}, Run: func(ctx context.Context) ([]alerts.Alert, error) {
+	return alerts.Check{Name: "operating", Kinds: []string{KindOperationsStopped, KindLiveRequest, KindAreaPaused}, Run: func(ctx context.Context) ([]alerts.Alert, error) {
 		st, err := g.Current(ctx)
 		if err != nil {
 			return nil, err
@@ -508,6 +509,17 @@ func OperatingCheck(g *compliance.Gate) alerts.Check {
 			out = append(out, alerts.Alert{Kind: KindOperationsStopped, Subject: "operating_mode", Severity: alerts.Page,
 				Summary: "Money operations are stopped (" + c.Reason + "): top-ups, plays and withdrawals are refused until an admin resumes them",
 				Details: map[string]any{"reason": c.Reason, "stopped_by": c.ChangedBy, "stopped_at": c.At}})
+		}
+		switches, err := g.Switches(ctx)
+		if err != nil {
+			return nil, err
+		}
+		for _, sw := range switches {
+			if sw.Paused {
+				out = append(out, alerts.Alert{Kind: KindAreaPaused, Subject: string(sw.Area), Severity: alerts.Warn,
+					Summary: "Staff paused " + string(sw.Area) + " (" + sw.Reason + "): they are refused until an admin resumes them",
+					Details: map[string]any{"area": string(sw.Area), "reason": sw.Reason, "paused_by": sw.ChangedBy, "paused_at": sw.At}})
+			}
 		}
 		reqs, err := g.OpenLiveRequests(ctx)
 		if err != nil {

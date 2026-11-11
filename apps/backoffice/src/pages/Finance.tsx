@@ -16,6 +16,7 @@ import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCaption, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { ExportReceipt, type SavedFile } from '../components/polish'
 
 // Dates are Nairobi dates as YYYY-MM-DD strings; the arithmetic below runs on them in UTC so no browser time zone
 // leaks in.
@@ -114,11 +115,16 @@ function Stat({ label, value, note, money = true, emphasis = false, tone }: { la
 const num = 'text-right tabular-nums'
 const th = 'text-xs font-medium uppercase tracking-wide text-muted-foreground'
 
-function Frame({ caption, children }: { caption: string; children: ReactNode }) {
+/** A finance table on its card, with its title and what it shows (every table has a description, 2026-11-11). */
+function Frame({ caption, description, children }: { caption: string; description: string; children: ReactNode }) {
   return (
-    <div className="mt-6 overflow-x-auto rounded-xl border bg-card shadow-card">
+    <div className="mt-6 overflow-x-auto rounded-3xl border bg-card shadow-card animate-rise-in">
+      <div className="px-5 pb-4 pt-5">
+        <h3 className="m-0 font-display text-lg font-bold tracking-tight">{caption}</h3>
+        <p className="m-0 mt-1 max-w-[70ch] text-[14px] leading-relaxed text-muted-foreground">{description}</p>
+      </div>
       <Table>
-        <TableCaption className="mt-0 border-b px-4 py-3 text-left text-base font-semibold text-foreground caption-top">{caption}</TableCaption>
+        <TableCaption className="sr-only">{caption}</TableCaption>
         {children}
       </Table>
     </div>
@@ -145,7 +151,7 @@ export function FinancePage() {
   const [custom, setCustom] = useState({ from: '', to: '' })
   const [group, setGroup] = useState<FinanceGroup>('day')
   const [exporting, setExporting] = useState<'finance' | 'ledger' | null>(null)
-  const [exported, setExported] = useState<{ tone: 'success' | 'error'; text: string } | null>(null)
+  const [exported, setExported] = useState<{ tone: 'error'; text: string } | { tone: 'success'; file: SavedFile } | null>(null)
   const today = nairobiToday()
   const range = rangeOf(preset, today, custom)
   const customProblem = preset === 'custom' && (custom.from !== '' || custom.to !== '') && range === null
@@ -158,7 +164,7 @@ export function FinancePage() {
     const path = kind === 'finance' ? `/v1/staff/finance/export?${q.toString()}` : `/v1/staff/ledger/export?${q.toString()}`
     const name = `${kind}-${range.from}-${range.to}.csv`
     try {
-      const { blob, sha256 } = await api.download(path)
+      const { blob, sha256, rows } = await api.download(path)
       const a = document.createElement('a')
       a.href = URL.createObjectURL(blob)
       a.download = name
@@ -167,7 +173,7 @@ export function FinancePage() {
       a.click()
       a.remove()
       setTimeout(() => { URL.revokeObjectURL(a.href) }, 1000)
-      setExported({ tone: 'success', text: `Saved ${name}${sha256 ? ` · SHA-256 ${sha256}` : ''}. The export is in the activity log.` })
+      setExported({ tone: 'success', file: { name, sha256, rows, at: new Date(), note: 'The export is in the activity log.' } })
     } catch (e) {
       const text = e instanceof ProblemError ? `${e.title}${e.detail ? `: ${e.detail}` : ''}` : e instanceof Error ? e.message : 'The export failed'
       setExported({ tone: 'error', text })
@@ -225,11 +231,8 @@ export function FinancePage() {
       </div>
       {customProblem ? <p id="finance-range-problem" role="alert" className="mt-2 text-sm text-destructive">{RANGE_PROBLEM}</p> : null}
       {preset === 'custom' && !range && !customProblem ? <p className="mt-2 text-sm text-muted-foreground">Pick the first and last day.</p> : null}
-      {exported ? (
-        <p role="status" className={cn('mt-3 rounded-lg border px-3 py-2 text-sm [overflow-wrap:anywhere]', exported.tone === 'error' ? 'border-destructive/40 bg-destructive/10 text-destructive' : 'border-success/40 bg-success/10 text-success')}>
-          {exported.text}
-        </p>
-      ) : null}
+      {exported?.tone === 'success' ? <ExportReceipt file={exported.file} className="max-w-xl" /> : null}
+      {exported?.tone === 'error' ? <p role="status" className="mt-3 rounded-2xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-[14.5px] font-medium text-destructive [overflow-wrap:anywhere]">{exported.text}</p> : null}
 
       {range ? <FinanceData key={`${range.from}:${range.to}:${group}`} from={range.from} to={range.to} group={group} /> : null}
     </section>
@@ -302,7 +305,7 @@ function FinanceData({ from, to, group }: { from: string; to: string; group: Fin
                 <Stat label="B2C float" value={s.balances.b2c_float_kes} note="negative: paid out beyond what was funded" />
               </div>
 
-              <Frame caption={`Per ${unit}`}>
+              <Frame caption={`Per ${unit}`} description="Money in and out for each period of the range: deposits, stakes, prizes, withdrawals, reversals, tax and what the platform kept.">
                 <Head first="Period" columns={['Deposits', 'Stakes', 'Prizes awarded', 'Prizes paid', 'Withdrawals', 'GGR', 'Plays', 'Players', 'New players']} />
                 <TableBody>
                   {[...s.periods].reverse().map((d: FinancePeriod) => (
@@ -365,7 +368,7 @@ function FinanceData({ from, to, group }: { from: string; to: string; group: Fin
                       ]}
                       note="Counts of top-ups by the period they were started in. Reversed top-ups are among the credited ones; the table lists them."
                     />
-                    <Frame caption={`Top-ups per ${unit}: count · KES`}>
+                    <Frame caption={`Top-ups per ${unit}: count · KES`} description="How many top-ups ended in each state in each period, and their value in shillings.">
                       <Head first="Period" columns={['Started', 'Credited', 'Failed', 'Cancelled', 'Expired', 'Unconfirmed', 'Reversed', 'Still pending', 'Median time to credit']} />
                       <TableBody>
                         {[...s.top_ups].reverse().map((t) => (
@@ -400,7 +403,7 @@ function FinanceData({ from, to, group }: { from: string; to: string; group: Fin
                 <Stat label="Oldest unremitted" value={s.tax.oldest_unremitted_age_seconds === null ? 'Nothing owed' : duration(s.tax.oldest_unremitted_age_seconds)} note={s.tax.oldest_unremitted_age_seconds === null ? undefined : 'since the prize was paid'} tone={(s.tax.oldest_unremitted_age_seconds ?? 0) > 20 * 86_400 ? 'warning' : undefined} />
               </div>
 
-              <Frame caption="Prize pools">
+              <Frame caption="Prize pools" description="What each prize pool holds now: the share of stakes set aside for prizes, less what has been awarded.">
                 <Head first="Pool" columns={['Balance now', 'Funded in the range', 'Paid in the range']} />
                 <TableBody>
                   {s.prize_pools.length === 0 ? (
@@ -416,7 +419,7 @@ function FinanceData({ from, to, group }: { from: string; to: string; group: Fin
                 </TableBody>
               </Frame>
 
-              <Frame caption={`Payouts per ${unit}: count · KES (requested and failed gross; paid, held and manual net)`}>
+              <Frame caption={`Payouts per ${unit}: count · KES`} description="How many payouts ended in each state in each period, and their value: requested and failed before tax, paid, held and manual after it.">
                 <Head first="Period" columns={['Requested', 'Paid', 'Failed', 'Held for approval', 'Manual settlement', 'Tax withheld']} />
                 <TableBody>
                   {[...s.payouts].reverse().map((p) => (
@@ -446,7 +449,7 @@ function FinanceData({ from, to, group }: { from: string; to: string; group: Fin
                   The ledger does not balance. A posting is broken; the figures on this page cannot be trusted until it is found. Raise it now.
                 </p>
               )}
-              <Frame caption="Trial balance: every ledger account, with its natural sign">
+              <Frame caption="Trial balance: every ledger account, with its natural sign" description="Every account in the double-entry ledger with its balance for the range. Debits equal credits when the books are right.">
                 <TableHeader className="bg-muted/50">
                   <TableRow className="hover:bg-transparent">
                     <TableHead scope="col" className={th}>Account</TableHead>
@@ -475,7 +478,7 @@ function FinanceData({ from, to, group }: { from: string; to: string; group: Fin
                 </TableFooter>
               </Frame>
 
-              <Frame caption="Journals posted in the range, by kind">
+              <Frame caption="Journals posted in the range, by kind" description="How many ledger journals of each kind were posted in the range, and the money they moved.">
                 <Head first="Kind" columns={['Journals', 'Debited', 'Credited']} />
                 <TableBody>
                   {s.by_kind.length === 0 ? (
@@ -535,7 +538,7 @@ function Reconciliations() {
           <Empty>No {current.label.toLowerCase()} reconciliation has run yet.</Empty>
         ) : (
           <>
-            <Frame caption={`${current.label} reconciliation runs, newest first`}>
+            <Frame caption={`${current.label} reconciliation runs, newest first`} description="Each time this reconciliation ran: whether the books agreed, and what differed when they did not.">
               <TableHeader className="bg-muted/50">
                 <TableRow className="hover:bg-transparent">
                   <TableHead scope="col" className={th}>Ran at</TableHead>

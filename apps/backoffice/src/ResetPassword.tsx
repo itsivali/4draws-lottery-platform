@@ -1,7 +1,7 @@
 import { CircleCheck, CircleX, KeyRound } from 'lucide-react'
 import { useId, useState } from 'react'
 import { ProblemError, type ApiClient } from './api'
-import { BrandGlyph } from './components/BrandGlyph'
+import { AuthShell } from './components/AuthShell'
 import { characters, MIN_PASSWORD } from './components/ui'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -24,10 +24,9 @@ export function ResetPassword({ api, token, onDone }: { api: ApiClient; token: s
   const mismatch = again.length > 0 && again !== next
   const blocked = busy || !token || !next || short || again !== next
   return (
-    <main id="main" className="grid min-h-svh place-items-center bg-background p-6">
-      <Card className="w-full max-w-[460px] shadow-float">
+    <AuthShell bare>
+      <Card className="w-full border-0 shadow-sheet animate-swing-in">
         <CardHeader>
-          <p className="mb-2 flex items-center gap-2 text-sm font-medium text-muted-foreground"><span className="flex size-6 items-center justify-center rounded-md bg-primary text-primary-foreground"><BrandGlyph className="size-4" /></span> 4draws back office</p>
           <CardTitle className="text-xl">Choose a new password</CardTitle>
           <CardDescription>{token ? 'From the link in your email. Your other sessions are signed out when it changes.' : 'This link is incomplete. Open the one in your email again, or ask for a new one from the sign-in page.'}</CardDescription>
         </CardHeader>
@@ -84,6 +83,6 @@ export function ResetPassword({ api, token, onDone }: { api: ApiClient; token: s
           )}
         </CardContent>
       </Card>
-    </main>
+    </AuthShell>
   )
 }

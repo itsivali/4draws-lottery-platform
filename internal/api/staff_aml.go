@@ -12,10 +12,12 @@ import (
 )
 
 // Transaction monitoring in the back office (ADR 0033): the cases, what is done on them, and the rules as they stand.
-// The rules' thresholds are set with lotteryctl (aml set-rule), by the compliance owner's decision.
-func (h *handlers) mountAML(r chi.Router, anyStaff func(http.Handler) http.Handler) {
+// The rules' thresholds are the compliance owner's decision; an admin records it here or with lotteryctl (aml
+// set-rule), with a note and, once given, the owner's approval reference (ADR 0036).
+func (h *handlers) mountAML(r chi.Router, anyStaff, admin func(http.Handler) http.Handler) {
 	has := h.StaffServices.AML != nil
 	r.With(anyStaff).Get("/aml/rules", h.needs(has, "Transaction monitoring", h.staffAMLRules))
+	r.With(admin).Put("/aml/rules/{rule}", h.needs(has, "Transaction monitoring", h.staffAMLSetRule))
 	r.With(anyStaff).Get("/aml/cases", h.needs(has, "Transaction monitoring", h.staffAMLCases))
 	r.With(anyStaff).Post("/aml/cases", h.needs(has, "Transaction monitoring", h.staffAMLOpen))
 	r.With(anyStaff).Get("/aml/cases/{id}", h.needs(has, "Transaction monitoring", h.staffAMLCase))
@@ -50,6 +52,29 @@ func (h *handlers) staffAMLRules(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpx.WriteJSON(w, http.StatusOK, map[string]any{"rules": rules})
+}
+
+// staffAMLSetRule records a rule's setting: on or off, its thresholds, the approval reference and a note.
+func (h *handlers) staffAMLSetRule(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Enabled           bool       `json:"enabled"`
+		Params            aml.Params `json:"params"`
+		ApprovalReference string     `json:"approval_reference"`
+		Note              string     `json:"note"`
+	}
+	if !httpx.DecodeJSON(w, r, &in) {
+		return
+	}
+	err := h.StaffServices.AML.SetRule(r.Context(), aml.Rule(chi.URLParam(r, "rule")), in.Enabled, in.Params, in.ApprovalReference, member(r).Operator(), in.Note)
+	if errors.Is(err, aml.ErrInvalid) {
+		httpx.WriteProblem(w, http.StatusBadRequest, "invalid-rule", "Check the rule's thresholds and give a note",
+			"every threshold is a positive whole number, play percent at most 100, accounts at least 2, windows and quiet periods at most a year")
+		return
+	} else if err != nil {
+		amlError(w, err)
+		return
+	}
+	h.staffAMLRules(w, r)
 }
 
 func (h *handlers) staffAMLCases(w http.ResponseWriter, r *http.Request) {

@@ -11,6 +11,7 @@ import { can } from '../roles'
 import type { Payout } from '../types'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { ReceiptCode } from '../components/polish'
 
 const states = [
   ['held', 'Held for approval'],
@@ -58,7 +59,7 @@ export function PayoutsPage() {
             {p.proposal ? <span className="text-sm">Proposed by <Mono>{p.proposal.by}</Mono>: not paid ({p.proposal.reason}); a second person confirms it</span> : null}
             {p.check && p.state === 'manual' ? (
               <span className="text-sm">
-                Receipt <Mono>{p.check.receipt}</Mono>{' '}
+                Receipt <ReceiptCode value={p.check.receipt} />{' '}
                 {p.check.outcome === '' ? 'is being checked with M-Pesa' : p.check.outcome === 'refuted' ? <>was not confirmed by M-Pesa{p.check.detail ? `: ${p.check.detail}` : ''}</> : 'got no answer from M-Pesa; record it again'}
               </span>
             ) : null}
@@ -130,7 +131,7 @@ export function PayoutsPage() {
       <Loaded load={load} what="payouts">
         {(payouts) =>
           payouts.length === 0 ? <Empty icon={Banknote}>Nothing here.</Empty> : (
-            <DataTable columns={columns} data={payouts} rowId={(p) => p.id} caption="Payouts" filter="Search payouts"
+            <DataTable columns={columns} data={payouts} rowId={(p) => p.id} caption="Payouts" description="Withdrawals, prizes and refunds in the chosen state. Held payouts wait for two people; unclear ones are settled from the M-Pesa statement." filter="Search payouts"
               more={{ has: load.more, loading: load.loadingMore, load: load.loadMore }} />
           )
         }

@@ -297,6 +297,7 @@ paths:
                   operating_mode: { type: string, enum: [disabled, sandbox, live] }
                   real_money: { type: boolean }
                   money_moves: { type: boolean }
+                  paused: { type: array, description: "Money areas staff paused on their own (ADR 0036): their operations are refused while the rest run.", items: { type: string, enum: [top-ups, plays, withdrawals, payouts] } }
         "503": { $ref: "#/components/responses/Problem" }
   /v1/auth/sso/{provider}:
     post:
@@ -1747,6 +1748,34 @@ paths:
               schema: { type: object, properties: { rules: { type: array, items: { type: object } } } }
         "401": { $ref: "#/components/responses/Problem" }
         "403": { $ref: "#/components/responses/Problem" }
+  /v1/staff/aml/rules/{rule}:
+    put:
+      operationId: staffAMLSetRule
+      tags: [back-office]
+      summary: "Record a monitoring rule's setting"
+      description: "Role: `admin`. ADR 0036. On or off, its thresholds, a note, and the compliance owner's approval reference when given (without it the rule stays pending approval)."
+      security: [{ staffBearer: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+        - { name: rule, in: path, required: true, schema: { type: string, enum: [deposit_velocity, in_out_little_play, failed_topups, shared_id_number, shared_device] } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [enabled, params, note], properties: { enabled: { type: boolean }, params: { type: object }, approval_reference: { type: string, maxLength: 200 }, note: { type: string, maxLength: 1000 } } }
+      responses:
+        "200":
+          description: Done
+          content:
+            application/json:
+              schema: { type: object }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
   /v1/staff/aml/cases:
     get:
       operationId: staffAMLCases
@@ -3344,6 +3373,122 @@ paths:
           content:
             application/json:
               schema: { type: object }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+  /v1/staff/operating/switches:
+    get:
+      operationId: staffSwitches
+      tags: [back-office]
+      summary: "The money areas and whether each is paused"
+      description: "Role: `staff` (admins too). ADR 0036."
+      security: [{ staffBearer: [] }]
+      responses:
+        "200":
+          description: Done
+          content:
+            application/json:
+              schema: { type: object }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+  /v1/staff/operating/switches/{area}/pause:
+    post:
+      operationId: staffSwitchPause
+      tags: [back-office]
+      summary: "Pause one money area, with a reason"
+      description: "Role: `staff` (admins too). ADR 0036. Refuses that area's operations with operations-stopped until an admin resumes it."
+      security: [{ staffBearer: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+        - { name: area, in: path, required: true, schema: { type: string, enum: [top-ups, plays, withdrawals, payouts] } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [reason], properties: { reason: { type: string, maxLength: 1000 } } }
+      responses:
+        "200":
+          description: Done
+          content:
+            application/json:
+              schema: { type: object }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+  /v1/staff/operating/switches/{area}/resume:
+    post:
+      operationId: staffSwitchResume
+      tags: [back-office]
+      summary: "Resume a paused money area, with a reason"
+      description: "Role: `admin`. ADR 0036."
+      security: [{ staffBearer: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+        - { name: area, in: path, required: true, schema: { type: string, enum: [top-ups, plays, withdrawals, payouts] } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [reason], properties: { reason: { type: string, maxLength: 1000 } } }
+      responses:
+        "200":
+          description: Done
+          content:
+            application/json:
+              schema: { type: object }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+  /v1/staff/jobs/{id}/retry:
+    post:
+      operationId: staffJobRetry
+      tags: [back-office]
+      summary: "Run a failing, discarded or cancelled background job again"
+      description: "Role: `admin`. ADR 0036. Audited."
+      security: [{ staffBearer: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+        - { name: id, in: path, required: true, schema: { type: integer, format: int64 } }
+      responses:
+        "204":
+          description: Done
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+  /v1/staff/jobs/{id}/cancel:
+    post:
+      operationId: staffJobCancel
+      tags: [back-office]
+      summary: "Cancel a background job that is waiting or retrying"
+      description: "Role: `admin`. ADR 0036. Audited; the area's sweep picks its work up again."
+      security: [{ staffBearer: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+        - { name: id, in: path, required: true, schema: { type: integer, format: int64 } }
+      responses:
+        "204":
+          description: Done
         "400": { $ref: "#/components/responses/Problem" }
         "401": { $ref: "#/components/responses/Problem" }
         "403": { $ref: "#/components/responses/Problem" }

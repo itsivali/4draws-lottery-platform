@@ -48,3 +48,16 @@ VALUES (sqlc.narg(user_id), sqlc.arg(action), sqlc.narg(country), sqlc.arg(refus
 -- An account's geo signals, newest first.
 SELECT action, country, refused, observed_at FROM compliance.geo_signals
 WHERE user_id = sqlc.arg(user_id) ORDER BY id DESC LIMIT sqlc.arg(max_rows);
+
+-- name: LatestAreaSwitches :many
+SELECT DISTINCT ON (area) id, area, paused, reason, changed_by, created_at
+FROM compliance.area_switches
+ORDER BY area, created_at DESC, id DESC;
+
+-- name: InsertAreaSwitch :one
+INSERT INTO compliance.area_switches (area, paused, reason, changed_by, created_at)
+VALUES (@area, @paused, @reason, @changed_by, @at)
+RETURNING id;
+
+-- name: AreaPaused :one
+SELECT paused FROM compliance.area_switches WHERE area = @area ORDER BY created_at DESC, id DESC LIMIT 1;

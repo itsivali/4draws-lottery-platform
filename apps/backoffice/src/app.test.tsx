@@ -22,7 +22,7 @@ describe('roles', () => {
     expect(within(nav).queryByRole('link', { name: 'Staff' })).not.toBeInTheDocument()
     expect(within(nav).queryByRole('link', { name: 'App metrics' })).not.toBeInTheDocument()
     // a forbidden address (the admin-only Staff page) goes back to the overview
-    expect(await screen.findByRole('heading', { name: /Signed in as Alice/ })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: /Welcome back, Alice/ })).toBeInTheDocument()
   })
 })
 
@@ -154,7 +154,8 @@ describe('Google photo and a first password (ADR 0035)', () => {
 
   it('the account menu shows the Google photo, never one from another host', () => {
     const { unmount } = renderSignedIn(<App />, { roles: ['staff'], route: quiet, me: { photo_url: 'https://lh3.googleusercontent.com/a/alice=s96-c' } })
-    expect(screen.getByTestId('member-photo')).toHaveAttribute('src', 'https://lh3.googleusercontent.com/a/alice=s96-c')
+    // in the sidebar's account menu and in the top bar
+    for (const img of screen.getAllByTestId('member-photo')) expect(img).toHaveAttribute('src', 'https://lh3.googleusercontent.com/a/alice=s96-c')
     unmount()
     renderSignedIn(<App />, { roles: ['staff'], route: quiet, me: { photo_url: 'https://evil.example/pixel.png' } })
     expect(screen.queryByTestId('member-photo')).not.toBeInTheDocument()

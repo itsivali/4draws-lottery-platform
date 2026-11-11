@@ -126,7 +126,7 @@ export function KycPage() {
           submissions.length === 0 ? (
             <Empty icon={IdCard}>No submission is waiting for review.</Empty>
           ) : (
-            <DataTable columns={columns} data={submissions} rowId={(s) => s.user_id} caption="Submissions awaiting review, oldest first" filter="Search by name, ID or phone" highlight={linked ?? undefined} />
+            <DataTable columns={columns} data={submissions} rowId={(s) => s.user_id} caption="Submissions awaiting review, oldest first" description="Identity submissions to compare with the national ID. Opening one shows the personal details, and that is recorded under your name." filter="Search by name, ID or phone" highlight={linked ?? undefined} />
           )
         }
       </Loaded>

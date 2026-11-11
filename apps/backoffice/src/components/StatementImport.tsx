@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { ReceiptCode } from './polish'
 
 const kindLabel: Record<StatementMatch['kind'], [Tone, string]> = {
   credited: ['success', 'Already credited'],
@@ -121,7 +122,7 @@ export function StatementImportCard() {
                             <Checkbox aria-label={`Credit ${m.row.receipt}`} checked={current !== null} onCheckedChange={(v) => { pick(m, v === true ? (m.payment_id ?? null) : null) }} />
                           ) : null}
                         </TableCell>
-                        <TableCell className="py-3"><Mono>{m.row.receipt}</Mono></TableCell>
+                        <TableCell className="py-3"><ReceiptCode value={m.row.receipt} /></TableCell>
                         <TableCell className="py-3 tabular-nums">{eat(m.row.completed_at)}</TableCell>
                         <TableCell className="py-3 text-right tabular-nums">{kes(m.row.paid_in_kes)}</TableCell>
                         <TableCell className="py-3">{m.row.party || <span className="text-muted-foreground">—</span>}</TableCell>
@@ -161,7 +162,7 @@ export function StatementImportCard() {
                 <p className="mt-1 text-muted-foreground">Either the file is partial, or a credit is wrong. Each opens the top-up.</p>
                 <ul className="mt-2 grid gap-1 pl-4">
                   {report.missing_from_statement.map((x) => (
-                    <li key={x.payment_id}><Link to={`/topups?topup=${encodeURIComponent(x.payment_id)}`} className="underline-offset-2 hover:underline"><Mono>{x.payment_id}</Mono></Link> · <Mono>{x.receipt}</Mono> · {kes(x.amount_kes)} · {eat(x.created_at)}</li>
+                    <li key={x.payment_id}><Link to={`/topups?topup=${encodeURIComponent(x.payment_id)}`} className="underline-offset-2 hover:underline"><Mono>{x.payment_id}</Mono></Link> · <ReceiptCode value={x.receipt} /> · {kes(x.amount_kes)} · {eat(x.created_at)}</li>
                   ))}
                 </ul>
               </details>
@@ -187,7 +188,7 @@ export function StatementImportCard() {
                     <li key={r.payment_id} className="flex flex-wrap items-center gap-2">
                       <Pill tone={r.credited ? 'success' : 'error'}>{r.credited ? 'Credited' : 'Refused'}</Pill>
                       <Link to={`/topups?topup=${encodeURIComponent(r.payment_id)}`} className="underline-offset-2 hover:underline"><Mono>{r.payment_id}</Mono></Link>
-                      <Mono>{r.receipt}</Mono> · {kes(r.amount_kes)}{r.error ? <span className="text-muted-foreground"> · {r.error}</span> : null}
+                      <ReceiptCode value={r.receipt} /> · {kes(r.amount_kes)}{r.error ? <span className="text-muted-foreground"> · {r.error}</span> : null}
                     </li>
                   ))}
                 </ul>

@@ -8,7 +8,7 @@ import { PlaysPage } from './pages/Plays'
 import { SystemPage } from './pages/System'
 import { TopUpsPage } from './pages/TopUps'
 import { renderSignedIn } from './test/render'
-import type { Alert, AlertDetail, AuditEvent, OperatingState, PlayRow, StaffMember, SystemState, TopUpDetail, TopUpRow } from './types'
+import type { Alert, AlertDetail, AreaSwitch, AuditEvent, OperatingState, PlayRow, StaffMember, SystemState, TopUpDetail, TopUpRow } from './types'
 
 const play: PlayRow = {
   ticket_id: 't-1', user_id: 'u-1', msisdn: '254705369005', full_name: 'Willis Ivali', play_date: '2026-10-30', seq: 2,
@@ -120,9 +120,11 @@ const operating: OperatingState = {
   live_requests: [], history: [],
 }
 
-/** Answers the System page's two reads: the system state and the operating mode. */
-const systemServer = (sys: SystemState, op: OperatingState = operating) => (_m: string, url: URL) =>
-  ({ status: 200, body: url.pathname === '/v1/staff/operating' ? op : sys })
+const running: AreaSwitch[] = [{ area: 'top-ups', paused: false }, { area: 'plays', paused: false }, { area: 'withdrawals', paused: false }, { area: 'payouts', paused: false }]
+
+/** Answers the System page's reads: the system state, the operating mode and the money switches. */
+const systemServer = (sys: SystemState, op: OperatingState = operating, switches: AreaSwitch[] = running) => (_m: string, url: URL) =>
+  ({ status: 200, body: url.pathname === '/v1/staff/operating' ? op : url.pathname === '/v1/staff/operating/switches' ? { switches } : sys })
 
 describe('system status', () => {
   it('shows the settings, failing jobs and reconciliations', async () => {
@@ -135,6 +137,56 @@ describe('system status', () => {
     expect(screen.getByText('1 found mismatches')).toBeInTheDocument()
     expect(screen.getByText('Never run')).toBeInTheDocument()
     expect(screen.getByText('12 slots, 1 lucky')).toBeInTheDocument()
+  })
+})
+
+describe('money switches and jobs (ADR 0036)', () => {
+  it('pauses an area with a reason from its switch; staff cannot resume it, an admin can', async () => {
+    const posts: { url: URL; body: unknown }[] = []
+    const { unmount } = renderSignedIn(<SystemPage />, { roles: ['staff'], route: (m, url, body) => {
+      if (m === 'POST') { posts.push({ url, body }); return { status: 200, body: {} } }
+      return systemServer(system)(m, url)
+    } })
+    const plays = await screen.findByRole('switch', { name: 'Plays' })
+    expect(plays).toBeChecked()
+    await userEvent.click(plays)
+    const dialog = await screen.findByRole('dialog', { name: 'Pause plays?' })
+    await userEvent.type(within(dialog).getByRole('textbox', { name: 'Why (required)' }), 'odds under review')
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Pause' }))
+    await waitFor(() => { expect(posts.at(-1)?.url.pathname).toBe('/v1/staff/operating/switches/plays/pause') })
+    expect(posts.at(-1)?.body).toEqual({ reason: 'odds under review' })
+    unmount()
+
+    const paused: AreaSwitch[] = running.map((s) => (s.area === 'plays' ? { ...s, paused: true, reason: 'odds under review', changed_by: 'staff:s9', at: '2026-11-11T09:00:00Z' } : s))
+    const staffView = renderSignedIn(<SystemPage />, { roles: ['staff'], route: systemServer(system, operating, paused) })
+    const off = await screen.findByRole('switch', { name: 'Plays' })
+    expect(off).not.toBeChecked()
+    expect(off).toBeDisabled()
+    expect(screen.getByText('An admin resumes it.')).toBeInTheDocument()
+    expect(screen.getByText(/odds under review/)).toBeInTheDocument()
+    staffView.unmount()
+    renderSignedIn(<SystemPage />, { roles: ['admin'], route: systemServer(system, operating, paused) })
+    expect(await screen.findByRole('switch', { name: 'Plays' })).toBeEnabled()
+  })
+
+  it('names each job, and lets an admin retry a failing one', async () => {
+    const posts: URL[] = []
+    renderSignedIn(<SystemPage />, { roles: ['admin'], route: (m, url) => {
+      if (m === 'POST') { posts.push(url); return { status: 204 } }
+      return systemServer(system)(m, url)
+    } })
+    expect(await screen.findByText('Send M-Pesa prompts')).toBeInTheDocument()
+    expect(screen.getAllByText('Asks M-Pesa to show the player the PIN prompt for a top-up they started.')).toHaveLength(1)
+    const failing = screen.getByRole('region', { name: 'Failing jobs' })
+    await userEvent.click(within(failing).getByRole('button', { name: 'Retry now' }))
+    await userEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Retry now' }))
+    await waitFor(() => { expect(posts.at(-1)?.pathname).toMatch(/^\/v1\/staff\/jobs\/\d+\/retry$/) })
+  })
+
+  it('offers no job actions to staff who are not admins', async () => {
+    renderSignedIn(<SystemPage />, { roles: ['staff'], route: systemServer(system) })
+    const failing = await screen.findByRole('region', { name: 'Failing jobs' })
+    expect(within(failing).queryByRole('button', { name: 'Retry now' })).toBeNull()
   })
 })
 

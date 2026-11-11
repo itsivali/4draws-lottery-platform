@@ -430,6 +430,8 @@ export interface SystemState {
   }
   jobs: { kind: string; state: string; count: number }[]
   failed_jobs: { id: number; kind: string; state: string; attempt: number; last_error: string; at: string }[]
+  /** when each kind last finished and next runs (absent from an older server) */
+  job_runs?: { kind: string; last_completed_at: string | null; next_at: string | null }[]
   reconciliations: { area: string; ran_at: string | null; ok: boolean | null }[]
   open_alerts: number
   players: number
@@ -549,4 +551,13 @@ export interface AmlRule {
   approval_reference?: string
   pending_approval: boolean
   default: boolean
+}
+
+/** A money area's switch (ADR 0036): running, or paused by a member for a reason. */
+export interface AreaSwitch {
+  area: 'top-ups' | 'plays' | 'withdrawals' | 'payouts'
+  paused: boolean
+  reason?: string
+  changed_by?: string
+  at?: string
 }

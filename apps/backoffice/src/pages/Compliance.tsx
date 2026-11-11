@@ -4,22 +4,19 @@ import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useSession } from '../context'
 import { Actions, DataTable, Stack } from '../components/DataTable'
+import { Rules } from '../components/Rules'
 import { useConfirmedAction } from '../components/useConfirmedAction'
 import { Empty, Loaded, Mono, PageHeader, Pill } from '../components/ui'
 import { eat, msisdn } from '../format'
 import { useLoad } from '../hooks'
-import type { AmlCase, AmlRule } from '../types'
+import type { AmlCase } from '../types'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
-export const ruleLabels: Record<AmlCase['rule'], string> = {
-  deposit_velocity: 'Much money in, quickly',
-  in_out_little_play: 'Money in and out, little play',
-  failed_topups: 'Many failed top-ups',
-  shared_id_number: 'ID number on several accounts',
-  shared_device: 'Device on several accounts',
-  manual: 'Opened by staff',
-}
+import { ruleLabels } from '../aml'
+
+export { ruleLabels }
+
 
 const views = [['open', 'Open'], ['held', 'Money held'], ['closed', 'Closed']] as const
 
@@ -45,7 +42,6 @@ export function CompliancePage() {
   const { api, me } = useSession()
   const [view, setView] = useState<string>('open')
   const load = useLoad((signal) => api.get<{ cases: AmlCase[]; next_after: string | null }>('/v1/staff/aml/cases', { view, limit: '200' }, { signal }), [view])
-  const rules = useLoad((signal) => api.get<{ rules: AmlRule[] }>('/v1/staff/aml/rules', undefined, { signal }))
   const { ask, busy, view: dialog } = useConfirmedAction(load.reload)
   const mine = `staff:${me.id}`
 
@@ -114,25 +110,11 @@ export function CompliancePage() {
       <div className="mt-3">
         <Loaded load={load} what="cases">
           {({ cases }) => cases.length === 0 ? <Empty icon={ShieldAlert}>No cases here.</Empty> : (
-            <DataTable columns={columns} data={cases} rowId={(c) => c.id} caption="Monitoring cases, oldest first" filter="Search by phone, id or reason" />
+            <DataTable columns={columns} data={cases} rowId={(c) => c.id} caption="Monitoring cases, oldest first" description="Cases the monitoring rules raised or staff opened in this view, with what the rule saw." filter="Search by phone, id or reason" />
           )}
         </Loaded>
       </div>
-      <h2 className="mt-8 text-base font-semibold">Rules</h2>
-      <Loaded load={rules} what="rules">
-        {({ rules: list }) => (
-          <ul className="mt-2 grid gap-2">
-            {list.map((r) => (
-              <li key={r.rule} className="flex flex-wrap items-center gap-2 rounded-xl border px-3 py-2 text-sm">
-                <span className="font-medium">{ruleLabels[r.rule]}</span>
-                <Pill tone={r.enabled ? 'success' : 'neutral'}>{r.enabled ? 'on' : 'off'}</Pill>
-                {r.pending_approval ? <Pill tone="warning">pending compliance-owner approval</Pill> : <Pill tone="success">approved: {r.approval_reference}</Pill>}
-                <Mono>{Object.entries(r.params).map(([k, v]) => `${k}=${String(v)}`).join(' ')}</Mono>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Loaded>
+      <Rules />
     </section>
   )
 }

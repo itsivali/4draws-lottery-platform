@@ -68,7 +68,7 @@ export function PlaysPage() {
       <Loaded load={load} what="plays">
         {(plays) =>
           plays.length === 0 ? <Empty icon={Ticket}>{q || day ? 'No play matches.' : 'No plays yet.'}</Empty> : (
-            <DataTable columns={columns} data={plays} rowId={(p) => p.ticket_id} caption="Plays, newest first" filter="Filter these rows"
+            <DataTable columns={columns} data={plays} rowId={(p) => p.ticket_id} caption="Plays, newest first" description="Every play bought, with the spin it produced and the draw entries it gave." filter="Filter these rows"
               more={{ has: load.more, loading: load.loadingMore, load: load.loadMore }} />
           )
         }

@@ -250,6 +250,14 @@ type JobState struct {
 	Count int64  `json:"count"`
 }
 
+// JobRun is when one kind of background job last finished and when it runs next (nil: not in the last day, or
+// nothing waiting).
+type JobRun struct {
+	Kind string     `json:"kind"`
+	Last *time.Time `json:"last_completed_at"`
+	Next *time.Time `json:"next_at"`
+}
+
 // FailedJob is a job that ran out of attempts or keeps failing, with its last error.
 type FailedJob struct {
 	ID        int64     `json:"id"`
@@ -272,6 +280,7 @@ type System struct {
 	Now             time.Time        `json:"now"`
 	Settings        Settings         `json:"settings"`
 	Jobs            []JobState       `json:"jobs"`
+	JobRuns         []JobRun         `json:"job_runs"`
 	FailedJobs      []FailedJob      `json:"failed_jobs"`
 	Reconciliations []Reconciliation `json:"reconciliations"`
 	OpenAlerts      int64            `json:"open_alerts"`
@@ -287,6 +296,10 @@ type System struct {
 const (
 	jobsSQL = `SELECT kind, state::text, count(*) FROM river.river_job
 WHERE state <> 'completed' OR finalized_at > now() - interval '1 day' GROUP BY kind, state ORDER BY kind, state`
+	jobRunsSQL = `SELECT kind,
+       max(finalized_at) FILTER (WHERE state = 'completed'),
+       min(scheduled_at) FILTER (WHERE state IN ('available', 'scheduled', 'retryable'))
+FROM river.river_job GROUP BY kind ORDER BY kind`
 	failedJobsSQL = `SELECT id, kind, state::text, attempt, coalesce(errors[array_length(errors, 1)]->>'error', ''),
        coalesce(finalized_at, attempted_at, created_at)
 FROM river.river_job WHERE state IN ('discarded', 'retryable') ORDER BY id DESC LIMIT 20`
@@ -313,10 +326,15 @@ func (s *Service) System(ctx context.Context) (System, error) {
 	if err != nil {
 		return System{}, err
 	}
-	out := System{Now: now, Settings: s.settings, Jobs: []JobState{}, FailedJobs: []FailedJob{}, Reconciliations: []Reconciliation{}}
+	out := System{Now: now, Settings: s.settings, Jobs: []JobState{}, JobRuns: []JobRun{}, FailedJobs: []FailedJob{}, Reconciliations: []Reconciliation{}}
 	if rows, err := s.pool.Query(ctx, jobsSQL); err == nil {
 		if js, err := pgx.CollectRows(rows, pgx.RowToStructByPos[JobState]); err == nil {
 			out.Jobs = js
+		}
+	}
+	if rows, err := s.pool.Query(ctx, jobRunsSQL); err == nil {
+		if jr, err := pgx.CollectRows(rows, pgx.RowToStructByPos[JobRun]); err == nil {
+			out.JobRuns = jr
 		}
 	}
 	if rows, err := s.pool.Query(ctx, failedJobsSQL); err == nil {

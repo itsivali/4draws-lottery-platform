@@ -1,7 +1,12 @@
-import { Activity, CircleCheck, CircleX, RefreshCw } from 'lucide-react'
+import { CircleCheck, CircleX, RefreshCw } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import { JobsPanel } from '../components/Jobs'
 import { OperatingMode } from '../components/OperatingMode'
-import { Loaded, PageHeader, Pill, SectionTitle, type Tone } from '../components/ui'
+import { Switches } from '../components/Switches'
+import { useConfirmedAction } from '../components/useConfirmedAction'
+import { infoOf } from '../jobs'
+import { can } from '../roles'
+import { Loaded, PageHeader, Pill, SectionTitle } from '../components/ui'
 import { useSession } from '../context'
 import { eat, kes } from '../format'
 import { useLoad } from '../hooks'
@@ -24,8 +29,6 @@ function Row({ label, children, help }: { label: string; children: React.ReactNo
   )
 }
 
-const jobTone: Record<string, Tone> = { available: 'pending', running: 'pending', scheduled: 'neutral', retryable: 'warning', discarded: 'error', completed: 'success', cancelled: 'neutral' }
-
 function minutes(s: number): string {
   if (s === 0) return 'none'
   return s % 60 === 0 ? `${s / 60} min` : `${s} s`
@@ -33,15 +36,17 @@ function minutes(s: number): string {
 
 /** The system's state: what is configured, the background jobs, the reconciliations, and the counts that matter. */
 export function SystemPage() {
-  const { api } = useSession()
+  const { api, me } = useSession()
   const load = useLoad((signal) => api.get<SystemState>('/v1/staff/system', {}, { signal }), [])
+  const { ask, busy, view } = useConfirmedAction(load.reload)
+  const admin = can(me.roles, 'admin')
   return (
     <section>
       <PageHeader title="System status" actions={<Button type="button" variant="outline" size="sm" onClick={load.reload} disabled={load.loading}><RefreshCw aria-hidden="true" /> Refresh</Button>}>
         How the platform is set up and running right now. Settings change in the hosting dashboard, not here; no secret
         is shown.
       </PageHeader>
-      <div className="mb-6"><OperatingMode /></div>
+      <div className="mb-6 grid gap-5"><OperatingMode /><Switches /></div>
       <Loaded load={load} what="the system status">
         {(s) => {
           const st = s.settings
@@ -129,38 +134,24 @@ export function SystemPage() {
               </div>
 
               <SectionTitle>Background jobs</SectionTitle>
-              <Card className="shadow-card">
-                <CardContent className="pt-6">
-                  {s.jobs.length === 0 ? <p className="m-0 flex items-center gap-2 text-sm text-muted-foreground"><Activity aria-hidden="true" className="size-4" /> No jobs in the last day.</p> : (
-                    <table className="w-full text-sm">
-                      <caption className="sr-only">Background jobs by kind and state (the last day for completed ones)</caption>
-                      <thead><tr className="text-left text-muted-foreground"><th className="pb-2 font-medium">Kind</th><th className="pb-2 font-medium">State</th><th className="pb-2 text-right font-medium">Jobs</th></tr></thead>
-                      <tbody>
-                        {s.jobs.map((j) => (
-                          <tr key={`${j.kind}:${j.state}`} className="border-t">
-                            <td className="py-2 font-mono text-xs">{j.kind}</td>
-                            <td className="py-2"><Pill tone={jobTone[j.state] ?? 'neutral'}>{j.state}</Pill></td>
-                            <td className="py-2 text-right tabular-nums">{j.count.toLocaleString('en-KE')}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  )}
-                  {failing > 0 ? (
-                    <>
-                      <h3 className="mb-2 mt-6 text-sm font-semibold">Failing jobs</h3>
-                      <ul className="m-0 grid list-none gap-2 p-0">
-                        {s.failed_jobs.map((j) => (
-                          <li key={j.id} className="rounded-lg border p-3 text-sm">
-                            <div className="flex flex-wrap items-center gap-2"><span className="font-mono text-xs">{j.kind}</span><Pill tone={jobTone[j.state] ?? 'neutral'}>{j.state}</Pill><span className="text-muted-foreground">attempt {j.attempt} · {eat(j.at)}</span></div>
-                            {j.last_error ? <p className="m-0 mt-1 text-muted-foreground [overflow-wrap:anywhere]">{j.last_error}</p> : null}
-                          </li>
-                        ))}
-                      </ul>
-                    </>
+              <p className="-mt-1 mb-4 max-w-[75ch] text-[14px] leading-relaxed text-muted-foreground">The work the platform does on its own: sending M-Pesa prompts and payouts, checking payments, running draws and the monitoring rules. Counts cover jobs waiting now and those finished in the last day.</p>
+              {view}
+              <JobsPanel s={s} actions={admin ? (j) => (
+                <>
+                  {j.state === 'retryable' ? (
+                    <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => {
+                      ask({ title: `Cancel this “${infoOf(j.kind).name}” job?`, confirmLabel: 'Cancel the job', success: 'Cancelled.', danger: true,
+                        body: <p>It stops retrying. Its work is not lost: the area’s sweep picks it up again, or retry it here.</p>,
+                        act: () => api.post(`/v1/staff/jobs/${String(j.id)}/cancel`) })
+                    }}>Cancel</Button>
                   ) : null}
-                </CardContent>
-              </Card>
+                  <Button type="button" size="sm" disabled={busy} onClick={() => {
+                    ask({ title: `Run “${infoOf(j.kind).name}” again now?`, confirmLabel: 'Retry now', success: 'Queued to run again.',
+                      body: <p>The job runs again at once. It checks its record first, so nothing is paid or credited twice.</p>,
+                      act: () => api.post(`/v1/staff/jobs/${String(j.id)}/retry`) })
+                  }}>Retry now</Button>
+                </>
+              ) : undefined} />
             </>
           )
         }}

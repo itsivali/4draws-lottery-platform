@@ -189,6 +189,16 @@ func (g *Gate) Assert(ctx context.Context, q Querier, op Op) error {
 	if st.Mode.rank() == 0 {
 		return fmt.Errorf("%w: %s refused", ErrOperationsStopped, op)
 	}
+	if area, ok := opArea[op]; ok {
+		paused, err := store.New(q).AreaPaused(ctx, string(area))
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+		case err != nil:
+			return err
+		case paused:
+			return fmt.Errorf("%w: %s refused: %s are paused", ErrOperationsStopped, op, area)
+		}
+	}
 	return nil
 }
 

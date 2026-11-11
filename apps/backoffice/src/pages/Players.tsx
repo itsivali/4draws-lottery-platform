@@ -16,6 +16,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { ReceiptCode } from '../components/polish'
+import { ExportReceipt, type SavedFile } from '../components/polish'
 
 const statuses = [['', 'All'], ['active', 'Active'], ['suspended', 'Suspended'], ['closed', 'Closed']] as const
 
@@ -219,7 +221,7 @@ export function PlayersPage() {
         {({ players, next_before }) =>
           players.length === 0 ? <Empty icon={UserRound}>{q || status ? 'No player matches.' : 'No players yet.'}</Empty> : (
             <>
-              <DataTable columns={columns} data={players} rowId={(p) => p.user_id} caption="Players, newest first" filter="Filter these rows" pageSize={25} highlight={open ?? undefined} />
+              <DataTable columns={columns} data={players} rowId={(p) => p.user_id} caption="Players, newest first" description="Every registered player with their balance, plays and last sign-in. Open one for their full timeline." filter="Filter these rows" pageSize={25} highlight={open ?? undefined} />
               {next_before ? <p className="mt-3 text-sm text-muted-foreground">Showing the newest 100. Search by phone number, email or user id to find an older player.</p> : null}
             </>
           )
@@ -242,13 +244,17 @@ const topUpTone = (status: string): Tone => status === 'credited' ? 'success' : 
 
 function When({ at }: { at: string }) { return <span className="tabular-nums text-muted-foreground">{eat(at)}</span> }
 
-function Rows({ children, caption }: { children: ReactNode; caption: string }) {
+/** A short list on the player's timeline, with what it shows (every table has a description, 2026-11-11). */
+function Rows({ children, caption, description }: { children: ReactNode; caption: string; description: string }) {
   return (
-    <div className="overflow-hidden rounded-xl border bg-card">
-      <table className="w-full text-sm">
-        <caption className="sr-only">{caption}</caption>
-        <tbody className="divide-y">{children}</tbody>
-      </table>
+    <div className="grid gap-2">
+      <p className="m-0 text-[14px] leading-relaxed text-muted-foreground">{description}</p>
+      <div className="overflow-hidden rounded-2xl border bg-card shadow-card">
+        <table className="w-full text-[14.5px]">
+          <caption className="sr-only">{caption}</caption>
+          <tbody className="divide-y">{children}</tbody>
+        </table>
+      </div>
     </div>
   )
 }
@@ -260,16 +266,16 @@ function PlayerSheet({ id, tick, post, ask, busy }: { id: string; tick: number; 
   const { api, me } = useSession()
   const admin = can(me.roles, 'admin')
   const load = useLoad((signal) => api.get<PlayerTimeline>(`/v1/staff/players/${encodeURIComponent(id)}`, undefined, { signal }), [id, tick])
-  const [exported, setExported] = useState<{ tone: Tone; text: string } | null>(null)
+  const [exported, setExported] = useState<{ tone: 'error'; text: string } | { tone: 'success'; file: SavedFile } | null>(null)
   const [exporting, setExporting] = useState(false)
   const download = async () => {
     setExporting(true)
     setExported(null)
     const name = `player-${id}.csv`
     try {
-      const { blob, sha256 } = await api.download(`/v1/staff/players/${encodeURIComponent(id)}/export`)
+      const { blob, sha256, rows } = await api.download(`/v1/staff/players/${encodeURIComponent(id)}/export`)
       saveBlob(blob, name)
-      setExported({ tone: 'success', text: `Saved ${name}${sha256 ? ` · SHA-256 ${sha256}` : ''}. The export is in the activity log.` })
+      setExported({ tone: 'success', file: { name, sha256, rows, at: new Date(), note: 'The export is in the activity log.' } })
     } catch (e) {
       setExported({ tone: 'error', text: e instanceof ProblemError ? `${e.title}${e.detail ? `: ${e.detail}` : ''}` : e instanceof Error ? e.message : 'The export failed' })
     } finally {
@@ -316,7 +322,8 @@ function PlayerSheet({ id, tick, post, ask, busy }: { id: string; tick: number; 
                 <Download aria-hidden="true" />{exporting ? 'Preparing…' : 'Download player pack (CSV)'}
               </Button>
             </div>
-            {exported ? <p role="status" className={`text-sm ${exported.tone === 'error' ? 'text-destructive' : 'text-muted-foreground'}`}>{exported.text}</p> : null}
+            {exported?.tone === 'success' ? <ExportReceipt file={exported.file} className="my-0" /> : null}
+            {exported?.tone === 'error' ? <p role="status" className="m-0 rounded-2xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-[14.5px] font-medium text-destructive">{exported.text}</p> : null}
             <Tabs defaultValue="wallet">
               <TabsList aria-label="Sections" className="h-auto flex-wrap">
                 <TabsTrigger value="wallet">Wallet</TabsTrigger>
@@ -330,7 +337,7 @@ function PlayerSheet({ id, tick, post, ask, busy }: { id: string; tick: number; 
               <TabsContent value="wallet" className="mt-3 grid gap-2">
                 <p className="text-sm text-muted-foreground">The last {t.wallet.transactions.length} movements; credits positive, debits negative. The full list is in the player pack.</p>
                 {t.wallet.transactions.length === 0 ? <Nothing>No money has moved yet.</Nothing> : (
-                  <Rows caption="Wallet movements">
+                  <Rows caption="Wallet movements" description="The last 50 credits and debits of the wallet, each with the ledger journal behind it.">
                     {t.wallet.transactions.map((x) => (
                       <tr key={x.id} className="align-top">
                         <td className="px-3 py-2"><When at={x.created_at} /></td>
@@ -343,13 +350,13 @@ function PlayerSheet({ id, tick, post, ask, busy }: { id: string; tick: number; 
               </TabsContent>
               <TabsContent value="topups" className="mt-3 grid gap-2">
                 {t.top_ups.length === 0 ? <Nothing>No top-ups yet.</Nothing> : (
-                  <Rows caption="Top-ups">
+                  <Rows caption="Top-ups" description="The last 20 M-Pesa top-ups, with what M-Pesa confirmed.">
                     {t.top_ups.map((x) => (
                       <tr key={x.id} className="align-top">
                         <td className="px-3 py-2"><When at={x.created_at} /></td>
                         <td className="px-3 py-2">
                           <Stack primary={<Pill tone={topUpTone(x.status)}>{x.status.replaceAll('_', ' ')}</Pill>} secondary={x.failure_reason ? x.failure_reason.replaceAll('_', ' ') : x.channel === 'stk' ? 'M-Pesa prompt' : 'Paybill'}>
-                            {x.receipt ? <Mono>{x.receipt}</Mono> : null}
+                            {x.receipt ? <ReceiptCode value={x.receipt} /> : null}
                           </Stack>
                         </td>
                         <td className="px-3 py-2 text-right tabular-nums">{kes(x.amount_confirmed_kes ?? x.amount_requested_kes)}</td>
@@ -362,7 +369,7 @@ function PlayerSheet({ id, tick, post, ask, busy }: { id: string; tick: number; 
               <TabsContent value="plays" className="mt-3 grid gap-2">
                 <p className="text-sm text-muted-foreground">{t.plays.count.toLocaleString('en-KE')} paid plays in all; the last {t.plays.last.length} here.</p>
                 {t.plays.last.length === 0 ? <Nothing>No plays yet.</Nothing> : (
-                  <Rows caption="Plays">
+                  <Rows caption="Plays" description="The last 20 plays, with the slot the wheel landed on.">
                     {t.plays.last.map((x) => (
                       <tr key={x.ticket_id} className="align-top">
                         <td className="px-3 py-2"><When at={x.created_at} /></td>
@@ -376,11 +383,11 @@ function PlayerSheet({ id, tick, post, ask, busy }: { id: string; tick: number; 
               </TabsContent>
               <TabsContent value="payouts" className="mt-3 grid gap-2">
                 {t.payouts.length === 0 ? <Nothing>No payouts yet.</Nothing> : (
-                  <Rows caption="Payouts">
+                  <Rows caption="Payouts" description="Withdrawals, prizes and refunds paid to the player, with the M-Pesa receipt once paid.">
                     {t.payouts.map((x) => (
                       <tr key={x.id} className="align-top">
                         <td className="px-3 py-2"><When at={x.created_at} /></td>
-                        <td className="px-3 py-2"><Stack primary={<span className="capitalize">{x.kind}</span>} secondary={x.receipt ? <Mono>{x.receipt}</Mono> : <Mono className="text-muted-foreground">{x.id}</Mono>} /></td>
+                        <td className="px-3 py-2"><Stack primary={<span className="capitalize">{x.kind}</span>} secondary={x.receipt ? <ReceiptCode value={x.receipt} /> : <Mono className="text-muted-foreground">{x.id}</Mono>} /></td>
                         <td className="px-3 py-2"><Pill tone={payoutTone(x.state)}>{x.state.replaceAll('_', ' ')}</Pill></td>
                         <td className="px-3 py-2 text-right tabular-nums"><Stack primary={kes(x.net_kes)} secondary={x.tax_kes > 0 ? `${kes(x.gross_kes)} less ${kes(x.tax_kes)} tax` : undefined} /></td>
                       </tr>
@@ -393,7 +400,7 @@ function PlayerSheet({ id, tick, post, ask, busy }: { id: string; tick: number; 
                 <section className="grid gap-2">
                   <h3 className="text-sm font-semibold">Identity submissions</h3>
                   {t.identity.kyc.length === 0 ? <Nothing>No submission yet.</Nothing> : (
-                    <Rows caption="Identity submissions">
+                    <Rows caption="Identity submissions" description="Each identity check: its outcome, and who reviewed it.">
                       {t.identity.kyc.map((x) => (
                         <tr key={x.id} className="align-top">
                           <td className="px-3 py-2"><When at={x.created_at} /></td>
@@ -406,7 +413,7 @@ function PlayerSheet({ id, tick, post, ask, busy }: { id: string; tick: number; 
                 <section className="grid gap-2">
                   <h3 className="text-sm font-semibold">Sign-ins</h3>
                   {t.identity.sessions.length === 0 ? <Nothing>Never signed in.</Nothing> : (
-                    <Rows caption="Sign-ins">
+                    <Rows caption="Sign-ins" description="The last 10 sessions, with the device and its attestation verdict.">
                       {t.identity.sessions.map((x) => (
                         <tr key={x.id} className="align-top">
                           <td className="px-3 py-2"><When at={x.created_at} /></td>
@@ -420,7 +427,7 @@ function PlayerSheet({ id, tick, post, ask, busy }: { id: string; tick: number; 
                 <section className="grid gap-2">
                   <h3 className="text-sm font-semibold">Account status</h3>
                   {t.identity.status_history.length === 0 ? <Nothing>No status change recorded.</Nothing> : (
-                    <Rows caption="Account status">
+                    <Rows caption="Account status" description="Every change of the account’s status, with who made it and why.">
                       {t.identity.status_history.map((x) => (
                         <tr key={x.id} className="align-top">
                           <td className="px-3 py-2"><When at={x.at} /></td>
@@ -433,7 +440,7 @@ function PlayerSheet({ id, tick, post, ask, busy }: { id: string; tick: number; 
                 <section className="grid gap-2">
                   <h3 className="text-sm font-semibold">Where from</h3>
                   {t.identity.locations.length === 0 ? <Nothing>No location recorded.</Nothing> : (
-                    <Rows caption="Where from">
+                    <Rows caption="Where from" description="The country the network reported for sign-ups and money moves.">
                       {t.identity.locations.map((x) => (
                         <tr key={x.id} className="align-top">
                           <td className="px-3 py-2"><When at={x.at} /></td>
@@ -454,7 +461,7 @@ function PlayerSheet({ id, tick, post, ask, busy }: { id: string; tick: number; 
                   </p>
                 ) : <p className="text-sm text-muted-foreground">No time-out or self-exclusion in force.</p>}
                 {t.limits.deposit.length === 0 ? <p className="text-sm text-muted-foreground">No deposit limits set.</p> : (
-                  <Rows caption="Deposit limits">
+                  <Rows caption="Deposit limits" description="The deposit limits the player set, and raises waiting out their cooling-off.">
                     {t.limits.deposit.map((x) => (
                       <tr key={`${x.period}-${x.pending ? 'pending' : 'current'}`}>
                         <td className="px-3 py-2 capitalize">{x.period}</td>
@@ -468,7 +475,7 @@ function PlayerSheet({ id, tick, post, ask, busy }: { id: string; tick: number; 
               <TabsContent value="activity" className="mt-3 grid gap-2">
                 <p className="text-sm text-muted-foreground">The last {t.events.length} audit records about this player. <Link to={`/activity?entity_id=${encodeURIComponent(p.user_id)}`}>Everything, in the activity log</Link>.</p>
                 {t.events.length === 0 ? <Nothing>Nothing recorded yet.</Nothing> : (
-                  <Rows caption="Audit records about the player">
+                  <Rows caption="Audit records about the player" description="The last 50 actions in the audit log by or about the player.">
                     {t.events.map((e: AuditEvent) => (
                       <tr key={e.id} className="align-top">
                         <td className="px-3 py-2"><When at={e.at} /></td>

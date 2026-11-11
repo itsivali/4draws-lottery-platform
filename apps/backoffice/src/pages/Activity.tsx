@@ -15,6 +15,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { ExportReceipt, type SavedFile } from '../components/polish'
 
 const actors = [['', 'Everyone'], ['staff', 'Staff'], ['player', 'Players'], ['system', 'System']] as const
 const actorTone: Record<AuditEvent['actor_type'], Tone> = { staff: 'pending', player: 'neutral', system: 'success' }
@@ -85,7 +86,7 @@ export function ActivityPage() {
   }))
   const [draft, setDraft] = useState<Filters>(initial)
   const [applied, setApplied] = useState<Filters>(initial)
-  const [exported, setExported] = useState<{ tone: Tone; text: string } | null>(null)
+  const [exported, setExported] = useState<{ tone: 'error'; text: string } | { tone: 'success'; file: SavedFile } | null>(null)
   const [exporting, setExporting] = useState(false)
   const set = (k: keyof Filters) => (v: string) => { setDraft((d) => ({ ...d, [k]: v })) }
   const members = useLoad((signal) => api.get<{ members: StaffMember[] }>('/v1/staff/members', undefined, { signal }))
@@ -102,9 +103,9 @@ export function ActivityPage() {
     const name = applied.from && applied.to ? `activity-${applied.from}-${applied.to}.csv` : applied.from ? `activity-from-${applied.from}.csv` : applied.to ? `activity-to-${applied.to}.csv` : 'activity-all.csv'
     try {
       const qs = new URLSearchParams(query).toString()
-      const { blob, sha256 } = await api.download(`/v1/staff/activity/export${qs ? `?${qs}` : ''}`)
+      const { blob, sha256, rows } = await api.download(`/v1/staff/activity/export${qs ? `?${qs}` : ''}`)
       saveBlob(blob, name)
-      setExported({ tone: 'success', text: `Saved ${name}${sha256 ? ` · SHA-256 ${sha256}` : ''}. The export itself is now in this log.` })
+      setExported({ tone: 'success', file: { name, sha256, rows, at: new Date(), note: 'The export itself is now in this log.' } })
     } catch (e) {
       const text = e instanceof ProblemError ? `${e.title}${e.detail ? `: ${e.detail}` : ''}` : e instanceof Error ? e.message : 'The export failed'
       setExported({ tone: 'error', text })
@@ -205,11 +206,12 @@ export function ActivityPage() {
           {filtered || draft !== none ? <Button type="button" variant="ghost" onClick={() => { setDraft(none); setApplied(none) }}>Clear</Button> : null}
         </div>
       </form>
-      {exported ? <p role="status" className={`mb-4 text-sm ${exported.tone === 'error' ? 'text-destructive' : 'text-muted-foreground'}`}>{exported.text}</p> : null}
+      {exported?.tone === 'success' ? <ExportReceipt file={exported.file} className="mb-6 max-w-xl" /> : null}
+      {exported?.tone === 'error' ? <p role="status" className="mb-4 rounded-2xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-[14.5px] font-medium text-destructive">{exported.text}</p> : null}
       <Loaded load={load} what="activity">
         {(events) =>
           events.length === 0 ? <Empty icon={History}>{filtered ? 'Nothing matches.' : 'Nothing recorded yet.'}</Empty> : (
-            <DataTable columns={columns} data={events} rowId={(e) => e.id} caption="Activity, newest first" filter="Filter these rows"
+            <DataTable columns={columns} data={events} rowId={(e) => e.id} caption="Activity, newest first" description="Every action recorded in the audit log, by staff, players and the system, with what it was about." filter="Filter these rows"
               more={{ has: load.more, loading: load.loadingMore, load: load.loadMore }} />
           )
         }

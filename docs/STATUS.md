@@ -42,6 +42,12 @@ Read this first at the start of every session.
   balance on an indigo hero card, the wheel squarely centred in its dial. The only 3D left is the gold coin beside
   the balance. Android has a launch screen in the page colour. `design-system/lottery-platform/MASTER.md` v4. The
   back office still wears coral and violet until its own pass.
+- **One design language, app and back office (2026-11-11, owner):** the back office wears the app's indigo
+  (`apps/backoffice/src/index.css`), and both follow MASTER.md v4.1: signed-out pages are one white card in the
+  middle of the indigo gradient under a deep shadow (`AuthPage` in the app, `AuthShell` in the back office); cards
+  stand off the page on a contact shadow plus a wide soft one, and tappable cards come forward under the pointer;
+  pages, tabs, dialogs and loading states fade and settle instead of cutting. The back office's 3D tilt and swing are
+  gone; its gold coin stays.
 - **Policy pages complete (2026-11-11, owner):** `/privacy/`, `/terms/`, `/responsible-gambling/` and
   `/delete-account/` are full documents in the operator's name, **4 DRAWS TICKET LTD**, version 1.0, with no open
   items; each still states that the service is not yet licensed. They were written for this platform, structured as
@@ -125,6 +131,11 @@ Read this first at the start of every session.
 - **Google photos and first passwords (ADR 0035, 2026-11-11):** the Google account's photo shows in the app and the
   back office (Google's image host only; migration 00054); a Google or Apple account can set a password within 10
   minutes of signing in.
+
+- **Back office controls (ADR 0036, 2026-11-11):** money switches on the System page pause top-ups, plays, withdrawals
+  or payouts on their own (anyone on staff pauses, an admin resumes; audited and alerted; migration 00055); an admin
+  edits the monitoring rules, turns them on or off and records the compliance owner's approval; failing background jobs
+  can be retried or cancelled by an admin.
 
 - **Android release readiness (S6, 2026-11-11):** release builds are signed with the upload key or stop (never the
   debug key); target and compile SDK 36 pinned; no backup or device transfer; the version code is the CI run number.

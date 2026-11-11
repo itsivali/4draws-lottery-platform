@@ -25,7 +25,18 @@ func (h *handlers) status(w http.ResponseWriter, r *http.Request) {
 		internalError(w, err)
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, map[string]any{"operating_mode": st.Mode, "real_money": st.RealMoney, "money_moves": st.Mode != compliance.Disabled})
+	switches, err := h.Gate.Switches(r.Context())
+	if err != nil {
+		internalError(w, err)
+		return
+	}
+	paused := []compliance.Area{}
+	for _, sw := range switches {
+		if sw.Paused {
+			paused = append(paused, sw.Area)
+		}
+	}
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{"operating_mode": st.Mode, "real_money": st.RealMoney, "money_moves": st.Mode != compliance.Disabled, "paused": paused})
 }
 
 // operationsStopped answers a player whose money operation the operating mode refused.
@@ -130,4 +141,32 @@ func complianceProblem(err error) (status int, slug, title string, ok bool) {
 		return http.StatusConflict, "operations-stopped", "Money operations are stopped; resume them first", true
 	}
 	return 0, "", "", false
+}
+
+// staffSwitches lists the money areas and whether each is paused (ADR 0036).
+func (h *handlers) staffSwitches(w http.ResponseWriter, r *http.Request) {
+	switches, err := h.StaffServices.Gate.Switches(r.Context())
+	if err != nil {
+		staffError(w, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{"switches": switches})
+}
+
+// staffSwitch pauses (anyone on staff) or resumes (admins; the route decides) one area, with a reason.
+func (h *handlers) staffSwitch(paused bool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var in struct {
+			Reason string `json:"reason"`
+		}
+		if !httpx.DecodeJSON(w, r, &in) {
+			return
+		}
+		sw, err := h.StaffServices.Gate.SetSwitch(r.Context(), compliance.Area(chi.URLParam(r, "area")), paused, member(r).Operator(), in.Reason)
+		if err != nil {
+			staffError(w, err)
+			return
+		}
+		httpx.WriteJSON(w, http.StatusOK, sw)
+	}
 }

@@ -12,6 +12,7 @@ import { can } from '../roles'
 import type { Batch } from '../types'
 import { Alert, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
+import { ExportReceipt, type SavedFile } from '../components/polish'
 
 export function TaxPage() {
   const { api, me } = useSession()
@@ -20,11 +21,13 @@ export function TaxPage() {
   const officer = can(me.roles, 'staff')
   const [downloading, setDownloading] = useState<number | null>(null)
   const [downloadError, setDownloadError] = useState<string | null>(null)
+  const [saved, setSaved] = useState<SavedFile | null>(null)
   const download = async (b: Batch) => {
     setDownloading(b.batch_no)
     setDownloadError(null)
+    setSaved(null)
     try {
-      const { blob, sha256 } = await api.download(`/v1/staff/tax/batches/${b.batch_no}/file`)
+      const { blob, sha256, rows } = await api.download(`/v1/staff/tax/batches/${b.batch_no}/file`)
       if (sha256 && sha256 !== b.file_sha256) {
         setDownloadError(`The file of batch #${b.batch_no} did not match its recorded hash; it was not saved. Try again.`)
         return
@@ -36,6 +39,8 @@ export function TaxPage() {
       a.click()
       a.remove()
       setTimeout(() => { URL.revokeObjectURL(a.href) }, 1000)
+      setSaved({ name: `kra-batch-${b.batch_no}.csv`, sha256: sha256 ?? b.file_sha256, rows, at: new Date(),
+        note: sha256 ? 'The file’s hash matches the one recorded when the batch was prepared.' : 'This is the hash recorded when the batch was prepared; check the saved file against it.' })
     } catch (e) {
       setDownloadError(e instanceof ProblemError ? e.title : 'The file could not be downloaded. Try again.')
     } finally {
@@ -90,10 +95,11 @@ export function TaxPage() {
       </PageHeader>
       {view}
       {downloadError ? <Alert variant="destructive" className="my-4"><AlertTitle>{downloadError}</AlertTitle></Alert> : null}
+      {saved ? <ExportReceipt file={saved} className="max-w-xl" /> : null}
       <Loaded load={load} what="batches">
         {({ batches }) =>
           batches.length === 0 ? <Empty icon={Receipt}>No batches yet.</Empty> : (
-            <DataTable columns={columns} data={batches} rowId={(b) => String(b.batch_no)} caption="KRA batches" />
+            <DataTable columns={columns} data={batches} rowId={(b) => String(b.batch_no)} caption="KRA batches" description="Withholding tax grouped into numbered batches for KRA. One person prepares a batch; someone else records its remittance." />
           )
         }
       </Loaded>

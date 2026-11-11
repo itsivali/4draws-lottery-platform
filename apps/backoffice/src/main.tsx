@@ -6,6 +6,7 @@ import { App } from './App'
 import { loadConfig, type Config } from './config'
 import { SessionContext, useSession, type Session } from './context'
 import { completeDevPopup } from './providers'
+import { AuthShell } from './components/AuthShell'
 import { NameForm } from './components/NameDialog'
 import { PasswordForm } from './components/PasswordDialog'
 import { ResetPassword } from './ResetPassword'
@@ -136,8 +137,8 @@ function Root({ config }: { config: Config }) {
 function FirstPassword({ onDone }: { onDone: () => void }) {
   const { signOut } = useSession()
   return (
-    <main id="main" className="grid min-h-svh place-items-center bg-background p-6">
-      <Card className="w-full max-w-[460px] shadow-float">
+    <AuthShell bare>
+      <Card className="w-full border-0 shadow-sheet animate-swing-in">
         <CardHeader>
           <CardTitle className="text-xl">Choose your password</CardTitle>
           <CardDescription>You signed in with a temporary password. Set your own to continue.</CardDescription>
@@ -147,7 +148,7 @@ function FirstPassword({ onDone }: { onDone: () => void }) {
           <button type="button" className="justify-self-start text-sm text-muted-foreground underline-offset-4 hover:underline" onClick={signOut}>Sign out instead</button>
         </CardContent>
       </Card>
-    </main>
+    </AuthShell>
   )
 }
 
@@ -155,8 +156,8 @@ function FirstPassword({ onDone }: { onDone: () => void }) {
 function FirstName({ onDone }: { onDone: (me: Me) => void }) {
   const { signOut } = useSession()
   return (
-    <main id="main" className="grid min-h-svh place-items-center bg-background p-6">
-      <Card className="w-full max-w-[460px] shadow-float">
+    <AuthShell bare>
+      <Card className="w-full border-0 shadow-sheet animate-swing-in">
         <CardHeader>
           <CardTitle className="text-xl">What should we call you?</CardTitle>
           <CardDescription>The back office shows your name, not your email address, wherever you appear.</CardDescription>
@@ -166,7 +167,7 @@ function FirstName({ onDone }: { onDone: (me: Me) => void }) {
           <button type="button" className="justify-self-start text-sm text-muted-foreground underline-offset-4 hover:underline" onClick={signOut}>Sign out instead</button>
         </CardContent>
       </Card>
-    </main>
+    </AuthShell>
   )
 }
 

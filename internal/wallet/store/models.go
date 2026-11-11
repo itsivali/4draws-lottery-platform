@@ -102,6 +102,15 @@ type ComplianceAmlRuleSetting struct {
 	SetAt             pgtype.Timestamptz
 }
 
+type ComplianceAreaSwitch struct {
+	ID        string
+	Area      string
+	Paused    bool
+	Reason    string
+	ChangedBy string
+	CreatedAt pgtype.Timestamptz
+}
+
 type ComplianceGeoSignal struct {
 	ID         int64
 	UserID     *string

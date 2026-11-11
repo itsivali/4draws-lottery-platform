@@ -152,7 +152,7 @@ export function AlertsPage() {
       <Loaded load={load} what="alerts">
         {(alerts) =>
           alerts.length === 0 ? <Empty icon={Bell}>{kind || severity || state !== 'open' ? 'No alerts match.' : 'No open alerts.'}</Empty> : (
-            <DataTable columns={columns} data={alerts} rowId={(a) => a.id} caption="Alerts, newest first" filter="Filter these rows" highlight={selected ?? undefined}
+            <DataTable columns={columns} data={alerts} rowId={(a) => a.id} caption="Alerts, newest first" description="What the platform’s checks found wrong, from reconciliations to stuck queues. Acknowledge an alert to stop its reminders." filter="Filter these rows" highlight={selected ?? undefined}
               more={{ has: load.more, loading: load.loadingMore, load: load.loadMore }} />
           )
         }

@@ -150,7 +150,10 @@ describe('finance', () => {
     await screen.findByRole('heading', { name: 'Finance' })
     const user = userEvent.setup()
     await user.click(screen.getByRole('button', { name: 'Export figures (CSV)' }))
-    expect(await screen.findByText(/^Saved finance-\d{4}-\d{2}-\d{2}-\d{4}-\d{2}-\d{2}\.csv/)).toHaveAttribute('role', 'status')
+    // the export's receipt: the file, when, and the hash to check it against
+    const saved = await screen.findByRole('status')
+    expect(saved).toHaveTextContent(/Saved finance-\d{4}-\d{2}-\d{2}-\d{4}-\d{2}-\d{2}\.csv/)
+    expect(within(saved).getByText(/SHA-256/)).toBeInTheDocument()
     const call = fetch.mock.calls.find(([u]) => (u as string).includes('/v1/staff/finance/export'))
     const url = new URL(call?.[0] as string)
     expect(url.searchParams.get('group')).toBe('day')
@@ -684,5 +687,46 @@ describe('compliance (ADR 0033)', () => {
     expect(await screen.findByRole('status')).toHaveTextContent('Money held.')
     const post = fetch.mock.calls.find(([, init]) => init?.method === 'POST')
     expect(JSON.parse(post?.[1]?.body as string)).toEqual({ note: 'deposits far above their usual' })
+  })
+  it('lets an admin turn a rule off, edit its thresholds and record its approval; staff only see them (ADR 0036)', async () => {
+    const rules: AmlRule[] = [{ rule: 'failed_topups', enabled: true, params: { window_hours: 24, min_failed: 5, quiet_days: 7 }, pending_approval: true, default: true }]
+    const route = (method: string, url: URL) => {
+      if (method === 'PUT') return { status: 200, body: { rules } }
+      if (url.pathname === '/v1/staff/aml/rules') return { status: 200, body: { rules } }
+      return { status: 200, body: { cases: [], next_after: null } }
+    }
+    const staffView = renderSignedIn(<CompliancePage />, { roles: ['staff'], route })
+    expect(await screen.findByRole('switch', { name: 'Many failed top-ups' })).toBeDisabled()
+    expect(screen.queryByRole('button', { name: 'Record approval' })).toBeNull()
+    expect(screen.getByText('24 h')).toBeInTheDocument()
+    staffView.unmount()
+
+    const { fetch } = renderSignedIn(<CompliancePage />, { roles: ['admin'], route })
+    const user = userEvent.setup()
+    const puts = () => fetch.mock.calls.filter(([, init]) => init?.method === 'PUT').map(([u, init]) => ({ url: u instanceof Request ? u.url : u.toString(), body: JSON.parse(init?.body as string) as unknown }))
+    await user.click(await screen.findByRole('switch', { name: 'Many failed top-ups' }))
+    let dialog = await screen.findByRole('dialog', { name: 'Turn off “Many failed top-ups”?' })
+    await user.type(within(dialog).getByLabelText(/^Note/), 'too noisy in sandbox')
+    await user.click(within(dialog).getByRole('button', { name: 'Turn off' }))
+    await waitFor(() => { expect(puts()).toHaveLength(1) })
+    expect(puts()[0]).toEqual({ url: 'https://api.test/v1/staff/aml/rules/failed_topups', body: { enabled: false, params: { window_hours: 24, min_failed: 5, quiet_days: 7 }, approval_reference: '', note: 'too noisy in sandbox' } })
+
+    await user.click(screen.getByRole('button', { name: /Many failed top-ups.*edit/ }))
+    dialog = await screen.findByRole('dialog', { name: 'Edit “Many failed top-ups”' })
+    const failed = within(dialog).getByLabelText(/^Failed top-ups/)
+    await user.clear(failed)
+    await user.type(failed, '3')
+    await user.type(within(dialog).getByLabelText(/^Note/), 'owner memo')
+    await user.click(within(dialog).getByRole('button', { name: 'Save the rule' }))
+    await waitFor(() => { expect(puts()).toHaveLength(2) })
+    expect(puts()[1]?.body).toEqual({ enabled: true, params: { window_hours: 24, min_failed: 3, quiet_days: 7 }, approval_reference: '', note: 'owner memo' })
+
+    await user.click(screen.getByRole('button', { name: 'Record approval' }))
+    dialog = await screen.findByRole('dialog', { name: 'Record the approval of “Many failed top-ups”' })
+    await user.type(within(dialog).getByLabelText(/^Approval reference/), 'CO-2026-11')
+    await user.type(within(dialog).getByLabelText(/^Note/), 'approved at the committee')
+    await user.click(within(dialog).getByRole('button', { name: 'Record approval' }))
+    await waitFor(() => { expect(puts()).toHaveLength(3) })
+    expect(puts()[2]?.body).toMatchObject({ approval_reference: 'CO-2026-11', params: { window_hours: 24, min_failed: 5, quiet_days: 7 } })
   })
 })

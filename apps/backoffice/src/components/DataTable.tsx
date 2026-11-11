@@ -9,21 +9,22 @@ import {
   type SortingState,
 } from '@tanstack/react-table'
 import { ArrowDown, ArrowUp, ArrowUpDown, ChevronLeft, ChevronRight, Search } from 'lucide-react'
-import { useState, type ReactNode } from 'react'
+import { useId, useState, type ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 
 /**
- * A sortable, filterable, paged table (TanStack Table on shadcn's Table). The caption names it for screen readers;
- * sorting is announced through aria-sort; filtering matches any cell's text.
+ * A sortable, filterable, paged table (TanStack Table on shadcn's Table), on a card with its title and a description
+ * of what it lists (every table has one, 2026-11-11). The caption names it for screen readers; sorting is announced
+ * through aria-sort; filtering matches any cell's text.
  */
 export function DataTable<T>({
   columns,
   data,
   caption,
-  captionVisible = false,
+  description,
   rowId,
   filter,
   pageSize = 25,
@@ -34,8 +35,10 @@ export function DataTable<T>({
 }: {
   columns: ColumnDef<T>[]
   data: T[]
+  /** the table's title, shown on its card and naming it for screen readers */
   caption: string
-  captionVisible?: boolean
+  /** what the table lists, in a sentence, under its title */
+  description: string
   rowId: (row: T) => string
   /** placeholder of a search box over every column; omitted: no search */
   filter?: string
@@ -65,18 +68,25 @@ export function DataTable<T>({
   const rows = table.getRowModel().rows
   const pages = table.getPageCount()
   const total = table.getFilteredRowModel().rows.length
+  const descId = useId()
   return (
-    <div className="mt-4 grid gap-3">
-      {filter ? (
-        <div className="relative max-w-sm">
-          <Search aria-hidden="true" className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input aria-label={filter} placeholder={filter} value={globalFilter} onChange={(e) => { setGlobalFilter(e.target.value) }} className="pl-8" />
+    <div className="mt-4 grid gap-3 animate-rise-in">
+      <div className="overflow-hidden rounded-3xl border bg-card shadow-card">
+        <div className="flex flex-wrap items-end justify-between gap-3 px-5 pb-4 pt-5">
+          <div className="min-w-0 max-w-[70ch]">
+            <h3 className="m-0 font-display text-lg font-bold tracking-tight">{caption}</h3>
+            <p id={descId} className="m-0 mt-1 text-[14px] leading-relaxed text-muted-foreground">{description}</p>
+          </div>
+          {filter ? (
+            <div className="relative w-full max-w-xs">
+              <Search aria-hidden="true" className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input aria-label={filter} placeholder={filter} value={globalFilter} onChange={(e) => { setGlobalFilter(e.target.value) }} className="h-10 rounded-full bg-background pl-10" />
+            </div>
+          ) : null}
         </div>
-      ) : null}
-      <div className="overflow-hidden rounded-2xl border bg-card shadow-card">
-        <Table>
-          <TableCaption className={cn('mt-0 border-b px-4 py-3 text-left text-sm font-medium text-foreground caption-top', !captionVisible && 'sr-only')}>{caption}</TableCaption>
-          <TableHeader className="bg-muted/50">
+        <Table aria-describedby={descId}>
+          <TableCaption className="sr-only">{caption}</TableCaption>
+          <TableHeader>
             {table.getHeaderGroups().map((hg) => (
               <TableRow key={hg.id} className="hover:bg-transparent">
                 {hg.headers.map((h) => {
@@ -87,7 +97,7 @@ export function DataTable<T>({
                       key={h.id}
                       scope="col"
                       aria-sort={sort === 'asc' ? 'ascending' : sort === 'desc' ? 'descending' : undefined}
-                      className={cn('h-10 text-xs font-medium uppercase tracking-wide text-muted-foreground', (h.column.columnDef.meta as ColumnMeta | undefined)?.className)}
+                      className={cn('h-11 border-y bg-muted/50 text-[12px] font-semibold uppercase tracking-wider text-muted-foreground first:pl-5 last:pr-5', (h.column.columnDef.meta as ColumnMeta | undefined)?.className)}
                     >
                       {h.isPlaceholder ? null : sortable ? (
                         <button
@@ -120,7 +130,7 @@ export function DataTable<T>({
                   ref={row.id === highlight ? (el) => { el?.scrollIntoView({ block: 'center' }) } : undefined}
                 >
                   {row.getVisibleCells().map((cell) => (
-                    <TableCell key={cell.id} className={cn('py-3', (cell.column.columnDef.meta as ColumnMeta | undefined)?.className)}>
+                    <TableCell key={cell.id} className={cn('py-3.5 text-[14.5px] first:pl-5 last:pr-5', (cell.column.columnDef.meta as ColumnMeta | undefined)?.className)}>
                       {flexRender(cell.column.columnDef.cell, cell.getContext())}
                     </TableCell>
                   ))}

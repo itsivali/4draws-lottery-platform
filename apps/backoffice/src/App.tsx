@@ -92,7 +92,7 @@ function Avatar({ initials, photo }: { initials: string; photo?: string | null |
   // only Google's image host, as the server keeps it
   const ok = !!photo && !failed && /^https:\/\/[a-z0-9-]+\.googleusercontent\.com\//.test(photo)
   return (
-    <span aria-hidden="true" className="relative flex size-8 items-center justify-center overflow-hidden rounded-lg bg-primary-container text-sm font-semibold text-primary-container-foreground">
+    <span aria-hidden="true" className="relative flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary-container text-sm font-bold text-primary-container-foreground ring-2 ring-card">
       {initials}
       {ok ? <img src={photo} alt="" referrerPolicy="no-referrer" className="absolute inset-0 size-full object-cover" onError={() => { setFailed(true) }} data-testid="member-photo" /> : null}
     </span>
@@ -126,7 +126,7 @@ function Layout() {
       <a className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-lg focus:bg-card focus:px-3 focus:py-2 focus:shadow-float" href="#main">Skip to content</a>
       <AppSidebar sections={sections} />
       <SidebarInset id="main" tabIndex={-1} className="min-w-0 outline-none">
-        <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center gap-2 border-b bg-background/80 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+        <header className="sticky top-2 z-20 mx-2 mt-2 flex h-16 shrink-0 items-center gap-2 rounded-3xl border bg-card/90 px-4 shadow-card backdrop-blur supports-[backdrop-filter]:bg-card/75 md:mx-4">
           <SidebarTrigger className="-ml-1" />
           <Separator orientation="vertical" className="mr-1 data-[orientation=vertical]:h-4" />
           <Breadcrumb>
@@ -142,7 +142,7 @@ function Layout() {
               ) : null}
             </BreadcrumbList>
           </Breadcrumb>
-          <div className="ml-auto flex items-center gap-1">
+          <div className="ml-auto flex items-center gap-3">
             <CommandMenu sections={sections} />
           </div>
         </header>
@@ -167,6 +167,8 @@ function Layout() {
               </AlertDescription>
             </Alert>
           ) : null}
+          {/* each page fades and rises in when the route changes */}
+          <div key={pathname} className="animate-page-in">
           <Routes>
             <Route path="/" element={<OverviewPage />} />
             {sections.map((s) => {
@@ -175,6 +177,7 @@ function Layout() {
             })}
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
+          </div>
         </div>
       </SidebarInset>
     </>
@@ -195,7 +198,7 @@ function AppSidebar({ sections }: { sections: Section[] }) {
   const [changing, setChanging] = useState(false)
   const [renaming, setRenaming] = useState(false)
   return (
-    <Sidebar collapsible="icon" variant="inset">
+    <Sidebar collapsible="icon" variant="floating">
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
@@ -279,8 +282,8 @@ function AppSidebar({ sections }: { sections: Section[] }) {
               </DropdownMenuTrigger>
               <DropdownMenuContent side={isMobile ? 'bottom' : 'right'} align="end" sideOffset={4} className="min-w-56 rounded-lg">
                 <DropdownMenuLabel className="font-normal">
-                  <span className="block truncate font-medium">{me.name}</span>
-                  <span className="block truncate text-xs text-muted-foreground">{roles}</span>
+                  <span className="block truncate text-xs text-muted-foreground">Signed in with</span>
+                  <span className="block truncate font-medium">{me.email}</span>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onSelect={() => { setRenaming(true) }}><UserPen /> Change name</DropdownMenuItem>
@@ -314,10 +317,10 @@ function CommandMenu({ sections }: { sections: Section[] }) {
   const go = (path: string) => { setOpen(false); void navigate(path) }
   return (
     <>
-      <Button type="button" variant="outline" size="sm" className="hidden h-8 gap-2 text-muted-foreground md:inline-flex" onClick={() => { setOpen(true) }}>
+      <Button type="button" variant="outline" size="sm" className="hidden h-10 w-64 justify-start gap-2 bg-background px-4 font-normal text-muted-foreground md:inline-flex" onClick={() => { setOpen(true) }}>
         <Search aria-hidden="true" />
-        <span>Jump to…</span>
-        <kbd aria-hidden="true" className="pointer-events-none rounded border bg-muted px-1.5 font-mono text-[10px] font-medium">⌘K</kbd>
+        <span>Jump to a section…</span>
+        <kbd aria-hidden="true" className="pointer-events-none ml-auto rounded-md border bg-card px-1.5 font-mono text-[11px] font-medium">⌘K</kbd>
       </Button>
       <Button type="button" variant="ghost" size="icon-sm" className="md:hidden" aria-label="Jump to a section" onClick={() => { setOpen(true) }}><Search /></Button>
       <CommandDialog open={open} onOpenChange={setOpen} title="Jump to" description="Search the back office's sections">

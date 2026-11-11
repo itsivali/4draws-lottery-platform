@@ -60,7 +60,7 @@ func TestCORS_ExposesTheHeadersClientsNeedOnRealRequests(t *testing.T) {
 	if rec.Code != http.StatusTeapot || rec.Header().Get("Access-Control-Allow-Origin") != "https://play.example.co.ke" {
 		t.Fatalf("%d %v", rec.Code, rec.Header())
 	}
-	for _, want := range []string{"Idempotent-Replay", "Retry-After", "X-Certificate-SHA256"} {
+	for _, want := range []string{"Idempotent-Replay", "Retry-After", "X-Certificate-SHA256", "X-File-SHA256", "X-File-Rows"} {
 		if !containsToken(rec.Header().Get("Access-Control-Expose-Headers"), want) {
 			t.Errorf("expose-headers lacks %s", want)
 		}

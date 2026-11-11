@@ -9,6 +9,7 @@ import { Loaded, Mono, Pill, type Tone } from './ui'
 import { useConfirmedAction } from './useConfirmedAction'
 import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
+import { ReceiptCard, ReceiptCode, ReceiptRow } from './polish'
 
 export const statusLabel: Record<string, [Tone, string]> = {
   initiated: ['pending', 'Sending prompt'],
@@ -65,7 +66,7 @@ export function TopUpDetailSheet({ id, onClose, onChanged }: { id: string | null
           {view}
           <Loaded load={load} what="the top-up">
             {(d) => d === null ? null : (
-              <>
+              <div className="grid gap-7">
                 <Summary d={d} />
                 {recheck ? (
                   <p role="status" className="rounded-lg border bg-muted/30 px-3 py-2 text-sm">
@@ -123,7 +124,7 @@ export function TopUpDetailSheet({ id, onClose, onChanged }: { id: string | null
                 <Section title="Receipt from the player">
                   {d.claim ? (
                     <dl className="grid gap-1 text-sm">
-                      <Row k="Receipt"><Mono>{d.claim.receipt}</Mono></Row>
+                      <Row k="Receipt"><ReceiptCode value={d.claim.receipt} /></Row>
                       <Row k="Status"><Pill tone={claimLabel[d.claim.status]?.[0] ?? 'neutral'}>{claimLabel[d.claim.status]?.[1] ?? d.claim.status}</Pill></Row>
                       <Row k="Given">{eat(d.claim.claimed_at)}</Row>
                       {d.claim.note ? <Row k="Note">{d.claim.note}</Row> : null}
@@ -189,7 +190,7 @@ export function TopUpDetailSheet({ id, onClose, onChanged }: { id: string | null
                     <Row k="Top-ups">{d.player.top_ups} in all · {kes(d.player.credited_kes)} credited{d.player.unconfirmed_count > 0 ? ` · ${d.player.unconfirmed_count} unconfirmed` : ''}</Row>
                   </dl>
                 </Section>
-              </>
+              </div>
             )}
           </Loaded>
         </div>
@@ -202,31 +203,32 @@ function Summary({ d }: { d: TopUpDetail }) {
   const [tone, text] = statusLabel[d.status] ?? ['neutral', d.status]
   const code = d.sandbox ? 'credited without M-Pesa’s confirmation (sandbox)' : d.result_code !== null ? (resultCodes[d.result_code] ?? `M-Pesa code ${d.result_code}`) : null
   return (
-    <div className="grid gap-2 rounded-xl border bg-card p-4 shadow-card">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <span className="font-display text-2xl font-semibold tabular-nums">{kes(d.amount_confirmed_kes ?? d.amount_requested_kes)}</span>
+    <ReceiptCard
+      title={d.channel === 'stk' ? 'M-Pesa prompt top-up' : 'Paybill top-up'}
+      amountLabel={d.amount_confirmed_kes !== null ? 'Confirmed by M-Pesa' : 'Asked for'}
+      amount={kes(d.amount_confirmed_kes ?? d.amount_requested_kes)}
+      status={
         <span className="flex flex-wrap gap-1">
           <Pill tone={tone}>{text}</Pill>
           {d.sandbox ? <Pill tone="pending">Sandbox</Pill> : null}
           {d.claim_status ? <Pill tone={claimLabel[d.claim_status]?.[0] ?? 'neutral'}>Receipt from player</Pill> : null}
         </span>
-      </div>
-      <dl className="grid gap-1 text-sm">
-        <Row k="Started">{eat(d.created_at)} · {d.channel === 'stk' ? 'M-Pesa prompt' : 'Paybill'}</Row>
-        <Row k="Last change">{eat(d.updated_at)}</Row>
-        {d.amount_confirmed_kes !== null && d.amount_confirmed_kes !== d.amount_requested_kes ? <Row k="Asked">{kes(d.amount_requested_kes)}</Row> : null}
-        <Row k="Why">{[code, d.failure_reason?.replaceAll('_', ' ')].filter(Boolean).join(' · ') || <span className="text-muted-foreground">—</span>}</Row>
-        <Row k="Receipt">{d.receipt ? <Mono>{d.receipt}</Mono> : <span className="text-muted-foreground">none</span>}</Row>
-        {d.reversed_at ? <Row k="Reversed">{eat(d.reversed_at)}{d.reversal_reason ? ` · ${d.reversal_reason}` : ''}</Row> : null}
-      </dl>
-    </div>
+      }
+    >
+      <ReceiptRow label="M-Pesa receipt" strong>{d.receipt ? <ReceiptCode value={d.receipt} /> : <span className="text-muted-foreground">none yet</span>}</ReceiptRow>
+      {d.amount_confirmed_kes !== null && d.amount_confirmed_kes !== d.amount_requested_kes ? <ReceiptRow label="Asked for">{kes(d.amount_requested_kes)}</ReceiptRow> : null}
+      <ReceiptRow label="Started">{eat(d.created_at)}</ReceiptRow>
+      <ReceiptRow label="Last change">{eat(d.updated_at)}</ReceiptRow>
+      <ReceiptRow label="Why">{[code, d.failure_reason?.replaceAll('_', ' ')].filter(Boolean).join(' · ') || <span className="text-muted-foreground">—</span>}</ReceiptRow>
+      {d.reversed_at ? <ReceiptRow label="Reversed">{eat(d.reversed_at)}{d.reversal_reason ? ` · ${d.reversal_reason}` : ''}</ReceiptRow> : null}
+    </ReceiptCard>
   )
 }
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="grid gap-2">
-      <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{title}</h3>
+    <section className="grid gap-3 border-t pt-5">
+      <h3 className="m-0 text-[12px] font-bold uppercase tracking-[0.12em] text-muted-foreground">{title}</h3>
       {children}
     </section>
   )
@@ -234,9 +236,9 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 
 function Row({ k, children }: { k: string; children: React.ReactNode }) {
   return (
-    <div className="grid grid-cols-[9rem_1fr] gap-x-3">
+    <div className="grid grid-cols-[9rem_1fr] gap-x-3 border-b border-dashed py-2 text-[14.5px] last:border-b-0">
       <dt className="text-muted-foreground">{k}</dt>
-      <dd className="min-w-0 break-words">{children}</dd>
+      <dd className="m-0 min-w-0 break-words font-medium">{children}</dd>
     </div>
   )
 }
@@ -248,7 +250,7 @@ function Callback({ c }: { c: CallbackView }) {
       {c.result_code === 0 ? 'paid' : (resultCodes[c.result_code] ?? `code ${c.result_code}`)}
       {c.result_desc ? <span className="text-muted-foreground"> · {c.result_desc}</span> : null}
       {c.amount_kes ? <> · {kes(c.amount_kes)}</> : null}
-      {c.receipt ? <> · <Mono>{c.receipt}</Mono></> : null}
+      {c.receipt ? <> · <ReceiptCode value={c.receipt} /></> : null}
       {c.payer ? <> · from {msisdn(c.payer)}</> : null}
       {c.received_at ? <span className="text-muted-foreground"> · {eat(c.received_at)}</span> : null}
     </span>

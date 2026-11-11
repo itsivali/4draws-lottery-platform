@@ -8,7 +8,7 @@ import (
 const (
 	corsAllowMethods  = "GET, POST, PUT, PATCH, DELETE"
 	corsAllowHeaders  = "Authorization, Content-Type, Idempotency-Key"
-	corsExposeHeaders = "Idempotent-Replay, Retry-After, X-Certificate-SHA256, Location"
+	corsExposeHeaders = "Idempotent-Replay, Retry-After, X-Certificate-SHA256, X-File-SHA256, X-File-Rows, Location"
 	corsMaxAge        = "600"
 )
 

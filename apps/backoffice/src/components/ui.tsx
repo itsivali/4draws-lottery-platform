@@ -35,23 +35,23 @@ export function Pill({ tone, children, className }: { tone: Tone; children: Reac
 
 export function PageHeader({ title, children, actions }: { title: string; children?: ReactNode; actions?: ReactNode }) {
   return (
-    <header className="mb-8 flex flex-wrap items-start justify-between gap-4 animate-in fade-in-0 slide-in-from-bottom-1 duration-300 motion-reduce:animate-none">
-      <div className="max-w-[70ch]">
-        <h1 className="font-display text-3xl font-extrabold leading-tight tracking-tight md:text-4xl">{title}</h1>
-        {children ? <p className="mt-2 text-[15px] text-muted-foreground md:text-base">{children}</p> : null}
+    <header className="mb-8 flex flex-wrap items-end justify-between gap-4 animate-rise-in">
+      <div className="max-w-[72ch]">
+        <h1 className="font-display text-[2rem] font-extrabold leading-[1.1] tracking-tight md:text-[2.6rem]">{title}</h1>
+        {children ? <p className="m-0 mt-2.5 text-[15.5px] leading-relaxed text-muted-foreground md:text-base">{children}</p> : null}
       </div>
       {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
     </header>
   )
 }
 
-/** A short monospace reference (ids, receipts, hashes) that wraps anywhere and can be selected. */
+/** A short monospace reference (ids, hashes) that wraps anywhere and can be selected. M-Pesa receipts use ReceiptCode. */
 export function Mono({ children, className }: { children: ReactNode; className?: string }) {
-  return <span className={cn('font-mono text-[13px] [overflow-wrap:anywhere]', className)}>{children}</span>
+  return <span className={cn('font-mono text-[13.5px] [overflow-wrap:anywhere]', className)}>{children}</span>
 }
 
 export function SectionTitle({ children, className }: { children: ReactNode; className?: string }) {
-  return <h2 className={cn('mb-3 mt-10 font-display text-xl font-bold tracking-tight', className)}>{children}</h2>
+  return <h2 className={cn('mb-3 mt-12 font-display text-[1.35rem] font-bold tracking-tight', className)}>{children}</h2>
 }
 
 function LoadError({ what, error, reload }: { what: string; error: unknown; reload: () => void }) {
@@ -158,6 +158,8 @@ export interface ConfirmField {
   type?: 'text' | 'number' | 'email' | 'checkbox' | 'password' | 'radio'
   options?: { value: string; label: string; description?: string }[]
   help?: string
+  /** number: what it counts, for its error message (default shillings) */
+  unit?: string
 }
 
 const emailRE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -172,7 +174,7 @@ export const characters = (s: string): number => Array.from(s).length
 export function fieldProblem(f: ConfirmField, value: string): string | null {
   const v = f.type === 'password' ? value : value.trim()
   if (!v) return null
-  if (f.type === 'number') return /^\d+$/.test(v) && Number(v) > 0 ? null : 'Enter a whole number of shillings above zero.'
+  if (f.type === 'number') return /^\d+$/.test(v) && Number(v) > 0 ? null : `Enter a whole number of ${f.unit ?? 'shillings'} above zero.`
   if (f.type === 'email') return emailRE.test(v) ? null : 'Enter an email address.'
   if (f.type === 'password') return characters(v) >= MIN_PASSWORD ? null : `Use at least ${MIN_PASSWORD} characters (a short sentence is fine).`
   return null
@@ -229,12 +231,12 @@ export function ConfirmDialog({
           className="grid gap-4"
         >
           <DialogHeader>
-            <DialogTitle className="text-xl">{title}</DialogTitle>
+            <DialogTitle>{title}</DialogTitle>
           </DialogHeader>
-          <div className="text-sm text-muted-foreground [&_p]:m-0">{body}</div>
+          <div className="grid gap-2 text-[15px] leading-relaxed text-foreground/85 [&_p]:m-0 [&_strong]:text-foreground">{body}</div>
           {inputs.map((f) => (
             <div key={f.name} className="grid gap-1.5">
-              <Label htmlFor={`${id}-${f.name}`}>{f.label}{f.required ? ' (required)' : ''}</Label>
+              <Label htmlFor={`${id}-${f.name}`} className="text-[14px] font-semibold">{f.label}{f.required ? ' (required)' : ''}</Label>
               <Input
                 id={`${id}-${f.name}`}
                 type={f.type === 'number' ? 'text' : (f.type ?? 'text')}
@@ -246,23 +248,23 @@ export function ConfirmDialog({
                 value={values[f.name] ?? ''}
                 onChange={(e) => { setValues({ ...values, [f.name]: e.target.value }) }}
               />
-              {problems[f.name] ? <p id={`${id}-${f.name}-p`} className="text-xs text-destructive">{problems[f.name]}</p> : f.help ? <p className="text-xs text-muted-foreground">{f.help}</p> : null}
+              {problems[f.name] ? <p id={`${id}-${f.name}-p`} className="text-[13px] font-medium text-destructive">{problems[f.name]}</p> : f.help ? <p className="text-[13px] text-muted-foreground">{f.help}</p> : null}
             </div>
           ))}
           {radios.map((f) => (
-            <fieldset key={f.name} className="grid gap-2 rounded-lg border bg-muted/40 p-3">
-              <legend className="px-1 text-sm font-medium">{f.label}</legend>
+            <fieldset key={f.name} className="grid gap-2 rounded-2xl border bg-muted/40 p-3.5">
+              <legend className="px-1 text-[14px] font-semibold">{f.label}</legend>
               {(f.options ?? []).map((o) => (
-                <label key={o.value} className="flex cursor-pointer items-start gap-2.5 rounded-md p-1.5 has-[:checked]:bg-primary-container/60">
+                <label key={o.value} className="flex cursor-pointer items-start gap-2.5 rounded-xl p-2 transition-colors hover:bg-background has-[:checked]:bg-primary-container/70">
                   <input type="radio" name={`${id}-${f.name}`} value={o.value} className="mt-1 size-4 accent-primary" checked={(values[f.name] ?? '') === o.value}
                     onChange={() => { setValues({ ...values, [f.name]: o.value }) }} />
-                  <span className="grid gap-0.5 text-sm"><span className="font-medium">{o.label}</span>{o.description ? <span className="text-muted-foreground">{o.description}</span> : null}</span>
+                  <span className="grid gap-0.5 text-[14.5px]"><span className="font-semibold">{o.label}</span>{o.description ? <span className="text-muted-foreground">{o.description}</span> : null}</span>
                 </label>
               ))}
             </fieldset>
           ))}
           {checks.length > 0 ? (
-            <div className="grid gap-2.5 rounded-lg border bg-muted/40 p-3 sm:grid-cols-2">
+            <div className="grid gap-2.5 rounded-2xl border bg-muted/40 p-3.5 sm:grid-cols-2">
               {checks.map((f) => (
                 <div key={f.name} className="flex items-center gap-2.5">
                   <Checkbox id={`${id}-${f.name}`} checked={values[f.name] === 'true'} onCheckedChange={(c) => { setValues({ ...values, [f.name]: String(c === true) }) }} />
@@ -271,7 +273,7 @@ export function ConfirmDialog({
               ))}
             </div>
           ) : null}
-          {crossProblem ? <p className="text-sm text-destructive" role="alert">{crossProblem}</p> : null}
+          {crossProblem ? <p className="text-[14px] font-medium text-destructive" role="alert">{crossProblem}</p> : null}
           <DialogFooter className="mt-2">
             <Button type="button" variant="outline" onClick={cancel}>Cancel</Button>
             <Button type="submit" variant={danger ? 'destructive' : 'default'} disabled={blocked}>{confirmLabel}</Button>
@@ -284,9 +286,9 @@ export function ConfirmDialog({
 
 export function Empty({ children, icon: Icon = Inbox }: { children: ReactNode; icon?: typeof Inbox }) {
   return (
-    <div className="mt-4 flex flex-col items-center gap-2 rounded-xl border border-dashed bg-card/60 px-6 py-10 text-center text-sm text-muted-foreground">
-      <Icon aria-hidden="true" className="size-6 opacity-60" />
-      <p className="m-0">{children}</p>
+    <div className="mt-4 flex flex-col items-center gap-3 rounded-3xl border border-dashed bg-card/70 px-6 py-12 text-center text-[15px] text-muted-foreground">
+      <span aria-hidden="true" className="flex size-12 items-center justify-center rounded-2xl bg-muted"><Icon className="size-6 opacity-70" /></span>
+      <p className="m-0 max-w-[48ch]">{children}</p>
     </div>
   )
 }

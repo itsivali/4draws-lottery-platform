@@ -3,6 +3,7 @@ package api
 import (
 	"errors"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -207,4 +208,29 @@ func (h *handlers) staffSystem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpx.WriteJSON(w, http.StatusOK, s)
+}
+
+// staffJob retries (retry) or cancels a background job: admins, audited (ADR 0036).
+func (h *handlers) staffJob(retry bool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+		if err != nil || id <= 0 {
+			httpx.WriteProblem(w, http.StatusNotFound, "not-found", "No such job", "")
+			return
+		}
+		act := h.StaffServices.Jobs.Cancel
+		if retry {
+			act = h.StaffServices.Jobs.Retry
+		}
+		switch err := act(r.Context(), id, member(r).Operator()); {
+		case errors.Is(err, oversight.ErrJobNotFound):
+			httpx.WriteProblem(w, http.StatusNotFound, "not-found", "No such job", "")
+		case errors.Is(err, oversight.ErrJobState):
+			httpx.WriteProblem(w, http.StatusConflict, "state", "The job is not in a state that allows this", "")
+		case err != nil:
+			staffError(w, err)
+		default:
+			w.WriteHeader(http.StatusNoContent)
+		}
+	}
 }

@@ -15,6 +15,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { ReceiptCode } from '../components/polish'
 
 const filters = [['', 'All'], ['credited', 'Credited'], ['stk_sent', 'Waiting'], ['failed', 'Failed'], ['cancelled', 'Cancelled'], ['unconfirmed', 'Unconfirmed'], ['reversed', 'Reversed']] as const
 
@@ -103,14 +104,14 @@ export function TopUpsPage() {
               {claim ? <Pill tone={claim[0]}>Receipt from player</Pill> : null}
             </div>
             {why ? <span className="text-sm text-muted-foreground">{why}</span> : null}
-            {claim && t.claimed_receipt ? <span className="text-sm text-muted-foreground">{claim[1].replace('Receipt from player: ', '')} · <Mono>{t.claimed_receipt}</Mono></span> : null}
+            {claim && t.claimed_receipt ? <span className="text-sm text-muted-foreground">{claim[1].replace('Receipt from player: ', '')} · <ReceiptCode value={t.claimed_receipt} /></span> : null}
           </div>
         )
       },
     },
     {
       id: 'receipt', header: 'Receipt', accessorFn: (t) => t.receipt ?? '',
-      cell: ({ row }) => <Stack primary={row.original.receipt ? <Mono>{row.original.receipt}</Mono> : <span className="font-normal text-muted-foreground">—</span>} secondary={<Mono className="text-muted-foreground">{row.original.id}</Mono>} />,
+      cell: ({ row }) => <Stack primary={row.original.receipt ? <ReceiptCode value={row.original.receipt} /> : <span className="font-normal text-muted-foreground">—</span>} secondary={<Mono className="text-muted-foreground">{row.original.id}</Mono>} />,
     },
     {
       id: 'actions', header: () => <span className="sr-only">Actions</span>, enableSorting: false,
@@ -179,7 +180,7 @@ export function TopUpsPage() {
       <Loaded load={load} what="top-ups">
         {(topups) =>
           topups.length === 0 ? <Empty icon={Smartphone}>{q || status || reason || channel || from || to || claimed ? 'No top-up matches.' : 'No top-ups yet.'}</Empty> : (
-            <DataTable columns={columns} data={topups} rowId={(t) => t.id} caption="Top-ups, newest first" filter="Filter these rows"
+            <DataTable columns={columns} data={topups} rowId={(t) => t.id} caption="Top-ups, newest first" description="M-Pesa top-ups players started, with what M-Pesa confirmed. Open one to see its receipt, its callbacks and what you can do about it." filter="Filter these rows"
               highlight={open ?? undefined} more={{ has: load.more, loading: load.loadingMore, load: load.loadMore }} />
           )
         }

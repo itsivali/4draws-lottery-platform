@@ -48,7 +48,7 @@ export function ClosuresPage() {
       <Loaded load={load} what="closure requests">
         {({ closures }) =>
           closures.length === 0 ? <Empty icon={UserX}>No open requests.</Empty> : (
-            <DataTable columns={columns} data={closures} rowId={(c) => c.user_id} caption="Open closure requests, oldest first" filter="Search by phone or id" />
+            <DataTable columns={columns} data={closures} rowId={(c) => c.user_id} caption="Open closure requests, oldest first" description="Players who asked to close their account. An account closes only once its balance is paid out and every top-up and payout is final." filter="Search by phone or id" />
           )
         }
       </Loaded>

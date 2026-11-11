@@ -29,7 +29,8 @@ describe('identity review notifications', () => {
     const nav = screen.getByRole('navigation', { name: 'Back office' })
     expect(await within(nav).findByRole('link', { name: 'Identity review, 2 waiting' })).toBeInTheDocument()
     await waitFor(() => { expect(document.title).toBe('(2) Back office') })
-    expect(await screen.findByRole('link', { name: /2 identity submissions wait for review/ })).toHaveAttribute('href', '/kyc')
+    // the overview's stat card counts them and leads to the review
+    expect(await screen.findByRole('link', { name: /Identity reviews\s*2/ })).toHaveAttribute('href', '/kyc')
   })
 
   it('a new submission raises a notice that leads to the review', async () => {
@@ -66,7 +67,7 @@ describe('identity review notifications', () => {
 
   it('an administrator reviews identities too, so the queue is polled for them as well', async () => {
     const { fetch } = renderSignedIn(<App />, { roles: ['admin'], route: () => ({ status: 200, body: { waiting: 0, oldest_submitted_at: null } }) })
-    expect(await screen.findByRole('heading', { name: /Signed in as Alice/ })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: /Welcome back, Alice/ })).toBeInTheDocument()
     poll()
     await waitFor(() => { expect(fetch.mock.calls.some(([u]) => (u as string).includes('/kyc/queue'))).toBe(true) })
     expect(document.title).toBe('Back office')

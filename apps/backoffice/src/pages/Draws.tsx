@@ -151,7 +151,7 @@ export function DrawsPage() {
       <Loaded load={draws} what="draws">
         {(list) =>
           list.length === 0 ? <Empty icon={Ticket}>No draws yet.</Empty> : (
-            <DataTable columns={columns} data={list} rowId={(d) => d.id} caption="Draws, newest first" filter="Search draws"
+            <DataTable columns={columns} data={list} rowId={(d) => d.id} caption="Draws, newest first" description="Daily, weekly and monthly draws with their state. Frozen draws need two officials to sign; conducted ones need approval." filter="Search draws"
               more={{ has: draws.more, loading: draws.loadingMore, load: draws.loadMore }} />
           )
         }

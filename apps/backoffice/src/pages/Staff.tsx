@@ -184,7 +184,7 @@ export function StaffPage() {
       <Loaded load={load} what="staff">
         {({ members }) =>
           members.length === 0 ? <Empty icon={Users}>No members yet.</Empty> : (
-            <DataTable columns={columns} data={members} rowId={(m) => m.id} caption="Staff members, active first" filter="Search by name or email" />
+            <DataTable columns={columns} data={members} rowId={(m) => m.id} caption="Staff members, active first" description="Everyone who can sign in to the back office, with their roles and how they sign in. Disabled members are listed after the active ones." filter="Search by name or email" />
           )
         }
       </Loaded>

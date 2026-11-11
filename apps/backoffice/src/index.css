@@ -1,65 +1,81 @@
-/* The design system's tokens (design-system/lottery-platform/MASTER.md, "Sunset", 2026-10-28) mapped onto shadcn/ui's
-   variables, for the staff back office. One light theme on a white background: coral primary, violet accents, gold
-   kept decorative (never a success or a balance), pending blue, status always with an icon and a word. */
+/* The design system's tokens (design-system/lottery-platform/MASTER.md, v4 "Indigo, Material", 2026-11-11) mapped onto
+   shadcn/ui's variables, for the staff back office: the same language as the player app. One light theme on a cool
+   off-white page: indigo primary (the logo's), gold kept decorative (never a success or a balance), pending teal,
+   status always with an icon and a word. White cards stand off the page on their shadows. */
 @import "tailwindcss";
 
-:root {
-  --radius: 1rem;
+/* The back office is one light theme. shadcn's components carry dark: styles; tied to the system setting (Tailwind's
+   default) they half-darkened inputs and outline buttons for staff whose computer is in dark mode. They apply only
+   under a .dark class, which nothing sets. */
+@custom-variant dark (&:where(.dark, .dark *));
 
-  /* warm linen page, white cards with a pronounced lift (owner, 2026-10-29) */
-  --background: #fbf6f3;
-  --foreground: #2a1a2e;
+:root {
+  --radius: 1.125rem;
+
+  /* the canvas: a cool off-white, so white cards stand out on their shadows (owner, 2026-11-11) */
+  --background: #f7f7fb;
+  --foreground: #1b1a2e;
   --card: #ffffff;
-  --card-foreground: #2a1a2e;
+  --card-foreground: #1b1a2e;
   --popover: #ffffff;
-  --popover-foreground: #2a1a2e;
-  --primary: #c23412;
+  --popover-foreground: #1b1a2e;
+  --primary: #4338ca;
   --primary-foreground: #ffffff;
-  --primary-container: #ffe3d8;
-  --primary-container-foreground: #7a1f06;
-  --secondary: #fbeee7;
-  --secondary-foreground: #2a1a2e;
-  --muted: #fbf1ec;
-  --muted-foreground: #6b5a62;
-  --accent: #f4eefc;
-  --accent-foreground: #3e2585;
-  --violet: #6d3fc7;
-  --violet-container: #efe8ff;
-  --violet-container-foreground: #3e2585;
+  --primary-container: #e4e2ff;
+  --primary-container-foreground: #211a78;
+  --secondary: #efeef8;
+  --secondary-foreground: #1b1a2e;
+  --muted: #f3f2fa;
+  /* legible at small sizes (WCAG AA on white, on the canvas and on muted) */
+  --muted-foreground: #55536b;
+  --accent: #ecebff;
+  --accent-foreground: #211a78;
+  /* the lighter indigo accent (the tokens keep their earlier name) */
+  --violet: #5b4fe0;
+  --violet-container: #e4e2ff;
+  --violet-container-foreground: #211a78;
   --destructive: #c62828;
   --destructive-foreground: #ffffff;
   --success: #1b7a43;
   --success-foreground: #ffffff;
-  --warning: #a05a00;
+  --warning: #9a5600;
   --warning-foreground: #ffffff;
-  --pending: #3b5bb5;
+  /* teal, so waiting is never mistaken for the indigo of an action */
+  --pending: #0f6a80;
   --pending-foreground: #ffffff;
-  --gold: #a8781c;
-  --border: #f0ddd5;
-  --input: #8a7a80;
-  --ring: #c23412;
+  --gold: #b47a12;
+  --border: #e4e3f0;
+  --input: #7c7a93;
+  --ring: #4338ca;
 
   /* chart series: distinct hues on white, each paired with a label; web, android, ios in the metrics */
-  --chart-1: #e0532a;
-  --chart-2: #6d3fc7;
+  --chart-1: #4338ca;
+  --chart-2: #e0532a;
   --chart-3: #0e8c86;
   --chart-4: #c98a00;
   --chart-5: #c2185b;
 
-  --sidebar: #fff6f1;
-  --sidebar-foreground: #2a1a2e;
-  --sidebar-primary: #c23412;
+  --sidebar: #ffffff;
+  --sidebar-foreground: #1b1a2e;
+  --sidebar-primary: #4338ca;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #ffe3d8;
-  --sidebar-accent-foreground: #7a1f06;
-  --sidebar-border: #f0ddd5;
-  --sidebar-ring: #c23412;
+  --sidebar-accent: #e4e2ff;
+  --sidebar-accent-foreground: #211a78;
+  --sidebar-border: #e4e3f0;
+  --sidebar-ring: #4338ca;
 
-  /* the sunset: the sign-in panel's only gradient (MASTER.md §5: hero surfaces, nothing else) */
-  --hero: linear-gradient(135deg, #ffa05e 0%, #ea4f26 30%, #b33ab5 68%, #3e2585 100%);
+  /* the hero surfaces' indigo gradient: the signed-out pages' background, the highlighted figure, the mark's tile */
+  --hero: linear-gradient(135deg, #5b4fe9 0%, #4338ca 50%, #2a2385 100%);
 
-  --shadow-card: 0 1px 3px rgb(60 20 40 / 0.06), 0 14px 36px rgb(60 20 40 / 0.13);
-  --shadow-float: 0 20px 56px rgb(60 20 40 / 0.22);
+  /* depth (MASTER.md v4.1): a contact shadow and a wide soft one in indigo-black; a card under the pointer comes
+     forward; a floating panel; the form's card over the brand colour */
+  --shadow-card: 0 1px 4px rgb(20 18 58 / 0.08), 0 14px 32px -6px rgb(20 18 58 / 0.13);
+  --shadow-raised: 0 2px 6px rgb(20 18 58 / 0.08), 0 20px 40px -6px rgb(20 18 58 / 0.18);
+  --shadow-float: 0 4px 10px rgb(20 18 58 / 0.08), 0 24px 56px -8px rgb(20 18 58 / 0.24);
+  --shadow-sheet: 0 4px 12px rgb(20 18 58 / 0.22), 0 32px 64px -8px rgb(20 18 58 / 0.42);
+
+  /* motion: one easing for arrivals, as in the app (Curves.easeOutQuart) */
+  --ease-settle: cubic-bezier(0.25, 1, 0.5, 1);
 
   color-scheme: light;
 }
@@ -121,7 +137,9 @@
   --color-sidebar-ring: var(--sidebar-ring);
 
   --shadow-card: var(--shadow-card);
+  --shadow-raised: var(--shadow-raised);
   --shadow-float: var(--shadow-float);
+  --shadow-sheet: var(--shadow-sheet);
 }
 
 @utility bg-hero {
@@ -135,6 +153,7 @@
   html {
     font-variant-numeric: tabular-nums;
     -webkit-font-smoothing: antialiased;
+    font-size: 15px;
   }
   body {
     @apply bg-background text-foreground font-sans;
@@ -153,4 +172,79 @@
 @keyframes slide {
   from { transform: translateX(-100%); }
   to { transform: translateX(300%); }
+}
+
+/* Motion (MASTER.md v4.1): the gold coin turns (the one 3D thing left); everything else arrives flat: pages and cards
+   fade and rise, dialogs fade and settle from slightly small, a tappable card comes forward under the pointer. All of
+   it stops for people who ask for reduced motion (the rule in the base layer above). */
+@keyframes coin-turn {
+  from { transform: rotateY(0deg) rotateX(12deg); }
+  to { transform: rotateY(360deg) rotateX(12deg); }
+}
+@keyframes coin-float {
+  0%, 100% { translate: 0 0; }
+  50% { translate: 0 -6px; }
+}
+@keyframes swing-in {
+  from { opacity: 0; transform: translateY(10px) scale(0.97); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes rise-in {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes page-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.99); }
+  to { opacity: 1; transform: none; }
+}
+@utility animate-swing-in {
+  animation: swing-in 320ms var(--ease-settle) both;
+}
+@utility animate-rise-in {
+  animation: rise-in 420ms var(--ease-settle) both;
+}
+/* a page arriving when the route changes */
+@utility animate-page-in {
+  animation: page-in 300ms var(--ease-settle) both;
+}
+/* a tappable card: it rises and its shadow deepens under the pointer, and settles when pressed */
+@utility lift {
+  transition: transform 220ms var(--ease-settle), box-shadow 220ms var(--ease-settle);
+  will-change: transform;
+  &:hover { transform: translateY(-3px); box-shadow: var(--shadow-raised); }
+  &:active { transform: translateY(0) scale(0.985); box-shadow: var(--shadow-card); }
+}
+/* a tappable card takes the hero's indigo (the "Payouts held" card's colour) under the pointer, under a finger and
+   under keyboard focus: the gradient fades in over the card, and everything on it turns white (owner, 2026-11-11) */
+@utility hover-hero {
+  position: relative;
+  isolation: isolate;
+  &::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    background-image: var(--hero);
+    opacity: 0;
+    transition: opacity 240ms var(--ease-settle);
+  }
+  & * { transition: color 240ms var(--ease-settle), background-color 240ms var(--ease-settle), border-color 240ms var(--ease-settle); }
+  &:hover, &:active, &:focus-visible { border-color: transparent; color: #fff; box-shadow: var(--shadow-float); }
+  &:hover::before, &:active::before, &:focus-visible::before { opacity: 1; }
+  &:hover *, &:active *, &:focus-visible * { color: #fff; }
+  /* the small round or square chip on a card (its arrow, its icon): a light wash on the indigo */
+  &:hover [data-chip], &:active [data-chip], &:focus-visible [data-chip] {
+    background-color: rgb(255 255 255 / 0.18);
+    border-color: rgb(255 255 255 / 0.3);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .animate-swing-in, .animate-rise-in, .animate-page-in { animation: none; }
+  .lift:hover, .lift:active { transform: none; }
+}
+
+/* every card eases between its states (a table gaining rows, a section loading) */
+@layer base {
+  [data-slot="card"] { transition: box-shadow 220ms var(--ease-settle), border-color 220ms var(--ease-settle); }
 }

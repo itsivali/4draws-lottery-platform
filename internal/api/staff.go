@@ -52,6 +52,8 @@ type StaffServices struct {
 	Metrics  *metrics.Service // the app metrics (admins)
 	// Oversight reads plays, top-ups, the audit trail and the system's state for the back office.
 	Oversight *oversight.Service
+	// Jobs retries or cancels a background job (ADR 0036).
+	Jobs *oversight.JobControl
 	// RG reads a player's deposit limits and restrictions for their timeline (owner, 2026-10-31).
 	RG *rg.Service
 	// Gate is the operating mode (ADR 0027): its state, stop, resume and the two-admin live approval.
@@ -217,6 +219,9 @@ func (h *handlers) mountStaff(r chi.Router) {
 	r.With(admin).Post("/operating/resume", h.needs(hasGate, "Operating mode", h.staffOperatingResume))
 	r.With(admin).Post("/operating/live-requests", h.needs(hasGate, "Operating mode", h.staffLiveRequest))
 	r.With(admin).Post("/operating/live-requests/{id}/approve", h.needs(hasGate, "Operating mode", h.staffLiveApprove))
+	r.With(anyStaff).Get("/operating/switches", h.needs(hasGate, "Operating mode", h.staffSwitches))
+	r.With(anyStaff).Post("/operating/switches/{area}/pause", h.needs(hasGate, "Operating mode", h.staffSwitch(true)))
+	r.With(admin).Post("/operating/switches/{area}/resume", h.needs(hasGate, "Operating mode", h.staffSwitch(false)))
 
 	r.With(anyStaff).Get("/closures", h.staffClosures)
 	r.With(anyStaff).Post("/closures/{user}/close", h.staffClose)
@@ -225,11 +230,13 @@ func (h *handlers) mountStaff(r chi.Router) {
 	r.With(anyStaff).Get("/topups", h.needs(h.StaffServices.Oversight != nil, "Top-ups", h.staffTopUps))
 	r.With(anyStaff).Get("/topups/{id}", h.needs(h.StaffServices.Oversight != nil, "Top-ups", h.staffTopUp))
 	r.With(anyStaff).Get("/system", h.needs(h.StaffServices.Oversight != nil, "System status", h.staffSystem))
+	r.With(admin).Post("/jobs/{id}/retry", h.needs(h.StaffServices.Jobs != nil, "Background jobs", h.staffJob(true)))
+	r.With(admin).Post("/jobs/{id}/cancel", h.needs(h.StaffServices.Jobs != nil, "Background jobs", h.staffJob(false)))
 	r.With(admin).Get("/activity", h.needs(h.StaffServices.Oversight != nil, "Activity log", h.staffActivity))
 	r.With(admin).Get("/activity/export", h.needs(h.StaffServices.Oversight != nil, "Activity log", h.staffActivityExport))
 
 	r.With(anyStaff).Get("/players", h.staffPlayers)
-	h.mountAML(r, anyStaff)
+	h.mountAML(r, anyStaff, admin)
 	r.With(anyStaff).Get("/players/{user}", h.needs(h.StaffServices.Oversight != nil, "Players", h.staffPlayer))
 	r.With(anyStaff).Get("/players/{user}/export", h.needs(h.StaffServices.Oversight != nil, "Players", h.staffPlayerExport))
 	r.With(anyStaff).Post("/players/{user}/suspend", h.staffSuspend(true))
