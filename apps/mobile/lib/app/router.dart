@@ -38,8 +38,28 @@ const _signedOutRoutes = {'/sign-in', '/create-account', '/forgot-password', '/r
 /// The password screen a player with a temporary password is held on until they choose their own.
 const requiredPasswordRoute = '/account/password?required=1';
 
+/// Addresses people guess or bookmark for signing in and signing up, sent to the real ones (owner, 2026-11-11: /login
+/// ended on "page may not exist").
+const _aliases = {
+  '/login': '/sign-in',
+  '/log-in': '/sign-in',
+  '/signin': '/sign-in',
+  '/register': '/create-account',
+  '/signup': '/create-account',
+  '/sign-up': '/create-account',
+};
+
+/// The app's own pages, under its five destinations: the only places a detour through sign-in may return to.
+const _appAreas = ['/home', '/play', '/draws', '/wallet', '/account'];
+
+bool _isAppPage(String location) {
+  final path = Uri.tryParse(location)?.path ?? '';
+  return _appAreas.any((a) => path == a || path.startsWith('$a/'));
+}
+
 String? sessionRedirect(SessionStatus status, Uri location, {bool mustChangePassword = false}) {
   final path = location.path;
+  if (_aliases[path.toLowerCase()] case final real?) return real;
   switch (status) {
     case SessionStatus.restoring:
       return path == '/starting' ? null : '/starting?from=${Uri.encodeComponent(location.toString())}';
@@ -48,14 +68,13 @@ String? sessionRedirect(SessionStatus status, Uri location, {bool mustChangePass
     case SessionStatus.signedOut:
       if (_signedOutRoutes.contains(path)) return null;
       final from = _sessionRoutes.contains(path) ? location.queryParameters['from'] : location.toString();
-      return from == null || from == '/' ? '/sign-in' : '/sign-in?from=${Uri.encodeComponent(from)}';
+      // only a real page is worth coming back to; anything else returns home after sign-in
+      return from == null || !_isAppPage(from) ? '/sign-in' : '/sign-in?from=${Uri.encodeComponent(from)}';
     case SessionStatus.signedIn:
       if (mustChangePassword) return path == '/account/password' ? null : requiredPasswordRoute;
       if (!_sessionRoutes.contains(path)) return path == '/' ? '/home' : null;
       final from = location.queryParameters['from'];
-      return from == null || from.isEmpty || from == '/' || _sessionRoutes.contains(Uri.parse(from).path)
-          ? '/home'
-          : from;
+      return from != null && _isAppPage(from) ? from : '/home';
   }
 }
 

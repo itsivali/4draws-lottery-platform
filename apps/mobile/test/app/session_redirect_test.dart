@@ -3,6 +3,36 @@ import 'package:lottery_mobile/app/router.dart';
 import 'package:lottery_mobile/core/auth/session_manager.dart';
 
 void main() {
+  group('an address the app does not have, such as /login (owner, 2026-11-11)', () {
+    test('the usual sign-in and sign-up addresses go to the real ones', () {
+      for (final (from, to) in [
+        ('/login', '/sign-in'),
+        ('/LOGIN', '/sign-in'),
+        ('/signin', '/sign-in'),
+        ('/register', '/create-account'),
+        ('/signup', '/create-account'),
+      ]) {
+        expect(sessionRedirect(SessionStatus.signedOut, Uri.parse(from)), to, reason: from);
+        expect(sessionRedirect(SessionStatus.signedIn, Uri.parse(from)), to, reason: '$from, then home');
+      }
+    });
+
+    test('signing in after a detour from an unknown address goes home, not to a missing page', () {
+      expect(sessionRedirect(SessionStatus.signedIn, Uri.parse('/sign-in?from=%2Flogin')), '/home');
+      expect(sessionRedirect(SessionStatus.signedIn, Uri.parse('/sign-in?from=%2Fnowhere%2Fat-all')), '/home');
+      expect(sessionRedirect(SessionStatus.signedIn, Uri.parse('/sign-in?from=https%3A%2F%2Fevil.test')), '/home');
+    });
+
+    test('an unknown address is not remembered on the way to sign-in', () {
+      expect(sessionRedirect(SessionStatus.signedOut, Uri.parse('/nowhere')), '/sign-in');
+    });
+
+    test('real pages still survive the detour', () {
+      expect(sessionRedirect(SessionStatus.signedOut, Uri.parse('/wallet/top-up')), '/sign-in?from=%2Fwallet%2Ftop-up');
+      expect(sessionRedirect(SessionStatus.signedIn, Uri.parse('/sign-in?from=%2Fdraws%2Fd1')), '/draws/d1');
+    });
+  });
+
   group('the create-account address (2026-10-30)', () {
     test('a signed-out player may be there, and is not sent to sign-in', () {
       expect(sessionRedirect(SessionStatus.signedOut, Uri.parse('/create-account')), isNull);
