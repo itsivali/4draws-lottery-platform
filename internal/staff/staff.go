@@ -226,13 +226,13 @@ func (s *Service) RequestPasswordReset(ctx context.Context, email string) error 
 		return err
 	}
 	link := strings.TrimRight(s.resets.BackOfficeURL, "/") + "/reset-password?token=" + url.QueryEscape(token)
-	return s.resets.Sender.Send(ctx, mail.Message{To: []string{email}, Subject: "Tajirika back office: reset your password",
+	return s.resets.Sender.Send(ctx, mail.Message{To: []string{email}, Subject: "4draws back office: reset your password",
 		Text: resetText(link, expires)})
 }
 
 func resetText(link string, expires time.Time) string {
 	nairobi := time.FixedZone("EAT", 3*60*60)
-	return "Someone asked to reset the password of the Tajirika back-office account with this email address.\n\n" +
+	return "Someone asked to reset the password of the 4draws back-office account with this email address.\n\n" +
 		"If it was you, choose a new password here (the link works until " + expires.In(nairobi).Format("15:04 MST") + "):\n" + link + "\n\n" +
 		"If it was not you, ignore this email: nothing changes until the link is used, and it is sent only to this address.\n"
 }

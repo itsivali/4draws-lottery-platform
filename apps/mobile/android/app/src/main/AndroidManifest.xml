@@ -4,7 +4,7 @@
     <!-- Nothing is backed up or carried to another device: the session and device identity belong to this install
          (docs/mobile/android-release.md). -->
     <application
-        android:label="Tajirika"
+        android:label="4draws"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         android:allowBackup="false"

@@ -206,7 +206,7 @@ func TestAPI_StaffSignInIsPasswordWithGoogleAppleOrTheLocalTestRealmOptional(t *
 		t.Fatalf("unset: %+v %v", cfg.API.Staff, err)
 	}
 	t.Setenv("STAFF_GOOGLE_CLIENT_ID", "123-abc.apps.googleusercontent.com")
-	t.Setenv("STAFF_APPLE_CLIENT_ID", "ke.tajirika.backoffice")
+	t.Setenv("STAFF_APPLE_CLIENT_ID", "ke.co.fourdraws.backoffice")
 	t.Setenv("STAFF_BOOTSTRAP_ADMIN", "Owner@Example.com")
 	t.Setenv("STAFF_BOOTSTRAP_PASSWORD", "a long temporary password")
 	t.Setenv("STAFF_DATABASE_URL", "postgres://worker@db/lottery")
@@ -215,7 +215,7 @@ func TestAPI_StaffSignInIsPasswordWithGoogleAppleOrTheLocalTestRealmOptional(t *
 		t.Fatal(err)
 	}
 	s := cfg.API.Staff
-	if !s.Enabled || s.GoogleClientID != "123-abc.apps.googleusercontent.com" || s.AppleClientID != "ke.tajirika.backoffice" ||
+	if !s.Enabled || s.GoogleClientID != "123-abc.apps.googleusercontent.com" || s.AppleClientID != "ke.co.fourdraws.backoffice" ||
 		s.BootstrapAdmin != "owner@example.com" || s.BootstrapPassword != "a long temporary password" || s.DatabaseURL != "postgres://worker@db/lottery" || s.Dev != nil {
 		t.Fatalf("staff: %+v", s)
 	}
@@ -286,8 +286,8 @@ func TestAPI_AttestationModeNeedsItsVerifiers(t *testing.T) {
 	if _, err := config.Load(); err == nil || !strings.Contains(err.Error(), "APP_ATTEST_APP_ID") {
 		t.Fatalf("require without verifiers accepted: %v", err)
 	}
-	t.Setenv("APP_ATTEST_APP_ID", "ABCDE12345.ke.tajirika.lottery_mobile")
-	t.Setenv("PLAY_INTEGRITY_PACKAGE", "ke.tajirika.lottery_mobile")
+	t.Setenv("APP_ATTEST_APP_ID", "ABCDE12345.ke.co.fourdraws.app")
+	t.Setenv("PLAY_INTEGRITY_PACKAGE", "ke.co.fourdraws.app")
 	t.Setenv("PLAY_INTEGRITY_SERVICE_ACCOUNT", base64.StdEncoding.EncodeToString([]byte(`{"client_email":"v@x.iam.gserviceaccount.com"}`)))
 	t.Setenv("PLAY_INTEGRITY_CERT_DIGESTS", "abc,def")
 	cfg, err = config.Load()
@@ -312,16 +312,16 @@ func TestAPI_PlayerSignInProvidersAreOptionalAndTheirIdsAreTheAudiences(t *testi
 	}
 	t.Setenv("GOOGLE_CLIENT_ID", "web.apps.googleusercontent.com")
 	t.Setenv("GOOGLE_IOS_CLIENT_ID", "ios.apps.googleusercontent.com")
-	t.Setenv("APPLE_CLIENT_ID", "ke.tajirika.web")
-	t.Setenv("APPLE_BUNDLE_ID", "ke.tajirika.lotteryMobile")
-	t.Setenv("ANDROID_PACKAGE", "ke.tajirika.lottery_mobile")
+	t.Setenv("APPLE_CLIENT_ID", "ke.co.fourdraws.web")
+	t.Setenv("APPLE_BUNDLE_ID", "ke.co.fourdraws.app")
+	t.Setenv("ANDROID_PACKAGE", "ke.co.fourdraws.app")
 	cfg, err = config.Load()
 	if err != nil {
 		t.Fatal(err)
 	}
 	si := cfg.API.SignIn
 	if !si.Google() || !si.Apple() || strings.Join(si.GoogleAudiences(), ",") != "web.apps.googleusercontent.com,ios.apps.googleusercontent.com" ||
-		strings.Join(si.AppleAudiences(), ",") != "ke.tajirika.web,ke.tajirika.lotteryMobile" || si.AndroidPackage != "ke.tajirika.lottery_mobile" {
+		strings.Join(si.AppleAudiences(), ",") != "ke.co.fourdraws.web,ke.co.fourdraws.app" || si.AndroidPackage != "ke.co.fourdraws.app" {
 		t.Fatalf("sign-in: %+v", si)
 	}
 	// Apple on iOS alone: the bundle id without a Services ID

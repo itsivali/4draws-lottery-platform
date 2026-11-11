@@ -1,6 +1,6 @@
 # iOS release (S7)
 
-How the App Store build of the Tajirika app is set up. Archiving, signing and TestFlight need the owner's Apple
+How the App Store build of the 4draws app is set up. Archiving, signing and TestFlight need the owner's Apple
 Developer account and a Mac; they cannot run on Linux. The store listing, age rating and the gambling review notes are
 S10.
 
@@ -8,8 +8,8 @@ S10.
 
 | Item | Value | Where |
 |---|---|---|
-| Bundle id | `ke.tajirika.lotteryMobile` (never changes once the app exists in App Store Connect) | `Runner.xcodeproj` |
-| Display and bundle name | Tajirika | `Runner/Info.plist` |
+| Bundle id | `ke.co.fourdraws.app` (never changes once the app exists in App Store Connect) | `Runner.xcodeproj` |
+| Display and bundle name | 4draws | `Runner/Info.plist` |
 | Devices | iPhone only (`TARGETED_DEVICE_FAMILY = 1`): no iPad screenshots or layout to review | `Runner.xcodeproj` |
 | Orientation | portrait only, as the app is designed | `Info.plist` |
 | Deployment target | iOS 15.0 | `Runner.xcodeproj` |
@@ -26,14 +26,14 @@ The Apple team id and the Google iOS client are the owner's. They are kept out o
 
 - **`DEVELOPMENT_TEAM`:** developer.apple.com → Membership details → Team ID.
 - **`GOOGLE_REVERSED_CLIENT_ID`:** the *reversed* `GOOGLE_IOS_CLIENT_ID` (`com.googleusercontent.apps.…`), from
-  Google Cloud console → Credentials → "Tajirika iOS" (`docs/runbooks/player-sign-in.md`).
+  Google Cloud console → Credentials → "4draws iOS" (`docs/runbooks/player-sign-in.md`).
 
 Without it the app still builds: signing has no team (archives fail until it is set), and the Google URL scheme is a
 placeholder nothing answers, so Google sign-in on iOS stays off. Phone sign-in and Sign in with Apple are unaffected.
 
 ## Releasing (needs the Apple account)
 
-1. Apple Developer: the App ID `ke.tajirika.lotteryMobile` with Sign in with Apple
+1. Apple Developer: the App ID `ke.co.fourdraws.app` with Sign in with Apple
    (`docs/runbooks/player-sign-in.md`).
 2. App Store Connect: create the app with that bundle id.
 3. On a Mac with Xcode and `Local.xcconfig` in place:

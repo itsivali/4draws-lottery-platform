@@ -1,4 +1,4 @@
-package ke.tajirika.lottery_mobile
+package ke.co.fourdraws.app
 
 import io.flutter.embedding.android.FlutterActivity
 

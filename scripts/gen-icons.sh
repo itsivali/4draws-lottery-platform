@@ -4,17 +4,18 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 LOGO=design-system/lottery-platform/logo
-MARK=$LOGO/tajirika-mark.svg          # rounded tile: favicons, web icons, Android legacy launcher icons
-SQUARE=$LOGO/tajirika-mark-square.svg # full-bleed: iOS (rounds its own corners), maskable web icons
+MARK=$LOGO/4draws-mark.svg          # rounded tile: favicons, web icons, Android legacy launcher icons
+SQUARE=$LOGO/4draws-mark-square.svg # full-bleed: iOS (rounds its own corners), maskable web icons
 png() { rsvg-convert -w "$2" -h "$2" "$1" -o "$3"; }
 
 # the share image (Open Graph / Twitter card, 1200x630) for the web app's links
-rsvg-convert -w 1200 -h 630 "$LOGO/tajirika-og.svg" -o apps/mobile/web/og-image.png
+rsvg-convert -w 1200 -h 630 "$LOGO/4draws-og.svg" -o apps/mobile/web/og-image.png
 
 # Player web app (Flutter web)
 W=apps/mobile/web
 png "$MARK" 48 "$W/favicon.png"
 cp "$MARK" "$W/favicon.svg"
+magick "$MARK" -background none -define icon:auto-resize=48,32,16 "$W/favicon.ico"
 png "$MARK" 192 "$W/icons/Icon-192.png"
 png "$MARK" 512 "$W/icons/Icon-512.png"
 png "$SQUARE" 192 "$W/icons/Icon-maskable-192.png"
@@ -41,7 +42,7 @@ d = sys.argv[1]
 for img in json.load(open(f"{d}/Contents.json"))["images"]:
     pt = float(img["size"].split("x")[0]); scale = int(img["scale"].rstrip("x"))
     px = int(round(pt * scale))
-    subprocess.run(["rsvg-convert", "-w", str(px), "-h", str(px), "-b", "#C23412",
-                    "design-system/lottery-platform/logo/tajirika-mark-square.svg", "-o", f"{d}/{img['filename']}"], check=True)
+    subprocess.run(["rsvg-convert", "-w", str(px), "-h", str(px), "-b", "#4338CA",
+                    "design-system/lottery-platform/logo/4draws-mark-square.svg", "-o", f"{d}/{img['filename']}"], check=True)
 PY
 echo "icons rendered"

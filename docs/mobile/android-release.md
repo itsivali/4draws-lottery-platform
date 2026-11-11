@@ -1,13 +1,13 @@
 # Android release (S6)
 
-How the store build of the Tajirika app is made and signed. Store listing, the gambling-app application and the data
+How the store build of the 4draws app is made and signed. Store listing, the gambling-app application and the data
 safety form are S10 (`docs/release/store-submission-checklist.md`, to come).
 
 ## What a release build is
 
 | Item | Value | Where |
 |---|---|---|
-| Application id | `ke.tajirika.lottery_mobile` (never changes once published) | `android/app/build.gradle.kts` |
+| Application id | `ke.co.fourdraws.app` (never changes once published) | `android/app/build.gradle.kts` |
 | Target / compile SDK | 36, pinned (Play requires 36 for new apps and updates; recheck at each submission) | same |
 | Minimum SDK | 24 (Flutter 3.47.7's default) | same |
 | Version code | the `mobile` workflow's run number (only grows) | `.github/workflows/mobile.yml` |
@@ -33,7 +33,7 @@ keytool -genkeypair -v -keystore upload.jks -alias upload -keyalg RSA -keysize 4
 
 Keep `upload.jks` and both passwords in the owner's password manager, with a second copy offline. Then:
 
-1. **Play Console.** Create the app (`ke.tajirika.lottery_mobile`) and enrol in Play App Signing. Upload the first
+1. **Play Console.** Create the app (`ke.co.fourdraws.app`) and enrol in Play App Signing. Upload the first
    bundle signed with this key; Play registers it as the upload key.
 2. **GitHub secrets** (`docs/ci-secrets.md`):
    ```sh

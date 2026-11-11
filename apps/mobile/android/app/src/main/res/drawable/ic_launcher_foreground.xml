@@ -1,10 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The T and the wheel's pointer: the 64-unit mark placed in the 108 dp canvas (inside the 66 dp safe zone). -->
+<!-- The 4 in its ring of four segments: the 64-unit mark placed in the 108 dp canvas (inside the 66 dp safe zone). -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
     <group android:translateX="22" android:translateY="22">
-        <path android:fillColor="#FFFFFFFF" android:pathData="M18,17h28a3,3 0 0 1 3,3v4a3,3 0 0 1 -3,3h-28a3,3 0 0 1 -3,-3v-4a3,3 0 0 1 3,-3z" />
-        <path android:fillColor="#FFFFFFFF" android:pathData="M30,17h4a3,3 0 0 1 3,3v27a3,3 0 0 1 -3,3h-4a3,3 0 0 1 -3,-3v-27a3,3 0 0 1 3,-3z" />
-        <path android:fillColor="#FFF2C14E" android:pathData="M32,7.5L36.6,14L27.4,14Z" />
+        <path android:pathData="M36.68 9.99 A22.5 22.5 0 0 1 54.01 27.32" android:strokeColor="#FFFFC53D" android:strokeWidth="4.5" android:strokeLineCap="round" />
+        <path android:pathData="M54.01 36.68 A22.5 22.5 0 0 1 36.68 54.01" android:strokeColor="#EBFFFFFF" android:strokeWidth="4.5" android:strokeLineCap="round" />
+        <path android:pathData="M27.32 54.01 A22.5 22.5 0 0 1 9.99 36.68" android:strokeColor="#EBFFFFFF" android:strokeWidth="4.5" android:strokeLineCap="round" />
+        <path android:pathData="M9.99 27.32 A22.5 22.5 0 0 1 27.32 9.99" android:strokeColor="#EBFFFFFF" android:strokeWidth="4.5" android:strokeLineCap="round" />
+        <path android:pathData="M36.5 44.5 V19.5 L22 38 H43" android:strokeColor="#FFFFFFFF" android:strokeWidth="5.5" android:strokeLineCap="round" android:strokeLineJoin="round" />
     </group>
 </vector>

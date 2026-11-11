@@ -93,7 +93,7 @@ func loadSignIn() (SignIn, error) {
 		return SignIn{}, errors.New("config: GOOGLE_IOS_CLIENT_ID needs GOOGLE_CLIENT_ID (the web client every app names as its server client)")
 	}
 	if s.AndroidPackage != "" && !androidPackageRe.MatchString(s.AndroidPackage) {
-		return SignIn{}, errors.New("config: ANDROID_PACKAGE must be an Android application id such as ke.tajirika.lottery_mobile")
+		return SignIn{}, errors.New("config: ANDROID_PACKAGE must be an Android application id such as ke.co.fourdraws.app")
 	}
 	for _, v := range []struct{ k, v string }{{"GOOGLE_CLIENT_ID", s.GoogleClientID}, {"GOOGLE_IOS_CLIENT_ID", s.GoogleIOSClientID}, {"APPLE_CLIENT_ID", s.AppleClientID}, {"APPLE_BUNDLE_ID", s.AppleBundleID}} {
 		if strings.ContainsAny(v.v, " \t\n,") {

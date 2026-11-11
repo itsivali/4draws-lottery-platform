@@ -1,13 +1,15 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../../app/theme/tokens.dart';
 
-/// The brand: the Tajirika mark (a sunset tile with a white T and the wheel's gold pointer) and the wordmark. Layouts
+/// The brand: the 4draws mark (an indigo tile with a white 4 in a ring of four segments) and the wordmark. Layouts
 /// only give it a height.
 class BrandMark extends StatelessWidget {
   const BrandMark({super.key, this.height = 28, this.showWordmark = true, this.wordmarkColor});
 
-  static const name = 'Tajirika';
+  static const name = '4draws';
 
   final double height;
   final bool showWordmark;
@@ -24,7 +26,7 @@ class BrandMark extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          CustomPaint(size: Size.square(height), painter: _MarkPainter(c)),
+          CustomPaint(size: Size.square(height), painter: const _MarkPainter()),
           if (showWordmark) ...[
             SizedBox(width: height * 0.32),
             Text(
@@ -44,44 +46,55 @@ class BrandMark extends StatelessWidget {
   }
 }
 
-/// The Tajirika mark (design-system/lottery-platform/logo/tajirika-mark.svg): a sunset tile carrying a white T, with
-/// the wheel's pointer above it in decorative gold. Drawn in a 64-unit box so it matches the icons exactly.
+/// The 4draws mark (design-system/lottery-platform/logo/4draws-mark.svg): an indigo tile carrying a white 4 inside a
+/// ring of four segments (the four draws), the top-right one gold. Drawn in a 64-unit box so it matches the icons
+/// exactly; its colours are the logo's own, whatever the theme.
 class _MarkPainter extends CustomPainter {
-  _MarkPainter(this.c);
+  const _MarkPainter();
 
-  final AppColors c;
+  static const _tile = [Color(0xFF5B4FE9), Color(0xFF4338CA), Color(0xFF2A2385)];
+  static const _gold = Color(0xFFFFC53D); // decorative, never text
 
   @override
   void paint(Canvas canvas, Size size) {
     final u = size.width / 64;
-    final tile = RRect.fromRectAndRadius(Offset.zero & size, Radius.circular(16 * u));
+    final box = Offset.zero & size;
     canvas.drawRRect(
-      tile,
+      RRect.fromRectAndRadius(box, Radius.circular(16 * u)),
       Paint()
-        ..shader = LinearGradient(
+        ..shader = const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [c.heroStart, c.primary, c.heroEnd],
-          stops: const [0, 0.62, 1],
-        ).createShader(Offset.zero & size),
+          colors: _tile,
+          stops: [0, 0.55, 1],
+        ).createShader(box),
     );
-    final white = Paint()..color = Colors.white;
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(Rect.fromLTWH(15 * u, 17 * u, 34 * u, 10 * u), Radius.circular(3 * u)),
-      white,
+    final ring = Rect.fromCircle(center: box.center, radius: 22.5 * u);
+    final stroke = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeWidth = 4.5 * u;
+    const gap = 24 * math.pi / 180;
+    for (var k = 0; k < 4; k++) {
+      stroke.color = k == 0 ? _gold : Colors.white.withValues(alpha: 0.92);
+      canvas.drawArc(ring, -math.pi / 2 + gap / 2 + k * math.pi / 2, math.pi / 2 - gap, false, stroke);
+    }
+    final four = Path()
+      ..moveTo(36.5 * u, 44.5 * u)
+      ..lineTo(36.5 * u, 19.5 * u)
+      ..lineTo(22 * u, 38 * u)
+      ..lineTo(43 * u, 38 * u);
+    canvas.drawPath(
+      four,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round
+        ..strokeWidth = 5.5 * u
+        ..color = Colors.white,
     );
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(Rect.fromLTWH(27 * u, 17 * u, 10 * u, 33 * u), Radius.circular(3 * u)),
-      white,
-    );
-    final pointer = Path()
-      ..moveTo(32 * u, 7.5 * u)
-      ..lineTo(36.6 * u, 14 * u)
-      ..lineTo(27.4 * u, 14 * u)
-      ..close();
-    canvas.drawPath(pointer, Paint()..color = const Color(0xFFF2C14E)); // decorative gold, never text
   }
 
   @override
-  bool shouldRepaint(_MarkPainter old) => old.c != c;
+  bool shouldRepaint(_MarkPainter old) => false;
 }

@@ -1,7 +1,7 @@
 # Compliance gap analysis (baseline, 2026-11-07)
 
 This is a technical analysis, not legal advice. Which obligations apply depends on the licence category that
-Tajirika obtains, which is undecided. Requirements and their sources are in `requirements-matrix.md`; the evidence
+4draws obtains, which is undecided. Requirements and their sources are in `requirements-matrix.md`; the evidence
 status of each is in `evidence-register.md`.
 
 ## 1. Operating state

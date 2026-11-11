@@ -3,4 +3,4 @@
 
 // The reversed iOS OAuth client id (com.googleusercontent.apps.…) Google sign-in returns to. This placeholder is a
 // valid URL scheme that nothing answers, so Google sign-in on iOS stays off until Local.xcconfig sets the real one.
-GOOGLE_REVERSED_CLIENT_ID = ke.tajirika.lotterymobile.google-not-configured
+GOOGLE_REVERSED_CLIENT_ID = ke.co.fourdraws.app.google-not-configured

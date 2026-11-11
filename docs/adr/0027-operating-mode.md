@@ -6,7 +6,7 @@ Date: 2026-11-07
 ## Context
 Money moved whenever Daraja credentials were configured: top-ups and payouts started with the credentials
 (`internal/platform/config/payments.go`), and plays had no switch at all. Nothing stopped production credentials from
-taking real stakes before Tajirika holds a licence; running an unlicensed gambling platform is an offence (LN 112/2026
+taking real stakes before 4draws holds a licence; running an unlicensed gambling platform is an offence (LN 112/2026
 reg 102). Nor could an operator stop money moving in an emergency without redeploying with credentials removed. The
 owner decided on 2026-11-07 that the service runs in one of three modes, that the deployed demo may keep running on the
 Daraja sandbox while licensing is pending, and that real-money operation needs recorded licence evidence and two

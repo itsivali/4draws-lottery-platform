@@ -31,9 +31,9 @@ depth, metal and motion (the *hero surfaces*, §5), and even there they only eve
   "You're due".
 - No manufactured urgency: no countdown pressure, no scarcity, no near-miss staging, no confetti for ordinary plays.
 
-**Mark and wordmark:** the Tajirika mark is a sunset tile (coral into violet, 25% corner radius) carrying a white T,
-with the wheel's pointer above it in decorative gold (`logo/tajirika-mark.svg`; `BrandMark` draws it, `scripts/
-gen-icons.sh` renders every app icon and favicon from it). The wordmark is "Tajirika" in the heading face, semibold.
+**Mark and wordmark:** the 4draws mark is a sunset tile (coral into violet, 25% corner radius) carrying a white T,
+with the wheel's pointer above it in decorative gold (`logo/4draws-mark.svg`; `BrandMark` draws it, `scripts/
+gen-icons.sh` renders every app icon and favicon from it). The wordmark is "4draws" in the heading face, semibold.
 Layouts only give the mark a height.
 
 ## 2. Colour

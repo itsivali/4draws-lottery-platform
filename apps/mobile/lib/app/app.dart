@@ -80,7 +80,7 @@ class _LotteryAppState extends ConsumerState<LotteryApp> with WidgetsBindingObse
 
   @override
   Widget build(BuildContext context) => MaterialApp.router(
-    title: 'Tajirika',
+    title: '4draws',
     debugShowCheckedModeBanner: false,
     theme: buildTheme(),
     // one moving fluid under every page (depth.dart)

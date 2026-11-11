@@ -54,13 +54,13 @@ func TestEmail_SubjectAndBodySayWhatWhereAndHow(t *testing.T) {
 		FirstSeenAt: first, LastSeenAt: first.Add(time.Hour), Occurrences: 13}
 	e := alerts.Email{BackOfficeURL: "https://backoffice.example.com/"}
 	m := alerts.Message{Event: "raised", Alert: a, Text: alerts.Text("raised", a)}
-	if got := e.Subject(m); got != "[Tajirika] PAGE topup.unconfirmed: A top-up is not confirmed" {
+	if got := e.Subject(m); got != "[4draws] PAGE topup.unconfirmed: A top-up is not confirmed" {
 		t.Fatalf("subject %q", got)
 	}
-	if got := e.Subject(alerts.Message{Event: "escalated", Alert: a}); !strings.HasPrefix(got, "[Tajirika] ESCALATED PAGE ") {
+	if got := e.Subject(alerts.Message{Event: "escalated", Alert: a}); !strings.HasPrefix(got, "[4draws] ESCALATED PAGE ") {
 		t.Fatalf("escalated subject %q", got)
 	}
-	if got := e.Subject(alerts.Message{Event: "resolved", Alert: a}); !strings.HasPrefix(got, "[Tajirika] RESOLVED PAGE ") {
+	if got := e.Subject(alerts.Message{Event: "resolved", Alert: a}); !strings.HasPrefix(got, "[4draws] RESOLVED PAGE ") {
 		t.Fatalf("resolved subject %q", got)
 	}
 	body := e.Body(m)

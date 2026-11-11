@@ -7,8 +7,8 @@ Read from `apps/mobile` on `main` at `9e11bf4`. Flutter is pinned to 3.47.7 (`mi
 
 | Item | Current | Evidence | Status |
 |---|---|---|---|
-| applicationId / namespace | `ke.tajirika.lottery_mobile` | `android/app/build.gradle.kts:8,19` | OK; template TODOs removed (S6) |
-| Label | Tajirika | `src/main/AndroidManifest.xml:5` | OK |
+| applicationId / namespace | `ke.co.fourdraws.app` | `android/app/build.gradle.kts:8,19` | OK; template TODOs removed (S6) |
+| Label | 4draws | `src/main/AndroidManifest.xml:5` | OK |
 | min / target / compile SDK | `flutter.*` defaults | `build.gradle.kts:9,10,22,23` | Fixed (S6): compile and target 36 pinned, min 24 (Flutter 3.47.7) |
 | AGP / Gradle / Kotlin / JVM | 9.1.0 / 9.3.1 / 2.4.0 / 17 | `settings.gradle.kts:22-23`, `gradle-wrapper.properties:5` | OK |
 | versionCode | `flutter.versionCode` from `pubspec.yaml` `1.0.0+1`; CI never passes `--build-number` | `build.gradle.kts:28-29` | Fixed (S6): CI passes the run number as `--build-number`, the tag as `--build-name` |
@@ -23,7 +23,7 @@ Read from `apps/mobile` on `main` at `9e11bf4`. Flutter is pinned to 3.47.7 (`mi
 
 | Item | Current | Evidence | Status |
 |---|---|---|---|
-| Bundle id | `ke.tajirika.lotteryMobile` | `Runner.xcodeproj/project.pbxproj:387` | OK (differs in style from Android; harmless) |
+| Bundle id | `ke.co.fourdraws.app` | `Runner.xcodeproj/project.pbxproj:387` | OK (differs in style from Android; harmless) |
 | Deployment target | 15.0 | `project.pbxproj:363` | OK |
 | Device family | iPhone and iPad (`1,2`) | `project.pbxproj:368` | Fixed (S7): iPhone only (`1`) |
 | Team / signing | `DEVELOPMENT_TEAM` from the uncommitted `Flutter/Local.xcconfig` | `Flutter/*.xcconfig` | S7: wired; the team id is the owner's (Apple account) |
@@ -32,7 +32,7 @@ Read from `apps/mobile` on `main` at `9e11bf4`. Flutter is pinned to 3.47.7 (`mi
 | Privacy manifest | `Runner/PrivacyInfo.xcprivacy`, bundled | `docs/mobile/privacy-manifests.md` | Fixed (S7); draft for counsel |
 | Export compliance | `ITSAppUsesNonExemptEncryption = false` | `Info.plist` | Fixed (S7) |
 | Orientation | portrait only | `Info.plist` | Fixed (S7) |
-| `CFBundleName` | Tajirika | `Info.plist` | Fixed (S7) |
+| `CFBundleName` | 4draws | `Info.plist` | Fixed (S7) |
 | CI | `flutter build ios --no-codesign` on tags, with build number and version | `mobile.yml` | Archive and TestFlight wait for the Apple account |
 
 ## Store prerequisites

@@ -66,7 +66,7 @@ class PageScaffold extends StatelessWidget {
       ],
     );
     return Title(
-      title: '$title · Tajirika',
+      title: '$title · 4draws',
       color: context.colors.primary,
       child: Scaffold(
         appBar: AppBar(

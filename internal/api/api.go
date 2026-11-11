@@ -193,7 +193,7 @@ func (h *handlers) geo(w http.ResponseWriter, r *http.Request, userID, action st
 }
 
 func outsideKenya(w http.ResponseWriter) {
-	httpx.WriteProblem(w, http.StatusUnavailableForLegalReasons, "outside-kenya", "Tajirika is only available in Kenya", "")
+	httpx.WriteProblem(w, http.StatusUnavailableForLegalReasons, "outside-kenya", "4draws is only available in Kenya", "")
 }
 
 func (h *handlers) clientIP(r *http.Request) string {

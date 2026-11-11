@@ -151,7 +151,7 @@ class FakeBackend {
   /// What GET /v1/auth/providers answers: Google and Apple on offer, or {} for neither (ADR 0020).
   Map<String, Object?> providers = {
     'google': {'client_id': 'web-client.apps.googleusercontent.com'},
-    'apple': {'client_id': 'ke.tajirika.web'},
+    'apple': {'client_id': 'ke.co.fourdraws.web'},
   };
 
   /// The Google or Apple ID tokens that already sign in to an account; others get 409 sso-not-linked.

@@ -81,7 +81,7 @@ func TestSTKPush_SendsASignedPaybillRequestAndReturnsTheCheckoutID(t *testing.T)
 	f := &fakeDaraja{push: func(w http.ResponseWriter, b map[string]any) { got = b; accepted(w, b) }}
 	c, _ := newClient(t, f)
 
-	res, err := c.STKPush(context.Background(), daraja.STKPushRequest{MSISDN: "254712345678", AmountKES: 150, AccountRef: "Tajirika", Description: "Tajirika"})
+	res, err := c.STKPush(context.Background(), daraja.STKPushRequest{MSISDN: "254712345678", AmountKES: 150, AccountRef: "4draws", Description: "4draws"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -93,7 +93,7 @@ func TestSTKPush_SendsASignedPaybillRequestAndReturnsTheCheckoutID(t *testing.T)
 		"BusinessShortCode": "174379", "Password": wantPassword, "Timestamp": "20261022093005",
 		"TransactionType": "CustomerPayBillOnline", "Amount": float64(150), "PartyA": "254712345678", "PartyB": "174379",
 		"PhoneNumber": "254712345678", "CallBackURL": "https://api.example/v1/payments/mpesa/stk/tok",
-		"AccountReference": "Tajirika", "TransactionDesc": "Tajirika",
+		"AccountReference": "4draws", "TransactionDesc": "4draws",
 	}
 	for k, v := range want {
 		if got[k] != v {

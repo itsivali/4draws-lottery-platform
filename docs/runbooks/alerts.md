@@ -74,7 +74,7 @@ condition clears (an escalated alert that was acknowledged as a warning is sent 
 
 - **Webhook** (`ALERT_WEBHOOK_URL`, a secret): each event as JSON `{event, text, alert}`; `event` is `raised`,
   `escalated`, `reminder` or `resolved`.
-- **Email** (`ALERT_EMAILS`, comma-separated addresses, not secret): subject `[Tajirika] PAGE kind: summary`
+- **Email** (`ALERT_EMAILS`, comma-separated addresses, not secret): subject `[4draws] PAGE kind: summary`
   (`ESCALATED`, `REMINDER` or `RESOLVED` in front when it is not the first notice), a plain-text body with the
   details and the link `BACKOFFICE_URL/alerts?alert=<id>`. Sent through `SMTP_HOST` like the other staff email; with
   no SMTP the email is only logged.

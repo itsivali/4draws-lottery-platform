@@ -28,7 +28,15 @@ Read this first at the start of every session.
   free, Oregon) builds from `main` (repository reconnected by the owner on 2026-10-24); migrations at version 17;
   sandbox top-ups and paybill on (`payments=true paybill=true`, shortcode 600992); client address from
   `CF-Connecting-IP`. Free Postgres `lottery-db` (PG 18) and Key Value `lottery-cache`.
-- **Domain and plans (2026-10-29):** the product is **Tajirika** and lives at `tajirika.co.ke` (registered with
+- **Renamed to 4draws (2026-11-11, owner):** the product was Tajirika until now. The name, the logo (a 4 in a ring of
+  four segments, one gold, on indigo: `design-system/lottery-platform/logo`), every app icon, the M-Pesa prompt's
+  account reference and description, the mail subjects and the app ids (`ke.co.fourdraws.app` on Android and iOS,
+  `ke.co.fourdraws.web` / `.backoffice` for Apple sign-in; a package segment cannot start with a digit) are 4draws.
+  The domain `4draws.co.ke` was registered the same day and has no DNS yet: the sites stay on `tajirika.co.ke` until
+  the cutover (its own change: Render custom domains, DNS at Safaricom, `render.yaml` URLs, CORS, canonical and
+  sitemap addresses, the Daraja callback and paybill URLs registered again). The public fairness repository keeps its
+  name (`itsivali/tajirika-fairness`) until the owner renames it.
+- **Domain and plans (2026-10-29):** the product (then Tajirika) lives at `tajirika.co.ke` (registered with
   Safaricom, DNS there): https://tajirika.co.ke (web app; www redirects), https://api.tajirika.co.ke and
   https://backoffice.tajirika.co.ke, with Render certificates; the onrender.com addresses keep working. `lottery-api`
   runs on the paid `0.5c-512mb` plan and `lottery-db` on `0.1c-256mb` (recreated empty on 2026-10-28); the free-database
@@ -102,7 +110,7 @@ Read this first at the start of every session.
   Tag builds need the owner's upload key in GitHub secrets (`docs/mobile/android-release.md`).
 
 - **iOS release readiness (S7, 2026-11-11):** privacy manifest bundled (draft for counsel), export flag, iPhone-only
-  portrait, bundle name Tajirika, Google URL scheme; the Apple team id and Google iOS client come from an uncommitted
+  portrait, bundle name 4draws, Google URL scheme; the Apple team id and Google iOS client come from an uncommitted
   `Local.xcconfig` (`docs/mobile/ios-release.md`). Archiving and TestFlight wait for the owner's Apple account.
 
 - **Policy pages and in-app links (S8, 2026-11-11):** `tajirika.co.ke/privacy/`, `/terms/`, `/responsible-gambling/`

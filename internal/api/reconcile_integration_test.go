@@ -128,8 +128,8 @@ func TestAPI_APlayerGivesTheReceiptForAnUncreditedTopUpAndStaffReconcileIt(t *te
 
 	// the statement: the credited receipt is recognised, an unknown one is not; nothing is credited by matching
 	csv := "Receipt No.,Completion Time,Details,Transaction Status,Paid In,Withdrawn,Other Party Info,A/C No.\n" +
-		"QJ7XK2M9PL,2026-10-21 15:00:00,Pay Bill,Completed,50.00,,254712***001 - AMINA OTIENO,Tajirika\n" +
-		"XY12345678,2026-10-21 15:05:00,Pay Bill,Completed,999.00,,254700***000 - NOBODY,Tajirika\n"
+		"QJ7XK2M9PL,2026-10-21 15:00:00,Pay Bill,Completed,50.00,,254712***001 - AMINA OTIENO,4draws\n" +
+		"XY12345678,2026-10-21 15:05:00,Pay Bill,Completed,999.00,,254700***000 - NOBODY,4draws\n"
 	m := e.do(t, http.MethodPost, "/v1/staff/payments/statement/match", tok, csv)
 	rep, _ := m.Body["report"].(map[string]any)
 	counts, _ := rep["counts"].(map[string]any)

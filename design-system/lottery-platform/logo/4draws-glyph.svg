@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="4draws">
+  <!-- four draws (daily, weekly, monthly, quarterly) as four segments of a wheel; the gold one is being drawn -->
+  <g fill="none" stroke-linecap="round" stroke-width="4.5">
+    <path d="M36.68 9.99 A22.5 22.5 0 0 1 54.01 27.32" stroke="#FFC53D"/>
+    <path d="M54.01 36.68 A22.5 22.5 0 0 1 36.68 54.01" stroke="#FFFFFF" stroke-opacity="0.92"/>
+    <path d="M27.32 54.01 A22.5 22.5 0 0 1 9.99 36.68" stroke="#FFFFFF" stroke-opacity="0.92"/>
+    <path d="M9.99 27.32 A22.5 22.5 0 0 1 27.32 9.99" stroke="#FFFFFF" stroke-opacity="0.92"/>
+  </g>
+  <!-- the 4 -->
+  <path d="M36.5 44.5 V19.5 L22 38 H43" fill="none" stroke="#FFFFFF" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

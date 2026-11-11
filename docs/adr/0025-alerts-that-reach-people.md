@@ -34,7 +34,7 @@ them see, filter and understand every alert.
   discarded jobs) are looked for over the last 24 hours, so such an alert clears a day after the last occurrence; the
   pages were sent and reminded meanwhile, and the System and Payouts pages keep the record.
 - **Channels fan out.** `Email` sends each event to `ALERT_EMAILS` through the SMTP sender the platform already uses
-  for staff email, with the subject `[Tajirika] PAGE kind: summary`, the details as `key: value` lines and the link
+  for staff email, with the subject `[4draws] PAGE kind: summary`, the details as `key: value` lines and the link
   `BACKOFFICE_URL/alerts?alert=<id>`. `Multi` sends to webhook and email; a channel that fails is logged and does not
   stop the others, and the event is retried at the next watch only when every channel failed (retrying after a
   partial failure would repeat the notice on the channel that worked). With no channel the log remains, as before.

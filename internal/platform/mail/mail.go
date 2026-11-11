@@ -45,7 +45,7 @@ type SMTP struct {
 	Port     int
 	Username string
 	Password string
-	// From is the sender address ("Tajirika <noreply@example.com>" or a bare address).
+	// From is the sender address ("4draws <noreply@example.com>" or a bare address).
 	From string
 	// Timeout bounds the whole exchange (default 20 s).
 	Timeout time.Duration

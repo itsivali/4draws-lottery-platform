@@ -11,17 +11,17 @@ The back office's own Google and Apple sign-in (staff) is a separate set of clie
 
 Google Cloud console → APIs & Services. One project (it may be the back office's).
 
-1. **OAuth consent screen:** External; app name Tajirika, support email, authorised domain `tajirika.co.ke`, the
+1. **OAuth consent screen:** External; app name 4draws, support email, authorised domain `tajirika.co.ke`, the
    privacy policy address. Scopes: only the default `openid`, `email`, `profile`. **Publish** it: in testing, only
    listed test users can sign in. (Non-sensitive scopes need no verification.)
 2. **Credentials → Create OAuth client ID**, three times:
-   - **Web application** "Tajirika player web": authorised JavaScript origins `https://tajirika.co.ke`,
+   - **Web application** "4draws player web": authorised JavaScript origins `https://tajirika.co.ke`,
      `https://www.tajirika.co.ke` and `http://localhost:8088` (local web app). No redirect URI (popup). Its client id
      is `GOOGLE_CLIENT_ID`. The phone apps name it too, as the server the token is for.
-   - **Android** "Tajirika Android": package `ke.tajirika.lottery_mobile` and the SHA-1 of every signing certificate
+   - **Android** "4draws Android": package `ke.co.fourdraws.app` and the SHA-1 of every signing certificate
      (the debug keystore, the upload key and Play App Signing's key, from Play Console → App integrity). No setting
      holds this id; it exists so Google lets the app sign in.
-   - **iOS** "Tajirika iOS": bundle `ke.tajirika.lotteryMobile`. Its client id is `GOOGLE_IOS_CLIENT_ID`, and its
+   - **iOS** "4draws iOS": bundle `ke.co.fourdraws.app`. Its client id is `GOOGLE_IOS_CLIENT_ID`, and its
      *reversed* form (`com.googleusercontent.apps.…`) goes into `apps/mobile/ios/Runner/Info.plist` as a URL scheme
      (`CFBundleURLTypes` → `CFBundleURLSchemes`), so Google can return to the app.
 
@@ -29,9 +29,9 @@ Google Cloud console → APIs & Services. One project (it may be the back office
 
 Apple Developer → Certificates, Identifiers & Profiles → Identifiers.
 
-1. **App ID** `ke.tajirika.lotteryMobile` with the *Sign in with Apple* capability (the app's entitlements file,
+1. **App ID** `ke.co.fourdraws.app` with the *Sign in with Apple* capability (the app's entitlements file,
    `apps/mobile/ios/Runner/Runner.entitlements`, already asks for it; Xcode's automatic signing adds it to the profile).
-2. **Services ID** `ke.tajirika.web` with *Sign in with Apple* configured: primary App ID the one above; domains
+2. **Services ID** `ke.co.fourdraws.web` with *Sign in with Apple* configured: primary App ID the one above; domains
    `tajirika.co.ke` and `api.tajirika.co.ke`; return URLs `https://tajirika.co.ke/` (the web app's popup) and
    `https://api.tajirika.co.ke/auth/apple/android` (the Android app's way back). Its identifier is `APPLE_CLIENT_ID`;
    the App ID's bundle is `APPLE_BUNDLE_ID`. Apple needs https, so it cannot be tried on localhost.
@@ -44,8 +44,8 @@ API (`render.yaml`, `lottery-api`; set in the dashboard, none is a secret):
 GOOGLE_CLIENT_ID=<web client id>            # Google on; also the phone apps' server client id
 GOOGLE_IOS_CLIENT_ID=<ios client id>        # optional: Google in the iOS app
 APPLE_CLIENT_ID=<services id>               # Apple on the web and Android
-APPLE_BUNDLE_ID=ke.tajirika.lotteryMobile   # Apple in the iOS app (natively)
-ANDROID_PACKAGE=ke.tajirika.lottery_mobile  # where Apple's Android return sends the browser
+APPLE_BUNDLE_ID=ke.co.fourdraws.app   # Apple in the iOS app (natively)
+ANDROID_PACKAGE=ke.co.fourdraws.app  # where Apple's Android return sends the browser
 ```
 
 The apps need no build setting: they ask `GET /v1/auth/providers` at the sign-in screen and offer what it lists. A

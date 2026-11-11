@@ -31,7 +31,7 @@ func (e Email) Notify(ctx context.Context, m Message) error {
 	return e.Sender.Send(ctx, mail.Message{To: e.To, Subject: e.Subject(m), Text: e.Body(m)})
 }
 
-// Subject is "[Tajirika] PAGE kind: summary", with the event in front when it is not the first notice.
+// Subject is "[4draws] PAGE kind: summary", with the event in front when it is not the first notice.
 func (Email) Subject(m Message) string {
 	prefix := ""
 	switch m.Event {
@@ -42,7 +42,7 @@ func (Email) Subject(m Message) string {
 	case "resolved":
 		prefix = "RESOLVED "
 	}
-	return oneLine("[Tajirika] " + prefix + strings.ToUpper(string(m.Alert.Severity)) + " " + m.Alert.Kind + ": " + m.Alert.Summary)
+	return oneLine("[4draws] " + prefix + strings.ToUpper(string(m.Alert.Severity)) + " " + m.Alert.Kind + ": " + m.Alert.Summary)
 }
 
 // Link is the alert's page in the back office.

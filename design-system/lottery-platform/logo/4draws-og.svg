@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630" role="img" aria-label="4draws: a spin for a shilling, paid with M-Pesa">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#5B4FE9"/>
+      <stop offset="0.5" stop-color="#4338CA"/>
+      <stop offset="1" stop-color="#231D6E"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="1" cy="0" r="0.9" gradientUnits="objectBoundingBox">
+      <stop offset="0" stop-color="#FFC53D" stop-opacity="0.28"/>
+      <stop offset="1" stop-color="#FFC53D" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <rect width="1200" height="630" fill="url(#glow)"/>
+  <!-- the mark, large and faint, as the picture -->
+  <g transform="translate(760 95) scale(6.9)" opacity="0.95">
+    <!-- four draws (daily, weekly, monthly, quarterly) as four segments of a wheel; the gold one is being drawn -->
+    <g fill="none" stroke-linecap="round" stroke-width="4.5">
+      <path d="M36.68 9.99 A22.5 22.5 0 0 1 54.01 27.32" stroke="#FFC53D"/>
+      <path d="M54.01 36.68 A22.5 22.5 0 0 1 36.68 54.01" stroke="#FFFFFF" stroke-opacity="0.92"/>
+      <path d="M27.32 54.01 A22.5 22.5 0 0 1 9.99 36.68" stroke="#FFFFFF" stroke-opacity="0.92"/>
+      <path d="M9.99 27.32 A22.5 22.5 0 0 1 27.32 9.99" stroke="#FFFFFF" stroke-opacity="0.92"/>
+    </g>
+    <!-- the 4 -->
+    <path d="M36.5 44.5 V19.5 L22 38 H43" fill="none" stroke="#FFFFFF" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+  <g transform="translate(96 84) scale(1.5)">
+    <!-- four draws (daily, weekly, monthly, quarterly) as four segments of a wheel; the gold one is being drawn -->
+    <g fill="none" stroke-linecap="round" stroke-width="4.5">
+      <path d="M36.68 9.99 A22.5 22.5 0 0 1 54.01 27.32" stroke="#FFC53D"/>
+      <path d="M54.01 36.68 A22.5 22.5 0 0 1 36.68 54.01" stroke="#FFFFFF" stroke-opacity="0.92"/>
+      <path d="M27.32 54.01 A22.5 22.5 0 0 1 9.99 36.68" stroke="#FFFFFF" stroke-opacity="0.92"/>
+      <path d="M9.99 27.32 A22.5 22.5 0 0 1 27.32 9.99" stroke="#FFFFFF" stroke-opacity="0.92"/>
+    </g>
+    <!-- the 4 -->
+    <path d="M36.5 44.5 V19.5 L22 38 H43" fill="none" stroke="#FFFFFF" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+  <text x="204" y="156" font-family="Manrope, 'IBM Plex Sans', Arial, sans-serif" font-size="68" font-weight="800" fill="#FFFFFF">4draws</text>
+  <text x="96" y="330" font-family="Manrope, 'IBM Plex Sans', Arial, sans-serif" font-size="62" font-weight="800" fill="#FFFFFF">A spin for a shilling,</text>
+  <text x="96" y="408" font-family="Manrope, 'IBM Plex Sans', Arial, sans-serif" font-size="62" font-weight="800" fill="#FFFFFF">paid with M-Pesa.</text>
+  <text x="96" y="486" font-family="'IBM Plex Sans', Arial, sans-serif" font-size="27" fill="#DDDBFF">Four draws: daily, weekly, monthly, quarterly.</text>
+  <text x="96" y="526" font-family="'IBM Plex Sans', Arial, sans-serif" font-size="27" fill="#DDDBFF">Fair on the record. Prizes paid to your M-Pesa.</text>
+  <text x="96" y="582" font-family="'IBM Plex Sans', Arial, sans-serif" font-size="23" font-weight="600" fill="#DDDBFF">tajirika.co.ke · Play responsibly · 18+</text>
+</svg>

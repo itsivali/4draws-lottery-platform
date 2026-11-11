@@ -82,9 +82,9 @@ func (m MailReviewNotifier) Link(userID string) string {
 
 func reviewSubject(n ReviewNotice) string {
 	if n.Waiting > 1 {
-		return "Tajirika: " + strconv.FormatInt(n.Waiting, 10) + " identity submissions are waiting for review"
+		return "4draws: " + strconv.FormatInt(n.Waiting, 10) + " identity submissions are waiting for review"
 	}
-	return "Tajirika: an identity submission is waiting for review"
+	return "4draws: an identity submission is waiting for review"
 }
 
 func reviewText(n ReviewNotice, link string) string {

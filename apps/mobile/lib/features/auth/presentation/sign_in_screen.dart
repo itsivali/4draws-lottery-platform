@@ -295,7 +295,7 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
     final heading = _Heading(step: _step, mode: _mode, providerName: _providerToken?.provider);
     final card = _FormCard(child: form);
     return Title(
-      title: '${_mode == _Mode.create ? 'Create account' : 'Sign in'} · Tajirika',
+      title: '${_mode == _Mode.create ? 'Create account' : 'Sign in'} · 4draws',
       color: context.colors.primary,
       child: Scaffold(
         body: SafeArea(
@@ -370,7 +370,7 @@ class _Heading {
 
   String get title => switch (step) {
     _Step.phone => 'Almost there',
-    _Step.form => mode == _Mode.create ? 'Join Tajirika' : 'Good to see you',
+    _Step.form => mode == _Mode.create ? 'Join 4draws' : 'Good to see you',
   };
 
   String get lead => switch (step) {

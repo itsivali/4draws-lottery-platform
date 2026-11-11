@@ -857,13 +857,13 @@ func TestAPI_PaybillHooksNeedTheSecretPathAndAnswerDaraja(t *testing.T) {
 func TestAPI_GoogleOrAppleWithoutAnAccountSignsUpWithAPhoneNumber(t *testing.T) {
 	e := setupWith(t, func(d *apiDeps) {
 		d.SignIn = api.SignInProviders{GoogleClientID: "web.apps.googleusercontent.com", GoogleIOSClientID: "ios.apps.googleusercontent.com",
-			AppleClientID: "ke.tajirika.web", AndroidPackage: "ke.tajirika.lottery_mobile"}
+			AppleClientID: "ke.co.fourdraws.web", AndroidPackage: "ke.co.fourdraws.app"}
 	})
 	dev := map[string]any{"fingerprint": "fp-sso", "platform": "android"}
 
 	// the apps learn what to offer from the API
 	r := e.do(t, http.MethodGet, "/v1/auth/providers", "", nil)
-	if r.Code != http.StatusOK || !strings.Contains(r.Raw, `"ios_client_id":"ios.apps.googleusercontent.com"`) || !strings.Contains(r.Raw, `"apple":{"client_id":"ke.tajirika.web"}`) {
+	if r.Code != http.StatusOK || !strings.Contains(r.Raw, `"ios_client_id":"ios.apps.googleusercontent.com"`) || !strings.Contains(r.Raw, `"apple":{"client_id":"ke.co.fourdraws.web"}`) {
 		t.Fatalf("providers: %d %s", r.Code, r.Raw)
 	}
 
@@ -897,7 +897,7 @@ func TestAPI_GoogleOrAppleWithoutAnAccountSignsUpWithAPhoneNumber(t *testing.T) 
 	}
 	_ = res.Body.Close()
 	loc := res.Header.Get("Location")
-	if res.StatusCode != http.StatusTemporaryRedirect || loc != "intent://callback?code=c.0.abc&id_token=eyJ.x.y&state=s1#Intent;package=ke.tajirika.lottery_mobile;scheme=signinwithapple;end" {
+	if res.StatusCode != http.StatusTemporaryRedirect || loc != "intent://callback?code=c.0.abc&id_token=eyJ.x.y&state=s1#Intent;package=ke.co.fourdraws.app;scheme=signinwithapple;end" {
 		t.Fatalf("apple return: %d %q", res.StatusCode, loc)
 	}
 }

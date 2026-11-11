@@ -431,9 +431,9 @@ func (s *Service) Push(ctx context.Context, paymentID string) error {
 	if stopped, err := s.refuseBeforePush(ctx, p.UserID, paymentID); err != nil || stopped {
 		return err
 	}
-	// Tajirika on the prompt (owner, 2026-10-29, #87). Tested 2026-10-30 (#107): sandbox prompts time out (1037) with
+	// 4draws on the prompt (owner, 2026-10-29, #87). Tested 2026-10-30 (#107): sandbox prompts time out (1037) with
 	// the old TOPUP / Wallet top-up text too, so the text is not why they fail.
-	req := daraja.STKPushRequest{MSISDN: *p.Msisdn, AmountKES: p.AmountRequestedKes, AccountRef: "Tajirika", Description: "Tajirika"}
+	req := daraja.STKPushRequest{MSISDN: *p.Msisdn, AmountKES: p.AmountRequestedKes, AccountRef: "4draws", Description: "4draws"}
 	res, pushErr := s.daraja.STKPush(ctx, req)
 	for _, wait := range s.cfg.ThrottleWaits {
 		if !errors.Is(pushErr, daraja.ErrThrottled) {

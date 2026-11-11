@@ -73,7 +73,7 @@ services:
       - key: APPLE_BUNDLE_ID
         sync: false
       - key: ANDROID_PACKAGE
-        value: ke.tajirika.lottery_mobile
+        value: ke.co.fourdraws.app
       # Browser origins (comma-separated, exact, https): https://tajirika.co.ke and https://backoffice.tajirika.co.ke, plus
       # the static sites' onrender.com addresses, which keep working. The phone apps need no entry.
       - key: CORS_ALLOWED_ORIGINS

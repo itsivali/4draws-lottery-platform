@@ -15,9 +15,9 @@ void main() {
     return m.group(1) == 'string' ? m.group(2) : m.group(1);
   }
 
-  test('the bundle is named Tajirika and declares only exempt encryption', () {
-    expect(value('CFBundleName'), 'Tajirika');
-    expect(value('CFBundleDisplayName'), 'Tajirika');
+  test('the bundle is named 4draws and declares only exempt encryption', () {
+    expect(value('CFBundleName'), '4draws');
+    expect(value('CFBundleDisplayName'), '4draws');
     expect(value('ITSAppUsesNonExemptEncryption'), 'false');
   });
 

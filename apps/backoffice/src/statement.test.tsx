@@ -5,14 +5,14 @@ import { PaymentsPage } from './pages/Payments'
 import { renderSignedIn } from './test/render'
 import type { StatementApplied, StatementReport } from './types'
 
-const csv = 'Receipt No.,Completion Time,Paid In,Other Party Info,A/C No.\nST22222222,2026-10-30 21:40:00,100.00,254796***457 - WILLIS,Tajirika\n'
+const csv = 'Receipt No.,Completion Time,Paid In,Other Party Info,A/C No.\nST22222222,2026-10-30 21:40:00,100.00,254796***457 - WILLIS,4draws\n'
 
 const report: StatementReport = {
   sha256: 'a'.repeat(64), rows: 2, from: '2026-10-30T18:30:00Z', to: '2026-10-30T18:40:00Z', counts: { matched: 1, unmatched: 1 },
   matches: [
-    { row: { line: 2, receipt: 'ST22222222', completed_at: '2026-10-30T18:40:00Z', paid_in_kes: 100, party: '254796***457 - WILLIS', party_number: '254796***457', account: 'Tajirika', details: '', status: 'Completed' },
+    { row: { line: 2, receipt: 'ST22222222', completed_at: '2026-10-30T18:40:00Z', paid_in_kes: 100, party: '254796***457 - WILLIS', party_number: '254796***457', account: '4draws', details: '', status: 'Completed' },
       kind: 'matched', payment_id: 'p-9', user_id: 'u-1', msisdn: '254796992457', status: 'unconfirmed', reason: 'same amount, number and time' },
-    { row: { line: 3, receipt: 'XX33333333', completed_at: '2026-10-30T18:41:00Z', paid_in_kes: 250, party: '254700***000 - NOBODY', party_number: '254700***000', account: 'Tajirika', details: '', status: 'Completed' },
+    { row: { line: 3, receipt: 'XX33333333', completed_at: '2026-10-30T18:41:00Z', paid_in_kes: 250, party: '254700***000 - NOBODY', party_number: '254700***000', account: '4draws', details: '', status: 'Completed' },
       kind: 'unmatched', reason: 'no prompt with this amount and number around this time' },
   ],
   to_credit: [{ payment_id: 'p-9', receipt: 'ST22222222', amount_kes: 100 }],

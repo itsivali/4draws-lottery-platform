@@ -136,11 +136,11 @@ void main() {
     final h = await pumpApp(t, FakeBackend(), signedIn: false);
     h.container.read(routerProvider).go('/create-account');
     await t.pumpAndSettle();
-    expect(find.text('Join Tajirika'), findsOneWidget);
+    expect(find.text('Join 4draws'), findsOneWidget);
     expect(find.widgetWithText(TextFormField, 'First name'), findsOneWidget);
     expect(find.widgetWithText(FilledButton, 'Create account'), findsOneWidget);
     expect(find.text('Good to see you'), findsNothing);
-    expect(find.byWidgetPredicate((w) => w is Title && w.title == 'Create account · Tajirika'), findsOneWidget);
+    expect(find.byWidgetPredicate((w) => w is Title && w.title == 'Create account · 4draws'), findsOneWidget);
   });
 
   testWidgets('a top-up stays pending until the server confirms it, then the balance updates', (t) async {

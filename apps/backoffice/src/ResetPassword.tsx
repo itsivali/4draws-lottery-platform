@@ -27,7 +27,7 @@ export function ResetPassword({ api, token, onDone }: { api: ApiClient; token: s
     <main id="main" className="grid min-h-svh place-items-center bg-background p-6">
       <Card className="w-full max-w-[460px] shadow-float">
         <CardHeader>
-          <p className="mb-2 flex items-center gap-2 text-sm font-medium text-muted-foreground"><span className="flex size-6 items-center justify-center rounded-md bg-primary text-primary-foreground"><BrandGlyph className="size-4" /></span> Tajirika back office</p>
+          <p className="mb-2 flex items-center gap-2 text-sm font-medium text-muted-foreground"><span className="flex size-6 items-center justify-center rounded-md bg-primary text-primary-foreground"><BrandGlyph className="size-4" /></span> 4draws back office</p>
           <CardTitle className="text-xl">Choose a new password</CardTitle>
           <CardDescription>{token ? 'From the link in your email. Your other sessions are signed out when it changes.' : 'This link is incomplete. Open the one in your email again, or ask for a new one from the sign-in page.'}</CardDescription>
         </CardHeader>

@@ -39,7 +39,7 @@ jobs:
         if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
         run: |
           keytool -genkeypair -noprompt -keystore "$RUNNER_TEMP/throwaway.jks" -alias throwaway -keyalg RSA -keysize 2048 \
-            -validity 1 -storepass throwaway -keypass throwaway -dname "CN=CI throwaway, O=Tajirika"
+            -validity 1 -storepass throwaway -keypass throwaway -dname "CN=CI throwaway, O=4draws"
           {
             echo "ANDROID_KEYSTORE_PATH=$RUNNER_TEMP/throwaway.jks"
             echo "ANDROID_KEYSTORE_PASSWORD=throwaway"

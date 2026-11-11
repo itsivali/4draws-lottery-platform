@@ -10,11 +10,11 @@ The player web app (`apps/mobile`, Flutter, served by Render at https://tajirika
   data (`Organization`, `WebSite`, `WebApplication` with the KES 1 price, and a `FAQPage`). The `<body>` carries a
   **landing** (`#landing`): the headline, how it works, fairness, responsible play and the questions, in plain HTML,
   which is what the root address shows: the app is not started at `/` (Google's renderer runs JavaScript, and an app
-  drawn on a canvas has no text to index). Every other path starts the app, and "Open Tajirika" leads to `/sign-in`;
+  drawn on a canvas has no text to index). Every other path starts the app, and "Open 4draws" leads to `/sign-in`;
   the installed app opens at `/home` (`manifest.json`'s `start_url`). Keep the landing's facts in step with the
   product (price, plays a day, draws, where prizes go): it is the one page search engines read.
 - **`og-image.png`:** the 1200x630 share image, rendered by `scripts/gen-icons.sh` from
-  `design-system/lottery-platform/logo/tajirika-og.svg`.
+  `design-system/lottery-platform/logo/4draws-og.svg`.
 - **`robots.txt`** (allow all but the reset pages) and **`sitemap.xml`** (the root, `/sign-in` and `/create-account`).
 - **`manifest.json`:** the installable app's name, description, colours and categories.
 - **Favicon** (the icon beside the result in Google): `favicon.ico` (48/32/16, made with
@@ -25,7 +25,7 @@ The player web app (`apps/mobile`, Flutter, served by Render at https://tajirika
   "Request indexing" in Search Console. It shows one icon per hostname.
 - **Addresses:** the app uses path URLs (`/sign-in`, `/reset-password?token=…`), not `/#/…`, since 2026-10-30
   (`usePathUrlStrategy` in `main.dart`; Render rewrites every path to `index.html`). Each screen sets the document
-  title ("Wallet · Tajirika") through `PageScaffold`.
+  title ("Wallet · 4draws") through `PageScaffold`.
 - **The back office** (https://backoffice.tajirika.co.ke) stays out of search: `<meta name="robots" content="noindex">`,
   `public/robots.txt` disallows everything, and Render sends `X-Robots-Tag: noindex, nofollow`.
 
@@ -43,7 +43,7 @@ The player web app (`apps/mobile`, Flutter, served by Render at https://tajirika
 Only the landing is indexable; every other screen is behind sign-in and should stay that way. **Sitelinks** (the
 "Sign in", "Create account"… links Google shows under a brand result) cannot be requested: Google builds them from the
 site's own link structure when it judges them useful, usually once a site has some history and traffic. What helps is
-what is in place: distinct addresses with their own titles (`/sign-in` "Sign in · Tajirika", `/create-account`
-"Create account · Tajirika"), short relevant anchor text from the landing, and the sitemap listing them. Ranking for "lottery
+what is in place: distinct addresses with their own titles (`/sign-in` "Sign in · 4draws", `/create-account`
+"Create account · 4draws"), short relevant anchor text from the landing, and the sitemap listing them. Ranking for "lottery
 Kenya" and "M-Pesa lottery" depends on links and reputation more than on tags; the tags make sure what appears is
 right and the share cards look like the brand.

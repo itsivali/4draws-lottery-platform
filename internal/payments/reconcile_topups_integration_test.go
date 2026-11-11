@@ -370,7 +370,7 @@ const statementHeader = "Receipt No.,Completion Time,Initiation Time,Details,Tra
 
 func statementLine(receipt string, at time.Time, paid int64, msisdn, name string) string {
 	masked := msisdn[:6] + "***" + msisdn[len(msisdn)-3:]
-	return fmt.Sprintf("%s,%s,%s,Pay Bill from %s - %s,Completed,\"%d.00\",,\"1,000.00\",true,Pay Bill,%s - %s,,Tajirika\n",
+	return fmt.Sprintf("%s,%s,%s,Pay Bill from %s - %s,Completed,\"%d.00\",,\"1,000.00\",true,Pay Bill,%s - %s,,4draws\n",
 		receipt, at.In(time.FixedZone("EAT", 3*3600)).Format("2006-01-02 15:04:05"), at.In(time.FixedZone("EAT", 3*3600)).Format("2006-01-02 15:04:05"), masked, name, paid, masked, name)
 }
 
@@ -387,7 +387,7 @@ func TestStatement_ParsesSafaricomsExportByHeaderNames(t *testing.T) {
 		t.Fatalf("rows %d skipped %v", len(rows), skipped)
 	}
 	r := rows[0]
-	if r.Receipt != "UJU4RRBMDK" || r.PaidInKES != 1 || r.PartyNumber != "254796***457" || r.Account != "Tajirika" || !r.CompletedAt.Equal(time.Date(2026, 10, 30, 18, 34, 51, 0, time.UTC)) {
+	if r.Receipt != "UJU4RRBMDK" || r.PaidInKES != 1 || r.PartyNumber != "254796***457" || r.Account != "4draws" || !r.CompletedAt.Equal(time.Date(2026, 10, 30, 18, 34, 51, 0, time.UTC)) {
 		t.Fatalf("row = %+v", r)
 	}
 	if rows[1].WithdrawnKES != 500 || rows[1].PaidInKES != 0 {

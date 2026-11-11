@@ -24,7 +24,7 @@ val uploadKeyPassword = signingValue("keyPassword", "ANDROID_KEY_PASSWORD")
 val uploadKeyConfigured = listOf(uploadKeystore, uploadKeystorePassword, uploadKeyAlias, uploadKeyPassword).all { it != null }
 
 android {
-    namespace = "ke.tajirika.lottery_mobile"
+    namespace = "ke.co.fourdraws.app"
     // Pinned (Flutter 3.47.7's defaults) so that a Flutter upgrade cannot change them unnoticed: Google Play requires
     // new apps and updates to target API 36 (recheck at each submission).
     compileSdk = 36
@@ -37,7 +37,7 @@ android {
 
     defaultConfig {
         // The store identity of the app: never changes once published.
-        applicationId = "ke.tajirika.lottery_mobile"
+        applicationId = "ke.co.fourdraws.app"
         minSdk = flutter.minSdkVersion
         targetSdk = 36
         // From --build-number and --build-name (CI passes the run number and the tag), else pubspec.yaml's version.
