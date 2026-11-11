@@ -42,6 +42,17 @@ Read this first at the start of every session.
   balance on an indigo hero card, the wheel squarely centred in its dial. The only 3D left is the gold coin beside
   the balance. Android has a launch screen in the page colour. `design-system/lottery-platform/MASTER.md` v4. The
   back office still wears coral and violet until its own pass.
+- **Policy pages complete (2026-11-11, owner):** `/privacy/`, `/terms/`, `/responsible-gambling/` and
+  `/delete-account/` are full documents in the operator's name, **4 DRAWS TICKET LTD**, version 1.0, with no open
+  items; each still states that the service is not yet licensed. They were written for this platform, structured as
+  Kenyan banks' and telcos' documents are, the deletion page after Meta's. **Not reviewed by counsel.** Things they
+  state that the owner must make true or correct before a licence: the mailboxes `support@4draws.co.ke` and
+  `privacy@4draws.co.ke` (they do not exist; the domain has no working DNS yet); closure "normally within 30 days" and
+  backups overwritten within 90 (commitments nobody has measured); retention of seven years (POCAMLA) and five (tax),
+  which ADR 0015 leaves to counsel; **deleting or anonymising a closed account's data, which the platform does not do
+  yet** (closing only blocks the account); staff and their families barred from playing; the helplines named on the
+  responsible gambling page. The company's registration number, postal address, licence number and ODPC registration
+  are not on the pages because they are not known here.
 - **Play Console (2026-11-11):** the owner's developer account is a personal one ("willis ivali"). The app is to be
   created as 4draws, `ke.co.fourdraws.app`, English (UK), App, Free; the three declarations are the owner's to
   accept. A release build signed with the upload key builds locally. Not yet possible: production release (needs
