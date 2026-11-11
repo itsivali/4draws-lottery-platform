@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../app/theme/theme.dart';
 import '../../../app/theme/tokens.dart';
 import '../../../core/formatting/money.dart';
 import '../../../core/formatting/phone.dart';
@@ -13,6 +14,7 @@ import '../../../core/widgets/busy_button.dart';
 import '../../../core/widgets/confirm_sheet.dart';
 import '../../../core/widgets/content_frame.dart';
 import '../../../core/widgets/failure_text.dart';
+import '../../../core/widgets/glow.dart';
 import '../../../core/widgets/hero_card.dart';
 import '../../../core/widgets/inline_banner.dart';
 import '../../../core/widgets/list_row.dart';
@@ -168,7 +170,7 @@ class _PlayScreenState extends ConsumerState<PlayScreen> {
                       Expanded(
                         flex: 5,
                         child: _Stage(
-                          child: Padding(padding: const EdgeInsets.all(Space.xl), child: wheel),
+                          child: Padding(padding: const EdgeInsets.all(Space.lg), child: wheel),
                         ),
                       ),
                       const SizedBox(width: Space.xxl),
@@ -178,7 +180,7 @@ class _PlayScreenState extends ConsumerState<PlayScreen> {
                 ),
               )
             : ListView(
-                padding: const EdgeInsets.fromLTRB(Space.lg, Space.sm, Space.lg, Space.xxl),
+                padding: const EdgeInsets.fromLTRB(Space.lg, Space.lg, Space.lg, Space.xxl),
                 children: [
                   ContentFrame(
                     child: Column(
@@ -208,15 +210,35 @@ class _PlayScreenState extends ConsumerState<PlayScreen> {
 }
 
 /// The wheel's stage: the app's second hero surface, the dusk end of the sunset, against which the segments, the rim
-/// and the lucky star all stand out.
+/// and the lucky star all stand out. Since the redesign of 2026-11-11 the wheel sits in a dotted dial, like a timer's
+/// bezel, over a soft coral glow.
 class _Stage extends StatelessWidget {
   const _Stage({required this.child});
 
   final Widget child;
 
   @override
-  Widget build(BuildContext context) =>
-      HeroCard(stage: true, radius: Radii.xxl, padding: const EdgeInsets.all(Space.lg), child: child);
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return HeroCard(
+      stage: true,
+      radius: Radii.xxl,
+      padding: const EdgeInsets.all(Space.md),
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Positioned.fill(
+            child: ExcludeSemantics(
+              child: DecoratedBox(
+                decoration: BoxDecoration(gradient: Gradients.blob(c.heroGlow, radius: 0.5, alpha: 0.38)),
+              ),
+            ),
+          ),
+          DottedDial(child: child),
+        ],
+      ),
+    );
+  }
 }
 
 class _PlayPanel extends ConsumerWidget {
@@ -394,8 +416,8 @@ class _PlayPanel extends ConsumerWidget {
   }
 }
 
-/// Price, plays left and chances as three tiles. The "N of M" text is one widget on purpose: it is what the player
-/// (and the tests) read as the count.
+/// Plays left as a ring gauge with the number inside, then the price and the chances under small captions. The
+/// "N of M" text is one widget on purpose: it is what the player (and the tests) read as the count.
 class _DayStrip extends StatelessWidget {
   const _DayStrip({required this.today});
 
@@ -406,16 +428,17 @@ class _DayStrip extends StatelessWidget {
     final t = Theme.of(context).textTheme;
     final c = context.colors;
     final cap = today.plays + today.playsLeft;
+    final big = t.headlineMedium?.weighted(FontWeight.w300);
     Widget cell(String label, String value, {Widget? badge}) => Expanded(
       child: MergeSemantics(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(label, style: t.labelSmall),
-            const SizedBox(height: Space.xs),
+            Text(label, style: t.labelMedium?.copyWith(color: c.inkMuted)),
+            const SizedBox(height: Space.xxs),
             Row(
               children: [
-                Flexible(child: Text(value, style: t.titleLarge)),
+                Flexible(child: Text(value, style: big)),
                 if (badge != null) ...[const SizedBox(width: Space.xs), badge],
               ],
             ),
@@ -424,20 +447,49 @@ class _DayStrip extends StatelessWidget {
       ),
     );
     return AppCard(
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          cell('Price per play', formatKes(today.priceKes)),
-          cell('Plays left today', '${today.playsLeft} of $cap'),
-          cell(
-            'Draw chances today',
-            '${today.chances}',
-            badge: today.lucky
-                ? Semantics(
-                    label: 'lucky day, doubled',
-                    child: ExcludeSemantics(child: Icon(Icons.star_rounded, size: 18, color: c.goldText)),
-                  )
-                : null,
+          Row(
+            children: [
+              RingGauge(
+                value: cap == 0 ? 0 : today.playsLeft / cap,
+                child: Text('${today.playsLeft}', style: t.titleLarge?.weighted(FontWeight.w500)),
+              ),
+              const SizedBox(width: Space.lg),
+              Expanded(
+                child: MergeSemantics(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Plays left today', style: t.labelMedium?.copyWith(color: c.inkMuted)),
+                      const SizedBox(height: Space.xxs),
+                      Text('${today.playsLeft} of $cap', style: big),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: Space.lg),
+          Divider(color: c.border),
+          const SizedBox(height: Space.lg),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              cell('Price per play', formatKes(today.priceKes)),
+              const SizedBox(width: Space.lg),
+              cell(
+                'Draw chances today',
+                '${today.chances}',
+                badge: today.lucky
+                    ? Semantics(
+                        label: 'lucky day, doubled',
+                        child: ExcludeSemantics(child: Icon(Icons.star_rounded, size: 18, color: c.goldText)),
+                      )
+                    : null,
+              ),
+            ],
           ),
         ],
       ),

@@ -41,12 +41,20 @@ class AppColors {
     required this.wheelRimDark,
     required this.wheelRimLight,
     required this.shadow,
+    required this.glass,
+    required this.glassBorder,
+    required this.glowViolet,
+    required this.track,
+    required this.selected,
+    required this.onSelected,
   });
 
-  /// "Sunset" (MASTER.md §2, owner 2026-10-28): one light theme on a white page. Coral leads, violet accents, gold
+  /// "Sunset" (MASTER.md §2, owner 2026-10-28): one light theme on a white page. Since the redesign of 2026-11-11 the
+  /// page is a soft off-white, cards are white with large corners, and soft coral and violet glows sit behind the key
+  /// numbers; the palette itself is unchanged. Coral leads, violet accents, gold
   /// stays decorative; status colours all clear 4.5:1 on the page, on cards and on muted panels (tokens_test).
   static const light = AppColors(
-    background: Color(0xFFFBF6F3), // warm linen: white cards stand off it (owner, 2026-10-29)
+    background: Color(0xFFF6F2F1), // soft off-white (redesign 2026-11-11; warm linen #FBF6F3 before)
     surface: Color(0xFFFFFFFF),
     surfaceRaised: Color(0xFFFFFAF7),
     surfaceMuted: Color(0xFFFBEEE7),
@@ -87,6 +95,12 @@ class AppColors {
     wheelRimDark: Color(0xFF9A6B10),
     wheelRimLight: Color(0xFFFFE08A),
     shadow: Color(0xFF3C1428),
+    glass: Color(0xB8FFFFFF), // frosted white, 72%: chips and panels over a glow
+    glassBorder: Color(0xE6FFFFFF),
+    glowViolet: Color(0xFFB794FF),
+    track: Color(0xFFEDE5E3), // empty bars and ring tracks (decorative, never text)
+    selected: Color(0xFF2A1A2E), // the dark selected segment, the round "›" button
+    onSelected: Color(0xFFFFFFFF),
   );
 
   final Color background;
@@ -129,6 +143,20 @@ class AppColors {
   final Color wheelRimDark;
   final Color wheelRimLight;
   final Color shadow;
+
+  /// Frosted surfaces over a glow: translucent white and its brighter edge.
+  final Color glass;
+  final Color glassBorder;
+
+  /// The second glow behind key numbers (the first is [heroGlow], coral).
+  final Color glowViolet;
+
+  /// The empty part of a bar or a ring gauge.
+  final Color track;
+
+  /// A selected segment, a selected chip and the round "›" button: plum ink, and the text on it.
+  final Color selected;
+  final Color onSelected;
 }
 
 /// Type faces and the few sizes the theme does not own (MASTER.md §3).
@@ -156,23 +184,35 @@ abstract final class Space {
 abstract final class Radii {
   static const sm = 8.0;
   static const md = 12.0;
-  static const lg = 20.0; // cards (16 until 2026-10-29)
+  static const lg = 24.0; // banners, panels inside cards (20 until 2026-11-11)
   static const xl = 24.0;
   static const xxl = 28.0;
+
+  /// Text fields and snack bars.
+  static const field = 16.0;
+
+  /// Cards (redesign 2026-11-11: 28, from 20).
+  static const card = 28.0;
   static const full = 999.0;
 }
 
 /// Depth in three steps (MASTER.md §5): a card's soft lift, a floating sheet, and the hero surfaces' deep shadow.
 abstract final class Elevation {
   // raised on 2026-10-29 (owner): cards must stand off the page, so the lift is deeper and the page is warm linen
+  // softened on 2026-11-11 (redesign): a wide, faint ambient shadow instead of a hard lift
   static List<BoxShadow> card(AppColors c) => [
-    BoxShadow(color: c.shadow.withValues(alpha: 0.06), blurRadius: 3, offset: const Offset(0, 1)),
-    BoxShadow(color: c.shadow.withValues(alpha: 0.13), blurRadius: 36, offset: const Offset(0, 14)),
+    BoxShadow(color: c.shadow.withValues(alpha: 0.04), blurRadius: 2, offset: const Offset(0, 1)),
+    BoxShadow(color: c.shadow.withValues(alpha: 0.07), blurRadius: 40, offset: const Offset(0, 16)),
   ];
 
-  /// The bottom navigation bar: a lift upwards, so the bar reads as a surface over the page.
+  /// The floating navigation bar.
   static List<BoxShadow> bar(AppColors c) => [
-    BoxShadow(color: c.shadow.withValues(alpha: 0.10), blurRadius: 24, offset: const Offset(0, -8)),
+    BoxShadow(color: c.shadow.withValues(alpha: 0.12), blurRadius: 32, offset: const Offset(0, 10)),
+  ];
+
+  /// The glow under the bright primary pill and the selected bar.
+  static List<BoxShadow> glow(Color color) => [
+    BoxShadow(color: color.withValues(alpha: 0.38), blurRadius: 24, offset: const Offset(0, 8)),
   ];
 
   static List<BoxShadow> float(AppColors c) => [
@@ -180,8 +220,9 @@ abstract final class Elevation {
   ];
 
   static List<BoxShadow> hero(AppColors c) => [
-    BoxShadow(color: c.heroEnd.withValues(alpha: 0.48), blurRadius: 56, offset: const Offset(0, 22)),
-    BoxShadow(color: c.heroStart.withValues(alpha: 0.22), blurRadius: 18, offset: const Offset(0, 5)),
+    // softened on 2026-11-11: a glow beneath, not a slab
+    BoxShadow(color: c.heroEnd.withValues(alpha: 0.30), blurRadius: 36, offset: const Offset(0, 16)),
+    BoxShadow(color: c.heroStart.withValues(alpha: 0.14), blurRadius: 12, offset: const Offset(0, 4)),
   ];
 }
 
@@ -198,6 +239,19 @@ abstract final class Gradients {
   /// out from it.
   static LinearGradient stage(AppColors c) =>
       LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [c.heroEnd, c.shadow]);
+
+  /// A soft glowing blob (redesign 2026-11-11): [color] fading to nothing, placed behind key content.
+  static RadialGradient blob(Color color, {Alignment center = Alignment.center, double radius = 0.8, double alpha = 0.5}) =>
+      RadialGradient(
+        center: center,
+        radius: radius,
+        colors: [color.withValues(alpha: alpha), color.withValues(alpha: alpha * 0.4), color.withValues(alpha: 0)],
+        stops: const [0, 0.45, 1],
+      );
+
+  /// A filled bar: coral rising into violet.
+  static LinearGradient bar(AppColors c) =>
+      LinearGradient(begin: Alignment.bottomCenter, end: Alignment.topCenter, colors: [c.primary, c.accent]);
 
   static RadialGradient heroGlow(AppColors c) => RadialGradient(
     center: const Alignment(-0.8, -1.2),

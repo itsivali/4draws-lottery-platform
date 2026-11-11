@@ -7,11 +7,11 @@ import '../../../app/theme/tokens.dart';
 import '../../../core/formatting/dates.dart';
 import '../../../core/formatting/phone.dart';
 import '../../../core/platform/preferences.dart';
-import '../../../core/widgets/app_card.dart';
 import '../../../core/widgets/async_view.dart';
 import '../../../core/widgets/back_office_link.dart';
 import '../../../core/widgets/confirm_sheet.dart';
 import '../../../core/widgets/content_frame.dart';
+import '../../../core/widgets/glow.dart';
 import '../../../core/widgets/list_row.dart';
 import '../../../core/widgets/policy_pages.dart';
 import '../../../core/widgets/status_pill.dart';
@@ -49,7 +49,7 @@ class AccountScreen extends ConsumerWidget {
       title: 'Account',
       onRefresh: () async => ref.invalidate(accountProvider),
       children: [
-        AppCard(
+        GlowPanel(
           child: AsyncView(
             value: account,
             what: 'your account',

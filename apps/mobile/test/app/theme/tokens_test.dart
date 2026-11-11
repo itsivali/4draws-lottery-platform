@@ -69,6 +69,27 @@ void main() {
     });
   }
 
+  test('the redesign keeps its text readable: the dark selected segment, frosted chips and the glows', () {
+    final c = AppColors.light;
+    expect(contrast(c.onSelected, c.selected), greaterThanOrEqualTo(4.5));
+    // a frosted chip over the page, and over the strongest point of either glow on a white panel
+    for (final under in [
+      c.background,
+      c.surface,
+      Color.alphaBlend(c.heroGlow.withValues(alpha: 0.42), c.surface),
+      Color.alphaBlend(c.glowViolet.withValues(alpha: 0.34), c.surface),
+    ]) {
+      expect(contrast(c.ink, Color.alphaBlend(c.glass, under)), greaterThanOrEqualTo(4.5));
+      expect(contrast(c.primary, Color.alphaBlend(c.glass, under)), greaterThanOrEqualTo(3), reason: 'chip icons');
+    }
+    // captions and figures sit on the panel where the glow is at most this strong
+    for (final glow in [c.heroGlow.withValues(alpha: 0.42), c.glowViolet.withValues(alpha: 0.34)]) {
+      final under = Color.alphaBlend(glow, c.surface);
+      expect(contrast(c.ink, under), greaterThanOrEqualTo(4.5));
+      expect(contrast(c.inkMuted, under), greaterThanOrEqualTo(4.5));
+    }
+  });
+
   test('pending never borrows the success colour, and gold is not the primary', () {
     expect(AppColors.light.pending, isNot(AppColors.light.success));
     expect(AppColors.light.gold, isNot(AppColors.light.primary));

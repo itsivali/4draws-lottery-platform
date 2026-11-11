@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../app/theme/tokens.dart';
+import 'depth.dart';
 import 'status_pill.dart';
 
 /// A notice inside the page (MASTER.md §11): an icon, a title, a sentence, and one action at most. The tone is carried by
@@ -43,20 +44,24 @@ class InlineBanner extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(Space.lg),
         decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.07),
+          // a white card washed with the tone, so the words read the same over any page (redesign 2026-11-11)
+          color: Color.alphaBlend(color.withValues(alpha: 0.07), c.surface),
           borderRadius: BorderRadius.circular(Radii.lg),
-          border: Border.all(color: color.withValues(alpha: 0.35)),
+          border: Border.all(color: color.withValues(alpha: 0.30)),
         ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            ExcludeSemantics(child: Icon(icon ?? defaultIcon, color: color)),
+            Orb(icon: icon ?? defaultIcon, size: 38, tone: OrbTone.ink, color: color),
             const SizedBox(width: Space.md),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title, style: t.titleSmall),
+                  Padding(
+                    padding: const EdgeInsets.only(top: Space.sm),
+                    child: Text(title, style: t.titleSmall),
+                  ),
                   if (message != null) ...[const SizedBox(height: Space.xs), Text(message!, style: t.bodySmall)],
                   if (actionLabel != null)
                     Padding(
@@ -65,7 +70,7 @@ class InlineBanner extends StatelessWidget {
                         style: OutlinedButton.styleFrom(
                           foregroundColor: color,
                           side: BorderSide(color: color.withValues(alpha: 0.6)),
-                          minimumSize: const Size(Breakpoints.minTouch, 44),
+                          minimumSize: const Size(Breakpoints.minTouch, Breakpoints.minTouch),
                         ),
                         onPressed: onAction,
                         child: Text(actionLabel!),
@@ -93,17 +98,13 @@ class EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
     final t = Theme.of(context).textTheme;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: Space.xl, horizontal: Space.lg),
       child: Column(
         children: [
-          Container(
-            width: 56,
-            height: 56,
-            decoration: BoxDecoration(color: c.surfaceMuted, shape: BoxShape.circle),
-            child: ExcludeSemantics(child: Icon(icon, color: c.inkMuted, size: 26)),
+          Floating(
+            child: Orb(icon: icon, size: 72, tone: OrbTone.soft),
           ),
           const SizedBox(height: Space.md),
           Text(title, style: t.titleMedium, textAlign: TextAlign.center),

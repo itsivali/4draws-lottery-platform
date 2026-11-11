@@ -7,8 +7,9 @@ import '../../../core/formatting/dates.dart';
 import '../../../core/formatting/money.dart';
 import '../../../core/widgets/app_card.dart';
 import '../../../core/widgets/async_view.dart';
+import '../../../core/widgets/coin.dart';
 import '../../../core/widgets/content_frame.dart';
-import '../../../core/widgets/hero_card.dart';
+import '../../../core/widgets/glow.dart';
 import '../../../core/widgets/inline_banner.dart';
 import '../../../core/widgets/list_row.dart';
 import '../../../core/widgets/skeleton.dart';
@@ -48,7 +49,8 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
         await ref.read(walletStatementProvider.future);
       },
       children: [
-        HeroCard(
+        // the balance as a big light numeral over soft glows (redesign 2026-11-11)
+        GlowPanel(
           child: AsyncView(
             value: wallet,
             what: 'your wallet',
@@ -59,21 +61,24 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Confirmed balance', style: t.labelMedium?.copyWith(color: c.onHeroMuted)),
+                  Text('Confirmed balance', style: t.labelLarge?.copyWith(color: c.inkMuted)),
                   const SizedBox(height: Space.xs),
-                  AnimatedSwitcher(
-                    duration: context.reduceMotion ? Duration.zero : Motion.standard,
-                    child: Text(
-                      formatKes(w.balanceKes),
-                      key: ValueKey(w.balanceKes),
-                      style: t.displayLarge?.copyWith(color: c.onHero),
-                    ),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: AnimatedSwitcher(
+                          duration: context.reduceMotion ? Duration.zero : Motion.standard,
+                          layoutBuilder: (current, previous) =>
+                              Stack(alignment: AlignmentDirectional.centerStart, children: [...previous, ?current]),
+                          child: BigAmount(key: ValueKey(w.balanceKes), text: formatKes(w.balanceKes)),
+                        ),
+                      ),
+                      const SizedBox(width: Space.sm),
+                      const Coin3D(size: 72),
+                    ],
                   ),
-                  const SizedBox(height: Space.xs),
-                  Text(
-                    'Only money the server has confirmed is shown here.',
-                    style: t.bodySmall?.copyWith(color: c.onHeroMuted),
-                  ),
+                  const SizedBox(height: Space.sm),
+                  Text('Only money the server has confirmed is shown here.', style: t.bodySmall),
                 ],
               ),
             ),

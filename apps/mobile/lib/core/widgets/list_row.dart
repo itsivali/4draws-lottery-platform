@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../app/theme/tokens.dart';
+import 'depth.dart';
 
 /// A list row (MASTER.md §7): an icon in a tinted disc, a title with an optional second line, and a trailing amount or
 /// chevron. 64 dp tall, hairline between rows when stacked in a `RowGroup`.
@@ -38,19 +39,7 @@ class ListRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.colors;
     final t = Theme.of(context).textTheme;
-    final disc =
-        leading ??
-        (icon == null
-            ? null
-            : Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: (iconColor ?? c.primary).withValues(alpha: 0.10),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(icon, size: 20, color: iconColor ?? c.primary),
-              ));
+    final disc = leading ?? (icon == null ? null : Orb(icon: icon!, tone: OrbTone.soft, color: iconColor ?? c.primary));
     final row = Padding(
       padding: const EdgeInsets.symmetric(horizontal: Space.lg, vertical: Space.md),
       child: Row(
@@ -97,12 +86,12 @@ class RowGroup extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
-    final radius = BorderRadius.circular(Radii.lg);
+    final radius = BorderRadius.circular(Radii.card);
     return DecoratedBox(
       decoration: BoxDecoration(
         color: c.surface,
         borderRadius: radius,
-        border: Border.all(color: c.border),
+        border: flat ? Border.all(color: c.border) : null,
         boxShadow: flat ? null : Elevation.card(c),
       ),
       child: ClipRRect(

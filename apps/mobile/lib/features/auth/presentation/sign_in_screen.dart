@@ -16,7 +16,9 @@ import '../../../core/widgets/back_office_link.dart';
 import '../../../core/widgets/brand_mark.dart';
 import '../../../core/widgets/busy_button.dart';
 import '../../../core/widgets/content_frame.dart';
+import '../../../core/widgets/depth.dart';
 import '../../../core/widgets/failure_text.dart';
+import '../../../core/widgets/glow.dart';
 import '../../../core/widgets/hero_card.dart';
 import '../../../core/widgets/inline_banner.dart';
 import '../../../core/widgets/reveal.dart';
@@ -634,14 +636,10 @@ class _Form extends StatelessWidget {
               const SizedBox(height: Space.sm),
               TextButton(onPressed: busy ? null : onBack, child: const Text('Sign in another way')),
             ] else ...[
-              SegmentedButton<_Mode>(
-                segments: const [
-                  ButtonSegment(value: _Mode.signIn, label: Text('Sign in')),
-                  ButtonSegment(value: _Mode.create, label: Text('Create account')),
-                ],
-                selected: {mode},
-                showSelectedIcon: false,
-                onSelectionChanged: busy ? null : (s) => onMode(s.first),
+              PillToggle<_Mode>(
+                segments: const [(_Mode.signIn, 'Sign in'), (_Mode.create, 'Create account')],
+                selected: mode,
+                onChanged: busy ? null : onMode,
               ),
               const SizedBox(height: Space.xl),
               if (creating) ...[identityFields, const SizedBox(height: Space.lg)],
@@ -788,6 +786,14 @@ class _ProviderButtons extends StatelessWidget {
                 foregroundColor: appleFg,
                 disabledBackgroundColor: (dark ? Colors.white : Colors.black).withValues(alpha: 0.4),
                 disabledForegroundColor: appleFg.withValues(alpha: 0.7),
+                // Apple's button stays black (or white): the same raised key, in its own colour
+                backgroundBuilder: (context, states, child) => raisedButtonFace(
+                  context,
+                  states,
+                  child,
+                  c: context.colors,
+                  base: dark ? Colors.white : Colors.black,
+                ),
               ),
               icon: ExcludeSemantics(
                 child: CustomPaint(

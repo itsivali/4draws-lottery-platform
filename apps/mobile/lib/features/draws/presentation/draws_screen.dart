@@ -42,22 +42,38 @@ class _DrawsScreenState extends ConsumerState<DrawsScreen> {
           style: t.bodyMedium?.copyWith(color: context.colors.inkMuted),
         ),
         const MyPeriodsCard(),
-        Wrap(
-          spacing: Space.sm,
-          runSpacing: Space.sm,
-          children: [
-            ChoiceChip(
-              label: const Text('All'),
-              selected: _type == null,
-              onSelected: (_) => setState(() => _type = null),
-            ),
-            for (final dt in DrawType.values)
-              ChoiceChip(
-                label: Text(drawTypeLabel(dt).replaceFirst(' draw', '')),
-                selected: _type == dt,
-                onSelected: (_) => setState(() => _type = dt),
+        // a segmented pill toggle: a white track, the chosen kind dark (redesign 2026-11-11); scrolls on narrow phones
+        Align(
+          alignment: AlignmentDirectional.centerStart,
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            clipBehavior: Clip.none,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: context.colors.surface,
+                borderRadius: BorderRadius.circular(Radii.full),
+                boxShadow: Elevation.card(context.colors),
               ),
-          ],
+              child: Padding(
+                padding: const EdgeInsets.all(Space.xs),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    for (final (i, dt) in <DrawType?>[null, ...DrawType.values].indexed) ...[
+                      if (i > 0) const SizedBox(width: Space.xxs),
+                      ChoiceChip(
+                        label: Text(dt == null ? 'All' : drawTypeLabel(dt).replaceFirst(' draw', '')),
+                        selected: _type == dt,
+                        side: _type == dt ? null : BorderSide.none,
+                        backgroundColor: context.colors.surface,
+                        onSelected: (_) => setState(() => _type = dt),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ),
         ),
         AsyncView(
           value: draws,
@@ -103,12 +119,9 @@ class DrawTile extends StatelessWidget {
         child: Row(
           children: [
             Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                color: open ? c.primaryContainer : c.surfaceMuted,
-                borderRadius: BorderRadius.circular(Radii.md),
-              ),
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(color: open ? c.primaryContainer : c.surfaceMuted, shape: BoxShape.circle),
               child: ExcludeSemantics(child: Icon(_icon(draw.type), color: open ? c.onPrimaryContainer : c.inkMuted)),
             ),
             const SizedBox(width: Space.md),

@@ -1,4 +1,4 @@
-# Lottery Platform — Design System (Master, v2.1 “Sunset”)
+# Lottery Platform — Design System (Master, v3 “Sunset, soft”)
 
 The single source of truth for how the player app (`apps/mobile`, Flutter: iOS, Android, web) looks, moves and feels.
 Page files in `pages/` record only deviations from this file; when a page file exists its rules win for that page.
@@ -9,6 +9,16 @@ spacing value or animation duration.** `test/app/theme/tokens_test.dart` checks 
 
 Generated with the UI/UX Pro Max skill (`search.py --design-system`, `--domain color|ux`, `--stack flutter`) and then
 adapted; the deviations from its output are listed under *Provenance* at the end.
+
+**v3 (2026-11-11, owner: "redesign the web app and the mobile apps"):** the Sunset palette is unchanged; the shapes,
+type and depth follow two reference shots (a light wellness app and a frosted fitness dashboard). A soft off-white
+page; white cards with 28 dp corners and a faint ambient shadow; big numbers in a light (300) weight with tight
+negative tracking under small muted captions; soft coral and violet radial glows behind key numbers (`GlowPanel`);
+frosted quick-action tiles (`GlassChip`); a dark selected segment for toggles, chips and navigation (`PillToggle`,
+`selected`); small round icon buttons, the dark one meaning "go on" (`RoundIconButton`); ring gauges with a number
+inside (`RingGauge`); a dotted dial around the wheel (`DottedDial`); a bar chart whose selected bar glows, with round
+chips under it (`GlowBars`); pill-shaped buttons. All of it lives in `core/widgets/glow.dart` and the theme. Where this
+file and v3 disagree below, v3 wins and the section says so.
 
 ## 1. Brand personality
 
@@ -36,7 +46,7 @@ suggest that money was won.
 
 | Role | Value | Use |
 |---|---|---|
-| `background` | `#FBF6F3` warm linen | Page background (white cards stand off it) |
+| `background` | `#F6F2F1` soft off-white (v3; `#FBF6F3` linen before) | Page background (white cards stand off it) |
 | `surface` | `#FFFFFF` | Cards, sheets, bars (a hairline border and a soft lift set them off the page) |
 | `surfaceRaised` | `#FFFAF7` | Inputs and panels that sit on `surface` |
 | `surfaceMuted` | `#FBEEE7` peach | Inset panels, skeletons, chips |
@@ -58,6 +68,10 @@ suggest that money was won.
 | `wheelSegments` | `#FF7A1A` `#FFC53D` `#2DD4BF` `#4CC9FF` `#B794FF` `#FF6FB5` | The wheel's six segment colours, used in turn; the lucky slot is `wheelLucky` `#FFE066`; labels `wheelLabel` `#2A1A2E` on all of them; each segment is two-tone: solid where its number sits, a white-and-colour checker (`wheelChecker` `#FFFFFF`) from the hub out to half the radius; the lucky star is `wheelStar` `#000000` (owner, 2026-10-28: the wheel is bright, the one place colour runs free) |
 | `heroStart` → `heroEnd` | `#C9381A` → `#3E2585` | The hero surfaces' sunset gradient, lit from the top left by `heroGlow` `#FF9B6A` |
 | `onHero` / `onHeroMuted` | `#FFFFFF` / `#FFE1D2` | Text on a hero surface |
+| `selected` / `onSelected` | `#2A1A2E` / `#FFFFFF` | v3: the selected segment, chip and navigation pill; the round "›" button |
+| `glass` / `glassBorder` | white 72% / white 90% | v3: frosted tiles over a glow |
+| `glowViolet` | `#B794FF` | v3: the second glow (the first is `heroGlow`, coral) |
+| `track` | `#EDE5E3` | v3: the empty part of a bar or ring (decorative, never text) |
 
 Every text colour clears 4.5:1 on the page, on cards and on muted panels; outlines and the pointer clear 3:1
 (`tokens_test.dart`). Every status colour is paired with an icon and a word (`StatusPill`): colour is never the only
@@ -78,7 +92,7 @@ every number style so KES amounts, counts and times align and do not jitter as t
 
 | Token | Size / line height | Weight | Use |
 |---|---|---|---|
-| `display` | 48 / 56 and 40 / 48 | 700 | The balance on Wallet and Home (on the hero surface) |
+| `display` | 60 / 64 and 48 / 54 | 300, −2.4 / −1.8 tracking (v3) | The balance on Home and Wallet (`BigAmount`: the currency small and muted, the figure large) |
 | `headline` | 28 / 36 | 700 / 600 | Screen titles |
 | `title` | 20 / 28 | 600 | Card titles, sheet titles |
 | `titleSmall` | 16 / 24 | 600 | Section headers, list titles |
@@ -123,11 +137,18 @@ Touch targets ≥ 48×48 dp, ≥ 8 dp apart. Safe areas respected; the bottom ba
   never for money. Nothing else is a hero.
 - Radii: `sm 8` (chips), `md 12` (buttons, inputs), `lg 20` (cards; 16 until 2026-10-29), `xl 24` (hero cards, dialogs), `xxl 28` (sheets'
   top corners, the wheel's stage), `full` (pills).
-- No glassmorphism, no blur as decoration; no gradients except the hero surfaces and the wheel's rim and hub.
+- v3: glows and frost are allowed, but only as `GlowPanel` (the balance on Home and Wallet, the profile header),
+  `GlassChip` (quick actions on a glow), the glow under the selected bar and around the wheel, and the bar/ring
+  gradient (coral into violet). No backdrop blur (cost on low-end phones); frost is translucent white. Text on a glow
+  or on glass is checked for 4.5:1 at the glow's strongest point (`tokens_test.dart`).
+- v3: the balance is no longer on the sunset hero; it is the big light numeral on a `GlowPanel`. `HeroCard` remains
+  for the wheel's stage and the sign-in brand panel.
+- Radii (v3): `lg` is 24 (banners, panels), `card` 28 (cards, dialogs), `field` 16 (inputs), buttons are stadiums.
 
 ## 6. Iconography
 
-Material Symbols **Rounded** (the Flutter SDK's `Icons.*_rounded`), 24 dp, one weight. No emoji as icons. Decorative
+Material Symbols **Rounded** (the Flutter SDK's `Icons.*_rounded`), 24 dp, one weight; set in glossy `Orb`s where they
+head a card, row or notice (§8.1). No emoji as icons. Decorative
 icons beside visible text are excluded from semantics; icon-only buttons always carry a tooltip and semantic label.
 
 Fixed meanings: `casino_rounded` is **not** used (no casino imagery). Play = `donut_large_rounded`;
@@ -153,8 +174,9 @@ success = `check_circle_rounded`; error = `error_rounded`; warning = `warning_ro
 - **Status pill:** icon + word + colour (`StatusPill`, `compact` inside rows), for draw, top-up, payout and KYC states.
 - **Sheets:** confirmation of anything that moves money is a bottom sheet (compact) or dialog (medium+): what it costs,
   what you get, what happens next, then *Confirm* (primary) and *Cancel*. Focus starts on the title.
-- **Navigation:** 5 destinations — Home, Play, Draws, Wallet, Account. Icon + label always. Play's selected icon is the
-  only filled-coral circle in the bar; nothing else about it is louder.
+- **Navigation:** 5 destinations — Home, Play, Draws, Wallet, Account. Icon + label always. v3: on phones the bar is
+  a white pill floating over the page; on tablets and desktops the rail is a white panel. The selected destination is
+  a dark (`selected`) pill with a white icon and a bold label.
 - **Lists:** `ListTile`-based rows, 56–72 dp, trailing amount in `amount` style.
 
 ## 8. Motion
@@ -175,6 +197,39 @@ Durations (`MotionTokens`): `quick 120ms` (press, toggles), `standard 220ms` (st
   without scale.
 
 The wheel's motion is specified in `pages/play.md`.
+
+### 8.1 Depth (v3, second pass, 2026-11-11)
+
+The owner asked for a fluid, three-dimensional feel (reference: lusion.co). Surfaces live in perspective space, all
+drawn in code (`lib/core/widgets/depth.dart`); nothing is a video or a 3D asset, so it costs the same on a budget phone
+and on the web.
+
+- **Ground:** one `FluidBackdrop` under every page (`Grounded`, in `MaterialApp.builder`): the page colour with three
+  large soft lights (coral, violet, gold) drifting on a 28 s loop. Scaffolds are transparent; the app bar is clear at
+  the top and frosts once content scrolls under it.
+- **Tilt:** raised cards, the balance panel, hero surfaces and quick-action tiles lean toward the pointer (web,
+  desktop) or toward the finger while pressed (at most ~3–10°), sink slightly, and spring back with a small overshoot.
+  A soft highlight follows the lean. Flat cards (in sheets) never tilt. A finger dragging a list scrolls it; only a
+  mouse steers the lean.
+- **Orbs:** icons that stand for a card, a row or a notice are glossy spheres (`Orb`): lit from the top left, with a
+  specular highlight and a coloured shadow. Brand orbs are coral into violet with a white glyph; `soft` pearls carry
+  a coloured glyph for quiet rows; banners use the tone's colour. Empty states float theirs.
+- **Buttons:** the filled button is a raised glossy key (coral into violet) whose light flips and face sinks when
+  pressed; outlined buttons are pearls; round icon buttons are beads. Apple's button keeps its black, and destructive
+  confirmations keep `error`, in the same raised form.
+- **Entrances and pages:** cards swing up out of a backward lean as they rise (`Staggered`, `Reveal`); a page rises
+  toward you as it fades in while the one beneath leans back and dissolves; a tab's page swings in when the tab
+  changes; the chosen tab's icon flips into place.
+- **The coin:** a gold `Coin3D` (struck "T" face, star back, milled edge built from layers sorted by depth) turns
+  slowly beside the balance on Home and Wallet, lingering face-on, with light glancing across it. It stands for money
+  held, so it never appears on a play's result: a play wins draw chances, not cash, and the result shows a floating
+  orb instead.
+- **The wheel:** `Wheel3D` stands the wheel up as a solid object: a thick bronze rim of layered slices behind the
+  painted face, a backward lean in perspective, a lean toward the finger at rest and a slight axle wobble at speed. The
+  pose never moves where the wheel lands; that is the face's rotation alone (`pages/play.md`).
+- **Reduced motion and tests:** under `disableAnimations` nothing leans, floats, drifts or flips, and pages simply
+  cross-fade. Ambient loops (`Ambient.enabled`) are off in tests so screens settle. Depth never carries meaning: every
+  orb and highlight is decoration beside words.
 
 ## 9. Haptics
 

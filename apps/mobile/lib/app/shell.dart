@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 
 import '../core/widgets/brand_mark.dart';
 import '../core/widgets/content_frame.dart';
+import '../core/widgets/depth.dart';
 import 'connectivity_strip.dart';
 import 'theme/tokens.dart';
 
@@ -22,8 +23,8 @@ const _destinations = [
   _Destination('Account', Icons.person_outline_rounded, Icons.person_rounded),
 ];
 
-/// Five top-level destinations: a bottom bar on phones, a rail on tablets, an extended rail with the wordmark on
-/// laptops and desktops (MASTER.md §4, §7).
+/// Five top-level destinations: a floating bottom bar on phones, a rail on tablets, an extended rail with the wordmark
+/// on laptops and desktops (MASTER.md §4, §7).
 class AppShell extends StatelessWidget {
   const AppShell({super.key, required this.shell});
 
@@ -38,55 +39,90 @@ class AppShell extends StatelessWidget {
     final body = Column(
       children: [
         const ConnectivityStrip(),
-        Expanded(child: shell),
+        // a tab's page swings in when the tab changes
+        Expanded(
+          child: TabArrival(index: shell.currentIndex, child: shell),
+        ),
       ],
     );
     if (width == WidthClass.compact) {
+      // a white pill floating over the page, the selected destination a dark pill (redesign 2026-11-11)
       return Scaffold(
         body: body,
-        bottomNavigationBar: DecoratedBox(
-          decoration: BoxDecoration(
-            color: c.surface,
-            border: Border(top: BorderSide(color: c.border)),
-            boxShadow: Elevation.bar(c),
-          ),
-          child: NavigationBar(
-            selectedIndex: shell.currentIndex,
-            onDestinationSelected: _go,
-            destinations: [
-              for (final d in _destinations)
-                NavigationDestination(icon: Icon(d.icon), selectedIcon: Icon(d.selectedIcon), label: d.label),
-            ],
+        bottomNavigationBar: SafeArea(
+          top: false,
+          minimum: const EdgeInsets.only(bottom: Space.sm),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(Space.md, Space.xs, Space.md, 0),
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: c.surface,
+                borderRadius: BorderRadius.circular(Radii.card),
+                boxShadow: Elevation.bar(c),
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(Radii.card),
+                child: MediaQuery.removePadding(
+                  context: context,
+                  removeBottom: true,
+                  child: NavigationBar(
+                    selectedIndex: shell.currentIndex,
+                    onDestinationSelected: _go,
+                    destinations: [
+                      for (final d in _destinations)
+                        NavigationDestination(
+                          icon: Icon(d.icon),
+                          selectedIcon: FlipIn(child: Icon(d.selectedIcon)),
+                          label: d.label,
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
           ),
         ),
       );
     }
     final extended = width == WidthClass.expanded;
+    // the rail is a white panel standing off the page, like the cards
     return Scaffold(
       body: SafeArea(
         child: Row(
           children: [
-            NavigationRail(
-              extended: extended,
-              minExtendedWidth: 232,
-              labelType: extended ? NavigationRailLabelType.none : NavigationRailLabelType.all,
-              selectedIndex: shell.currentIndex,
-              onDestinationSelected: _go,
-              leading: Padding(
-                padding: const EdgeInsets.fromLTRB(Space.sm, Space.xl, Space.sm, Space.xl),
-                child: BrandMark(height: 34, showWordmark: extended),
-              ),
-              destinations: [
-                for (final d in _destinations)
-                  NavigationRailDestination(
-                    icon: Icon(d.icon),
-                    selectedIcon: Icon(d.selectedIcon),
-                    label: Text(d.label),
-                    padding: const EdgeInsets.symmetric(vertical: Space.xxs),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(Space.md, Space.md, 0, Space.md),
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: c.surface,
+                  borderRadius: BorderRadius.circular(Radii.card),
+                  boxShadow: Elevation.card(c),
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(Radii.card),
+                  child: NavigationRail(
+                    extended: extended,
+                    minExtendedWidth: 232,
+                    labelType: extended ? NavigationRailLabelType.none : NavigationRailLabelType.all,
+                    selectedIndex: shell.currentIndex,
+                    onDestinationSelected: _go,
+                    leading: Padding(
+                      padding: const EdgeInsets.fromLTRB(Space.sm, Space.xl, Space.sm, Space.xl),
+                      child: BrandMark(height: 34, showWordmark: extended),
+                    ),
+                    destinations: [
+                      for (final d in _destinations)
+                        NavigationRailDestination(
+                          icon: Icon(d.icon),
+                          selectedIcon: FlipIn(child: Icon(d.selectedIcon)),
+                          label: Text(d.label),
+                          padding: const EdgeInsets.symmetric(vertical: Space.xs),
+                        ),
+                    ],
                   ),
-              ],
+                ),
+              ),
             ),
-            VerticalDivider(width: 1, color: c.border),
             Expanded(child: body),
           ],
         ),

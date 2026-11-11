@@ -87,7 +87,7 @@ class _StaggeredState extends State<Staggered> with SingleTickerProviderStateMix
                 curve: Interval(
                   (Motion.stagger.inMilliseconds * i) / total,
                   ((Motion.stagger.inMilliseconds * i) + Motion.emphasis.inMilliseconds) / total,
-                  curve: Motion.settle,
+                  curve: Curves.easeOutBack,
                 ),
               ),
               child: widget.children[i],
@@ -106,9 +106,18 @@ class _Enter extends AnimatedWidget {
   @override
   Widget build(BuildContext context) {
     final v = (listenable as Animation<double>).value;
+    // each card swings up out of a backward lean as it rises, so a list unfolds in depth (redesign, second pass)
     return Opacity(
-      opacity: v,
-      child: Transform.translate(offset: Offset(0, Motion.riseDistance * (1 - v)), child: child),
+      opacity: v.clamp(0.0, 1.0),
+      child: Transform(
+        alignment: Alignment.topCenter,
+        transform: Matrix4.identity()
+          ..setEntry(3, 2, 0.0011)
+          ..translateByDouble(0, Motion.riseDistance * 2.4 * (1 - v), 0, 1)
+          ..rotateX(0.42 * (1 - v))
+          ..scaleByDouble(0.94 + 0.06 * v, 0.94 + 0.06 * v, 1, 1),
+        child: child,
+      ),
     );
   }
 }

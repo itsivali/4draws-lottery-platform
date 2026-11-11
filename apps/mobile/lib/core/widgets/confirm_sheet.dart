@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../app/theme/tokens.dart';
 import 'content_frame.dart';
+import 'depth.dart';
 
 /// Asks before anything that moves money or limits play: what it costs, what you get, what happens next
 /// (MASTER.md §7). A bottom sheet on phones, a dialog on wider screens. Returns true only on an explicit confirm.
@@ -70,7 +71,14 @@ class _ConfirmBody extends StatelessWidget {
           if (note != null) ...[const SizedBox(height: Space.sm), Text(note!, style: t.bodySmall)],
           const SizedBox(height: Space.xl),
           FilledButton(
-            style: destructive ? FilledButton.styleFrom(backgroundColor: c.error, foregroundColor: c.onPrimary) : null,
+            style: destructive
+                ? FilledButton.styleFrom(
+                    backgroundColor: c.error,
+                    foregroundColor: c.onPrimary,
+                    backgroundBuilder: (context, states, child) =>
+                        raisedButtonFace(context, states, child, c: c, base: c.error),
+                  )
+                : null,
             onPressed: () => Navigator.of(context).pop(true),
             child: Text(confirmLabel),
           ),

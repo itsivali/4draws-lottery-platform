@@ -26,7 +26,14 @@ class Reveal extends StatelessWidget {
       child: child,
       builder: (context, t, child) => Opacity(
         opacity: t,
-        child: Transform.translate(offset: Offset(0, 12 * (1 - t)), child: child),
+        child: Transform(
+          alignment: Alignment.bottomCenter,
+          transform: Matrix4.identity()
+            ..setEntry(3, 2, 0.0011)
+            ..translateByDouble(0, 18 * (1 - t), 0, 1)
+            ..rotateX(-0.3 * (1 - t)),
+          child: child,
+        ),
       ),
     );
   }
@@ -35,20 +42,24 @@ class Reveal extends StatelessWidget {
 /// Counts a sum up to its value when it first appears or changes, so a balance reads as money arriving, not a
 /// number swapping. Off when the platform asks for reduced motion.
 class CountUp extends StatelessWidget {
-  const CountUp({super.key, required this.value, required this.format, this.style});
+  const CountUp({super.key, required this.value, required this.format, this.style, this.builder});
 
   final int value;
   final String Function(int) format;
   final TextStyle? style;
 
+  /// Draws the formatted text another way (the big numeral); a plain text in [style] by default.
+  final Widget Function(String text)? builder;
+
   @override
   Widget build(BuildContext context) {
-    if (context.reduceMotion) return Text(format(value), style: style);
+    Widget show(String s) => builder?.call(s) ?? Text(s, style: style);
+    if (context.reduceMotion) return show(format(value));
     return TweenAnimationBuilder<double>(
       tween: Tween(begin: 0, end: value.toDouble()),
       duration: Motion.standard * 3,
       curve: Curves.easeOutCubic,
-      builder: (context, v, _) => Text(format(v.round()), style: style),
+      builder: (context, v, _) => show(format(v.round())),
     );
   }
 }

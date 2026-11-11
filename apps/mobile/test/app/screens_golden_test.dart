@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_test/flutter_test.dart' hide testWidgets;
+import 'package:flutter_test/flutter_test.dart' as flutter_test show testWidgets;
 
 import '../support/app_harness.dart';
 import '../support/fake_backend.dart';
@@ -8,6 +9,19 @@ import '../support/fonts.dart';
 // Golden images of whole screens, for review of the design (MASTER.md) and to catch visual regressions.
 void main() {
   setUpAll(loadAppFonts);
+
+  // the soft shadows and glows are part of the design, so these images paint them (tests flatten shadows by default)
+  void testWidgets(String description, Future<void> Function(WidgetTester) body) => flutter_test.testWidgets(
+    description,
+    (t) async {
+      debugDisableShadows = false;
+      try {
+        await body(t);
+      } finally {
+        debugDisableShadows = true;
+      }
+    },
+  );
 
   Future<void> shot(WidgetTester t, String name) async {
     await t.pumpAndSettle();
@@ -34,6 +48,17 @@ void main() {
     final b = FakeBackend(balance: 1250);
     await pumpApp(t, b);
     await shot(t, 'home_phone');
+  });
+
+  testWidgets('home on a small phone', (t) async {
+    await pumpApp(t, FakeBackend(balance: 1250), size: const Size(360, 740));
+    await shot(t, 'home_small_phone');
+  });
+
+  testWidgets('account', (t) async {
+    await pumpApp(t, FakeBackend());
+    await t.tap(find.text('Account').last);
+    await shot(t, 'account_phone');
   });
 
   testWidgets('play, ready', (t) async {

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/auth/session_manager.dart';
 import '../core/input/text_focus.dart';
+import '../core/widgets/depth.dart';
 import '../features/account/application/account_providers.dart';
 import '../features/draws/application/draws_providers.dart';
 import '../features/fairness/application/fairness_providers.dart';
@@ -82,6 +83,8 @@ class _LotteryAppState extends ConsumerState<LotteryApp> with WidgetsBindingObse
     title: 'Tajirika',
     debugShowCheckedModeBanner: false,
     theme: buildTheme(),
+    // one moving fluid under every page (depth.dart)
+    builder: (context, child) => Grounded(child: child ?? const SizedBox()),
     routerConfig: ref.watch(routerProvider),
   );
 }
@@ -93,6 +96,7 @@ class ConfigErrorApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) => MaterialApp(
     theme: buildTheme(),
+    builder: (context, child) => Grounded(child: child ?? const SizedBox()),
     home: const Scaffold(
       body: Center(
         child: Padding(

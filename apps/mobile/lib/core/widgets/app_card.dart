@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 
 import '../../app/theme/tokens.dart';
+import 'depth.dart';
 
-/// The one card: a surface with a hairline border and a soft lift (MASTER.md §5, §7). `tinted` cards sit on
-/// primaryContainer for quiet emphasis; `flat` ones keep the border and drop the shadow (inside sheets and lists).
+/// The one card: a white surface with large corners and a faint ambient shadow (MASTER.md §5, §7). `tinted` cards sit
+/// on primaryContainer for quiet emphasis; `flat` ones trade the shadow for a hairline (inside sheets and lists).
 class AppCard extends StatelessWidget {
   const AppCard({
     super.key,
@@ -32,7 +33,7 @@ class AppCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.colors;
     final t = Theme.of(context).textTheme;
-    final radius = BorderRadius.circular(Radii.lg);
+    final radius = BorderRadius.circular(Radii.card);
     final body = Padding(
       padding: padding,
       child: Column(
@@ -45,17 +46,7 @@ class AppCard extends StatelessWidget {
               padding: EdgeInsets.symmetric(horizontal: padding.horizontal == 0 ? Space.lg : 0),
               child: Row(
                 children: [
-                  if (icon != null) ...[
-                    ExcludeSemantics(
-                      child: Container(
-                        width: 36,
-                        height: 36,
-                        decoration: BoxDecoration(color: c.primaryContainer, shape: BoxShape.circle),
-                        child: Icon(icon, size: 20, color: c.onPrimaryContainer),
-                      ),
-                    ),
-                    const SizedBox(width: Space.md),
-                  ],
+                  if (icon != null) ...[Orb(icon: icon!, size: 40), const SizedBox(width: Space.md)],
                   Expanded(
                     child: Semantics(header: true, child: Text(title!, style: t.titleMedium)),
                   ),
@@ -69,11 +60,16 @@ class AppCard extends StatelessWidget {
         ],
       ),
     );
+    // raised cards lean toward the finger or pointer (depth.dart); flat ones sit in sheets and stay still
+    return Tilt(enabled: !flat, maxAngle: 0.05, child: _face(c, radius, body));
+  }
+
+  Widget _face(AppColors c, BorderRadius radius, Widget body) {
     return DecoratedBox(
       decoration: BoxDecoration(
         color: tinted ? c.primaryContainer : c.surface,
         borderRadius: radius,
-        border: Border.all(color: tinted ? c.primaryContainer : c.border),
+        border: flat ? Border.all(color: c.border) : null,
         boxShadow: flat || tinted ? null : Elevation.card(c),
       ),
       child: Material(

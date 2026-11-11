@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -9,8 +8,9 @@ import '../../../core/formatting/money.dart';
 import '../../../core/widgets/app_card.dart';
 import '../../../core/widgets/async_view.dart';
 import '../../../core/widgets/brand_mark.dart';
+import '../../../core/widgets/coin.dart';
 import '../../../core/widgets/content_frame.dart';
-import '../../../core/widgets/hero_card.dart';
+import '../../../core/widgets/glow.dart';
 import '../../../core/widgets/inline_banner.dart';
 import '../../../core/widgets/motion.dart';
 import '../../../core/widgets/reveal.dart';
@@ -21,6 +21,7 @@ import '../../account/domain/account_models.dart';
 import '../../draws/application/draws_providers.dart';
 import '../../draws/presentation/draws_screen.dart';
 import '../../play/application/play_providers.dart';
+import '../../play/domain/play_models.dart';
 import '../../status/operating_status.dart';
 import '../../wallet/application/wallet_providers.dart';
 
@@ -156,6 +157,7 @@ class HomeScreen extends ConsumerWidget {
   }
 }
 
+/// The balance as a big light numeral over two soft glows, with frosted quick actions under it (redesign 2026-11-11).
 class _BalanceHero extends ConsumerWidget {
   const _BalanceHero();
 
@@ -164,55 +166,58 @@ class _BalanceHero extends ConsumerWidget {
     final wallet = ref.watch(walletStatementProvider);
     final t = Theme.of(context).textTheme;
     final c = context.colors;
-    final heroButton = OutlinedButton.styleFrom(
-      foregroundColor: c.onHero,
-      side: BorderSide(color: c.onHero.withValues(alpha: 0.45)),
-      minimumSize: const Size(Breakpoints.minTouch, 44),
-    );
-    return HeroCard(
-      child: AsyncView(
-        value: wallet,
-        what: 'your balance',
-        onRetry: () => ref.invalidate(walletStatementProvider),
-        loading: const Skeleton(height: 48, width: 180),
-        data: (w) => Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Confirmed balance', style: t.labelMedium?.copyWith(color: c.onHeroMuted)),
-            const SizedBox(height: Space.xs),
-            CountUp(
-              key: ValueKey(w.balanceKes),
-              value: w.balanceKes,
-              format: formatKes,
-              style: t.displayMedium?.copyWith(color: c.onHero),
-            ),
-            if (w.debtKes > 0) ...[
-              const SizedBox(height: Space.sm),
-              Text(
-                'Owed after a reversed top-up: ${formatKes(w.debtKes)}',
-                style: t.bodySmall?.copyWith(color: c.onHeroMuted),
+    return Reveal(
+      child: GlowPanel(
+        child: AsyncView(
+          value: wallet,
+          what: 'your balance',
+          onRetry: () => ref.invalidate(walletStatementProvider),
+          loading: const Skeleton(height: 64, width: 200),
+          data: (w) => Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text('Confirmed balance', style: t.labelLarge?.copyWith(color: c.inkMuted)),
+                  ),
+                  RoundIconButton(
+                    icon: Icons.chevron_right_rounded,
+                    tooltip: 'Wallet',
+                    dark: true,
+                    onPressed: () => context.go('/wallet'),
+                  ),
+                ],
+              ),
+              // the balance beside a turning gold coin (3D, depth pass)
+              Row(
+                children: [
+                  Expanded(
+                    child: CountUp(
+                      key: ValueKey(w.balanceKes),
+                      value: w.balanceKes,
+                      format: formatKes,
+                      builder: (text) => BigAmount(text: text),
+                    ),
+                  ),
+                  const SizedBox(width: Space.sm),
+                  const Coin3D(size: 64),
+                ],
+              ),
+              if (w.debtKes > 0) ...[
+                const SizedBox(height: Space.sm),
+                Text('Owed after a reversed top-up: ${formatKes(w.debtKes)}', style: t.bodySmall),
+              ],
+              const SizedBox(height: Space.lg),
+              GlassChipRow(
+                chips: [
+                  (Icons.add_rounded, 'Top up', () => context.go('/wallet/top-up')),
+                  (Icons.donut_large_rounded, 'Play', () => context.go('/play')),
+                  (Icons.arrow_outward_rounded, 'Withdraw', () => context.go('/wallet/withdraw')),
+                ],
               ),
             ],
-            const SizedBox(height: Space.lg),
-            Wrap(
-              spacing: Space.sm,
-              runSpacing: Space.sm,
-              children: [
-                OutlinedButton.icon(
-                  style: heroButton,
-                  onPressed: () => context.go('/wallet/top-up'),
-                  icon: const Icon(Icons.add_rounded, size: 20),
-                  label: const Text('Top up'),
-                ),
-                OutlinedButton.icon(
-                  style: heroButton,
-                  onPressed: () => context.go('/wallet'),
-                  icon: const Icon(Icons.account_balance_wallet_rounded, size: 20),
-                  label: const Text('Wallet'),
-                ),
-              ],
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -234,8 +239,8 @@ class _Greeting extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Semantics(header: true, child: Text(name == null ? 'Karibu' : 'Karibu, $name', style: t.headlineMedium)),
-          const SizedBox(height: Space.xxs),
+          Semantics(header: true, child: Text(name == null ? 'Karibu' : 'Karibu, $name', style: t.headlineLarge)),
+          const SizedBox(height: Space.xs),
           Text('Your wallet, today\'s plays and the open draws.', style: t.bodyMedium?.copyWith(color: c.inkMuted)),
         ],
       ),
@@ -264,43 +269,39 @@ class _TodayCard extends ConsumerWidget {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Row(
-                children: [
-                  _PlaysRing(done: d.plays, total: total),
-                  const SizedBox(width: Space.lg),
-                  Expanded(
-                    child: MergeSemantics(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+              MergeSemantics(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      d.plays == 0 ? 'No plays yet today' : '${d.plays} ${d.plays == 1 ? 'play' : 'plays'} today',
+                      style: t.titleMedium,
+                    ),
+                    const SizedBox(height: Space.xxs),
+                    Text(
+                      d.plays == 0 ? '${d.playsLeft} of $total left · $chances' : '${d.playsLeft} left · $chances',
+                      style: t.bodySmall,
+                    ),
+                    if (d.lucky) ...[
+                      const SizedBox(height: Space.sm),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          Text(
-                            d.plays == 0 ? 'No plays yet today' : '${d.plays} ${d.plays == 1 ? 'play' : 'plays'} today',
-                            style: t.titleMedium,
+                          ExcludeSemantics(child: Icon(Icons.star_rounded, size: 18, color: c.gold)),
+                          const SizedBox(width: Space.xs),
+                          Flexible(
+                            child: Text('Lucky day · chances doubled', style: t.labelMedium?.copyWith(color: c.goldText)),
                           ),
-                          const SizedBox(height: Space.xxs),
-                          Text(
-                            d.plays == 0
-                                ? '${d.playsLeft} of $total left · $chances'
-                                : '${d.playsLeft} left · $chances',
-                            style: t.bodySmall,
-                          ),
-                          if (d.lucky) ...[
-                            const SizedBox(height: Space.sm),
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                ExcludeSemantics(child: Icon(Icons.star_rounded, size: 18, color: c.gold)),
-                                const SizedBox(width: Space.xs),
-                                Text('Lucky day · chances doubled', style: t.labelMedium?.copyWith(color: c.goldText)),
-                              ],
-                            ),
-                          ],
                         ],
                       ),
-                    ),
-                  ),
-                ],
+                    ],
+                  ],
+                ),
               ),
+              if (total > 0) ...[
+                const SizedBox(height: Space.md),
+                _PlaysChart(plays: d.tickets, done: d.plays, total: total),
+              ],
               const SizedBox(height: Space.lg),
               FilledButton.icon(
                 onPressed: () => context.go('/play'),
@@ -315,41 +316,45 @@ class _TodayCard extends ConsumerWidget {
   }
 }
 
-/// Plays done today as a ring: a quiet progress mark, not a score.
-class _PlaysRing extends StatelessWidget {
-  const _PlaysRing({required this.done, required this.total});
+/// Today's plays as bars, one per play the day allows: a filled bar is a play made, a pale one a play left, the latest
+/// play glows and a lucky one carries the star. It shows only what the server reported, nothing estimated; a day
+/// allowing more plays than fit falls back to a ring.
+class _PlaysChart extends StatelessWidget {
+  const _PlaysChart({required this.plays, required this.done, required this.total});
 
+  final List<Play> plays;
   final int done;
   final int total;
+
+  static const _maxBars = 12;
 
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
     final t = Theme.of(context).textTheme;
-    return ExcludeSemantics(
-      child: SizedBox.square(
-        dimension: 64,
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            TweenAnimationBuilder<double>(
-              tween: Tween(end: total == 0 ? 0 : done / total),
-              duration: context.reduceMotion ? Duration.zero : Motion.emphasis,
-              curve: Motion.settle,
-              builder: (_, v, _) => SizedBox.expand(
-                child: CircularProgressIndicator(
-                  value: v,
-                  strokeWidth: 6,
-                  strokeCap: StrokeCap.round,
-                  color: c.primary,
-                  backgroundColor: c.surfaceMuted,
-                ),
-              ),
-            ),
-            Text('$done/$total', style: t.titleSmall),
-          ],
+    final label = '$done of $total plays made today';
+    if (total > _maxBars) {
+      return Semantics(
+        label: label,
+        excludeSemantics: true,
+        child: Align(
+          alignment: Alignment.centerLeft,
+          child: RingGauge(value: done / total, child: Text('$done/$total', style: t.titleSmall)),
         ),
-      ),
+      );
+    }
+    final lucky = {for (final p in plays) if (p.spin.lucky) p.seq};
+    return GlowBars(
+      semanticsLabel: label,
+      bars: [
+        for (var i = 1; i <= total; i++)
+          GlowBar(
+            value: i <= done ? 1 : 0,
+            label: '$i',
+            selected: i == done,
+            mark: lucky.contains(i) ? Icon(Icons.star_rounded, size: 16, color: c.gold) : null,
+          ),
+      ],
     );
   }
 }

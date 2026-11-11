@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../app/theme/tokens.dart';
 import '../../../../core/api/api_failure.dart';
 import '../../../../core/formatting/money.dart';
+import '../../../../core/widgets/depth.dart';
 import '../../../../core/widgets/failure_text.dart';
 import '../../application/play_controller.dart';
 import '../play_copy.dart';
@@ -111,10 +112,10 @@ class _Panel extends StatelessWidget {
     final t = Theme.of(context).textTheme;
     final c = context.colors;
     return Container(
-      padding: const EdgeInsets.all(Space.lg),
+      padding: const EdgeInsets.all(Space.xl),
       decoration: BoxDecoration(
         color: c.surface,
-        borderRadius: BorderRadius.circular(Radii.lg),
+        borderRadius: BorderRadius.circular(Radii.card),
         border: Border.all(color: tone.withValues(alpha: 0.45)),
         boxShadow: Elevation.card(c),
       ),
@@ -127,11 +128,10 @@ class _Panel extends StatelessWidget {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  width: 36,
-                  height: 36,
-                  decoration: BoxDecoration(color: tone.withValues(alpha: 0.14), shape: BoxShape.circle),
-                  child: ExcludeSemantics(child: Icon(icon, color: tone, size: 20)),
+                // a floating 3D orb in the panel's tone (not a coin: a play wins chances, never money)
+                Floating(
+                  amplitude: 2.5,
+                  child: Orb(icon: icon, size: 40, color: tone),
                 ),
                 const SizedBox(width: Space.md),
                 Expanded(
