@@ -190,6 +190,10 @@ Read this first at the start of every session.
   Account → About links to them, the closure screen says what is kept, and Home shows a demo banner in sandbox (and a
   paused one when stopped). Data inventory: `docs/security/privacy-data-inventory.md`.
 
+- **CI and security scanning (S9, 2026-11-11):** the OSV scan covers the back office's npm and the app's Dart
+  dependencies as well as Go; staticcheck is pinned; the dead `web` job is gone; `scripts/check-operating-mode.sh` (in
+  CI and `make lint`) fails if any workflow, deploy or compose file sets `OPERATING_MODE=live`.
+
 ## Before the API is exposed to players
 
 1. **Trusted proxy: fixed.** Measured on the live service (`docs/runbooks/trusted-proxy.md`): the rightmost
