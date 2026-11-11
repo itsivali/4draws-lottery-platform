@@ -13,6 +13,7 @@ import '../../../core/widgets/back_office_link.dart';
 import '../../../core/widgets/confirm_sheet.dart';
 import '../../../core/widgets/content_frame.dart';
 import '../../../core/widgets/list_row.dart';
+import '../../../core/widgets/policy_pages.dart';
 import '../../../core/widgets/status_pill.dart';
 import '../application/account_providers.dart';
 import '../domain/account_models.dart';
@@ -109,6 +110,15 @@ class AccountScreen extends ConsumerWidget {
               subtitle: 'Plays, chances, draws and prizes',
             ),
             link(Icons.verified_rounded, 'Fairness', '/account/fairness', subtitle: 'Check your spins yourself'),
+          ],
+        ),
+        const SectionHeader(title: 'About'),
+        const RowGroup(
+          children: [
+            PolicyRow(PolicyPage.privacy),
+            PolicyRow(PolicyPage.terms),
+            PolicyRow(PolicyPage.responsibleGambling),
+            PolicyRow(PolicyPage.deleteAccount),
           ],
         ),
         const SectionHeader(title: 'Preferences'),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -20,6 +21,7 @@ import '../../account/domain/account_models.dart';
 import '../../draws/application/draws_providers.dart';
 import '../../draws/presentation/draws_screen.dart';
 import '../../play/application/play_providers.dart';
+import '../../status/operating_status.dart';
 import '../../wallet/application/wallet_providers.dart';
 
 class HomeScreen extends ConsumerWidget {
@@ -32,6 +34,8 @@ class HomeScreen extends ConsumerWidget {
     final wallet = ref.watch(walletStatementProvider);
     final cards = <Widget>[
       _Greeting(name: account.value?.firstName),
+      // only when there is something to say: a demo or a stopped service (S8)
+      if (ref.watch(operatingModeProvider).value case 'sandbox' || 'disabled') const OperatingModeBanner(),
       // an account from before sign-up asked for them is asked until it gives them (owner, 2026-10-31)
       if (account.value?.needsIdentity ?? false)
         InlineBanner(

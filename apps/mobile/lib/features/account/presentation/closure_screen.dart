@@ -12,6 +12,7 @@ import '../../../core/widgets/confirm_sheet.dart';
 import '../../../core/widgets/content_frame.dart';
 import '../../../core/widgets/failure_text.dart';
 import '../../../core/widgets/inline_banner.dart';
+import '../../../core/widgets/policy_pages.dart';
 import '../../../core/widgets/status_pill.dart';
 import '../application/account_providers.dart';
 
@@ -86,9 +87,23 @@ class _ClosureScreenState extends ConsumerState<ClosureScreen> {
                     children: [
                       Text(
                         'You can ask for your account to be closed. Staff close it once any balance has been paid out '
-                        'to your M-Pesa number. Records the law requires are kept; everything else about you is no '
-                        'longer used.',
+                        'to your M-Pesa number. Then you cannot sign in, play, top up or withdraw, and every session '
+                        'ends.',
                         style: t.bodyMedium?.copyWith(color: c.inkMuted),
+                      ),
+                      const SizedBox(height: Space.md),
+                      Text(
+                        'What is kept: the law makes gambling operators keep records of payments, plays, prizes, tax '
+                        'withheld, identity checks and anti-money-laundering checks after an account closes, for the '
+                        'periods it sets. They are kept secure and then deleted or made anonymous.',
+                        style: t.bodyMedium?.copyWith(color: c.inkMuted),
+                      ),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: TextButton(
+                          onPressed: () => openPolicy(ref, PolicyPage.deleteAccount),
+                          child: const Text('What is kept, and why'),
+                        ),
                       ),
                       if (_error != null) ...[
                         const SizedBox(height: Space.lg),

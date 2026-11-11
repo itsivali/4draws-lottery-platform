@@ -5,7 +5,7 @@ import 'package:flutter/foundation.dart';
 ///     flutter run --dart-define=API_BASE_URL=http://localhost:8080
 ///     flutter build web --dart-define=API_BASE_URL=https://lottery-api.example
 class AppConfig {
-  const AppConfig({required this.apiBaseUrl, this.backOfficeUrl});
+  const AppConfig({required this.apiBaseUrl, this.backOfficeUrl, this.siteUrl});
 
   /// Reads `API_BASE_URL` and, for the web app's link to the staff back office, `BACKOFFICE_URL`. Debug builds default
   /// to the local stack; release builds must name the server (no default production URL is compiled in), and plain
@@ -15,9 +15,11 @@ class AppConfig {
     final api = secureUrl(raw.isEmpty && kDebugMode ? 'http://localhost:8080' : raw);
     if (api == null) return null;
     const office = String.fromEnvironment('BACKOFFICE_URL');
+    const site = String.fromEnvironment('SITE_URL');
     return AppConfig(
       apiBaseUrl: api,
       backOfficeUrl: secureUrl(office.isEmpty && kDebugMode ? 'http://localhost:5173' : office),
+      siteUrl: secureUrl(site),
     );
   }
 
@@ -34,4 +36,13 @@ class AppConfig {
 
   /// Where the staff back office lives, for the link the web app shows; null when the build names none.
   final Uri? backOfficeUrl;
+
+  /// The public site with the privacy policy, terms, responsible gambling and account deletion pages (`SITE_URL`);
+  /// tajirika.co.ke when the build names none.
+  final Uri? siteUrl;
+
+  static final _defaultSite = Uri.parse('https://tajirika.co.ke');
+
+  /// The address of a public page, such as `privacy` (S8: apps/mobile/web/`page`/).
+  Uri page(String slug) => (siteUrl ?? _defaultSite).resolve('/$slug/');
 }

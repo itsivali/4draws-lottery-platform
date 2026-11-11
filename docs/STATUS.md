@@ -105,6 +105,11 @@ Read this first at the start of every session.
   portrait, bundle name Tajirika, Google URL scheme; the Apple team id and Google iOS client come from an uncommitted
   `Local.xcconfig` (`docs/mobile/ios-release.md`). Archiving and TestFlight wait for the owner's Apple account.
 
+- **Policy pages and in-app links (S8, 2026-11-11):** `tajirika.co.ke/privacy/`, `/terms/`, `/responsible-gambling/`
+  and `/delete-account/` are plain pages in the web build, marked DRAFT with `[TO CONFIRM]` items for counsel; the app's
+  Account → About links to them, the closure screen says what is kept, and Home shows a demo banner in sandbox (and a
+  paused one when stopped). Data inventory: `docs/security/privacy-data-inventory.md`.
+
 ## Before the API is exposed to players
 
 1. **Trusted proxy: fixed.** Measured on the live service (`docs/runbooks/trusted-proxy.md`): the rightmost

@@ -165,6 +165,12 @@ class FakeBackend {
   String? secondName = 'Wanjiru';
   bool hasPassword = true;
 
+  /// The operating mode GET /v1/status reports (ADR 0027); null answers 404, as an api without one would.
+  String? operatingMode;
+
+  /// The web addresses the app opened in the browser (policy pages).
+  final opened = <Uri>[];
+
   /// The Google account's photo (ADR 0035); and whether the sign-in is too old to set a first password.
   String? photoUrl;
   bool signInStale = false;
@@ -207,6 +213,7 @@ class FakeBackend {
         path == '/v1/auth/signup' ||
         path == '/v1/auth/refresh' ||
         path == '/v1/auth/providers' ||
+        path == '/v1/status' ||
         path == '/v1/auth/password/forgot' ||
         path == '/v1/auth/password/reset' ||
         path.startsWith('/v1/auth/sso/') ||
@@ -456,6 +463,13 @@ class FakeBackend {
         final id = 'po-${++_ids}';
         payouts[id] = payoutJson(id: id, amount: amount);
         return _ok(payouts[id]!, 201);
+      case ('GET', '/v1/status'):
+        if (operatingMode == null) return _problem(404, 'not-found', 'Not found');
+        return _ok({
+          'operating_mode': operatingMode,
+          'real_money': operatingMode == 'live',
+          'money_moves': operatingMode != 'disabled',
+        });
       case ('GET', '/v1/draws'):
         return _ok({'draws': draws});
       case ('GET', '/v1/draws/periods'):

@@ -10,6 +10,7 @@ import 'package:lottery_mobile/core/auth/session_manager.dart';
 import 'package:lottery_mobile/core/auth/token_store.dart';
 import 'package:lottery_mobile/core/platform/haptics.dart';
 import 'package:lottery_mobile/core/platform/preferences.dart';
+import 'package:lottery_mobile/core/widgets/policy_pages.dart';
 import 'package:lottery_mobile/features/auth/application/auth_providers.dart';
 import 'package:lottery_mobile/features/auth/data/provider_sign_in.dart';
 import 'package:lottery_mobile/features/auth/data/sign_in_providers.dart';
@@ -93,6 +94,10 @@ Future<AppHarness> pumpApp(
       preferenceStoreProvider.overrideWithValue(prefs),
       storedHapticsPreferenceProvider.overrideWithValue(hapticsOn),
       hapticsSupportedProvider.overrideWithValue(true),
+      urlOpenerProvider.overrideWithValue((url) async {
+        backend.opened.add(url);
+        return true;
+      }),
       hapticsProvider.overrideWith((ref) => GatedHaptics(haptics, enabled: () => ref.read(hapticsEnabledProvider))),
     ],
     retry: (_, _) => null,
