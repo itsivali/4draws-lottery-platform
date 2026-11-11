@@ -2,7 +2,9 @@ package identity
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -101,7 +103,8 @@ func (s *Service) OpenClosures(ctx context.Context, limit int, viewer string) ([
 type ClosureGuard func(ctx context.Context, tx pgx.Tx, userID string) error
 
 // CloseAccount closes the account of an open closure request: the account becomes `closed` (no sign-in, play, top-up
-// or withdrawal), every session ends, and the request records who closed it. The player's records stay. staffID is
+// or withdrawal), the request records who closed it, and what the law does not require is erased (ADR 0037): the
+// password, sessions, devices, sign-in links, photo and email. The records the law requires stay. staffID is
 // the staff member's id (a uuid); staff is how they appear in the audit log.
 func (s *Service) CloseAccount(ctx context.Context, userID, staffID, staff string, guard ClosureGuard) (time.Time, error) {
 	var at time.Time
@@ -132,10 +135,30 @@ func (s *Service) CloseAccount(ctx context.Context, userID, staffID, staff strin
 			return err
 		}
 		at = now
-		return s.audit.Record(ctx, tx, audit.Event{ActorType: audit.Staff, ActorID: staff, Action: "identity.account_closed",
-			EntityType: "user", EntityID: userID})
+		if err := s.audit.Record(ctx, tx, audit.Event{ActorType: audit.Staff, ActorID: staff, Action: "identity.account_closed",
+			EntityType: "user", EntityID: userID}); err != nil {
+			return err
+		}
+		// erasure at closure (ADR 0037): in this transaction, so an account is never closed with its password,
+		// sessions, devices, sign-in links, photo and email still there
+		return s.erase(ctx, tx, q, userID, staff, now)
 	})
 	return at, err
+}
+
+// erase removes what the law does not require of a closed account (ADR 0037) and records what was removed, as
+// counts and yes/no, never the values. The database refuses it for an account that is not closed.
+func (s *Service) erase(ctx context.Context, tx pgx.Tx, q *store.Queries, userID, staff string, now time.Time) error {
+	raw, err := q.EraseClosedAccount(ctx, store.EraseClosedAccountParams{UserID: userID, At: now})
+	if err != nil {
+		return fmt.Errorf("identity: erase closed account: %w", err)
+	}
+	var removed map[string]any
+	if err := json.Unmarshal(raw, &removed); err != nil {
+		return fmt.Errorf("identity: erase closed account: %w", err)
+	}
+	return s.audit.Record(ctx, tx, audit.Event{ActorType: audit.Staff, ActorID: staff, Action: "identity.account_erased",
+		EntityType: "user", EntityID: userID, Details: map[string]any{"removed": removed}})
 }
 
 // Player is a registered account as the back office lists it.

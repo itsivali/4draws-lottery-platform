@@ -55,10 +55,14 @@ Read this first at the start of every session.
   state that the owner must make true or correct before a licence: the mailboxes `support@4draws.co.ke` and
   `privacy@4draws.co.ke` (they do not exist; the domain has no working DNS yet); closure "normally within 30 days" and
   backups overwritten within 90 (commitments nobody has measured); retention of seven years (POCAMLA) and five (tax),
-  which ADR 0015 leaves to counsel; **deleting or anonymising a closed account's data, which the platform does not do
-  yet** (closing only blocks the account); staff and their families barred from playing; the helplines named on the
+  which ADR 0015 leaves to counsel; deleting the kept records when those periods end (not built: ADR 0037 erases
+  at closure what the law does not require, since 2026-11-11); staff and their families barred from playing; the helplines named on the
   responsible gambling page. The company's registration number, postal address, licence number and ODPC registration
   are not on the pages because they are not known here.
+- **Erasure at closure (2026-11-11, ADR 0037, migration 00056):** closing an account now erases, in the same
+  transaction, its password, sessions, devices, Google/Apple links, photo, email and reset links, through one database
+  function that refuses any account that is not closed; the money's records, identity checks and the audit log stay.
+  Accounts closed earlier were erased by the migration. Not built: purging the kept records when retention ends.
 - **Play Console (2026-11-11):** the owner's developer account is a personal one ("willis ivali"). The app is to be
   created as 4draws, `ke.co.fourdraws.app`, English (UK), App, Free; the three declarations are the owner's to
   accept. A release build signed with the upload key builds locally. Not yet possible: production release (needs

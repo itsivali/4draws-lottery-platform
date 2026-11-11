@@ -339,6 +339,7 @@ type IdentityUser struct {
 	MustChangePassword bool
 	Email              pgtype.Text
 	PhotoUrl           pgtype.Text
+	ErasedAt           pgtype.Timestamptz
 }
 
 type IdentityUserStatusHistory struct {

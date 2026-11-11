@@ -5,8 +5,10 @@ privacy policy (`apps/mobile/web/privacy/`), the App Store privacy label and man
 (`docs/mobile/privacy-manifests.md`) and the Play data safety form (S10). **For counsel to confirm.**
 
 Retention periods are not decided. ADR 0015 (data retention) is proposed and waits for counsel on what the Data
-Protection Act 2019, the Gambling Control Act and POCAMLA require. Until then nothing is deleted automatically, and a
-closed account keeps its records.
+Protection Act 2019, the Gambling Control Act and POCAMLA require. Until then no kept record is deleted when it
+ages. Since ADR 0037 (2026-11-11), closing an account erases what the law does not require at once: its password,
+sessions, devices, Google or Apple links, photo, email and reset links. The records listed below as legal obligations
+stay.
 
 ## Player data
 

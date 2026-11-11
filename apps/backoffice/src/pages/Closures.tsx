@@ -29,7 +29,7 @@ export function ClosuresPage() {
         return (
           <Actions>
             <Button type="button" size="sm" variant="outline" className="border-destructive/50 text-destructive hover:bg-destructive/10 hover:text-destructive" disabled={busy} onClick={() => {
-              ask({ title: `Close the account of ${msisdn(c.msisdn)}?`, body: <p>Sign-in, play, top-ups and withdrawals stop and every session ends. This cannot be undone here.</p>,
+              ask({ title: `Close the account of ${msisdn(c.msisdn)}?`, body: <p>Sign-in, play, top-ups and withdrawals stop. The account’s password, sessions, devices, Google or Apple links, photo and email address are erased; the records the law requires (identity checks, payments, plays, prizes) are kept. This cannot be undone.</p>,
                 confirmLabel: 'Close account', danger: true, success: 'Account closed.', act: () => api.post(`/v1/staff/closures/${c.user_id}/close`) })
             }}>Close account</Button>
           </Actions>

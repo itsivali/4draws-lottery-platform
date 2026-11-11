@@ -88,6 +88,24 @@ func (q *Queries) EndSessionsFor(ctx context.Context, arg EndSessionsForParams) 
 	return err
 }
 
+const eraseClosedAccount = `-- name: EraseClosedAccount :one
+SELECT identity.erase_closed_account($1::uuid, $2::timestamptz)::jsonb AS removed
+`
+
+type EraseClosedAccountParams struct {
+	UserID string
+	At     time.Time
+}
+
+// Erasure at closure (ADR 0037): removes what the law does not require of a closed account and says what it removed.
+// Refuses an account that is not closed.
+func (q *Queries) EraseClosedAccount(ctx context.Context, arg EraseClosedAccountParams) ([]byte, error) {
+	row := q.db.QueryRow(ctx, eraseClosedAccount, arg.UserID, arg.At)
+	var removed []byte
+	err := row.Scan(&removed)
+	return removed, err
+}
+
 const findAuthIdentity = `-- name: FindAuthIdentity :one
 SELECT user_id FROM identity.auth_identities WHERE provider = $1 AND subject = $2
 `

@@ -222,3 +222,8 @@ SELECT created_at FROM identity.sessions WHERE id = $1 AND user_id = $2 AND revo
 -- Sets a password on an account that has none (ADR 0035).
 UPDATE identity.users SET password_hash = sqlc.arg(password_hash), password_changed_at = sqlc.arg(at), updated_at = sqlc.arg(at)
 WHERE id = sqlc.arg(id) AND password_hash IS NULL;
+
+-- name: EraseClosedAccount :one
+-- Erasure at closure (ADR 0037): removes what the law does not require of a closed account and says what it removed.
+-- Refuses an account that is not closed.
+SELECT identity.erase_closed_account(sqlc.arg(user_id)::uuid, sqlc.arg(at)::timestamptz)::jsonb AS removed;

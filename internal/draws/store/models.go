@@ -339,6 +339,7 @@ type IdentityUser struct {
 	MustChangePassword bool
 	Email              *string
 	PhotoUrl           *string
+	ErasedAt           *time.Time
 }
 
 type IdentityUserStatusHistory struct {

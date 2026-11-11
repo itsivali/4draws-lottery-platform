@@ -387,6 +387,52 @@ func TestStaffAPI_AnAccountClosesOnlyOnceItsMoneyIsOut(t *testing.T) {
 	if list := e.do(t, http.MethodGet, "/v1/staff/closures", support, nil); len(list.Body["closures"].([]any)) != 0 {
 		t.Fatalf("still listed: %s", list.Raw)
 	}
+
+	// erasure at closure (ADR 0037): what the law does not require is gone...
+	ctx := context.Background()
+	var sessions, tokens, devices, links, resets int
+	var hasPassword, hasEmail, hasPhoto, erased bool
+	if err := e.pool.QueryRow(ctx, `SELECT
+		(SELECT count(*) FROM identity.sessions WHERE user_id = $1),
+		(SELECT count(*) FROM identity.refresh_tokens r JOIN identity.sessions x ON x.id = r.session_id WHERE x.user_id = $1),
+		(SELECT count(*) FROM identity.devices WHERE user_id = $1),
+		(SELECT count(*) FROM identity.auth_identities WHERE user_id = $1),
+		(SELECT count(*) FROM identity.password_resets WHERE user_id = $1),
+		u.password_hash IS NOT NULL, u.email IS NOT NULL, u.photo_url IS NOT NULL, u.erased_at IS NOT NULL
+		FROM identity.users u WHERE u.id = $1`, user).Scan(&sessions, &tokens, &devices, &links, &resets, &hasPassword, &hasEmail, &hasPhoto, &erased); err != nil {
+		t.Fatal(err)
+	}
+	if sessions+tokens+devices+links+resets != 0 || hasPassword || hasEmail || hasPhoto || !erased {
+		t.Fatalf("after closing: %d sessions, %d tokens, %d devices, %d links, %d resets, password %v, email %v, photo %v, erased %v",
+			sessions, tokens, devices, links, resets, hasPassword, hasEmail, hasPhoto, erased)
+	}
+	// ...and what the law requires stays: the account and its number, the money's records, the payout
+	var status, msisdn string
+	var walletRows, payouts int
+	if err := e.pool.QueryRow(ctx, `SELECT u.status, u.msisdn,
+		(SELECT count(*) FROM wallet.wallet_transactions WHERE user_id = $1),
+		(SELECT count(*) FROM payouts.payouts WHERE user_id = $1)
+		FROM identity.users u WHERE u.id = $1`, user).Scan(&status, &msisdn, &walletRows, &payouts); err != nil {
+		t.Fatal(err)
+	}
+	if status != "closed" || msisdn == "" || walletRows == 0 || payouts != 1 {
+		t.Fatalf("records kept: status %q, number %q, %d wallet rows, %d payouts", status, msisdn, walletRows, payouts)
+	}
+	// the audit log says what was removed, as counts
+	var removed string
+	if err := e.pool.QueryRow(ctx, `SELECT details->'removed' FROM audit.audit_log WHERE action = 'identity.account_erased' AND entity_id = $1`, user).Scan(&removed); err != nil ||
+		!strings.Contains(removed, `"sessions"`) || !strings.Contains(removed, `"password": true`) {
+		t.Fatalf("erasure audited as %s (%v)", removed, err)
+	}
+	// the database refuses to erase an account that is not closed, whoever asks
+	other := e.userID(t, e.signIn(t))
+	if _, err := e.pool.Exec(ctx, `SELECT identity.erase_closed_account($1, now())`, other); err == nil || !strings.Contains(err.Error(), "not closed") {
+		t.Fatalf("erasing an open account: %v", err)
+	}
+	var stillThere int
+	if err := e.pool.QueryRow(ctx, `SELECT count(*) FROM identity.sessions WHERE user_id = $1`, other).Scan(&stillThere); err != nil || stillThere == 0 {
+		t.Fatalf("the open account's sessions: %d (%v)", stillThere, err)
+	}
 }
 
 func TestStaffAPI_UnconfiguredStaffSignInAnswers503(t *testing.T) {
