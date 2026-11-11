@@ -1,0 +1,6 @@
+// Settings every build shares (docs/mobile/ios-release.md). The owner's own values go in Local.xcconfig, which git
+// ignores; copy Local.xcconfig.example.
+
+// The reversed iOS OAuth client id (com.googleusercontent.apps.…) Google sign-in returns to. This placeholder is a
+// valid URL scheme that nothing answers, so Google sign-in on iOS stays off until Local.xcconfig sets the real one.
+GOOGLE_REVERSED_CLIENT_ID = ke.tajirika.lotterymobile.google-not-configured

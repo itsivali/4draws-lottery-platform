@@ -101,6 +101,10 @@ Read this first at the start of every session.
   debug key); target and compile SDK 36 pinned; no backup or device transfer; the version code is the CI run number.
   Tag builds need the owner's upload key in GitHub secrets (`docs/mobile/android-release.md`).
 
+- **iOS release readiness (S7, 2026-11-11):** privacy manifest bundled (draft for counsel), export flag, iPhone-only
+  portrait, bundle name Tajirika, Google URL scheme; the Apple team id and Google iOS client come from an uncommitted
+  `Local.xcconfig` (`docs/mobile/ios-release.md`). Archiving and TestFlight wait for the owner's Apple account.
+
 ## Before the API is exposed to players
 
 1. **Trusted proxy: fixed.** Measured on the live service (`docs/runbooks/trusted-proxy.md`): the rightmost

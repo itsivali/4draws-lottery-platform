@@ -25,15 +25,15 @@ Read from `apps/mobile` on `main` at `9e11bf4`. Flutter is pinned to 3.47.7 (`mi
 |---|---|---|---|
 | Bundle id | `ke.tajirika.lotteryMobile` | `Runner.xcodeproj/project.pbxproj:387` | OK (differs in style from Android; harmless) |
 | Deployment target | 15.0 | `project.pbxproj:363` | OK |
-| Device family | iPhone and iPad (`1,2`) | `project.pbxproj:368` | iPad screenshots will be required; consider iPhone only |
-| Team / signing | no `DEVELOPMENT_TEAM`, automatic | `project.pbxproj` | **Blocker** (owner's Apple account) |
+| Device family | iPhone and iPad (`1,2`) | `project.pbxproj:368` | Fixed (S7): iPhone only (`1`) |
+| Team / signing | `DEVELOPMENT_TEAM` from the uncommitted `Flutter/Local.xcconfig` | `Flutter/*.xcconfig` | S7: wired; the team id is the owner's (Apple account) |
 | Entitlements | Sign in with Apple only | `Runner/Runner.entitlements` | OK |
-| URL types | none | `Runner/Info.plist` | **Blocker** if Google sign-in is on for iOS |
-| Privacy manifest | none | — | **Blocker** |
-| Export compliance | `ITSAppUsesNonExemptEncryption` unset | `Info.plist` | Gap (asked at every upload) |
-| Orientation | iPhone allows landscape | `Info.plist:56-61` | Gap (the app is designed portrait) |
-| `CFBundleName` | `lottery_mobile` | `Info.plist:17-18` | Gap |
-| CI | `flutter build ios --no-codesign` on tags | `mobile.yml:39-51` | No archive, no TestFlight |
+| URL types | `$(GOOGLE_REVERSED_CLIENT_ID)` from `Local.xcconfig` | `Runner/Info.plist` | Fixed (S7); the client id is the owner's |
+| Privacy manifest | `Runner/PrivacyInfo.xcprivacy`, bundled | `docs/mobile/privacy-manifests.md` | Fixed (S7); draft for counsel |
+| Export compliance | `ITSAppUsesNonExemptEncryption = false` | `Info.plist` | Fixed (S7) |
+| Orientation | portrait only | `Info.plist` | Fixed (S7) |
+| `CFBundleName` | Tajirika | `Info.plist` | Fixed (S7) |
+| CI | `flutter build ios --no-codesign` on tags, with build number and version | `mobile.yml` | Archive and TestFlight wait for the Apple account |
 
 ## Store prerequisites
 

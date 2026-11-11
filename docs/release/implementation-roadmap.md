@@ -37,7 +37,7 @@ submission; P2 hardens.
 | OPS-01 | P1 | S4 | Single-person payout and settle powers; CLI official spoofing | Second person enforced in the API and CLI | — | done (ADR 0032) |
 | AML-01 | P1 | S5 | No transaction monitoring or cases | Configurable rules raise cases; holds honoured | ID-02 | done (ADR 0033; thresholds pending the compliance owner) |
 | AND-01 | P0 (store) | S6 | Release signed with debug key; versionCode fixed | Release fails without upload key; build number from CI | — | done (`docs/mobile/android-release.md`; the upload key is the owner's) |
-| IOS-01 | P0 (store) | S7 | No privacy manifest, URL types, export flag | Present and correct | — | not_started |
+| IOS-01 | P0 (store) | S7 | No privacy manifest, URL types, export flag | Present and correct | — | done (`docs/mobile/ios-release.md`; team and Google client are the owner's) |
 | WEB-01 | P0 (store) | S8 | No privacy, terms, RG, deletion pages; no in-app links | Pages published (DRAFT for counsel); linked in the app | — | not_started |
 | CI-01 | P2 | S9 | No Flutter/npm dependency scan; dead `web` job | osv-scanner on lockfiles; job fixed | — | not_started |
 | RG-01 | P1 | S11 | LN 112 reg 84 requires loss, session and spend limits and reality checks; only deposit limits and time-outs exist | Limits enforced server-side on play; reality check served by the API and shown by the app | — | not_started |

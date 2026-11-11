@@ -32,3 +32,6 @@ Runner/GeneratedPluginRegistrant.*
 !default.mode2v3
 !default.pbxuser
 !default.perspectivev3
+
+# the owner's Apple team and Google client (docs/mobile/ios-release.md)
+Flutter/Local.xcconfig

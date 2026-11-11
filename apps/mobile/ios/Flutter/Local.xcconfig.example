@@ -1,0 +1,7 @@
+// Copy to Local.xcconfig (git ignores it) and fill in (docs/mobile/ios-release.md).
+
+// The Apple Developer team that signs the app: developer.apple.com → Membership details → Team ID.
+DEVELOPMENT_TEAM = ABCDE12345
+
+// The reversed form of GOOGLE_IOS_CLIENT_ID: Google Cloud console → Credentials → "Tajirika iOS" → iOS URL scheme.
+GOOGLE_REVERSED_CLIENT_ID = com.googleusercontent.apps.000000000000-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx

@@ -1,1 +1,4 @@
 #include "Generated.xcconfig"
+#include "App.xcconfig"
+// the owner's Apple team and Google client: optional, never committed
+#include? "Local.xcconfig"
