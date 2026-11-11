@@ -23,7 +23,8 @@ class OperatingModeBanner extends ConsumerWidget {
       tone: StatusTone.pending,
       icon: Icons.science_outlined,
       title: 'Demo: test money only, no real prizes',
-      message: '4draws is not licensed yet. Top-ups use M-Pesa’s test system and nothing won can be paid out as real money.',
+      message:
+          '4draws is not licensed yet. Top-ups use M-Pesa’s test system and nothing won can be paid out as real money.',
     ),
     'disabled' => const InlineBanner(
       tone: StatusTone.warning,

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lottery_mobile/app/theme/theme.dart';
 import 'package:lottery_mobile/core/widgets/coin.dart';
-import 'package:lottery_mobile/core/widgets/depth.dart';
+import 'package:lottery_mobile/core/widgets/motion.dart';
 
 void main() {
   Widget app(Widget child, {bool reduceMotion = false}) => MaterialApp(

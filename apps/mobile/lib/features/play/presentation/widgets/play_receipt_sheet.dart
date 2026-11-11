@@ -41,7 +41,7 @@ class _Receipt extends StatelessWidget {
                 ),
                 child: ExcludeSemantics(
                   child: Icon(
-                    s.lucky ? Icons.star_rounded : Icons.donut_large_rounded,
+                    s.lucky ? Icons.star_rounded : Icons.play_arrow_rounded,
                     color: s.lucky ? c.goldText : c.onPrimaryContainer,
                   ),
                 ),

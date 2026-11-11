@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../app/theme/tokens.dart';
-import 'depth.dart';
+import 'icon_disc.dart';
 
 /// A list row (MASTER.md §7): an icon in a tinted disc, a title with an optional second line, and a trailing amount or
 /// chevron. 64 dp tall, hairline between rows when stacked in a `RowGroup`.
@@ -39,7 +39,7 @@ class ListRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.colors;
     final t = Theme.of(context).textTheme;
-    final disc = leading ?? (icon == null ? null : Orb(icon: icon!, tone: OrbTone.soft, color: iconColor ?? c.primary));
+    final disc = leading ?? (icon == null ? null : IconDisc(icon: icon!, size: 44, color: iconColor));
     final row = Padding(
       padding: const EdgeInsets.symmetric(horizontal: Space.lg, vertical: Space.md),
       child: Row(

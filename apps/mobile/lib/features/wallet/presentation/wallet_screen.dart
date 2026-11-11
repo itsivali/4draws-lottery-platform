@@ -10,6 +10,7 @@ import '../../../core/widgets/async_view.dart';
 import '../../../core/widgets/coin.dart';
 import '../../../core/widgets/content_frame.dart';
 import '../../../core/widgets/glow.dart';
+import '../../../core/widgets/hero_card.dart';
 import '../../../core/widgets/inline_banner.dart';
 import '../../../core/widgets/list_row.dart';
 import '../../../core/widgets/skeleton.dart';
@@ -49,8 +50,8 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
         await ref.read(walletStatementProvider.future);
       },
       children: [
-        // the balance as a big light numeral over soft glows (redesign 2026-11-11)
-        GlowPanel(
+        // the balance on the indigo hero card, as on Home
+        HeroCard(
           child: AsyncView(
             value: wallet,
             what: 'your wallet',
@@ -61,7 +62,7 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Confirmed balance', style: t.labelLarge?.copyWith(color: c.inkMuted)),
+                  Text('Confirmed balance', style: t.labelLarge?.copyWith(color: c.onHeroMuted)),
                   const SizedBox(height: Space.xs),
                   Row(
                     children: [
@@ -70,15 +71,23 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
                           duration: context.reduceMotion ? Duration.zero : Motion.standard,
                           layoutBuilder: (current, previous) =>
                               Stack(alignment: AlignmentDirectional.centerStart, children: [...previous, ?current]),
-                          child: BigAmount(key: ValueKey(w.balanceKes), text: formatKes(w.balanceKes)),
+                          child: BigAmount(
+                            key: ValueKey(w.balanceKes),
+                            text: formatKes(w.balanceKes),
+                            color: c.onHero,
+                            unitColor: c.onHeroMuted,
+                          ),
                         ),
                       ),
                       const SizedBox(width: Space.sm),
-                      const Coin3D(size: 72),
+                      const Coin3D(size: 60),
                     ],
                   ),
                   const SizedBox(height: Space.sm),
-                  Text('Only money the server has confirmed is shown here.', style: t.bodySmall),
+                  Text(
+                    'Only money the server has confirmed is shown here.',
+                    style: t.bodySmall?.copyWith(color: c.onHeroMuted),
+                  ),
                 ],
               ),
             ),
@@ -194,7 +203,7 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
 
   static IconData _txIcon(String kind) => switch (kind) {
     'deposit' => Icons.add_rounded,
-    'stake' => Icons.donut_large_rounded,
+    'stake' => Icons.play_arrow_rounded,
     'withdrawal' => Icons.arrow_outward_rounded,
     'prize' => Icons.emoji_events_rounded,
     'refund' => Icons.undo_rounded,

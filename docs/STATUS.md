@@ -36,6 +36,16 @@ Read this first at the start of every session.
   the cutover (its own change: Render custom domains, DNS at Safaricom, `render.yaml` URLs, CORS, canonical and
   sitemap addresses, the Daraja callback and paybill URLs registered again). The public fairness repository keeps its
   name (`itsivali/tajirika-fairness`) until the owner renames it.
+- **Player app, Material 3 (2026-11-11, owner):** after two same-day redesign passes (soft glows, then a full 3D
+  pass that the owner found too much), the app is a native-feeling Material 3 app in the logo's indigo: flat filled,
+  outlined and tonal buttons, a standard navigation bar, each platform's own page transition, tonal icon discs, the
+  balance on an indigo hero card, the wheel squarely centred in its dial. The only 3D left is the gold coin beside
+  the balance. Android has a launch screen in the page colour. `design-system/lottery-platform/MASTER.md` v4. The
+  back office still wears coral and violet until its own pass.
+- **Play Console (2026-11-11):** the owner's developer account is a personal one ("willis ivali"). The app is to be
+  created as 4draws, `ke.co.fourdraws.app`, English (UK), App, Free; the three declarations are the owner's to
+  accept. A release build signed with the upload key builds locally. Not yet possible: production release (needs
+  the licence, Google's gambling application and, for a personal account, a 12-tester closed test of 14 days).
 - **Domain and plans (2026-10-29):** the product (then Tajirika) lives at `tajirika.co.ke` (registered with
   Safaricom, DNS there): https://tajirika.co.ke (web app; www redirects), https://api.tajirika.co.ke and
   https://backoffice.tajirika.co.ke, with Render certificates; the onrender.com addresses keep working. `lottery-api`

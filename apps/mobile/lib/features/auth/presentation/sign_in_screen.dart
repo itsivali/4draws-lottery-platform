@@ -16,7 +16,6 @@ import '../../../core/widgets/back_office_link.dart';
 import '../../../core/widgets/brand_mark.dart';
 import '../../../core/widgets/busy_button.dart';
 import '../../../core/widgets/content_frame.dart';
-import '../../../core/widgets/depth.dart';
 import '../../../core/widgets/failure_text.dart';
 import '../../../core/widgets/glow.dart';
 import '../../../core/widgets/hero_card.dart';
@@ -786,14 +785,6 @@ class _ProviderButtons extends StatelessWidget {
                 foregroundColor: appleFg,
                 disabledBackgroundColor: (dark ? Colors.white : Colors.black).withValues(alpha: 0.4),
                 disabledForegroundColor: appleFg.withValues(alpha: 0.7),
-                // Apple's button stays black (or white): the same raised key, in its own colour
-                backgroundBuilder: (context, states, child) => raisedButtonFace(
-                  context,
-                  states,
-                  child,
-                  c: context.colors,
-                  base: dark ? Colors.white : Colors.black,
-                ),
               ),
               icon: ExcludeSemantics(
                 child: CustomPaint(

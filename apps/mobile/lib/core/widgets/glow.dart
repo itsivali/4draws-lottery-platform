@@ -4,92 +4,23 @@ import 'package:flutter/material.dart';
 
 import '../../app/theme/theme.dart';
 import '../../app/theme/tokens.dart';
-import 'depth.dart';
 
-// The shapes of the 2026-11-11 redesign (MASTER.md §5, §7): a white panel with soft glows behind its numbers, a big
-// light numeral, frosted pill chips, round icon buttons, ring gauges, a dotted dial and a glowing bar chart. Every one
-// is drawn in code from the theme's colours; none of them carries meaning by colour alone.
+// Shared shapes (MASTER.md §5, §7): the big amount, the quick actions on a hero surface, a round icon button, the ring
+// gauge, the wheel's dotted dial, the plays bar chart and the segmented toggle. Every one is drawn in code from the
+// theme's colours; none of them carries meaning by colour alone.
 
-/// A white card with large corners and two soft glows behind its content: coral from the top right, violet from the
-/// bottom left. Text on it stays on near-white, so it keeps its contrast (the glows are faint where text sits).
-class GlowPanel extends StatelessWidget {
-  const GlowPanel({super.key, required this.child, this.padding = const EdgeInsets.all(Space.xl)});
-
-  final Widget child;
-  final EdgeInsets padding;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-    final radius = BorderRadius.circular(Radii.card);
-    return Tilt(
-      maxAngle: 0.06,
-      child: DecoratedBox(
-        decoration: BoxDecoration(color: c.surface, borderRadius: radius, boxShadow: Elevation.card(c)),
-        child: ClipRRect(
-          borderRadius: radius,
-          child: Stack(
-            children: [
-              Positioned.fill(child: GlowBlobs(colors: c)),
-              Padding(padding: padding, child: child),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// The two glows on their own, to sit behind anything.
-class GlowBlobs extends StatelessWidget {
-  const GlowBlobs({super.key, required this.colors, this.strength = 1});
-
-  final AppColors colors;
-
-  /// Scales both glows' opacity (1 = the panel's).
-  final double strength;
-
-  @override
-  Widget build(BuildContext context) => ExcludeSemantics(
-    child: IgnorePointer(
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: Gradients.blob(
-                colors.heroGlow,
-                center: const Alignment(1.05, -1.1),
-                radius: 1.1,
-                alpha: 0.42 * strength,
-              ),
-            ),
-          ),
-          DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: Gradients.blob(
-                colors.glowViolet,
-                center: const Alignment(-1.1, 1.2),
-                radius: 1.0,
-                alpha: 0.34 * strength,
-              ),
-            ),
-          ),
-        ],
-      ),
-    ),
-  );
-}
-
-/// A sum as a big light numeral: the currency small and muted, the figure large, thin and tightly set. It is one
+/// A sum as a big numeral: the currency small and muted, the figure large and tightly set. It is one
 /// text (so it reads, and is found, as "KES 1,250") and shrinks to fit rather than wrap.
 class BigAmount extends StatelessWidget {
-  const BigAmount({super.key, required this.text, this.style, this.color});
+  const BigAmount({super.key, required this.text, this.style, this.color, this.unitColor});
 
   /// The formatted sum, such as "KES 1,250".
   final String text;
   final TextStyle? style;
   final Color? color;
+
+  /// The currency's colour: muted ink by default; pass the hero's muted colour on a hero surface.
+  final Color? unitColor;
 
   @override
   Widget build(BuildContext context) {
@@ -108,7 +39,7 @@ class BigAmount extends StatelessWidget {
               TextSpan(
                 text: unit,
                 style: big
-                    .copyWith(fontSize: (big.fontSize ?? 48) * 0.36, letterSpacing: 0, color: c.inkMuted)
+                    .copyWith(fontSize: (big.fontSize ?? 48) * 0.38, letterSpacing: 0, color: unitColor ?? c.inkMuted)
                     .weighted(FontWeight.w500),
               ),
             TextSpan(text: figure),
@@ -121,8 +52,8 @@ class BigAmount extends StatelessWidget {
   }
 }
 
-/// A frosted quick action over a glow: a small icon disc over a word, in a translucent white tile. 48 dp tall at the
-/// least; at large text sizes it becomes a pill with the icon beside the word, so the word is never shrunk.
+/// A quick action on a hero surface: an icon over a word in a tonal tile (a light wash of the hero's own colour). 48 dp
+/// tall at the least; at large text sizes it becomes a pill with the icon beside the word, so the word is never shrunk.
 class GlassChip extends StatelessWidget {
   const GlassChip({super.key, required this.icon, required this.label, required this.onPressed, this.stacked = true});
 
@@ -137,16 +68,16 @@ class GlassChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.colors;
     final t = Theme.of(context).textTheme;
-    final disc = Orb(icon: icon, size: 36);
+    final disc = Icon(icon, size: 24, color: c.onHero);
     final word = Text(label, textAlign: TextAlign.center);
-    return Tilt(maxAngle: 0.18, pressScale: 0.94, radius: Radii.lg, child: _button(c, t, disc, word));
+    return _button(c, t, disc, word);
   }
 
   Widget _button(AppColors c, TextTheme t, Widget disc, Widget word) {
     return TextButton(
       style: TextButton.styleFrom(
         backgroundColor: c.glass,
-        foregroundColor: c.ink,
+        foregroundColor: c.onHero,
         minimumSize: const Size(Breakpoints.minTouch, Breakpoints.minTouch),
         padding: stacked
             ? const EdgeInsets.symmetric(horizontal: Space.sm, vertical: Space.md)
@@ -154,9 +85,9 @@ class GlassChip extends StatelessWidget {
         shape: stacked
             ? RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(Radii.lg),
-                side: BorderSide(color: c.glassBorder, width: 1.5),
+                side: BorderSide(color: c.glassBorder),
               )
-            : StadiumBorder(side: BorderSide(color: c.glassBorder, width: 1.5)),
+            : StadiumBorder(side: BorderSide(color: c.glassBorder)),
         textStyle: t.labelLarge?.copyWith(fontWeight: FontWeight.w600),
       ),
       onPressed: onPressed,
@@ -181,7 +112,7 @@ class GlassChip extends StatelessWidget {
   }
 }
 
-/// Quick actions side by side as equal frosted tiles; at large text sizes they wrap as pills instead.
+/// Quick actions side by side as equal tonal tiles; at large text sizes they wrap as pills instead.
 class GlassChipRow extends StatelessWidget {
   const GlassChipRow({super.key, required this.chips});
 
@@ -211,8 +142,8 @@ class GlassChipRow extends StatelessWidget {
   }
 }
 
-/// A small round icon button: light (white with a hairline) or dark (the selected ink, like the "›" that leads on).
-/// Always carries a tooltip, which is also its label for screen readers.
+/// A small round icon button (Material's tonal icon button): on a card, or on a hero surface with [dark]. Always
+/// carries a tooltip, which is also its label for screen readers.
 class RoundIconButton extends StatelessWidget {
   const RoundIconButton({
     super.key,
@@ -225,6 +156,8 @@ class RoundIconButton extends StatelessWidget {
   final IconData icon;
   final String tooltip;
   final VoidCallback? onPressed;
+
+  /// On a hero surface: a light wash with a white icon.
   final bool dark;
 
   @override
@@ -234,29 +167,13 @@ class RoundIconButton extends StatelessWidget {
       tooltip: tooltip,
       onPressed: onPressed,
       icon: Icon(icon, size: 22),
-      style:
-          IconButton.styleFrom(
-            backgroundColor: dark ? c.selected : c.surface,
-            foregroundColor: dark ? c.onSelected : c.ink,
-            minimumSize: const Size.square(Breakpoints.minTouch),
-            side: dark ? null : BorderSide(color: c.border),
-            shape: const CircleBorder(),
-            elevation: 3,
-            shadowColor: (dark ? c.selected : c.shadow).withValues(alpha: 0.45),
-          ).copyWith(
-            // a glossy bead: lit from the top left
-            backgroundBuilder: (context, states, child) => DecoratedBox(
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: RadialGradient(
-                  center: const Alignment(-0.4, -0.55),
-                  radius: 1.1,
-                  colors: dark ? [Color.lerp(c.selected, Colors.white, 0.3)!, c.selected] : [c.surface, c.surfaceMuted],
-                ),
-              ),
-              child: child,
-            ),
-          ),
+      style: IconButton.styleFrom(
+        backgroundColor: dark ? c.glass : c.selected,
+        foregroundColor: dark ? c.onHero : c.onSelected,
+        minimumSize: const Size.square(Breakpoints.minTouch),
+        side: dark ? BorderSide(color: c.glassBorder) : null,
+        shape: const CircleBorder(),
+      ),
     );
   }
 }
@@ -415,7 +332,7 @@ class GlowBar {
   final Widget? mark;
 }
 
-/// A vertical bar chart: pale capsule tracks, filled coral into violet, the selected bar glowing, with round chips
+/// A vertical bar chart: pale capsule tracks, filled indigo, the selected bar glowing, with round chips
 /// under the bars and the selected chip filled. Decorative to screen readers: [semanticsLabel] says what it shows.
 class GlowBars extends StatelessWidget {
   const GlowBars({super.key, required this.bars, required this.semanticsLabel, this.height = 96});
@@ -467,7 +384,7 @@ class GlowBars extends StatelessWidget {
                         alignment: Alignment.center,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          color: b.selected ? c.selected : c.surface,
+                          color: b.selected ? c.primary : c.surface,
                           border: b.selected ? null : Border.all(color: c.border, width: 1.5),
                         ),
                         child: Padding(
@@ -478,7 +395,7 @@ class GlowBars extends StatelessWidget {
                               b.label,
                               style: t.labelLarge?.copyWith(
                                 fontWeight: FontWeight.w600,
-                                color: b.selected ? c.onSelected : c.ink,
+                                color: b.selected ? c.onPrimary : c.ink,
                               ),
                             ),
                           ),
@@ -549,7 +466,7 @@ class _Bar extends StatelessWidget {
   );
 }
 
-/// A segmented pill toggle: a muted track, the chosen segment a dark pill with white words, the others plain. Each
+/// A segmented toggle: a tonal track, the chosen segment a white pill with bold words, the others muted. Each
 /// segment is a 48 dp button that screen readers hear as selected or not.
 class PillToggle<T> extends StatelessWidget {
   const PillToggle({super.key, required this.segments, required this.selected, required this.onChanged});
@@ -582,8 +499,9 @@ class PillToggle<T> extends StatelessWidget {
                   duration: duration,
                   curve: Motion.enter,
                   decoration: BoxDecoration(
-                    color: value == selected ? c.selected : c.surfaceMuted.withValues(alpha: 0),
+                    color: value == selected ? c.surface : c.surface.withValues(alpha: 0),
                     borderRadius: BorderRadius.circular(Radii.full),
+                    boxShadow: value == selected ? Elevation.card(c) : null,
                   ),
                   child: Material(
                     type: MaterialType.transparency,
@@ -600,8 +518,8 @@ class PillToggle<T> extends StatelessWidget {
                               label,
                               textAlign: TextAlign.center,
                               style: t.labelLarge?.copyWith(
-                                fontWeight: FontWeight.w600,
-                                color: value == selected ? c.onSelected : c.ink,
+                                fontWeight: value == selected ? FontWeight.w700 : FontWeight.w500,
+                                color: value == selected ? c.ink : c.inkMuted,
                               ),
                             ),
                           ),

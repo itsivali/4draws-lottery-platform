@@ -3,9 +3,9 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../../app/theme/tokens.dart';
-import 'depth.dart';
+import 'motion.dart';
 
-/// A gold coin in 3D, turning slowly about its upright axis (redesign, second pass): two struck faces (the brand's "T"
+/// A gold coin in 3D, turning slowly about its upright axis (redesign, second pass): two struck faces (the brand's "4"
 /// on the front, a star on the back) and a milled edge built from thin layers, drawn in perspective and sorted by
 /// depth each frame, so its thickness shows as it turns. Light glances across the face with the turn. It stands for
 /// money (the balance), never for a win. Decorative; at rest (reduced motion, tests) it holds a three-quarter pose
@@ -257,7 +257,7 @@ class _FacePainter extends CustomPainter {
       if (device case final Path p) {
         canvas.drawPath(p, Paint()..color = color);
       } else if (device case final TextPainter tp) {
-        tp.text = TextSpan(text: 'T', style: _style(r, color));
+        tp.text = TextSpan(text: '4', style: _style(r, color));
         tp.layout();
         tp.paint(canvas, o - Offset(tp.width / 2, tp.height / 2));
       }

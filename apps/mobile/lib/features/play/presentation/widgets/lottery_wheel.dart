@@ -248,203 +248,65 @@ class LotteryWheelState extends State<LotteryWheel> with TickerProviderStateMixi
           // decorative: the result panel says what happened, in words
           child: SizedBox.square(
             dimension: d,
-            // the wheel stands in 3D: a thick milled rim behind it, a slight backward lean, a wobble at speed
-            child: Wheel3D(
-              fx: _fx,
-              colors: c,
-              still: context.reduceMotion,
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  CustomPaint(painter: WheelBackplatePainter(c)),
-                  ValueListenableBuilder<double>(
-                    valueListenable: _rotation,
-                    builder: (_, angle, child) => Transform.rotate(angle: angle, child: child),
-                    child: Stack(
-                      fit: StackFit.expand,
-                      children: [
-                        RepaintBoundary(
-                          child: AnimatedSwitcher(
-                            duration: Motion.standard,
-                            child: SizedBox.expand(
-                              key: ValueKey((_geometry.slots, _geometry.luckySlots, _labelled)),
-                              child: CustomPaint(
-                                painter: WheelDiscPainter(
-                                  geometry: _geometry,
-                                  colors: c,
-                                  labelled: _labelled,
-                                  textScaler: scaler,
-                                ),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                CustomPaint(painter: WheelBackplatePainter(c)),
+                ValueListenableBuilder<double>(
+                  valueListenable: _rotation,
+                  builder: (_, angle, child) => Transform.rotate(angle: angle, child: child),
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      RepaintBoundary(
+                        child: AnimatedSwitcher(
+                          duration: Motion.standard,
+                          child: SizedBox.expand(
+                            key: ValueKey((_geometry.slots, _geometry.luckySlots, _labelled)),
+                            child: CustomPaint(
+                              painter: WheelDiscPainter(
+                                geometry: _geometry,
+                                colors: c,
+                                labelled: _labelled,
+                                textScaler: scaler,
                               ),
                             ),
                           ),
                         ),
-                        // the shimmer, twinkle and landing glow turn with the disc
-                        if (!context.reduceMotion)
-                          RepaintBoundary(
-                            child: CustomPaint(
-                              painter: WheelDiscFxPainter(fx: _fx, geometry: _geometry, colors: c),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                  RepaintBoundary(child: CustomPaint(painter: WheelFramePainter(c))),
-                  RepaintBoundary(
-                    child: CustomPaint(
-                      painter: WheelFrameFxPainter(fx: _fx, colors: c),
-                    ),
-                  ),
-                  RepaintBoundary(
-                    child: CustomPaint(
-                      painter: WheelPointerPainter(fx: _fx, colors: c, geometry: _geometry),
-                    ),
-                  ),
-                  if (waiting && context.reduceMotion)
-                    Center(
-                      child: SizedBox.square(
-                        dimension: d * 0.12,
-                        child: CircularProgressIndicator(strokeWidth: 3, color: c.wheelRimLight),
                       ),
+                      // the shimmer, twinkle and landing glow turn with the disc
+                      if (!context.reduceMotion)
+                        RepaintBoundary(
+                          child: CustomPaint(
+                            painter: WheelDiscFxPainter(fx: _fx, geometry: _geometry, colors: c),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                RepaintBoundary(child: CustomPaint(painter: WheelFramePainter(c))),
+                RepaintBoundary(
+                  child: CustomPaint(
+                    painter: WheelFrameFxPainter(fx: _fx, colors: c),
+                  ),
+                ),
+                RepaintBoundary(
+                  child: CustomPaint(
+                    painter: WheelPointerPainter(fx: _fx, colors: c, geometry: _geometry),
+                  ),
+                ),
+                if (waiting && context.reduceMotion)
+                  Center(
+                    child: SizedBox.square(
+                      dimension: d * 0.12,
+                      child: CircularProgressIndicator(strokeWidth: 3, color: c.wheelRimLight),
                     ),
-                ],
-              ),
+                  ),
+              ],
             ),
           ),
         );
       },
     );
   }
-}
-
-/// The wheel as a solid object: its painted face over a milled gold rim built from thin layers behind it, the whole
-/// leaning back a little in perspective so the rim's thickness shows below. It leans toward the pointer or the finger
-/// at rest and wobbles slightly with the speed of a spin, as a real wheel on its axle does. Under reduced motion it
-/// holds its pose. The pose never changes where the wheel lands: that is the face's rotation alone.
-class Wheel3D extends StatefulWidget {
-  const Wheel3D({super.key, required this.fx, required this.colors, required this.child, this.still = false});
-
-  final WheelFx fx;
-  final AppColors colors;
-  final Widget child;
-
-  /// Hold the pose: no lean toward the pointer, no wobble.
-  final bool still;
-
-  /// How far back the wheel leans at rest, in radians.
-  static const lean = 0.34;
-
-  @override
-  State<Wheel3D> createState() => _Wheel3DState();
-}
-
-class _Wheel3DState extends State<Wheel3D> {
-  Offset _aim = Offset.zero;
-
-  void _point(Offset local) {
-    final size = context.size;
-    if (size == null || size.isEmpty || widget.still) return;
-    setState(
-      () => _aim = Offset(
-        (local.dx / size.width * 2 - 1).clamp(-1.0, 1.0),
-        (local.dy / size.height * 2 - 1).clamp(-1.0, 1.0),
-      ),
-    );
-  }
-
-  void _rest() {
-    if (_aim != Offset.zero) setState(() => _aim = Offset.zero);
-  }
-
-  static const _layers = 12;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = widget.colors;
-    return MouseRegion(
-      onHover: (e) => _point(e.localPosition),
-      onExit: (_) => _rest(),
-      child: Listener(
-        behavior: HitTestBehavior.translucent,
-        onPointerDown: (e) => _point(e.localPosition),
-        onPointerUp: (_) => _rest(),
-        onPointerCancel: (_) => _rest(),
-        child: TweenAnimationBuilder<Offset>(
-          tween: Tween(end: _aim),
-          duration: Motion.emphasis * 1.5,
-          curve: _aim == Offset.zero ? Curves.easeOutBack : Curves.easeOutCubic,
-          builder: (context, aim, face) => AnimatedBuilder(
-            animation: widget.fx,
-            child: face,
-            builder: (context, face) {
-              final e = widget.still ? 0.0 : widget.fx.energy;
-              final r = widget.fx.rotation;
-              final rx = Wheel3D.lean - aim.dy * 0.14 + sin(r * 2) * 0.03 * e;
-              final ry = aim.dx * 0.16 + cos(r * 2) * 0.03 * e;
-              return LayoutBuilder(
-                builder: (context, box) {
-                  final d = box.biggest.shortestSide;
-                  final depth = d * 0.11;
-                  Matrix4 at(double z) => Matrix4.identity()
-                    ..setEntry(3, 2, 0.0009)
-                    ..rotateX(rx)
-                    ..rotateY(ry)
-                    ..translateByDouble(0, 0, z, 1)
-                    // cancel the perspective's shrink, so the slices extrude the rim rather than recede inside it
-                    ..scaleByDouble(1 + 0.0009 * z, 1 + 0.0009 * z, 1, 1);
-                  return Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      // the rim, furthest slice first
-                      for (var i = _layers; i >= 1; i--)
-                        Transform(
-                          alignment: Alignment.center,
-                          transform: at(depth * i / _layers),
-                          child: CustomPaint(
-                            painter: _RimSlice(c, shade: i / _layers, ridge: i.isEven, last: i == _layers),
-                          ),
-                        ),
-                      Transform(alignment: Alignment.center, transform: at(0), child: face),
-                    ],
-                  );
-                },
-              );
-            },
-          ),
-          child: widget.child,
-        ),
-      ),
-    );
-  }
-}
-
-/// One slice of the wheel's rim: gold darkening with depth, alternately milled; the last carries a soft shadow.
-class _RimSlice extends CustomPainter {
-  _RimSlice(this.c, {required this.shade, required this.ridge, required this.last});
-
-  final AppColors c;
-  final double shade;
-  final bool ridge;
-  final bool last;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final o = size.center(Offset.zero);
-    final r = size.shortestSide / 2;
-    if (last) {
-      canvas.drawCircle(
-        o,
-        r * 1.02,
-        Paint()
-          ..color = c.shadow.withValues(alpha: 0.35)
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 14),
-      );
-    }
-    // bronze, darkening with depth, so the thickness reads against the bright frame
-    final base = Color.lerp(c.wheelRimDark, Colors.black, 0.15 + 0.35 * shade)!;
-    canvas.drawCircle(o, r * 0.995, Paint()..color = ridge ? base : Color.lerp(base, Colors.black, 0.12)!);
-  }
-
-  @override
-  bool shouldRepaint(_RimSlice old) => old.shade != shade || old.ridge != ridge || old.c != c;
 }

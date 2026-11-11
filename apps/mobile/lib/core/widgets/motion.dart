@@ -87,7 +87,7 @@ class _StaggeredState extends State<Staggered> with SingleTickerProviderStateMix
                 curve: Interval(
                   (Motion.stagger.inMilliseconds * i) / total,
                   ((Motion.stagger.inMilliseconds * i) + Motion.emphasis.inMilliseconds) / total,
-                  curve: Curves.easeOutBack,
+                  curve: Motion.settle,
                 ),
               ),
               child: widget.children[i],
@@ -106,18 +106,48 @@ class _Enter extends AnimatedWidget {
   @override
   Widget build(BuildContext context) {
     final v = (listenable as Animation<double>).value;
-    // each card swings up out of a backward lean as it rises, so a list unfolds in depth (redesign, second pass)
     return Opacity(
       opacity: v.clamp(0.0, 1.0),
-      child: Transform(
-        alignment: Alignment.topCenter,
-        transform: Matrix4.identity()
-          ..setEntry(3, 2, 0.0011)
-          ..translateByDouble(0, Motion.riseDistance * 2.4 * (1 - v), 0, 1)
-          ..rotateX(0.42 * (1 - v))
-          ..scaleByDouble(0.94 + 0.06 * v, 0.94 + 0.06 * v, 1, 1),
-        child: child,
-      ),
+      child: Transform.translate(offset: Offset(0, Motion.riseDistance * (1 - v)), child: child),
     );
   }
+}
+
+/// Ambient motion that never ends (the turning coin). Tests turn it off so screens settle.
+abstract final class Ambient {
+  static bool enabled = true;
+}
+
+/// Material's fade-through between top-level destinations: when the chosen tab changes, its page fades in. Keeps the
+/// same child (the tabs keep their state); nothing happens under reduced motion.
+class TabArrival extends StatefulWidget {
+  const TabArrival({super.key, required this.index, required this.child});
+
+  final int index;
+  final Widget child;
+
+  @override
+  State<TabArrival> createState() => _TabArrivalState();
+}
+
+class _TabArrivalState extends State<TabArrival> with SingleTickerProviderStateMixin {
+  late final _c = AnimationController(vsync: this, duration: Motion.standard, value: 1);
+
+  @override
+  void didUpdateWidget(TabArrival old) {
+    super.didUpdateWidget(old);
+    if (old.index != widget.index && !context.reduceMotion) _c.forward(from: 0);
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => FadeTransition(
+    opacity: CurvedAnimation(parent: _c, curve: Motion.enter),
+    child: widget.child,
+  );
 }

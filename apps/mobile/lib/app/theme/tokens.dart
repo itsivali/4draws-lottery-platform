@@ -49,35 +49,35 @@ class AppColors {
     required this.onSelected,
   });
 
-  /// "Sunset" (MASTER.md §2, owner 2026-10-28): one light theme on a white page. Since the redesign of 2026-11-11 the
-  /// page is a soft off-white, cards are white with large corners, and soft coral and violet glows sit behind the key
-  /// numbers; the palette itself is unchanged. Coral leads, violet accents, gold
-  /// stays decorative; status colours all clear 4.5:1 on the page, on cards and on muted panels (tokens_test).
+  /// "Indigo" (MASTER.md §2, owner 2026-11-11, with the 4draws name): one light Material 3 theme. The page is a cool
+  /// off-white, cards are white, indigo leads (the logo's own), a lighter indigo accents, and gold stays decorative:
+  /// the wheel's rim, the lucky star, the logo's fourth segment. Status colours all clear 4.5:1 on the page, on cards
+  /// and on muted panels (tokens_test).
   static const light = AppColors(
-    background: Color(0xFFF6F2F1), // soft off-white (redesign 2026-11-11; warm linen #FBF6F3 before)
+    background: Color(0xFFF7F7FB),
     surface: Color(0xFFFFFFFF),
-    surfaceRaised: Color(0xFFFFFAF7),
-    surfaceMuted: Color(0xFFFBEEE7),
-    ink: Color(0xFF2A1A2E),
-    inkMuted: Color(0xFF6B5A62),
-    primary: Color(0xFFC23412),
+    surfaceRaised: Color(0xFFFBFBFE),
+    surfaceMuted: Color(0xFFEFEEF8), // tonal: fields' tracks, quiet chips, the segmented control's track
+    ink: Color(0xFF1B1A2E),
+    inkMuted: Color(0xFF5A5870),
+    primary: Color(0xFF4338CA),
     onPrimary: Color(0xFFFFFFFF),
-    primaryContainer: Color(0xFFFFE3D8),
-    onPrimaryContainer: Color(0xFF7A1F06),
-    accent: Color(0xFF6D3FC7),
-    gold: Color(0xFFA8781C),
-    goldText: Color(0xFF7A5612),
+    primaryContainer: Color(0xFFE4E2FF),
+    onPrimaryContainer: Color(0xFF211A78),
+    accent: Color(0xFF5B4FE0),
+    gold: Color(0xFFB47A12),
+    goldText: Color(0xFF7A5200),
     success: Color(0xFF1B7A43),
-    warning: Color(0xFFA05A00),
+    warning: Color(0xFF9A5600),
     error: Color(0xFFC62828),
-    pending: Color(0xFF3B5BB5),
-    border: Color(0xFFF0DDD5),
-    outline: Color(0xFF8A7A80),
-    heroStart: Color(0xFFC9381A),
-    heroEnd: Color(0xFF3E2585),
-    heroGlow: Color(0xFFFF9B6A),
+    pending: Color(0xFF0F6A80), // teal, so it is never mistaken for the indigo of an action
+    border: Color(0xFFE4E3F0),
+    outline: Color(0xFF7C7A93),
+    heroStart: Color(0xFF5B4FE9),
+    heroEnd: Color(0xFF2A2385),
+    heroGlow: Color(0xFF8F88FF),
     onHero: Color(0xFFFFFFFF),
-    onHeroMuted: Color(0xFFFFE1D2),
+    onHeroMuted: Color(0xFFDDDBFF),
     // the wheel is the one place colour runs free (owner, 2026-10-28): six bright hues in turn, a bright gold lucky
     // slot, dark labels on all of them (every pair clears 4.5:1, tokens_test)
     wheelSegments: [
@@ -89,18 +89,18 @@ class AppColors {
       Color(0xFFFF6FB5), // pink
     ],
     wheelLucky: Color(0xFFFFE066),
-    wheelLabel: Color(0xFF2A1A2E),
+    wheelLabel: Color(0xFF1B1A2E),
     wheelStar: Color(0xFF000000),
     wheelChecker: Color(0xFFFFFFFF),
     wheelRimDark: Color(0xFF9A6B10),
     wheelRimLight: Color(0xFFFFE08A),
-    shadow: Color(0xFF3C1428),
-    glass: Color(0xB8FFFFFF), // frosted white, 72%: chips and panels over a glow
-    glassBorder: Color(0xE6FFFFFF),
-    glowViolet: Color(0xFFB794FF),
-    track: Color(0xFFEDE5E3), // empty bars and ring tracks (decorative, never text)
-    selected: Color(0xFF2A1A2E), // the dark selected segment, the round "›" button
-    onSelected: Color(0xFFFFFFFF),
+    shadow: Color(0xFF14123A),
+    glass: Color(0x1AFFFFFF), // a tonal wash on a hero surface (the quick actions on the balance)
+    glassBorder: Color(0x2EFFFFFF),
+    glowViolet: Color(0xFFB7B1FF),
+    track: Color(0xFFE6E5F2), // empty bars and ring tracks (decorative, never text)
+    selected: Color(0xFFE4E2FF), // Material's selected state: the navigation indicator, a chosen segment or chip
+    onSelected: Color(0xFF211A78),
   );
 
   final Color background;
@@ -144,17 +144,17 @@ class AppColors {
   final Color wheelRimLight;
   final Color shadow;
 
-  /// Frosted surfaces over a glow: translucent white and its brighter edge.
+  /// A tonal wash over a hero surface, and its edge.
   final Color glass;
   final Color glassBorder;
 
-  /// The second glow behind key numbers (the first is [heroGlow], coral).
+  /// A soft indigo highlight (the ring gauge's far end).
   final Color glowViolet;
 
   /// The empty part of a bar or a ring gauge.
   final Color track;
 
-  /// A selected segment, a selected chip and the round "›" button: plum ink, and the text on it.
+  /// A selected destination, segment or chip: Material's tonal container, and the text and icon on it.
   final Color selected;
   final Color onSelected;
 }
@@ -180,83 +180,87 @@ abstract final class Space {
   static const xxxl = 48.0;
 }
 
-/// Corner radii (MASTER.md §5).
+/// Corner radii (MASTER.md §5), on Material 3's shape scale: small 8, medium 12, large 16, extra large 28.
 abstract final class Radii {
   static const sm = 8.0;
   static const md = 12.0;
-  static const lg = 24.0; // banners, panels inside cards (20 until 2026-11-11)
-  static const xl = 24.0;
-  static const xxl = 28.0;
+  static const lg = 16.0; // banners, panels inside cards
+  static const xl = 24.0; // the hero surfaces
+  static const xxl = 28.0; // sheets
 
   /// Text fields and snack bars.
-  static const field = 16.0;
+  static const field = 14.0;
 
-  /// Cards (redesign 2026-11-11: 28, from 20).
-  static const card = 28.0;
+  /// Cards.
+  static const card = 20.0;
   static const full = 999.0;
 }
 
-/// Depth in three steps (MASTER.md §5): a card's soft lift, a floating sheet, and the hero surfaces' deep shadow.
+/// Depth, quietly (MASTER.md §5, Material 3): a card barely lifts off the page, a sheet floats, a hero surface casts
+/// its own colour.
 abstract final class Elevation {
-  // raised on 2026-10-29 (owner): cards must stand off the page, so the lift is deeper and the page is warm linen
-  // softened on 2026-11-11 (redesign): a wide, faint ambient shadow instead of a hard lift
   static List<BoxShadow> card(AppColors c) => [
-    BoxShadow(color: c.shadow.withValues(alpha: 0.04), blurRadius: 2, offset: const Offset(0, 1)),
-    BoxShadow(color: c.shadow.withValues(alpha: 0.07), blurRadius: 40, offset: const Offset(0, 16)),
+    BoxShadow(color: c.shadow.withValues(alpha: 0.05), blurRadius: 2, offset: const Offset(0, 1)),
+    BoxShadow(color: c.shadow.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 3)),
   ];
 
-  /// The floating navigation bar.
+  /// A bar standing over content.
   static List<BoxShadow> bar(AppColors c) => [
-    BoxShadow(color: c.shadow.withValues(alpha: 0.12), blurRadius: 32, offset: const Offset(0, 10)),
+    BoxShadow(color: c.shadow.withValues(alpha: 0.08), blurRadius: 12, offset: const Offset(0, -2)),
   ];
 
-  /// The glow under the bright primary pill and the selected bar.
+  /// The glow under the selected bar.
   static List<BoxShadow> glow(Color color) => [
-    BoxShadow(color: color.withValues(alpha: 0.38), blurRadius: 24, offset: const Offset(0, 8)),
+    BoxShadow(color: color.withValues(alpha: 0.28), blurRadius: 14, offset: const Offset(0, 5)),
   ];
 
   static List<BoxShadow> float(AppColors c) => [
-    BoxShadow(color: c.shadow.withValues(alpha: 0.22), blurRadius: 56, offset: const Offset(0, 20)),
+    BoxShadow(color: c.shadow.withValues(alpha: 0.18), blurRadius: 32, offset: const Offset(0, 12)),
   ];
 
   static List<BoxShadow> hero(AppColors c) => [
-    // softened on 2026-11-11: a glow beneath, not a slab
-    BoxShadow(color: c.heroEnd.withValues(alpha: 0.30), blurRadius: 36, offset: const Offset(0, 16)),
-    BoxShadow(color: c.heroStart.withValues(alpha: 0.14), blurRadius: 12, offset: const Offset(0, 4)),
+    BoxShadow(color: c.primary.withValues(alpha: 0.24), blurRadius: 20, offset: const Offset(0, 8)),
   ];
 }
 
-/// The hero surfaces' gradient: the sunset, coral into violet, lit from the top left (MASTER.md §5).
+/// The hero surfaces' gradient: the logo's indigo, lit from the top left (MASTER.md §5).
 abstract final class Gradients {
   static LinearGradient hero(AppColors c) => LinearGradient(
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
-    colors: [c.heroStart, c.primary, c.accent, c.heroEnd],
-    stops: const [0, 0.28, 0.72, 1],
+    colors: [c.heroStart, c.primary, c.heroEnd],
+    stops: const [0, 0.5, 1],
   );
 
-  /// The wheel's stage: the dusk end of the sunset, violet into plum, so both segment colours and the gold rim stand
-  /// out from it.
+  /// The wheel's stage: deep indigo into midnight, so the segment colours and the gold rim stand out from it.
   static LinearGradient stage(AppColors c) =>
       LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [c.heroEnd, c.shadow]);
 
-  /// A soft glowing blob (redesign 2026-11-11): [color] fading to nothing, placed behind key content.
-  static RadialGradient blob(Color color, {Alignment center = Alignment.center, double radius = 0.8, double alpha = 0.5}) =>
-      RadialGradient(
-        center: center,
-        radius: radius,
-        colors: [color.withValues(alpha: alpha), color.withValues(alpha: alpha * 0.4), color.withValues(alpha: 0)],
-        stops: const [0, 0.45, 1],
-      );
+  /// A soft highlight: [color] fading to nothing.
+  static RadialGradient blob(
+    Color color, {
+    Alignment center = Alignment.center,
+    double radius = 0.8,
+    double alpha = 0.5,
+  }) => RadialGradient(
+    center: center,
+    radius: radius,
+    colors: [
+      color.withValues(alpha: alpha),
+      color.withValues(alpha: alpha * 0.4),
+      color.withValues(alpha: 0),
+    ],
+    stops: const [0, 0.45, 1],
+  );
 
-  /// A filled bar: coral rising into violet.
+  /// A filled bar: indigo rising into its lighter accent.
   static LinearGradient bar(AppColors c) =>
       LinearGradient(begin: Alignment.bottomCenter, end: Alignment.topCenter, colors: [c.primary, c.accent]);
 
   static RadialGradient heroGlow(AppColors c) => RadialGradient(
     center: const Alignment(-0.8, -1.2),
     radius: 1.4,
-    colors: [c.heroGlow.withValues(alpha: 0.6), c.heroGlow.withValues(alpha: 0)],
+    colors: [c.heroGlow.withValues(alpha: 0.45), c.heroGlow.withValues(alpha: 0)],
   );
 }
 

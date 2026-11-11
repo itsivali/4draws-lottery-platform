@@ -49,7 +49,7 @@ class HowItWorksScreen extends ConsumerWidget {
     return PageScaffold(
       title: 'How it works',
       children: [
-        section(Icons.donut_large_rounded, 'Plays', [
+        section(Icons.play_arrow_rounded, 'Plays', [
           'A play costs ${price == null ? 'the price shown on Play' : formatKes(price)}, paid from your wallet.',
           'You can make up to ${cap ?? 'a few'} plays a day. The day runs from midnight to midnight Nairobi time.',
           'Each play is one spin over the slots on the wheel. The server picks the slot; the wheel only shows it.',

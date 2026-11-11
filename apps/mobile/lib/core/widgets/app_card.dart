@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../app/theme/tokens.dart';
-import 'depth.dart';
+import 'icon_disc.dart';
 
 /// The one card: a white surface with large corners and a faint ambient shadow (MASTER.md §5, §7). `tinted` cards sit
 /// on primaryContainer for quiet emphasis; `flat` ones trade the shadow for a hairline (inside sheets and lists).
@@ -46,7 +46,7 @@ class AppCard extends StatelessWidget {
               padding: EdgeInsets.symmetric(horizontal: padding.horizontal == 0 ? Space.lg : 0),
               child: Row(
                 children: [
-                  if (icon != null) ...[Orb(icon: icon!, size: 40), const SizedBox(width: Space.md)],
+                  if (icon != null) ...[IconDisc(icon: icon!), const SizedBox(width: Space.md)],
                   Expanded(
                     child: Semantics(header: true, child: Text(title!, style: t.titleMedium)),
                   ),
@@ -60,11 +60,6 @@ class AppCard extends StatelessWidget {
         ],
       ),
     );
-    // raised cards lean toward the finger or pointer (depth.dart); flat ones sit in sheets and stay still
-    return Tilt(enabled: !flat, maxAngle: 0.05, child: _face(c, radius, body));
-  }
-
-  Widget _face(AppColors c, BorderRadius radius, Widget body) {
     return DecoratedBox(
       decoration: BoxDecoration(
         color: tinted ? c.primaryContainer : c.surface,

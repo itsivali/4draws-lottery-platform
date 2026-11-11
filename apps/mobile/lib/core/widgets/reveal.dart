@@ -26,14 +26,7 @@ class Reveal extends StatelessWidget {
       child: child,
       builder: (context, t, child) => Opacity(
         opacity: t,
-        child: Transform(
-          alignment: Alignment.bottomCenter,
-          transform: Matrix4.identity()
-            ..setEntry(3, 2, 0.0011)
-            ..translateByDouble(0, 18 * (1 - t), 0, 1)
-            ..rotateX(-0.3 * (1 - t)),
-          child: child,
-        ),
+        child: Transform.translate(offset: Offset(0, 12 * (1 - t)), child: child),
       ),
     );
   }

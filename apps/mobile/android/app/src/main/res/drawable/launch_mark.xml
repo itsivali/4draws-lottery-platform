@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The 4draws mark on its indigo tile, for the launch screen before Android 12 (design-system/lottery-platform/logo). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="96dp" android:height="96dp" android:viewportWidth="64" android:viewportHeight="64">
+    <path android:pathData="M16,0h32a16,16 0 0 1 16,16v32a16,16 0 0 1 -16,16h-32a16,16 0 0 1 -16,-16v-32a16,16 0 0 1 16,-16z">
+        <aapt:attr name="android:fillColor">
+            <gradient android:type="linear" android:startX="0" android:startY="0" android:endX="64" android:endY="64">
+                <item android:offset="0" android:color="#FF5B4FE9" />
+                <item android:offset="0.55" android:color="#FF4338CA" />
+                <item android:offset="1" android:color="#FF2A2385" />
+            </gradient>
+        </aapt:attr>
+    </path>
+    <path android:pathData="M36.68 9.99 A22.5 22.5 0 0 1 54.01 27.32" android:strokeColor="#FFFFC53D" android:strokeWidth="4.5" android:strokeLineCap="round" />
+    <path android:pathData="M54.01 36.68 A22.5 22.5 0 0 1 36.68 54.01" android:strokeColor="#EBFFFFFF" android:strokeWidth="4.5" android:strokeLineCap="round" />
+    <path android:pathData="M27.32 54.01 A22.5 22.5 0 0 1 9.99 36.68" android:strokeColor="#EBFFFFFF" android:strokeWidth="4.5" android:strokeLineCap="round" />
+    <path android:pathData="M9.99 27.32 A22.5 22.5 0 0 1 27.32 9.99" android:strokeColor="#EBFFFFFF" android:strokeWidth="4.5" android:strokeLineCap="round" />
+    <path android:pathData="M36.5 44.5 V19.5 L22 38 H43" android:strokeColor="#FFFFFFFF" android:strokeWidth="5.5" android:strokeLineCap="round" android:strokeLineJoin="round" />
+</vector>

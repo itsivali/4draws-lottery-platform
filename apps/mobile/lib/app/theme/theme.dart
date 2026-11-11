@@ -1,6 +1,6 @@
+import 'package:flutter/cupertino.dart' show CupertinoPageTransitionsBuilder;
 import 'package:flutter/material.dart';
 
-import '../../core/widgets/depth.dart';
 import 'tokens.dart';
 
 const _tabular = [FontFeature.tabularFigures()];
@@ -21,9 +21,9 @@ TextTheme _textTheme(AppColors c) {
         letterSpacing: tracking,
       );
   return TextTheme(
-    // big numbers (redesign 2026-11-11): light and tightly tracked, small muted captions sit over them
-    displayLarge: s(60, 64, FontWeight.w300, c.ink, display: true, tracking: -2.4),
-    displayMedium: s(48, 54, FontWeight.w300, c.ink, display: true, tracking: -1.8),
+    // big numbers: medium weight and tightly tracked, a small muted caption over them
+    displayLarge: s(52, 60, FontWeight.w600, c.ink, display: true, tracking: -1.6),
+    displayMedium: s(40, 48, FontWeight.w600, c.ink, display: true, tracking: -1.0),
     displaySmall: s(34, 42, FontWeight.w500, c.ink, display: true, tracking: -1.0),
     headlineLarge: s(30, 38, FontWeight.w600, c.ink, display: true, tracking: -0.9),
     headlineMedium: s(28, 36, FontWeight.w500, c.ink, display: true, tracking: -0.8),
@@ -48,7 +48,7 @@ extension DisplayWeight on TextStyle {
   );
 }
 
-/// The app's one theme: light, on white (MASTER.md §12).
+/// The app's one theme: light Material 3 in the 4draws indigo (MASTER.md §12).
 ThemeData buildTheme() {
   const c = AppColors.light;
   final text = _textTheme(c);
@@ -60,6 +60,9 @@ ThemeData buildTheme() {
     onPrimaryContainer: c.onPrimaryContainer,
     secondary: c.accent,
     onSecondary: c.onPrimary,
+    // tonal buttons, the navigation indicator and chosen segments share one container (Material 3)
+    secondaryContainer: c.selected,
+    onSecondaryContainer: c.onSelected,
     tertiary: c.gold,
     onTertiary: c.ink,
     error: c.error,
@@ -76,7 +79,7 @@ ThemeData buildTheme() {
     outlineVariant: c.border,
     shadow: c.shadow,
   );
-  // pills (redesign 2026-11-11): every button is a stadium
+  // Material 3: buttons are fully rounded
   const buttonShape = StadiumBorder();
   const buttonSize = Size(Breakpoints.minTouch, Breakpoints.buttonHeight);
   const buttonPadding = EdgeInsets.symmetric(horizontal: Space.xl);
@@ -92,8 +95,7 @@ ThemeData buildTheme() {
     colorScheme: scheme,
     fontFamily: AppType.body,
     textTheme: text,
-    // pages stand on the moving fluid (depth.dart's Grounded, under the router), so scaffolds let it through
-    scaffoldBackgroundColor: Colors.transparent,
+    scaffoldBackgroundColor: c.background,
     canvasColor: c.background,
     dividerColor: c.border,
     focusColor: c.primary.withValues(alpha: 0.16),
@@ -102,16 +104,15 @@ ThemeData buildTheme() {
     visualDensity: VisualDensity.standard,
     materialTapTargetSize: MaterialTapTargetSize.padded,
     appBarTheme: AppBarTheme(
-      // clear over the fluid at the top; frosted once the page scrolls under it
-      backgroundColor: WidgetStateColor.resolveWith(
-        (s) => s.contains(WidgetState.scrolledUnder) ? c.background.withValues(alpha: 0.94) : Colors.transparent,
-      ),
+      backgroundColor: c.background,
       foregroundColor: c.ink,
       surfaceTintColor: Colors.transparent,
       elevation: 0,
-      scrolledUnderElevation: 0,
+      // Material 3: the bar lifts a little once content scrolls under it
+      scrolledUnderElevation: 3,
+      shadowColor: c.shadow.withValues(alpha: 0.35),
       centerTitle: false,
-      titleTextStyle: text.headlineSmall,
+      titleTextStyle: text.titleLarge,
       titleSpacing: Space.lg,
       toolbarHeight: 64,
     ),
@@ -125,31 +126,20 @@ ThemeData buildTheme() {
       ),
     ),
     dividerTheme: DividerThemeData(color: c.border, space: 1, thickness: 1),
+    // Material 3 buttons: a flat filled pill for the one primary action, an outlined pill beside it, tonal for the
+    // quiet ones. No gradients, no gloss: the state layer and the ripple are the feedback, as on the platform.
     filledButtonTheme: FilledButtonThemeData(
-      style:
-          FilledButton.styleFrom(
-            backgroundColor: c.primary,
-            foregroundColor: c.onPrimary,
-            disabledBackgroundColor: c.surfaceMuted,
-            disabledForegroundColor: c.inkMuted,
-            minimumSize: buttonSize,
-            padding: buttonPadding,
-            shape: buttonShape,
-            textStyle: buttonText,
-            shadowColor: c.accent.withValues(alpha: 0.6),
-            // a raised glossy key that sinks when pressed (redesign, second pass)
-            backgroundBuilder: (context, states, child) => raisedButtonFace(context, states, child, c: c),
-          ).copyWith(
-            elevation: WidgetStateProperty.resolveWith(
-              (s) => s.contains(WidgetState.disabled)
-                  ? 0
-                  : s.contains(WidgetState.pressed)
-                  ? 1
-                  : s.contains(WidgetState.hovered)
-                  ? 10
-                  : 5,
-            ),
-          ),
+      style: FilledButton.styleFrom(
+        backgroundColor: c.primary,
+        foregroundColor: c.onPrimary,
+        disabledBackgroundColor: c.ink.withValues(alpha: 0.10),
+        disabledForegroundColor: c.ink.withValues(alpha: 0.42),
+        minimumSize: buttonSize,
+        padding: buttonPadding,
+        shape: buttonShape,
+        textStyle: buttonText,
+        elevation: 0,
+      ),
     ),
     outlinedButtonTheme: OutlinedButtonThemeData(
       style: OutlinedButton.styleFrom(
@@ -157,12 +147,8 @@ ThemeData buildTheme() {
         minimumSize: buttonSize,
         padding: buttonPadding,
         shape: buttonShape,
-        backgroundColor: c.surface,
         side: BorderSide(color: c.outline),
         textStyle: buttonText,
-        elevation: 1,
-        shadowColor: c.shadow.withValues(alpha: 0.3),
-        backgroundBuilder: (context, states, child) => pearlButtonFace(context, states, child, c: c),
       ),
     ),
     textButtonTheme: TextButtonThemeData(
@@ -176,7 +162,7 @@ ThemeData buildTheme() {
     iconButtonTheme: IconButtonThemeData(
       style: IconButton.styleFrom(foregroundColor: c.ink, minimumSize: const Size.square(Breakpoints.minTouch)),
     ),
-    // chips are pills: white with a hairline, or the dark selected segment when chosen (redesign 2026-11-11)
+    // chips: outlined, or filled with the tonal container when chosen (Material 3)
     chipTheme: ChipThemeData(
       backgroundColor: c.surface,
       selectedColor: c.selected,
@@ -194,10 +180,10 @@ ThemeData buildTheme() {
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
-      fillColor: c.surfaceRaised,
+      fillColor: c.surface,
       contentPadding: const EdgeInsets.symmetric(horizontal: Space.lg, vertical: Space.lg),
-      border: inputBorder(c.border),
-      enabledBorder: inputBorder(c.border),
+      border: inputBorder(c.outline),
+      enabledBorder: inputBorder(c.outline),
       focusedBorder: inputBorder(c.primary, 2),
       errorBorder: inputBorder(c.error),
       focusedErrorBorder: inputBorder(c.error, 2),
@@ -208,25 +194,26 @@ ThemeData buildTheme() {
       helperMaxLines: 3,
       errorMaxLines: 3,
     ),
-    // the bar floats as a white pill; the selected destination is a dark pill with a white icon (redesign 2026-11-11)
+    // Material 3 navigation: a full-width bar on the surface, the chosen destination under a tonal pill
     navigationBarTheme: NavigationBarThemeData(
-      backgroundColor: Colors.transparent,
+      backgroundColor: c.surface,
       surfaceTintColor: Colors.transparent,
       indicatorColor: c.selected,
       indicatorShape: const StadiumBorder(),
       elevation: 0,
-      height: 68,
+      height: 72,
+      labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
       labelTextStyle: WidgetStateProperty.resolveWith(
         (s) => s.contains(WidgetState.selected)
             ? text.labelMedium?.copyWith(color: c.ink, fontWeight: FontWeight.w700)
             : text.labelMedium?.copyWith(color: c.inkMuted),
       ),
       iconTheme: WidgetStateProperty.resolveWith(
-        (s) => IconThemeData(color: s.contains(WidgetState.selected) ? c.onSelected : c.inkMuted),
+        (s) => IconThemeData(color: s.contains(WidgetState.selected) ? c.onSelected : c.inkMuted, size: 24),
       ),
     ),
     navigationRailTheme: NavigationRailThemeData(
-      backgroundColor: Colors.transparent,
+      backgroundColor: c.surface,
       indicatorColor: c.selected,
       indicatorShape: const StadiumBorder(),
       selectedIconTheme: IconThemeData(color: c.onSelected),
@@ -261,14 +248,13 @@ ThemeData buildTheme() {
       contentTextStyle: text.bodyMedium?.copyWith(color: c.background),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(Radii.lg)),
     ),
-    // a pill toggle: a muted track with the chosen segment dark (redesign 2026-11-11)
+    // Material 3's segmented button: outlined, the chosen segment tonal
     segmentedButtonTheme: SegmentedButtonThemeData(
       style: SegmentedButton.styleFrom(
-        backgroundColor: c.surfaceMuted,
         foregroundColor: c.ink,
         selectedBackgroundColor: c.selected,
         selectedForegroundColor: c.onSelected,
-        side: BorderSide(color: c.surfaceMuted, width: 3),
+        side: BorderSide(color: c.outline),
         shape: const StadiumBorder(),
         textStyle: text.labelLarge?.copyWith(fontWeight: FontWeight.w600),
         minimumSize: const Size(Breakpoints.minTouch, Breakpoints.minTouch),
@@ -284,14 +270,14 @@ ThemeData buildTheme() {
       trackColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.selected) ? c.primary : c.surfaceMuted),
       trackOutlineColor: WidgetStateProperty.all(c.outline),
     ),
+    // each platform's own page transition: Material's fade-forwards on Android, the slide (and edge swipe) on iOS
     pageTransitionsTheme: const PageTransitionsTheme(
       builders: {
-        // pages arrive from depth, over the one fluid ground (depth.dart)
-        TargetPlatform.android: DepthPageTransitionsBuilder(),
-        TargetPlatform.iOS: DepthPageTransitionsBuilder(),
-        TargetPlatform.linux: DepthPageTransitionsBuilder(),
-        TargetPlatform.macOS: DepthPageTransitionsBuilder(),
-        TargetPlatform.windows: DepthPageTransitionsBuilder(),
+        TargetPlatform.android: FadeForwardsPageTransitionsBuilder(),
+        TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+        TargetPlatform.linux: FadeForwardsPageTransitionsBuilder(),
+        TargetPlatform.macOS: CupertinoPageTransitionsBuilder(),
+        TargetPlatform.windows: FadeForwardsPageTransitionsBuilder(),
       },
     ),
   );

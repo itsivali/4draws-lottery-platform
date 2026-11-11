@@ -24,13 +24,6 @@ The only screen with depth, metal and motion. Everything else about it follows M
 
 Gold appears here and nowhere else in the app except the lucky star.
 
-## Depth (`Wheel3D`, 2026-11-11)
-
-The painted wheel stands on twelve bronze slices (11% of the diameter deep) behind it and leans back 0.34 rad in
-perspective, so its rim reads as solid. It leans toward the finger or pointer at rest, and wobbles by at most 0.03 rad
-with the spin's energy. The pose is presentation only: the slot is decided by the server and shown by the face's
-rotation, which the pose never changes. Under reduced motion the pose holds still.
-
 ## Motion (`SpinTiming`)
 Accelerate 600 ms (smoothstep velocity) → cruise at 2 turns/s for at least 1.2 s and for as long as the answer takes
 → decelerate with an ease-out cubic whose starting velocity equals the cruise speed (seamless hand-off), about 2.25–3.75 s

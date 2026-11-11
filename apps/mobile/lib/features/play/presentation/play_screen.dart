@@ -352,7 +352,7 @@ class _PlayPanel extends ConsumerWidget {
                   label: payInstead
                       ? 'Pay ${formatKes(day.priceKes)} with M-Pesa and spin'
                       : 'Play for ${formatKes(day.priceKes)}',
-                  icon: payInstead ? Icons.phone_iphone_rounded : Icons.donut_large_rounded,
+                  icon: payInstead ? Icons.phone_iphone_rounded : Icons.play_arrow_rounded,
                   busy: flow.stage == PlayStage.submitting || paying == PayAndPlayStage.paying,
                   semanticsLabel: payInstead
                       ? 'Pay ${formatKes(day.priceKes)} with M-Pesa and spin. ${day.playsLeft} of $cap plays left today.'
@@ -399,7 +399,7 @@ class _PlayPanel extends ConsumerWidget {
                 for (final (i, p) in day.tickets.reversed.indexed) ...[
                   if (i > 0) Divider(indent: Space.lg, endIndent: Space.lg, color: context.colors.border),
                   ListRow(
-                    icon: p.spin.lucky ? Icons.star_rounded : Icons.donut_large_rounded,
+                    icon: p.spin.lucky ? Icons.star_rounded : Icons.play_arrow_rounded,
                     iconColor: p.spin.lucky ? context.colors.goldText : context.colors.inkMuted,
                     title: 'Play ${p.seq} · slot ${p.spin.slot}${p.spin.lucky ? ' (lucky)' : ''}',
                     subtitle: formatKes(p.priceKes),
@@ -548,7 +548,7 @@ class _WhatAPlayDoes extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           point(
-            Icons.donut_large_rounded,
+            Icons.play_arrow_rounded,
             'Each play is one spin over the slots shown on the wheel. The server picks the slot with your provably fair '
             'seed chain; the wheel only shows it.',
           ),

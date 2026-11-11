@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../core/auth/session_manager.dart';
-import '../core/widgets/depth.dart';
 import '../core/widgets/inline_banner.dart';
 import '../features/account/presentation/account_screen.dart';
 import '../features/account/presentation/closure_screen.dart';
@@ -79,16 +78,14 @@ String? sessionRedirect(SessionStatus status, Uri location, {bool mustChangePass
   }
 }
 
-/// Every screen as a page that arrives in depth (depth.dart), on every platform alike.
-GoRouterPageBuilder depthPage(GoRouterWidgetBuilder build) =>
-    (context, state) => CustomTransitionPage<void>(
+/// Every screen as a Material page, so each platform gets its own transition from the theme (fade-forwards on
+/// Android, the slide and edge swipe on iOS).
+GoRouterPageBuilder _page(GoRouterWidgetBuilder build) =>
+    (context, state) => MaterialPage<void>(
       key: state.pageKey,
       name: state.name,
       arguments: state.extra,
       restorationId: state.pageKey.value,
-      transitionDuration: const Duration(milliseconds: 460),
-      reverseTransitionDuration: const Duration(milliseconds: 320),
-      transitionsBuilder: depthTransition,
       child: build(context, state),
     );
 
@@ -101,34 +98,34 @@ final routerProvider = Provider<GoRouter>((ref) {
         sessionRedirect(session.status.value, state.uri, mustChangePassword: session.mustChangePassword.value),
     routes: [
       GoRoute(path: '/', redirect: (_, _) => '/home'),
-      GoRoute(path: '/starting', pageBuilder: depthPage((_, _) => const StartingScreen())),
-      GoRoute(path: '/offline', pageBuilder: depthPage((_, _) => const OfflineScreen())),
-      GoRoute(path: '/sign-in', pageBuilder: depthPage((_, _) => const SignInScreen())),
+      GoRoute(path: '/starting', pageBuilder: _page((_, _) => const StartingScreen())),
+      GoRoute(path: '/offline', pageBuilder: _page((_, _) => const OfflineScreen())),
+      GoRoute(path: '/sign-in', pageBuilder: _page((_, _) => const SignInScreen())),
       // its own address, so search engines can list "Create account" beside "Sign in" (2026-10-30)
-      GoRoute(path: '/create-account', pageBuilder: depthPage((_, _) => const SignInScreen(create: true))),
-      GoRoute(path: '/forgot-password', pageBuilder: depthPage((_, _) => const ForgotPasswordScreen())),
+      GoRoute(path: '/create-account', pageBuilder: _page((_, _) => const SignInScreen(create: true))),
+      GoRoute(path: '/forgot-password', pageBuilder: _page((_, _) => const ForgotPasswordScreen())),
       GoRoute(
         path: '/reset-password',
-        pageBuilder: depthPage((_, state) => ResetPasswordScreen(token: state.uri.queryParameters['token'] ?? '')),
+        pageBuilder: _page((_, state) => ResetPasswordScreen(token: state.uri.queryParameters['token'] ?? '')),
       ),
       StatefulShellRoute.indexedStack(
         builder: (_, _, shell) => AppShell(shell: shell),
         branches: [
           StatefulShellBranch(
-            routes: [GoRoute(path: '/home', pageBuilder: depthPage((_, _) => const HomeScreen()))],
+            routes: [GoRoute(path: '/home', pageBuilder: _page((_, _) => const HomeScreen()))],
           ),
           StatefulShellBranch(
-            routes: [GoRoute(path: '/play', pageBuilder: depthPage((_, _) => const PlayScreen()))],
+            routes: [GoRoute(path: '/play', pageBuilder: _page((_, _) => const PlayScreen()))],
           ),
           StatefulShellBranch(
             routes: [
               GoRoute(
                 path: '/draws',
-                pageBuilder: depthPage((_, _) => const DrawsScreen()),
+                pageBuilder: _page((_, _) => const DrawsScreen()),
                 routes: [
                   GoRoute(
                     path: ':id',
-                    pageBuilder: depthPage((_, s) => DrawDetailScreen(id: s.pathParameters['id']!)),
+                    pageBuilder: _page((_, s) => DrawDetailScreen(id: s.pathParameters['id']!)),
                   ),
                 ],
               ),
@@ -138,10 +135,10 @@ final routerProvider = Provider<GoRouter>((ref) {
             routes: [
               GoRoute(
                 path: '/wallet',
-                pageBuilder: depthPage((_, _) => const WalletScreen()),
+                pageBuilder: _page((_, _) => const WalletScreen()),
                 routes: [
-                  GoRoute(path: 'top-up', pageBuilder: depthPage((_, _) => const TopUpScreen())),
-                  GoRoute(path: 'withdraw', pageBuilder: depthPage((_, _) => const WithdrawScreen())),
+                  GoRoute(path: 'top-up', pageBuilder: _page((_, _) => const TopUpScreen())),
+                  GoRoute(path: 'withdraw', pageBuilder: _page((_, _) => const WithdrawScreen())),
                 ],
               ),
             ],
@@ -150,18 +147,18 @@ final routerProvider = Provider<GoRouter>((ref) {
             routes: [
               GoRoute(
                 path: '/account',
-                pageBuilder: depthPage((_, _) => const AccountScreen()),
+                pageBuilder: _page((_, _) => const AccountScreen()),
                 routes: [
-                  GoRoute(path: 'details', pageBuilder: depthPage((_, _) => const DetailsScreen())),
-                  GoRoute(path: 'verify', pageBuilder: depthPage((_, _) => const KycScreen())),
-                  GoRoute(path: 'devices', pageBuilder: depthPage((_, _) => const DevicesScreen())),
-                  GoRoute(path: 'sign-ins', pageBuilder: depthPage((_, _) => const SignInsScreen())),
-                  GoRoute(path: 'limits', pageBuilder: depthPage((_, _) => const ResponsibleGamingScreen())),
-                  GoRoute(path: 'password', pageBuilder: depthPage((_, _) => const PasswordScreen())),
-                  GoRoute(path: 'email', pageBuilder: depthPage((_, _) => const EmailScreen())),
-                  GoRoute(path: 'fairness', pageBuilder: depthPage((_, _) => const FairnessScreen())),
-                  GoRoute(path: 'how-it-works', pageBuilder: depthPage((_, _) => const HowItWorksScreen())),
-                  GoRoute(path: 'close', pageBuilder: depthPage((_, _) => const ClosureScreen())),
+                  GoRoute(path: 'details', pageBuilder: _page((_, _) => const DetailsScreen())),
+                  GoRoute(path: 'verify', pageBuilder: _page((_, _) => const KycScreen())),
+                  GoRoute(path: 'devices', pageBuilder: _page((_, _) => const DevicesScreen())),
+                  GoRoute(path: 'sign-ins', pageBuilder: _page((_, _) => const SignInsScreen())),
+                  GoRoute(path: 'limits', pageBuilder: _page((_, _) => const ResponsibleGamingScreen())),
+                  GoRoute(path: 'password', pageBuilder: _page((_, _) => const PasswordScreen())),
+                  GoRoute(path: 'email', pageBuilder: _page((_, _) => const EmailScreen())),
+                  GoRoute(path: 'fairness', pageBuilder: _page((_, _) => const FairnessScreen())),
+                  GoRoute(path: 'how-it-works', pageBuilder: _page((_, _) => const HowItWorksScreen())),
+                  GoRoute(path: 'close', pageBuilder: _page((_, _) => const ClosureScreen())),
                 ],
               ),
             ],

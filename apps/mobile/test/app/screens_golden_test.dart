@@ -11,17 +11,15 @@ void main() {
   setUpAll(loadAppFonts);
 
   // the soft shadows and glows are part of the design, so these images paint them (tests flatten shadows by default)
-  void testWidgets(String description, Future<void> Function(WidgetTester) body) => flutter_test.testWidgets(
-    description,
-    (t) async {
-      debugDisableShadows = false;
-      try {
-        await body(t);
-      } finally {
-        debugDisableShadows = true;
-      }
-    },
-  );
+  void testWidgets(String description, Future<void> Function(WidgetTester) body) =>
+      flutter_test.testWidgets(description, (t) async {
+        debugDisableShadows = false;
+        try {
+          await body(t);
+        } finally {
+          debugDisableShadows = true;
+        }
+      });
 
   Future<void> shot(WidgetTester t, String name) async {
     await t.pumpAndSettle();

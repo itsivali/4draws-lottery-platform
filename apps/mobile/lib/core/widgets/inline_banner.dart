@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../app/theme/tokens.dart';
-import 'depth.dart';
+import 'icon_disc.dart';
 import 'status_pill.dart';
 
 /// A notice inside the page (MASTER.md §11): an icon, a title, a sentence, and one action at most. The tone is carried by
@@ -52,7 +52,7 @@ class InlineBanner extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Orb(icon: icon ?? defaultIcon, size: 38, tone: OrbTone.ink, color: color),
+            IconDisc(icon: icon ?? defaultIcon, size: 36, color: color),
             const SizedBox(width: Space.md),
             Expanded(
               child: Column(
@@ -103,9 +103,7 @@ class EmptyState extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: Space.xl, horizontal: Space.lg),
       child: Column(
         children: [
-          Floating(
-            child: Orb(icon: icon, size: 72, tone: OrbTone.soft),
-          ),
+          IconDisc(icon: icon, size: 64),
           const SizedBox(height: Space.md),
           Text(title, style: t.titleMedium, textAlign: TextAlign.center),
           if (message != null) ...[
