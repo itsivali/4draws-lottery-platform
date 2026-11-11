@@ -196,17 +196,24 @@ abstract final class Radii {
   static const full = 999.0;
 }
 
-/// Depth, quietly (MASTER.md §5, Material 3): a card barely lifts off the page, a sheet floats, a hero surface casts
-/// its own colour.
+/// Depth (MASTER.md §5): cards stand clearly off the page, a sheet floats, a hero surface casts its own colour.
 abstract final class Elevation {
+  // raised again on 2026-11-11 (owner: "cards should stand out with shadows"): a close contact shadow and a wide,
+  // soft one in the page's own indigo-black, so white cards lift clearly off the off-white page
   static List<BoxShadow> card(AppColors c) => [
-    BoxShadow(color: c.shadow.withValues(alpha: 0.05), blurRadius: 2, offset: const Offset(0, 1)),
-    BoxShadow(color: c.shadow.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 3)),
+    BoxShadow(color: c.shadow.withValues(alpha: 0.08), blurRadius: 4, offset: const Offset(0, 1)),
+    BoxShadow(color: c.shadow.withValues(alpha: 0.13), blurRadius: 32, offset: const Offset(0, 14), spreadRadius: -6),
+  ];
+
+  /// A card under the pointer or a finger: it comes forward.
+  static List<BoxShadow> cardRaised(AppColors c) => [
+    BoxShadow(color: c.shadow.withValues(alpha: 0.08), blurRadius: 6, offset: const Offset(0, 2)),
+    BoxShadow(color: c.shadow.withValues(alpha: 0.16), blurRadius: 40, offset: const Offset(0, 20), spreadRadius: -6),
   ];
 
   /// A bar standing over content.
   static List<BoxShadow> bar(AppColors c) => [
-    BoxShadow(color: c.shadow.withValues(alpha: 0.08), blurRadius: 12, offset: const Offset(0, -2)),
+    BoxShadow(color: c.shadow.withValues(alpha: 0.10), blurRadius: 20, offset: const Offset(0, -4)),
   ];
 
   /// The glow under the selected bar.
@@ -218,8 +225,15 @@ abstract final class Elevation {
     BoxShadow(color: c.shadow.withValues(alpha: 0.18), blurRadius: 32, offset: const Offset(0, 12)),
   ];
 
+  /// The form's card on the signed-out page: deep, over the brand's colour.
+  static List<BoxShadow> sheet(AppColors c) => [
+    BoxShadow(color: c.shadow.withValues(alpha: 0.22), blurRadius: 12, offset: const Offset(0, 4)),
+    BoxShadow(color: c.shadow.withValues(alpha: 0.42), blurRadius: 64, offset: const Offset(0, 32), spreadRadius: -8),
+  ];
+
   static List<BoxShadow> hero(AppColors c) => [
-    BoxShadow(color: c.primary.withValues(alpha: 0.24), blurRadius: 20, offset: const Offset(0, 8)),
+    BoxShadow(color: c.primary.withValues(alpha: 0.18), blurRadius: 6, offset: const Offset(0, 2)),
+    BoxShadow(color: c.primary.withValues(alpha: 0.34), blurRadius: 32, offset: const Offset(0, 16), spreadRadius: -4),
   ];
 }
 
@@ -279,14 +293,14 @@ abstract final class Motion {
   static const press = Duration(milliseconds: 90);
   static const quick = Duration(milliseconds: 120);
   static const standard = Duration(milliseconds: 220);
-  static const emphasis = Duration(milliseconds: 360);
+  static const emphasis = Duration(milliseconds: 380);
   static const stagger = Duration(milliseconds: 45);
   static const skeletonPulse = Duration(milliseconds: 1200);
   static const enter = Curves.easeOutCubic;
   static const exit = Curves.easeInCubic;
   static const settle = Curves.easeOutQuart;
   static const pressScale = 0.98;
-  static const riseDistance = 10.0;
+  static const riseDistance = 14.0;
 
   static Duration exitFor(Duration enter) => enter * 0.65;
 }

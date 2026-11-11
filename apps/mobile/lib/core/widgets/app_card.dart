@@ -2,8 +2,9 @@ import 'package:flutter/material.dart';
 
 import '../../app/theme/tokens.dart';
 import 'icon_disc.dart';
+import 'motion.dart';
 
-/// The one card: a white surface with large corners and a faint ambient shadow (MASTER.md §5, §7). `tinted` cards sit
+/// The one card: a white surface with large corners that stands off the page on its shadow (MASTER.md §5, §7). `tinted` cards sit
 /// on primaryContainer for quiet emphasis; `flat` ones trade the shadow for a hairline (inside sheets and lists).
 class AppCard extends StatelessWidget {
   const AppCard({
@@ -60,12 +61,11 @@ class AppCard extends StatelessWidget {
         ],
       ),
     );
-    return DecoratedBox(
+    final surface = DecoratedBox(
       decoration: BoxDecoration(
         color: tinted ? c.primaryContainer : c.surface,
         borderRadius: radius,
         border: flat ? Border.all(color: c.border) : null,
-        boxShadow: flat || tinted ? null : Elevation.card(c),
       ),
       child: Material(
         type: MaterialType.transparency,
@@ -74,6 +74,8 @@ class AppCard extends StatelessWidget {
         child: onTap == null ? body : InkWell(onTap: onTap, child: body),
       ),
     );
+    // raised cards stand off the page on their shadow; tappable ones come forward under the pointer (Lift)
+    return flat || tinted ? surface : Lift(enabled: onTap != null, child: surface);
   }
 }
 

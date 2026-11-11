@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/theme/tokens.dart';
 import '../api/api_failure.dart';
 import 'failure_text.dart';
 import 'inline_banner.dart';
@@ -23,9 +24,25 @@ class AsyncView<T> extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final v = value;
-    if (v.hasValue) return data(v.requireValue);
-    if (v.hasError) return ErrorNotice(error: v.error!, onRetry: onRetry, what: what);
-    return loading ?? const SkeletonLines();
+    final (state, child) = v.hasValue
+        ? (0, data(v.requireValue))
+        : v.hasError
+        ? (1, ErrorNotice(error: v.error!, onRetry: onRetry, what: what))
+        : (2, loading ?? const SkeletonLines());
+    if (context.reduceMotion) return child;
+    // the skeleton gives way to the data in a short cross-fade, and the card grows to fit it, instead of a cut
+    return AnimatedSize(
+      duration: Motion.standard,
+      curve: Motion.settle,
+      alignment: Alignment.topCenter,
+      child: AnimatedSwitcher(
+        duration: Motion.standard,
+        switchInCurve: Motion.enter,
+        switchOutCurve: Motion.exit,
+        layoutBuilder: (current, previous) => Stack(alignment: Alignment.topCenter, children: [...previous, ?current]),
+        child: KeyedSubtree(key: ValueKey(state), child: child),
+      ),
+    );
   }
 }
 

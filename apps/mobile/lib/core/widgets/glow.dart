@@ -501,7 +501,15 @@ class PillToggle<T> extends StatelessWidget {
                   decoration: BoxDecoration(
                     color: value == selected ? c.surface : c.surface.withValues(alpha: 0),
                     borderRadius: BorderRadius.circular(Radii.full),
-                    boxShadow: value == selected ? Elevation.card(c) : null,
+                    boxShadow: value == selected
+                        ? [
+                            BoxShadow(
+                              color: c.shadow.withValues(alpha: 0.12),
+                              blurRadius: 6,
+                              offset: const Offset(0, 2),
+                            ),
+                          ]
+                        : null,
                   ),
                   child: Material(
                     type: MaterialType.transparency,

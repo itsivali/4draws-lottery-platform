@@ -55,6 +55,20 @@ Where this file and v4 disagree below, v4 wins.
 - **Shapes:** cards 20 dp, fields 14 dp, hero surfaces 24 dp, sheets 28 dp, buttons fully rounded; a card's lift is
   barely there (`Elevation.card`).
 
+**v4.1 (2026-11-11, owner: "the form in the middle of the screen, the colour on the background, the form with
+shadows; cards that stand out with shadows; fluid, smooth transitions"), for the app and the back office alike:**
+
+- **Signed-out pages** (`AuthPage`: sign in, create account, password reset): the indigo hero gradient fills the
+  screen; the form is one white card in the middle of it (440 dp at most) under `Elevation.sheet`, the mark above it
+  in white. The same on phones and on wide screens; the two-panel layout is gone. The card grows and shrinks smoothly
+  as the form changes.
+- **Cards stand out:** `Elevation.card` is a close contact shadow plus a wide soft one (the "barely there" lift of v4
+  is withdrawn). A tappable card comes forward under the pointer (`Elevation.cardRaised`, 3 dp up) and settles under
+  a press (`Lift`). Hero surfaces cast their own indigo.
+- **Transitions:** tabs fade through while settling from 97% (`TabArrival`); a card's skeleton cross-fades into its
+  data and the card resizes to fit (`AsyncView`); lists rise in 14 dp. Page transitions stay the platform's own.
+- The back office (`apps/backoffice`) wears the same indigo, shadows and motion (`src/index.css`).
+
 ## 2. Colour
 
 **One theme: light, on a warm near-white page** (owner, 2026-10-28; the page took a linen tint on 2026-10-29 so the
@@ -98,8 +112,8 @@ signal.
 
 **Pending is teal, not green.** A pending top-up or payout must not look like a success.
 
-The staff back office (`apps/backoffice`) maps the same roles onto its own tokens (`src/index.css`), and still wears
-the earlier coral and violet until its own pass.
+The staff back office (`apps/backoffice`) maps the same roles onto its own tokens (`src/index.css`), in the same
+indigo, with five labelled chart hues.
 
 ## 3. Typography
 

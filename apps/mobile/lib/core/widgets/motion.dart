@@ -118,8 +118,8 @@ abstract final class Ambient {
   static bool enabled = true;
 }
 
-/// Material's fade-through between top-level destinations: when the chosen tab changes, its page fades in. Keeps the
-/// same child (the tabs keep their state); nothing happens under reduced motion.
+/// Material's fade-through between top-level destinations: when the chosen tab changes, its page fades in while it
+/// settles from slightly small. Keeps the same child (the tabs keep their state); nothing happens under reduced motion.
 class TabArrival extends StatefulWidget {
   const TabArrival({super.key, required this.index, required this.child});
 
@@ -131,7 +131,12 @@ class TabArrival extends StatefulWidget {
 }
 
 class _TabArrivalState extends State<TabArrival> with SingleTickerProviderStateMixin {
-  late final _c = AnimationController(vsync: this, duration: Motion.standard, value: 1);
+  late final _c = AnimationController(vsync: this, duration: Motion.emphasis, value: 1);
+  late final _fade = CurvedAnimation(
+    parent: _c,
+    curve: const Interval(0, 0.7, curve: Motion.enter),
+  );
+  late final _scale = Tween(begin: 0.97, end: 1.0).animate(CurvedAnimation(parent: _c, curve: Motion.settle));
 
   @override
   void didUpdateWidget(TabArrival old) {
@@ -141,13 +146,69 @@ class _TabArrivalState extends State<TabArrival> with SingleTickerProviderStateM
 
   @override
   void dispose() {
+    _fade.dispose();
     _c.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) => FadeTransition(
-    opacity: CurvedAnimation(parent: _c, curve: Motion.enter),
-    child: widget.child,
+    opacity: _fade,
+    child: ScaleTransition(scale: _scale, child: widget.child),
   );
+}
+
+/// A card that answers the pointer and the finger: it rises a little and its shadow deepens under a hovering pointer,
+/// and it settles back down when pressed. Wraps a surface that draws no shadow of its own; only listens, so the child
+/// keeps its taps. Under reduced motion the shadow still changes, without movement.
+class Lift extends StatefulWidget {
+  const Lift({super.key, required this.child, this.radius = Radii.card, this.enabled = true});
+
+  final Widget child;
+  final double radius;
+
+  /// Off for cards that are not tappable: they keep the resting shadow.
+  final bool enabled;
+
+  @override
+  State<Lift> createState() => _LiftState();
+}
+
+class _LiftState extends State<Lift> {
+  bool _hover = false;
+  bool _down = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final raised = widget.enabled && _hover && !_down;
+    final still = context.reduceMotion;
+    final card = AnimatedContainer(
+      duration: still ? Duration.zero : Motion.standard,
+      curve: Motion.enter,
+      transform: Matrix4.translationValues(0, raised && !still ? -3 : 0, 0),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(widget.radius),
+        boxShadow: raised ? Elevation.cardRaised(c) : Elevation.card(c),
+      ),
+      child: widget.child,
+    );
+    if (!widget.enabled) return card;
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
+      child: Listener(
+        behavior: HitTestBehavior.deferToChild,
+        onPointerDown: (_) => setState(() => _down = true),
+        onPointerUp: (_) => setState(() => _down = false),
+        onPointerCancel: (_) => setState(() => _down = false),
+        child: AnimatedScale(
+          scale: _down && !still ? Motion.pressScale : 1,
+          duration: Motion.quick,
+          curve: Motion.enter,
+          child: card,
+        ),
+      ),
+    );
+  }
 }

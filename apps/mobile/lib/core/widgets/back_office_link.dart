@@ -10,10 +10,13 @@ import '../../app/theme/tokens.dart';
 /// when the build names a back office (`BACKOFFICE_URL`). It opens in a new tab; the player app itself never signs
 /// staff in.
 class BackOfficeLink extends ConsumerWidget {
-  const BackOfficeLink({super.key, this.web = kIsWeb});
+  const BackOfficeLink({super.key, this.web = kIsWeb, this.onHero = false});
 
   /// Whether this is the web app (a parameter so tests can show the link).
   final bool web;
+
+  /// On a hero surface (the signed-out page): the hero's muted text colour instead of muted ink.
+  final bool onHero;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -21,10 +24,10 @@ class BackOfficeLink extends ConsumerWidget {
     if (!web || url == null) return const SizedBox.shrink();
     final c = context.colors;
     return Align(
-      alignment: Alignment.centerLeft,
+      alignment: onHero ? Alignment.center : Alignment.centerLeft,
       child: TextButton.icon(
         style: TextButton.styleFrom(
-          foregroundColor: c.inkMuted,
+          foregroundColor: onHero ? c.onHeroMuted : c.inkMuted,
           padding: const EdgeInsets.symmetric(horizontal: Space.sm),
         ),
         icon: const Icon(Icons.admin_panel_settings_outlined, size: 18),

@@ -12,15 +12,12 @@ import '../../../core/api/api_failure.dart';
 import '../../../core/api/idempotency.dart';
 import '../../../core/auth/session_manager.dart';
 import '../../../core/formatting/phone.dart';
+import '../../../core/widgets/auth_page.dart';
 import '../../../core/widgets/back_office_link.dart';
-import '../../../core/widgets/brand_mark.dart';
 import '../../../core/widgets/busy_button.dart';
-import '../../../core/widgets/content_frame.dart';
 import '../../../core/widgets/failure_text.dart';
 import '../../../core/widgets/glow.dart';
-import '../../../core/widgets/hero_card.dart';
 import '../../../core/widgets/inline_banner.dart';
-import '../../../core/widgets/reveal.dart';
 import '../../../core/widgets/status_pill.dart';
 import '../application/auth_providers.dart';
 import '../data/auth_repository.dart';
@@ -253,7 +250,6 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final wide = widthClassOf(context) == WidthClass.expanded;
     final providers = ref.watch(signInProvidersProvider).value ?? SignInProviders.none;
     if (providers.any && !_prepared) unawaited(_prepare(providers));
     final signIn = ref.read(providerSignInProvider);
@@ -292,74 +288,23 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
       onForgot: () => context.go('/forgot-password'),
     );
     final heading = _Heading(step: _step, mode: _mode, providerName: _providerToken?.provider);
-    final card = _FormCard(child: form);
+    final c = context.colors;
     return Title(
       title: '${_mode == _Mode.create ? 'Create account' : 'Sign in'} · 4draws',
-      color: context.colors.primary,
-      child: Scaffold(
-        body: SafeArea(
-          child: wide
-              ? Row(
-                  children: [
-                    const Expanded(child: _Panel()),
-                    Expanded(
-                      child: Center(
-                        child: SingleChildScrollView(
-                          padding: const EdgeInsets.all(Space.xxl),
-                          child: ConstrainedBox(
-                            constraints: const BoxConstraints(maxWidth: 440),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                heading.onPage(context),
-                                const SizedBox(height: Space.xl),
-                                card,
-                                const SizedBox(height: Space.lg),
-                                const BackOfficeLink(),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                )
-              : SingleChildScrollView(
-                  padding: const EdgeInsets.fromLTRB(Space.lg, Space.sm, Space.lg, Space.xl),
-                  child: Center(
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 440),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          // the sunset header carries the greeting; the form's card rises into its lower edge
-                          HeroCard(
-                            radius: Radii.xl,
-                            padding: const EdgeInsets.fromLTRB(Space.xl, Space.xl, Space.xl, Space.xxxl + Space.lg),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                BrandMark(height: 36, wordmarkColor: context.colors.onHero),
-                                const SizedBox(height: Space.xl),
-                                heading.onHero(context),
-                              ],
-                            ),
-                          ),
-                          Transform.translate(offset: const Offset(0, -Space.xxxl), child: card),
-                          Transform.translate(offset: const Offset(0, -Space.xl), child: const BackOfficeLink()),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-        ),
+      color: c.primary,
+      // the form in the middle of the screen, on the brand's colour (owner, 2026-11-11)
+      child: AuthPage(
+        title: heading.title,
+        lead: heading.lead,
+        footer: const BackOfficeLink(onHero: true),
+        child: form,
       ),
     );
   }
 }
 
 /// The greeting (owner's copy, 2026-10-29): a welcome for sign-in, the promise for a new account, and the one question
-/// left after Google or Apple. On phones it sits on the sunset header; on wide screens above the card.
+/// left after Google or Apple. It heads the form's card.
 class _Heading {
   const _Heading({required this.step, required this.mode, required this.providerName});
 
@@ -382,97 +327,6 @@ class _Heading {
           ? 'Every draw on the record, every prize paid back to your M-Pesa.'
           : 'Sign in to your wallet, your plays and your draws.',
   };
-
-  Widget onHero(BuildContext context) {
-    final t = Theme.of(context).textTheme;
-    final c = context.colors;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Semantics(
-          header: true,
-          child: Text(title, style: t.displaySmall?.copyWith(color: c.onHero)),
-        ),
-        const SizedBox(height: Space.sm),
-        Text(lead, style: t.bodyLarge?.copyWith(color: c.onHeroMuted)),
-      ],
-    );
-  }
-
-  Widget onPage(BuildContext context) {
-    final t = Theme.of(context).textTheme;
-    final c = context.colors;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Semantics(header: true, child: Text(title, style: t.headlineLarge)),
-        const SizedBox(height: Space.sm),
-        Text(lead, style: t.bodyMedium?.copyWith(color: c.inkMuted)),
-      ],
-    );
-  }
-}
-
-/// The form's card: a surface with the float lift and the hero's corner radius, so it reads as one raised sheet.
-class _FormCard extends StatelessWidget {
-  const _FormCard({required this.child});
-
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-    return Reveal(
-      child: DecoratedBox(
-        decoration: BoxDecoration(borderRadius: BorderRadius.circular(Radii.xl), boxShadow: Elevation.float(c)),
-        child: Material(
-          color: c.surface,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(Radii.xl),
-            side: BorderSide(color: c.border),
-          ),
-          clipBehavior: Clip.antiAlias,
-          child: Padding(padding: const EdgeInsets.all(Space.xl), child: child),
-        ),
-      ),
-    );
-  }
-}
-
-/// The brand panel beside the form on wide screens: the one place the hero surface carries words, not money.
-class _Panel extends StatelessWidget {
-  const _Panel();
-
-  @override
-  Widget build(BuildContext context) {
-    final t = Theme.of(context).textTheme;
-    final c = context.colors;
-    return Padding(
-      padding: const EdgeInsets.all(Space.xl),
-      child: HeroCard(
-        radius: Radii.xxl,
-        padding: const EdgeInsets.all(Space.xxxl),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            BrandMark(height: 44, wordmarkColor: c.onHero),
-            const Spacer(),
-            Text(
-              'KES 1 a spin, up to four a day.\nFair draws, paid to your M-Pesa.',
-              style: t.displaySmall?.copyWith(color: c.onHero),
-            ),
-            const SizedBox(height: Space.lg),
-            Text(
-              'Each spin is paid from your M-Pesa, draws use a public randomness beacon, and every prize is paid back to it.',
-              style: t.bodyLarge?.copyWith(color: c.onHeroMuted),
-            ),
-            const Spacer(),
-            Text('Play responsibly · 18+', style: t.labelMedium?.copyWith(color: c.onHeroMuted)),
-          ],
-        ),
-      ),
-    );
-  }
 }
 
 class _Form extends StatelessWidget {

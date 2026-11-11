@@ -5,7 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../app/theme/tokens.dart';
 import '../../../core/api/api_failure.dart';
 import '../../../core/api/idempotency.dart';
-import '../../../core/widgets/brand_mark.dart';
+import '../../../core/widgets/auth_page.dart';
 import '../../../core/widgets/busy_button.dart';
 import '../../../core/widgets/failure_text.dart';
 import '../../../core/widgets/inline_banner.dart';
@@ -13,7 +13,7 @@ import '../../../core/widgets/status_pill.dart';
 import '../application/auth_providers.dart';
 import 'email_rules.dart';
 
-/// The signed-out frame the reset screens share: the mark, a heading, a line of help and the form.
+/// The signed-out frame the reset screens share with sign-in: the form's card in the middle of the brand's colour.
 class _SignedOutPage extends StatelessWidget {
   const _SignedOutPage({required this.title, required this.lead, required this.children});
 
@@ -22,34 +22,11 @@ class _SignedOutPage extends StatelessWidget {
   final List<Widget> children;
 
   @override
-  Widget build(BuildContext context) {
-    final t = Theme.of(context).textTheme;
-    final c = context.colors;
-    return Scaffold(
-      body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(Space.xl),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 420),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const Align(alignment: Alignment.centerLeft, child: BrandMark(height: 42)),
-                  const SizedBox(height: Space.xxl),
-                  Semantics(header: true, child: Text(title, style: t.headlineLarge)),
-                  const SizedBox(height: Space.sm),
-                  Text(lead, style: t.bodyMedium?.copyWith(color: c.inkMuted)),
-                  const SizedBox(height: Space.xl),
-                  ...children,
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => AuthPage(
+    title: title,
+    lead: lead,
+    child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: children),
+  );
 }
 
 /// "Forgotten your password?": the player gives the email address of their account and is emailed a link (ADR 0021).
