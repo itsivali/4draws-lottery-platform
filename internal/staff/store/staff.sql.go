@@ -385,7 +385,8 @@ func (q *Queries) RevokeSession(ctx context.Context, arg RevokeSessionParams) er
 }
 
 const sessionMember = `-- name: SessionMember :one
-SELECT s.id AS session_id, s.last_seen_at, s.provider, m.id, m.email, m.name, m.roles, m.active, m.must_change_password
+SELECT s.id AS session_id, s.last_seen_at, s.provider, s.created_at AS signed_in_at, m.id, m.email, m.name, m.roles, m.active,
+  m.must_change_password, (m.password_hash IS NOT NULL)::boolean AS has_password, m.photo_url
 FROM staff.sessions s JOIN staff.members m ON m.id = s.member_id
 WHERE s.token_hash = $1 AND s.revoked_at IS NULL AND s.expires_at > $2
   AND s.last_seen_at > $3
@@ -401,12 +402,15 @@ type SessionMemberRow struct {
 	SessionID          string
 	LastSeenAt         time.Time
 	Provider           string
+	SignedInAt         time.Time
 	ID                 string
 	Email              string
 	Name               string
 	Roles              []string
 	Active             bool
 	MustChangePassword bool
+	HasPassword        bool
+	PhotoUrl           *string
 }
 
 // a live session and its member as they are now (roles and active state are read on every request)
@@ -417,14 +421,32 @@ func (q *Queries) SessionMember(ctx context.Context, arg SessionMemberParams) (S
 		&i.SessionID,
 		&i.LastSeenAt,
 		&i.Provider,
+		&i.SignedInAt,
 		&i.ID,
 		&i.Email,
 		&i.Name,
 		&i.Roles,
 		&i.Active,
 		&i.MustChangePassword,
+		&i.HasPassword,
+		&i.PhotoUrl,
 	)
 	return i, err
+}
+
+const setMemberPhoto = `-- name: SetMemberPhoto :exec
+UPDATE staff.members SET photo_url = $1 WHERE id = $2 AND photo_url IS DISTINCT FROM $1
+`
+
+type SetMemberPhotoParams struct {
+	PhotoUrl *string
+	ID       string
+}
+
+// The Google account's photo, refreshed at each Google sign-in (ADR 0035).
+func (q *Queries) SetMemberPhoto(ctx context.Context, arg SetMemberPhotoParams) error {
+	_, err := q.db.Exec(ctx, setMemberPhoto, arg.PhotoUrl, arg.ID)
+	return err
 }
 
 const setName = `-- name: SetName :execrows

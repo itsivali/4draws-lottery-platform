@@ -88,3 +88,15 @@ The compose api passes `GOOGLE_CLIENT_ID` and `APPLE_CLIENT_ID` through from the
 `http://localhost:8088` among its origins) before `scripts/dev-backend.sh`, then `scripts/dev-frontend.sh` and the
 Google button appears on the local web app. Apple cannot be tried locally (https). The widget tests use a fake
 provider (`test/support/app_harness.dart`), the Go tests a fake verifier.
+
+## Photos and passwords for Google and Apple accounts (ADR 0035)
+
+- **Photo.** A player or staff member who signs in with Google sees that account's photo, in the app's account header
+  and the back office's account menu. It is refreshed at each Google sign-in and kept only when Google serves it from
+  its own image host (https on googleusercontent.com). Apple gives no photo, so initials show instead.
+- **Password.** An account made with Google or Apple has no password. It can set one under Account → Sign-in methods
+  → Password (players) or the account menu → *Set a password* (staff), within 10 minutes of signing in. A player can
+  then also sign in with their phone number on the web, and staff with their email address. If it is refused ("sign in
+  again"), they sign out, sign in with Google or Apple again, and go straight back.
+- **Phone number.** A Google or Apple sign-up gives the M-Pesa number the player will use. The first top-up's prompt
+  goes to that number, and paying it proves the number (ADR 0005, 0020). Nothing changed here.

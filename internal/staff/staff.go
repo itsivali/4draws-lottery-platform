@@ -26,6 +26,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/itsivali/lottery-platform/internal/audit"
+	"github.com/itsivali/lottery-platform/internal/identity"
 	"github.com/itsivali/lottery-platform/internal/platform/clock"
 	"github.com/itsivali/lottery-platform/internal/platform/mail"
 	"github.com/itsivali/lottery-platform/internal/platform/password"
@@ -110,7 +111,20 @@ type Member struct {
 	// MustChangePassword: this session was opened with a temporary password and may do nothing else until the member
 	// changes it (a session opened with Google or Apple is not held back by it).
 	MustChangePassword bool
+	// HasPassword: the member can sign in with a password; one who signs in with Google or Apple only can set one
+	// within FreshSignIn of signing in (ADR 0035).
+	HasPassword bool
+	// PhotoURL is the photo of the Google account the member signs in with, or "" (ADR 0035).
+	PhotoURL string
+	// SignedInAt is when this session's sign-in happened.
+	SignedInAt time.Time
 }
+
+// FreshSignIn is how recent the sign-in must be for a member without a password to set one (ADR 0035).
+const FreshSignIn = 10 * time.Minute
+
+// ErrSignInAgain: setting a first password needs a sign-in within FreshSignIn.
+var ErrSignInAgain = errors.New("staff: sign in again to do this")
 
 // Has reports whether the member may act as role: admins may act as anyone.
 func (m Member) Has(r Role) bool {
@@ -317,6 +331,15 @@ func (s *Service) SignIn(ctx context.Context, provider, idToken, nonce string) (
 		if len(member.Roles) == 0 {
 			return ErrNoRole
 		}
+		if provider == "google" { // the account's photo, refreshed at each Google sign-in (ADR 0035)
+			var photo *string
+			if p := identity.GooglePhoto(provider, claims); p != "" {
+				photo = &p
+			}
+			if err := q.SetMemberPhoto(ctx, store.SetMemberPhotoParams{PhotoUrl: photo, ID: m.ID}); err != nil {
+				return err
+			}
+		}
 		out, err = s.openSession(ctx, tx, q, now, token, provider, member)
 		return err
 	})
@@ -417,6 +440,10 @@ func (s *Service) ChangePassword(ctx context.Context, m Member, token, current, 
 		row, err := q.LockMember(ctx, m.ID)
 		if err != nil {
 			return err
+		}
+		if row.PasswordHash == nil && now.Sub(m.SignedInAt) > FreshSignIn {
+			// a first password is a new way in: only right after signing in with Google or Apple (ADR 0035)
+			return ErrSignInAgain
 		}
 		if row.PasswordHash != nil {
 			ok, err := password.Verify(current, *row.PasswordHash, s.pepper)
@@ -560,7 +587,8 @@ func (s *Service) Authenticate(ctx context.Context, token string) (Member, error
 		return Member{}, ErrUnauthenticated
 	}
 	// the temporary password holds back the sessions it opened; a Google or Apple sign-in is not using it
-	m := Member{ID: r.ID, Name: r.Name, Email: r.Email, Roles: roles(r.Roles), MustChangePassword: r.MustChangePassword && r.Provider == "password"}
+	m := Member{ID: r.ID, Name: r.Name, Email: r.Email, Roles: roles(r.Roles), MustChangePassword: r.MustChangePassword && r.Provider == "password",
+		HasPassword: r.HasPassword, PhotoURL: deref(r.PhotoUrl), SignedInAt: r.SignedInAt}
 	if len(m.Roles) == 0 {
 		return Member{}, ErrNoRole
 	}
@@ -889,4 +917,11 @@ func appendRole(in []string, r Role) []string {
 		return in
 	}
 	return append(in, string(r))
+}
+
+func deref(p *string) string {
+	if p == nil {
+		return ""
+	}
+	return *p
 }

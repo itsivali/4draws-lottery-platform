@@ -15,7 +15,9 @@ import { Label } from '@/components/ui/label'
  * account menu, and as the only thing a member with a temporary password can do.
  */
 export function PasswordForm({ onDone, forced = false }: { onDone: () => void; forced?: boolean }) {
-  const { api, me } = useSession()
+  const { api, me, updateMe } = useSession()
+  // a member who signs in with Google or Apple only has no current password to give (ADR 0035)
+  const first = me.has_password === false && !forced
   const id = useId()
   const [current, setCurrent] = useState('')
   const [next, setNext] = useState('')
@@ -35,7 +37,13 @@ export function PasswordForm({ onDone, forced = false }: { onDone: () => void; f
         setBusy(true)
         setProblem(null)
         api.put('/v1/staff/password', { current_password: current, new_password: next }).then(
-          () => { rememberCredential(me.email, next, me.name || undefined); setDone(true); setBusy(false); onDone() },
+          () => {
+            rememberCredential(me.email, next, me.name || undefined)
+            setDone(true)
+            setBusy(false)
+            if (first) updateMe({ ...me, has_password: true })
+            onDone()
+          },
           (err: unknown) => {
             setBusy(false)
             if (err instanceof ProblemError) setProblem({ title: err.title, detail: err.detail })
@@ -45,10 +53,17 @@ export function PasswordForm({ onDone, forced = false }: { onDone: () => void; f
         )
       }}
     >
-      <div className="grid gap-1.5">
-        <Label htmlFor={`${id}-current`}>{forced ? 'Temporary password' : 'Current password'}</Label>
-        <Input id={`${id}-current`} name="current-password" type="password" autoComplete="current-password" value={current} onChange={(e) => { setCurrent(e.target.value) }} />
-      </div>
+      {first ? (
+        <p className="text-sm text-muted-foreground">
+          You sign in with Google or Apple. A password lets you sign in with your email address too. For your security this
+          works within 10 minutes of signing in: if it is refused, sign out, sign in again and come straight back.
+        </p>
+      ) : (
+        <div className="grid gap-1.5">
+          <Label htmlFor={`${id}-current`}>{forced ? 'Temporary password' : 'Current password'}</Label>
+          <Input id={`${id}-current`} name="current-password" type="password" autoComplete="current-password" value={current} onChange={(e) => { setCurrent(e.target.value) }} />
+        </div>
+      )}
       <div className="grid gap-1.5">
         <Label htmlFor={`${id}-new`}>New password</Label>
         <Input id={`${id}-new`} name="new-password" type="password" autoComplete="new-password" required aria-invalid={short || undefined} aria-describedby={`${id}-help`} value={next} onChange={(e) => { setNext(e.target.value) }} />
@@ -71,7 +86,7 @@ export function PasswordForm({ onDone, forced = false }: { onDone: () => void; f
       {done ? (
         <Alert role="status" className="border-success/40 bg-success/10 text-success [&>svg]:text-success">
           <CircleCheck />
-          <AlertTitle>Password changed. Your other sessions were signed out.</AlertTitle>
+          <AlertTitle>{first ? 'Password set. Your other sessions were signed out.' : 'Password changed. Your other sessions were signed out.'}</AlertTitle>
         </Alert>
       ) : null}
       <DialogFooter className="mt-1">
@@ -82,11 +97,12 @@ export function PasswordForm({ onDone, forced = false }: { onDone: () => void; f
 }
 
 export function PasswordDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { me } = useSession()
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose() }}>
       <DialogContent className="sm:max-w-[460px]">
         <DialogHeader>
-          <DialogTitle className="text-xl">Change your password</DialogTitle>
+          <DialogTitle className="text-xl">{me.has_password === false ? 'Set a password' : 'Change your password'}</DialogTitle>
           <DialogDescription>Your other sessions are signed out when it changes.</DialogDescription>
         </DialogHeader>
         <PasswordForm onDone={() => { setTimeout(onClose, 900) }} />

@@ -93,6 +93,10 @@ Read this first at the start of every session.
   else. Thresholds are placeholders pending the compliance owner (`docs/runbooks/compliance-monitoring.md`); migration
   00053.
 
+- **Google photos and first passwords (ADR 0035, 2026-11-11):** the Google account's photo shows in the app and the
+  back office (Google's image host only; migration 00054); a Google or Apple account can set a password within 10
+  minutes of signing in.
+
 ## Before the API is exposed to players
 
 1. **Trusted proxy: fixed.** Measured on the live service (`docs/runbooks/trusted-proxy.md`): the rightmost

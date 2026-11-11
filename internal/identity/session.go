@@ -349,3 +349,54 @@ func deref(p *string) string {
 	}
 	return *p
 }
+
+// FreshSignIn is how recent the sign-in must be for an account without a password to set one (ADR 0035): a session
+// stolen later cannot add a way in.
+const FreshSignIn = 10 * time.Minute
+
+// Errors of setting a first password.
+var (
+	ErrPasswordExists = errors.New("identity: the account has a password; change it with the current one")
+	ErrSignInAgain    = errors.New("identity: sign in again to do this")
+)
+
+// SetPassword gives an account that signs in with Google or Apple only a password too, so the player can sign in with
+// their phone number on the web (ADR 0035). Only within FreshSignIn of the session's sign-in; every other session ends.
+func (s *Service) SetPassword(ctx context.Context, userID, sessionID, next string) error {
+	u, err := store.New(s.pool).GetUser(ctx, userID)
+	if err != nil {
+		return err
+	}
+	if u.PasswordHash != nil {
+		return ErrPasswordExists
+	}
+	if err := password.CheckPolicy(next, u.Msisdn); err != nil {
+		return err
+	}
+	hash, err := password.Hash(next, s.pepper)
+	if err != nil {
+		return err
+	}
+	return s.withTx(ctx, func(tx pgx.Tx, q *store.Queries, now time.Time) error {
+		started, err := q.SessionStartedAt(ctx, store.SessionStartedAtParams{ID: sessionID, UserID: userID})
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrSignInAgain
+		} else if err != nil {
+			return err
+		}
+		if now.Sub(started) > FreshSignIn {
+			return ErrSignInAgain
+		}
+		n, err := q.SetFirstPassword(ctx, store.SetFirstPasswordParams{PasswordHash: &hash, At: &now, ID: userID})
+		if err != nil {
+			return err
+		}
+		if n == 0 {
+			return ErrPasswordExists
+		}
+		if err := q.RevokeOtherSessions(ctx, store.RevokeOtherSessionsParams{At: &now, UserID: userID, KeepSessionID: sessionID}); err != nil {
+			return err
+		}
+		return s.audit.Record(ctx, tx, audit.Event{ActorType: audit.Player, ActorID: userID, Action: "auth.password_set", EntityType: "user", EntityID: userID})
+	})
+}

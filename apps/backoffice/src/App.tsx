@@ -86,6 +86,19 @@ const groups: { label: string; paths: string[] }[] = [
   { label: 'Administration', paths: ['/staff', '/activity'] },
 ]
 
+/** The Google account's photo (ADR 0035) over the member's initials, which show when there is none or it fails. */
+function Avatar({ initials, photo }: { initials: string; photo?: string | null | undefined }) {
+  const [failed, setFailed] = useState(false)
+  // only Google's image host, as the server keeps it
+  const ok = !!photo && !failed && /^https:\/\/[a-z0-9-]+\.googleusercontent\.com\//.test(photo)
+  return (
+    <span aria-hidden="true" className="relative flex size-8 items-center justify-center overflow-hidden rounded-lg bg-primary-container text-sm font-semibold text-primary-container-foreground">
+      {initials}
+      {ok ? <img src={photo} alt="" referrerPolicy="no-referrer" className="absolute inset-0 size-full object-cover" onError={() => { setFailed(true) }} data-testid="member-photo" /> : null}
+    </span>
+  )
+}
+
 /** The signed-in back office: only the sections the member's roles allow are linked or routed. */
 export function App() {
   return (
@@ -256,7 +269,7 @@ function AppSidebar({ sections }: { sections: Section[] }) {
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <SidebarMenuButton size="lg" className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground">
-                  <span aria-hidden="true" className="flex size-8 items-center justify-center rounded-lg bg-primary-container text-sm font-semibold text-primary-container-foreground">{initials}</span>
+                  <Avatar initials={initials} photo={me.photo_url} />
                   <span className="grid flex-1 text-left text-sm leading-tight">
                     <span className="truncate font-medium">{me.name}</span>
                     <span className="truncate text-xs text-muted-foreground">{roles}</span>
@@ -271,7 +284,7 @@ function AppSidebar({ sections }: { sections: Section[] }) {
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onSelect={() => { setRenaming(true) }}><UserPen /> Change name</DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => { setChanging(true) }}><KeyRound /> Change password</DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => { setChanging(true) }}><KeyRound /> {me.has_password === false ? 'Set a password' : 'Change password'}</DropdownMenuItem>
                 <DropdownMenuItem onSelect={signOut}><LogOut /> Sign out</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

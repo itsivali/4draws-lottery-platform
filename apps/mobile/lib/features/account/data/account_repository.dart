@@ -57,6 +57,11 @@ class AccountRepository {
         body: {'current_password': current, 'new_password': next},
       );
 
+  /// Sets a first password on an account that signs in with Google or Apple only (ADR 0035): allowed within ten
+  /// minutes of signing in.
+  Future<void> setPassword({required String next, required String idempotencyKey}) =>
+      _api.post('/v1/auth/password/set', idempotencyKey: idempotencyKey, body: {'new_password': next});
+
   /// Changes or adds the email address; an account with a password gives it.
   Future<void> setEmail({required String email, required String currentPassword, required String idempotencyKey}) =>
       _api.put(

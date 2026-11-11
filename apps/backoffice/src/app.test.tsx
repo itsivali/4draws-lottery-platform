@@ -148,3 +148,32 @@ describe('closures', () => {
   })
 })
 
+
+describe('Google photo and a first password (ADR 0035)', () => {
+  const quiet = () => ({ status: 200, body: { waiting: 0, oldest_submitted_at: null } })
+
+  it('the account menu shows the Google photo, never one from another host', () => {
+    const { unmount } = renderSignedIn(<App />, { roles: ['staff'], route: quiet, me: { photo_url: 'https://lh3.googleusercontent.com/a/alice=s96-c' } })
+    expect(screen.getByTestId('member-photo')).toHaveAttribute('src', 'https://lh3.googleusercontent.com/a/alice=s96-c')
+    unmount()
+    renderSignedIn(<App />, { roles: ['staff'], route: quiet, me: { photo_url: 'https://evil.example/pixel.png' } })
+    expect(screen.queryByTestId('member-photo')).not.toBeInTheDocument()
+  })
+
+  it('a member who signs in with Google sets a password without a current one', async () => {
+    const { fetch, session } = renderSignedIn(<App />, { roles: ['staff'], me: { has_password: false },
+      route: (method, url) => (method === 'PUT' && url.pathname === '/v1/staff/password' ? { status: 204 } : quiet()) })
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: /Alice/ }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Set a password' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Set a password' })
+    expect(within(dialog).queryByLabelText('Current password')).not.toBeInTheDocument()
+    await user.type(within(dialog).getByLabelText('New password'), 'a long first password')
+    await user.type(within(dialog).getByLabelText('New password again'), 'a long first password')
+    await user.click(within(dialog).getByRole('button', { name: 'Set password' }))
+    expect(await within(dialog).findByText('Password set. Your other sessions were signed out.')).toBeInTheDocument()
+    const put = fetch.mock.calls.find(([, init]) => init?.method === 'PUT')
+    expect(JSON.parse(put?.[1]?.body as string)).toEqual({ current_password: '', new_password: 'a long first password' })
+    expect(session.updateMe).toHaveBeenCalledWith(expect.objectContaining({ has_password: true }))
+  })
+})

@@ -246,6 +246,32 @@ func (h *handlers) changePassword(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// setPassword gives an account that signs in with Google or Apple only a password too (ADR 0035), within
+// identity.FreshSignIn of signing in.
+func (h *handlers) setPassword(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		New string `json:"new_password"`
+	}
+	if !httpx.DecodeJSON(w, r, &in) {
+		return
+	}
+	p, _ := principalFrom(r.Context())
+	if !h.limit(w, r, "pwchange:user:"+p.UserID, 10, time.Hour) {
+		return
+	}
+	switch err := h.Identity.SetPassword(r.Context(), p.UserID, p.SessionID, in.New); {
+	case err == nil:
+		w.WriteHeader(http.StatusNoContent)
+	case errors.Is(err, identity.ErrPasswordExists):
+		httpx.WriteProblem(w, http.StatusConflict, "password-exists", "Your account has a password; change it with the current one", "")
+	case errors.Is(err, identity.ErrSignInAgain):
+		httpx.WriteProblem(w, http.StatusForbidden, "sign-in-again", "Sign in again to set a password",
+			"for your security, sign out, sign in with Google or Apple, then set it within 10 minutes")
+	default:
+		authError(w, err)
+	}
+}
+
 // forgotPassword emails a reset link to an address that has an active account (ADR 0021). It always answers 202, so
 // nobody learns which addresses have accounts; 503 when the api has no web-app address to link to.
 func (h *handlers) forgotPassword(w http.ResponseWriter, r *http.Request) {

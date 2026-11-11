@@ -5,6 +5,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 
@@ -12,18 +13,47 @@ import (
 	"github.com/itsivali/lottery-platform/internal/identity/store"
 )
 
-func (s *Service) verifyIDToken(ctx context.Context, provider, idToken, nonce string) (string, error) {
-	sub, err := s.oidc.VerifyIDToken(ctx, provider, idToken, nonce)
-	if err != nil || sub == "" {
-		return "", errors.Join(ErrTokenInvalid, err)
+// claimsVerifier is a verifier that also returns the token's claims (the real one does), for the account's photo.
+type claimsVerifier interface {
+	VerifyIDTokenClaims(ctx context.Context, provider, idToken, nonce string) (jwt.MapClaims, error)
+}
+
+// verifyIDToken returns the token's subject and, for Google, the account's photo (ADR 0035).
+func (s *Service) verifyIDToken(ctx context.Context, provider, idToken, nonce string) (sub, photo string, err error) {
+	if cv, ok := s.oidc.(claimsVerifier); ok {
+		claims, err := cv.VerifyIDTokenClaims(ctx, provider, idToken, nonce)
+		if err != nil {
+			return "", "", errors.Join(ErrTokenInvalid, err)
+		}
+		if sub, _ = claims.GetSubject(); sub == "" {
+			return "", "", ErrTokenInvalid
+		}
+		return sub, GooglePhoto(provider, claims), nil
 	}
-	return sub, nil
+	sub, err = s.oidc.VerifyIDToken(ctx, provider, idToken, nonce)
+	if err != nil || sub == "" {
+		return "", "", errors.Join(ErrTokenInvalid, err)
+	}
+	return sub, "", nil
+}
+
+// keepPhoto records the photo of the Google account the player signed in with; a Google account without one clears
+// it. Apple gives no photo and changes nothing.
+func keepPhoto(ctx context.Context, q *store.Queries, userID, provider, photo string) error {
+	if provider != "google" {
+		return nil
+	}
+	var p *string
+	if photo != "" {
+		p = &photo
+	}
+	return q.SetPhoto(ctx, store.SetPhotoParams{PhotoUrl: p, ID: userID})
 }
 
 // SignInSSO signs in an already-linked Google or Apple identity. An unlinked identity must first sign in with phone
 // and password, complete KYC and then link (SSO never creates an account).
 func (s *Service) SignInSSO(ctx context.Context, provider, idToken, nonce string, dev Device) (Tokens, error) {
-	sub, err := s.verifyIDToken(ctx, provider, idToken, nonce)
+	sub, photo, err := s.verifyIDToken(ctx, provider, idToken, nonce)
 	if err != nil {
 		return Tokens{}, err
 	}
@@ -38,6 +68,9 @@ func (s *Service) SignInSSO(ctx context.Context, provider, idToken, nonce string
 			return err
 		}
 		if err := s.assertActive(ctx, q, userID); err != nil {
+			return err
+		}
+		if err := keepPhoto(ctx, q, userID, provider, photo); err != nil {
 			return err
 		}
 		tokens, err = s.startSession(ctx, q, userID, dev, verdict, now)
@@ -59,8 +92,11 @@ func (s *Service) LinkSSO(ctx context.Context, userID, provider, idToken, nonce 
 		if !u.PhoneVerified {
 			return ErrPhoneNotVerified
 		}
-		sub, err := s.verifyIDToken(ctx, provider, idToken, nonce)
+		sub, photo, err := s.verifyIDToken(ctx, provider, idToken, nonce)
 		if err != nil {
+			return err
+		}
+		if err := keepPhoto(ctx, q, userID, provider, photo); err != nil {
 			return err
 		}
 		if err := q.InsertAuthIdentity(ctx, store.InsertAuthIdentityParams{UserID: userID, Provider: provider, Subject: sub}); err != nil {
@@ -84,7 +120,7 @@ func (s *Service) SignupSSO(ctx context.Context, provider, idToken, nonce, rawMS
 	if err != nil {
 		return Tokens{}, err
 	}
-	sub, err := s.verifyIDToken(ctx, provider, idToken, nonce)
+	sub, photo, err := s.verifyIDToken(ctx, provider, idToken, nonce)
 	if err != nil {
 		return Tokens{}, err
 	}
@@ -111,6 +147,9 @@ func (s *Service) SignupSSO(ctx context.Context, provider, idToken, nonce, rawMS
 			if err := c(ctx, tx, id); err != nil {
 				return err
 			}
+		}
+		if err := keepPhoto(ctx, q, id, provider, photo); err != nil {
+			return err
 		}
 		if err := q.InsertAuthIdentity(ctx, store.InsertAuthIdentityParams{UserID: id, Provider: provider, Subject: sub}); err != nil {
 			var pe *pgconn.PgError

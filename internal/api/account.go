@@ -134,7 +134,7 @@ func (h *handlers) getAccount(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusOK, map[string]any{
 		"user_id": a.UserID, "msisdn": a.MSISDN, "phone_verified": a.PhoneVerified, "kyc_status": a.KYCStatus, "status": a.Status,
 		"created_at": a.CreatedAt, "restriction": restriction, "closure_requested_at": a.ClosureRequestedAt,
-		"must_change_password": a.MustChangePassword, "email": a.Email, "has_password": a.HasPassword,
+		"must_change_password": a.MustChangePassword, "email": a.Email, "has_password": a.HasPassword, "photo_url": nonEmpty(a.PhotoURL),
 		"first_name": first, "second_name": second, "identity": ident,
 	})
 }
@@ -278,4 +278,12 @@ func (h *handlers) listPayments(w http.ResponseWriter, r *http.Request) {
 		out = append(out, toTopUpJSON(t))
 	}
 	httpx.WriteJSON(w, http.StatusOK, map[string]any{"payments": out})
+}
+
+// nonEmpty is nil for "", so JSON says null rather than an empty string.
+func nonEmpty(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
 }

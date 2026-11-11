@@ -165,6 +165,10 @@ class FakeBackend {
   String? secondName = 'Wanjiru';
   bool hasPassword = true;
 
+  /// The Google account's photo (ADR 0035); and whether the sign-in is too old to set a first password.
+  String? photoUrl;
+  bool signInStale = false;
+
   /// Whether the "server" can email reset links; the addresses it was asked to email.
   bool resetsConfigured = true;
   final resetRequests = <String>[];
@@ -347,6 +351,7 @@ class FakeBackend {
           ),
           'email': email,
           'has_password': hasPassword,
+          'photo_url': photoUrl,
           'first_name': firstName,
           'second_name': secondName,
           'identity': {
@@ -381,6 +386,20 @@ class FakeBackend {
         return _ok({'sessions': sessions});
       case ('POST', '/v1/account/sessions/revoke-others'):
         sessions.removeWhere((s) => s['current'] != true);
+        return http.Response('', 204);
+      case ('POST', '/v1/auth/password/set'):
+        if (hasPassword) {
+          return _problem(409, 'password-exists', 'Your account has a password; change it with the current one');
+        }
+        if (signInStale) {
+          return _problem(
+            403,
+            'sign-in-again',
+            'Sign in again to set a password',
+            'for your security, sign out, sign in with Google or Apple, then set it within 10 minutes',
+          );
+        }
+        hasPassword = true;
         return http.Response('', 204);
       case ('GET', '/v1/account/sign-ins'):
         return _ok({'password': hasPassword, 'providers': linkedSignIns});

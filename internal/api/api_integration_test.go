@@ -359,7 +359,7 @@ func TestAPI_SignInRefreshAndLogoutFlow(t *testing.T) {
 type route struct{ method, path string }
 
 var authedRoutes = []route{
-	{http.MethodPost, "/v1/auth/sso/google/link"}, {http.MethodPost, "/v1/auth/password/change"},
+	{http.MethodPost, "/v1/auth/sso/google/link"}, {http.MethodPost, "/v1/auth/password/change"}, {http.MethodPost, "/v1/auth/password/set"},
 	{http.MethodGet, "/v1/kyc"}, {http.MethodPost, "/v1/kyc"},
 	{http.MethodGet, "/v1/rg/limits"}, {http.MethodPut, "/v1/rg/limits"},
 	{http.MethodPost, "/v1/rg/timeout"}, {http.MethodPost, "/v1/rg/self-exclusion"},

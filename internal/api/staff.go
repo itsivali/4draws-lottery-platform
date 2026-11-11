@@ -270,6 +270,11 @@ func staffError(w http.ResponseWriter, err error) {
 			strings.TrimPrefix(err.Error(), payouts.ErrPayeeIneligible.Error()+": "))
 		return
 	}
+	if errors.Is(err, staff.ErrSignInAgain) {
+		httpx.WriteProblem(w, http.StatusForbidden, "sign-in-again", "Sign in again to set a password",
+			"for your security, sign out, sign in with Google or Apple, then set it within 10 minutes")
+		return
+	}
 	if errors.Is(err, staff.ErrWeakPassword) {
 		httpx.WriteProblem(w, http.StatusBadRequest, "weak-password", "Password too weak", strings.TrimPrefix(err.Error(), "password: too weak: "))
 		return
@@ -1380,7 +1385,8 @@ func memberJSON(m staff.Member) map[string]any {
 	for _, role := range m.Roles {
 		roles = append(roles, string(role))
 	}
-	return map[string]any{"id": m.ID, "name": m.Name, "email": m.Email, "roles": roles, "must_change_password": m.MustChangePassword}
+	return map[string]any{"id": m.ID, "name": m.Name, "email": m.Email, "roles": roles, "must_change_password": m.MustChangePassword,
+		"has_password": m.HasPassword, "photo_url": nonEmpty(m.PhotoURL)}
 }
 
 func (h *handlers) staffMembers(w http.ResponseWriter, r *http.Request) {

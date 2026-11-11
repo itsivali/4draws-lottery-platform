@@ -70,7 +70,7 @@ void main() {
     final h = await pumpApp(t, backend);
     h.container.read(routerProvider).go('/account/sign-ins');
     await t.pumpAndSettle();
-    expect(find.text('Not set: you sign in with Google or Apple'), findsOneWidget);
+    expect(find.text('Not set: you sign in with Google or Apple. Tap to set one'), findsOneWidget);
     expect(find.text('Not linked'), findsOneWidget, reason: 'Google');
   });
 }

@@ -38,9 +38,9 @@ class SignInsScreen extends ConsumerWidget {
                     ListRow(
                       icon: Icons.lock_rounded,
                       title: 'Password',
-                      subtitle: m.password ? 'Set' : 'Not set: you sign in with Google or Apple',
-                      chevron: m.password,
-                      onTap: m.password ? () => context.go('/account/password') : null,
+                      subtitle: m.password ? 'Set' : 'Not set: you sign in with Google or Apple. Tap to set one',
+                      chevron: true,
+                      onTap: () => context.go(m.password ? '/account/password' : '/account/password?set=1'),
                     ),
                     ListRow(
                       icon: Icons.g_mobiledata_rounded,

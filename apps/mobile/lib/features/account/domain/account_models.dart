@@ -65,6 +65,7 @@ class Account {
     this.mustChangePassword = false,
     this.email,
     this.hasPassword = true,
+    this.photoUrl,
     this.firstName,
     this.secondName,
     this.identity,
@@ -74,6 +75,11 @@ class Account {
     mustChangePassword: j.raw['must_change_password'] == true,
     email: j.strOrNull('email'),
     hasPassword: j.raw['has_password'] != false,
+    photoUrl: switch (j.strOrNull('photo_url')) {
+      // only Google's image host, as the server keeps it (ADR 0035)
+      final u? when u.startsWith('https://') && Uri.tryParse(u)?.host.endsWith('.googleusercontent.com') == true => u,
+      _ => null,
+    },
     firstName: j.strOrNull('first_name'),
     secondName: j.strOrNull('second_name'),
     identity: switch (j.objectOrNull('identity')) {
@@ -114,6 +120,9 @@ class Account {
 
   /// False for an account that signs in with Google or Apple only.
   final bool hasPassword;
+
+  /// The photo of the Google account the player signs in with (ADR 0035); null otherwise.
+  final String? photoUrl;
 
   /// The first two words of the player's name: from their identity submission, else what they declared at sign-up or
   /// from their account; null for an account that gave neither.

@@ -12,6 +12,7 @@ import (
 	"io"
 	"math/big"
 	"net/http"
+	"regexp"
 	"slices"
 	"sync"
 	"time"
@@ -182,4 +183,21 @@ func (v *OIDCVerifier) fetch(ctx context.Context, url string, now time.Time) (*j
 		out.keys[k.Kid] = &rsa.PublicKey{N: new(big.Int).SetBytes(n), E: int(new(big.Int).SetBytes(e).Int64())}
 	}
 	return out, nil
+}
+
+// googlePhoto is the shape of a Google account photo URL the platform keeps (ADR 0035): https on Google's image host
+// only, as migration 00054 checks too.
+var googlePhoto = regexp.MustCompile(`^https://[a-z0-9-]+\.googleusercontent\.com/[^\s"'<>]+$`)
+
+// GooglePhoto returns the photo of a verified Google ID token's account, or "" when there is none (or the provider is
+// not Google, or the link is not on Google's image host).
+func GooglePhoto(provider string, claims jwt.MapClaims) string {
+	if provider != "google" {
+		return ""
+	}
+	p, _ := claims["picture"].(string)
+	if len(p) > 1600 || !googlePhoto.MatchString(p) {
+		return ""
+	}
+	return p
 }

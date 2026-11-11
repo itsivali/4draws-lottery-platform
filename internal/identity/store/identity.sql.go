@@ -106,7 +106,7 @@ func (q *Queries) FindAuthIdentity(ctx context.Context, arg FindAuthIdentityPara
 
 const getAccount = `-- name: GetAccount :one
 SELECT u.id, u.msisdn, u.email, u.kyc_status, u.status, (u.msisdn_verified_at IS NOT NULL)::boolean AS phone_verified, u.created_at,
-  u.must_change_password, (u.password_hash IS NOT NULL)::boolean AS has_password, c.requested_at AS closure_requested_at
+  u.must_change_password, (u.password_hash IS NOT NULL)::boolean AS has_password, c.requested_at AS closure_requested_at, u.photo_url
 FROM identity.users u LEFT JOIN identity.closure_requests c ON c.user_id = u.id
 WHERE u.id = $1
 `
@@ -122,6 +122,7 @@ type GetAccountRow struct {
 	MustChangePassword bool
 	HasPassword        bool
 	ClosureRequestedAt *time.Time
+	PhotoUrl           *string
 }
 
 func (q *Queries) GetAccount(ctx context.Context, id string) (GetAccountRow, error) {
@@ -138,6 +139,7 @@ func (q *Queries) GetAccount(ctx context.Context, id string) (GetAccountRow, err
 		&i.MustChangePassword,
 		&i.HasPassword,
 		&i.ClosureRequestedAt,
+		&i.PhotoUrl,
 	)
 	return i, err
 }
@@ -825,6 +827,43 @@ func (q *Queries) RevokeSessionsForPasswordChange(ctx context.Context, arg Revok
 	return err
 }
 
+const sessionStartedAt = `-- name: SessionStartedAt :one
+SELECT created_at FROM identity.sessions WHERE id = $1 AND user_id = $2 AND revoked_at IS NULL
+`
+
+type SessionStartedAtParams struct {
+	ID     string
+	UserID string
+}
+
+// When the session's sign-in happened (refreshes keep the session).
+func (q *Queries) SessionStartedAt(ctx context.Context, arg SessionStartedAtParams) (time.Time, error) {
+	row := q.db.QueryRow(ctx, sessionStartedAt, arg.ID, arg.UserID)
+	var created_at time.Time
+	err := row.Scan(&created_at)
+	return created_at, err
+}
+
+const setFirstPassword = `-- name: SetFirstPassword :execrows
+UPDATE identity.users SET password_hash = $1, password_changed_at = $2, updated_at = $2
+WHERE id = $3 AND password_hash IS NULL
+`
+
+type SetFirstPasswordParams struct {
+	PasswordHash *string
+	At           *time.Time
+	ID           string
+}
+
+// Sets a password on an account that has none (ADR 0035).
+func (q *Queries) SetFirstPassword(ctx context.Context, arg SetFirstPasswordParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setFirstPassword, arg.PasswordHash, arg.At, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const setPassword = `-- name: SetPassword :exec
 UPDATE identity.users SET password_hash = $2, password_changed_at = $3, must_change_password = false, updated_at = $3 WHERE id = $1
 `
@@ -837,6 +876,21 @@ type SetPasswordParams struct {
 
 func (q *Queries) SetPassword(ctx context.Context, arg SetPasswordParams) error {
 	_, err := q.db.Exec(ctx, setPassword, arg.ID, arg.PasswordHash, arg.PasswordChangedAt)
+	return err
+}
+
+const setPhoto = `-- name: SetPhoto :exec
+UPDATE identity.users SET photo_url = $1 WHERE id = $2 AND photo_url IS DISTINCT FROM $1
+`
+
+type SetPhotoParams struct {
+	PhotoUrl *string
+	ID       string
+}
+
+// The Google account's photo, refreshed at each Google sign-in (ADR 0035).
+func (q *Queries) SetPhoto(ctx context.Context, arg SetPhotoParams) error {
+	_, err := q.db.Exec(ctx, setPhoto, arg.PhotoUrl, arg.ID)
 	return err
 }
 

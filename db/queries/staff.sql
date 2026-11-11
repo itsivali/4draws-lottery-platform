@@ -28,7 +28,8 @@ VALUES (sqlc.arg(token_hash), sqlc.arg(member_id), sqlc.arg(provider), sqlc.arg(
 
 -- name: SessionMember :one
 -- a live session and its member as they are now (roles and active state are read on every request)
-SELECT s.id AS session_id, s.last_seen_at, s.provider, m.id, m.email, m.name, m.roles, m.active, m.must_change_password
+SELECT s.id AS session_id, s.last_seen_at, s.provider, s.created_at AS signed_in_at, m.id, m.email, m.name, m.roles, m.active,
+  m.must_change_password, (m.password_hash IS NOT NULL)::boolean AS has_password, m.photo_url
 FROM staff.sessions s JOIN staff.members m ON m.id = s.member_id
 WHERE s.token_hash = sqlc.arg(token_hash) AND s.revoked_at IS NULL AND s.expires_at > sqlc.arg(now)
   AND s.last_seen_at > sqlc.arg(idle_after);
@@ -84,3 +85,7 @@ FOR UPDATE OF r;
 -- name: UseMemberPasswordResets :exec
 -- a reset consumes every open link of the member, not only the one used
 UPDATE staff.password_resets SET used_at = sqlc.arg(at) WHERE member_id = sqlc.arg(member_id) AND used_at IS NULL;
+
+-- name: SetMemberPhoto :exec
+-- The Google account's photo, refreshed at each Google sign-in (ADR 0035).
+UPDATE staff.members SET photo_url = sqlc.narg(photo_url) WHERE id = sqlc.arg(id) AND photo_url IS DISTINCT FROM sqlc.narg(photo_url);

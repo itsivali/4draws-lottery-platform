@@ -183,14 +183,31 @@ class _ProfileHeader extends StatelessWidget {
           width: 56,
           height: 56,
           alignment: Alignment.center,
+          clipBehavior: Clip.antiAlias,
           decoration: BoxDecoration(color: c.primaryContainer, shape: BoxShape.circle),
           child: ExcludeSemantics(
-            child: initials == null
-                ? Icon(Icons.person_rounded, color: c.onPrimaryContainer, size: 28)
-                : Text(
-                    initials,
-                    style: t.titleLarge?.copyWith(color: c.onPrimaryContainer, fontWeight: FontWeight.w700),
+            child: Stack(
+              alignment: Alignment.center,
+              fit: StackFit.expand,
+              children: [
+                Center(
+                  child: initials == null
+                      ? Icon(Icons.person_rounded, color: c.onPrimaryContainer, size: 28)
+                      : Text(
+                          initials,
+                          style: t.titleLarge?.copyWith(color: c.onPrimaryContainer, fontWeight: FontWeight.w700),
+                        ),
+                ),
+                // the Google account's photo over the initials, which stay when it cannot load (ADR 0035)
+                if (a.photoUrl case final url?)
+                  Image.network(
+                    url,
+                    key: const Key('account-photo'),
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, _, _) => const SizedBox.shrink(),
                   ),
+              ],
+            ),
           ),
         ),
         const SizedBox(width: Space.lg),

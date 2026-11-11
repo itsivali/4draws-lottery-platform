@@ -111,7 +111,7 @@ SELECT id, status, kyc_status FROM identity.users WHERE msisdn = $1 AND msisdn_v
 
 -- name: GetAccount :one
 SELECT u.id, u.msisdn, u.email, u.kyc_status, u.status, (u.msisdn_verified_at IS NOT NULL)::boolean AS phone_verified, u.created_at,
-  u.must_change_password, (u.password_hash IS NOT NULL)::boolean AS has_password, c.requested_at AS closure_requested_at
+  u.must_change_password, (u.password_hash IS NOT NULL)::boolean AS has_password, c.requested_at AS closure_requested_at, u.photo_url
 FROM identity.users u LEFT JOIN identity.closure_requests c ON c.user_id = u.id
 WHERE u.id = $1;
 
@@ -209,3 +209,16 @@ FROM identity.user_status_history WHERE user_id = sqlc.arg(user_id) ORDER BY id;
 -- Ends every open session of an account with the given reason (a self-exclusion, ADR 0030).
 UPDATE identity.sessions SET revoked_at = sqlc.arg(at), revoked_reason = sqlc.arg(reason)
 WHERE user_id = sqlc.arg(user_id) AND revoked_at IS NULL;
+
+-- name: SetPhoto :exec
+-- The Google account's photo, refreshed at each Google sign-in (ADR 0035).
+UPDATE identity.users SET photo_url = sqlc.narg(photo_url) WHERE id = sqlc.arg(id) AND photo_url IS DISTINCT FROM sqlc.narg(photo_url);
+
+-- name: SessionStartedAt :one
+-- When the session's sign-in happened (refreshes keep the session).
+SELECT created_at FROM identity.sessions WHERE id = $1 AND user_id = $2 AND revoked_at IS NULL;
+
+-- name: SetFirstPassword :execrows
+-- Sets a password on an account that has none (ADR 0035).
+UPDATE identity.users SET password_hash = sqlc.arg(password_hash), password_changed_at = sqlc.arg(at), updated_at = sqlc.arg(at)
+WHERE id = sqlc.arg(id) AND password_hash IS NULL;

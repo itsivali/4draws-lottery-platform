@@ -329,6 +329,7 @@ type IdentityUser struct {
 	MsisdnVerifiedAt   pgtype.Timestamptz
 	MustChangePassword bool
 	Email              pgtype.Text
+	PhotoUrl           pgtype.Text
 }
 
 type IdentityUserStatusHistory struct {
@@ -633,6 +634,7 @@ type StaffMember struct {
 	PasswordHash       pgtype.Text
 	PasswordChangedAt  pgtype.Timestamptz
 	MustChangePassword bool
+	PhotoUrl           pgtype.Text
 }
 
 type StaffPasswordReset struct {

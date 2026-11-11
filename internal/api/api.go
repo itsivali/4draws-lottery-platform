@@ -132,6 +132,7 @@ func Mount(d Deps) func(chi.Router) {
 				r.Use(requireAuth)
 				r.Post("/auth/logout", h.logout)
 				r.Post("/auth/password/change", h.changePassword)
+				r.Post("/auth/password/set", h.setPassword)
 				r.Post("/auth/sso/{provider}/link", h.ssoLink)
 				r.Get("/kyc", h.kycStatus)
 				r.Post("/kyc", h.kycSubmit)

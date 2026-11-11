@@ -125,6 +125,33 @@ paths:
         "401": { $ref: "#/components/responses/Problem" }
         "403": { $ref: "#/components/responses/Problem" }
         "429": { $ref: "#/components/responses/Problem" }
+  /v1/auth/password/set:
+    post:
+      operationId: setPassword
+      tags: [auth]
+      summary: Give an account that signs in with Google or Apple only a password
+      description: >-
+        ADR 0035. Only for an account without a password (409 `password-exists` otherwise; change it with
+        `/v1/auth/password/change`), and only within 10 minutes of the session's sign-in (403 `sign-in-again`): a
+        session stolen later cannot add a way in. The player can then also sign in with their phone number and the
+        password. Ends every other session of the account.
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [new_password]
+              properties:
+                new_password: { type: string, minLength: 8, maxLength: 128 }
+      responses:
+        "204": { description: Password set }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
   /v1/auth/password/forgot:
     post:
       operationId: forgotPassword
@@ -1108,7 +1135,8 @@ paths:
       tags: [back-office]
       summary: Set one's own password (required first after a temporary one)
       description: |
-        The current password must match (unless the member has none yet). Rules: 12 to 128 characters, nothing from
+        The current password must match (unless the member has none yet: then only within 10 minutes of signing in with
+        Google or Apple, 403 `sign-in-again` after; ADR 0035). Rules: 12 to 128 characters, nothing from
         the common-password list, not the member's email address. Every other session of the member ends. Audited.
       security: [{ staffBearer: [] }]
       parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
@@ -4105,6 +4133,12 @@ components:
         email: { type: string }
         roles: { type: array, items: { $ref: "#/components/schemas/StaffRole" } }
         must_change_password: { type: boolean, description: Signed in with a temporary password; only PUT /v1/staff/password is allowed. }
+        has_password:
+          type: boolean
+          description: >-
+            False for a member who signs in with Google or Apple only (ADR 0035): PUT /v1/staff/password sets one
+            without the current password, within 10 minutes of signing in (403 `sign-in-again` after).
+        photo_url: { type: [string, "null"], description: "The photo of the Google account the member signs in with (ADR 0035)." }
     Draw:
       type: object
       required: [id, draw_type, period_start, period_end, status, freeze_at, entries, entry_list_hash, seed_commit, drand_round,
@@ -4320,7 +4354,12 @@ components:
         closure_requested_at: { type: [string, "null"], format: date-time }
         must_change_password: { type: boolean, description: Staff gave the player a temporary password they have not replaced yet; the app asks for a new one first. }
         email: { type: [string, "null"], format: email, description: "Null for an account from before addresses were asked for (ADR 0021)." }
-        has_password: { type: boolean, description: "False for an account that signs in with Google or Apple only (ADR 0020)." }
+        has_password: { type: boolean, description: "False for an account that signs in with Google or Apple only (ADR 0020); it may set one (`/v1/auth/password/set`, ADR 0035)." }
+        photo_url:
+          type: [string, "null"]
+          description: >-
+            The photo of the Google account the player signs in with (ADR 0035): https on googleusercontent.com only,
+            refreshed at each Google sign-in; null for others.
         first_name:
           type: [string, "null"]
           description: |

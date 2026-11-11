@@ -10,6 +10,10 @@ export interface Me {
   roles: Role[]
   /** signed in with a temporary password: only changing it is allowed until done */
   must_change_password: boolean
+  /** false for a member who signs in with Google or Apple only: they may set one right after signing in (ADR 0035) */
+  has_password?: boolean
+  /** the photo of the Google account the member signs in with (ADR 0035) */
+  photo_url?: string | null
 }
 
 export interface KycSubmission {

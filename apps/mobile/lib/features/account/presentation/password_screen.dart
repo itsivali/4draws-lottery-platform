@@ -42,16 +42,29 @@ class _PasswordScreenState extends ConsumerState<PasswordScreen> {
     if (!_form.currentState!.validate()) return;
     setState(() => _busy = true);
     try {
-      await ref
-          .read(accountRepositoryProvider)
-          .changePassword(current: _current.text, next: _next.text, idempotencyKey: newIdempotencyKey());
+      final first = _first(context);
+      final repo = ref.read(accountRepositoryProvider);
+      if (first) {
+        await repo.setPassword(next: _next.text, idempotencyKey: newIdempotencyKey());
+      } else {
+        await repo.changePassword(current: _current.text, next: _next.text, idempotencyKey: newIdempotencyKey());
+      }
       TextInput.finishAutofillContext(); // the password manager offers to update the saved password
       ref.read(sessionManagerProvider).passwordChanged();
-      ref.invalidate(accountProvider);
+      ref
+        ..invalidate(accountProvider)
+        ..invalidate(signInsProvider);
       if (!mounted) return;
       final required = _required(context);
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('Password changed. Other devices are signed out.')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            first
+                ? 'Password set. You can also sign in with your phone number and it. Other devices are signed out.'
+                : 'Password changed. Other devices are signed out.',
+          ),
+        ),
+      );
       context.go(required ? '/home' : '/account');
     } on ApiFailure catch (f) {
       if (!mounted) return;
@@ -65,9 +78,16 @@ class _PasswordScreenState extends ConsumerState<PasswordScreen> {
   /// Staff gave this player a temporary password: the router sent them here and holds them until it is replaced.
   static bool _required(BuildContext context) => GoRouterState.of(context).uri.queryParameters['required'] == '1';
 
+  /// An account that signs in with Google or Apple only sets its first password: there is no current one (ADR 0035).
+  static bool _first(BuildContext context) => GoRouterState.of(context).uri.queryParameters['set'] == '1';
+
   @override
   Widget build(BuildContext context) => PageScaffold(
-    title: _required(context) ? 'Choose a new password' : 'Change password',
+    title: _required(context)
+        ? 'Choose a new password'
+        : _first(context)
+        ? 'Set a password'
+        : 'Change password',
     children: [
       Form(
         key: _form,
@@ -85,22 +105,34 @@ class _PasswordScreenState extends ConsumerState<PasswordScreen> {
                   ),
                   const SizedBox(height: Space.lg),
                 ],
-                TextFormField(
-                  controller: _current,
-                  obscureText: _obscure,
-                  autofillHints: const [AutofillHints.password],
-                  decoration: InputDecoration(
-                    labelText: _required(context) ? 'Temporary password' : 'Current password',
-                    prefixIcon: const Icon(Icons.lock_outline_rounded),
-                    suffixIcon: IconButton(
-                      tooltip: _obscure ? 'Show passwords' : 'Hide passwords',
-                      icon: Icon(_obscure ? Icons.visibility_rounded : Icons.visibility_off_rounded),
-                      onPressed: () => setState(() => _obscure = !_obscure),
-                    ),
+                if (_first(context)) ...[
+                  const InlineBanner(
+                    tone: StatusTone.pending,
+                    icon: Icons.key_rounded,
+                    title: 'With a password you can also sign in with your phone number, on the web too.',
+                    message:
+                        'For your security this works within 10 minutes of signing in with Google or Apple. If it '
+                        'is refused, sign out, sign in with Google or Apple again, and come straight back here.',
                   ),
-                  validator: (v) => (v ?? '').isEmpty ? 'Enter your current password.' : null,
-                ),
-                const SizedBox(height: Space.lg),
+                  const SizedBox(height: Space.lg),
+                ] else ...[
+                  TextFormField(
+                    controller: _current,
+                    obscureText: _obscure,
+                    autofillHints: const [AutofillHints.password],
+                    decoration: InputDecoration(
+                      labelText: _required(context) ? 'Temporary password' : 'Current password',
+                      prefixIcon: const Icon(Icons.lock_outline_rounded),
+                      suffixIcon: IconButton(
+                        tooltip: _obscure ? 'Show passwords' : 'Hide passwords',
+                        icon: Icon(_obscure ? Icons.visibility_rounded : Icons.visibility_off_rounded),
+                        onPressed: () => setState(() => _obscure = !_obscure),
+                      ),
+                    ),
+                    validator: (v) => (v ?? '').isEmpty ? 'Enter your current password.' : null,
+                  ),
+                  const SizedBox(height: Space.lg),
+                ],
                 TextFormField(
                   controller: _next,
                   obscureText: _obscure,
@@ -117,7 +149,11 @@ class _PasswordScreenState extends ConsumerState<PasswordScreen> {
                   InlineBanner(tone: StatusTone.error, live: true, title: _error!),
                 ],
                 const SizedBox(height: Space.xl),
-                BusyButton(label: 'Change password', busy: _busy, onPressed: _submit),
+                BusyButton(
+                  label: _first(context) ? 'Set password' : 'Change password',
+                  busy: _busy,
+                  onPressed: _submit,
+                ),
               ],
             ),
           ),
