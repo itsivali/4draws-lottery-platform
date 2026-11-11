@@ -63,6 +63,10 @@ Read this first at the start of every session.
   transaction, its password, sessions, devices, Google/Apple links, photo, email and reset links, through one database
   function that refuses any account that is not closed; the money's records, identity checks and the audit log stay.
   Accounts closed earlier were erased by the migration. Not built: purging the kept records when retention ends.
+- **A copy of your data by email (2026-11-11, ADR 0038, migration 00057):** Account → Get a copy of your data
+  (`POST /v1/account/data-export`) emails the player a readable report (an HTML page with a table per kind of record)
+  and the same data as JSON, to the account's own address, once a day; the ID number as its last three digits. Recorded in `identity.data_exports` and the audit log.
+  **Does nothing in production until SMTP is configured** (the route answers 503 and names the privacy address).
 - **Play Console (2026-11-11):** the owner's developer account is a personal one ("willis ivali"). The app is to be
   created as 4draws, `ke.co.fourdraws.app`, English (UK), App, Free; the three declarations are the owner's to
   accept. A release build signed with the upload key builds locally. Not yet possible: production release (needs

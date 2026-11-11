@@ -39,6 +39,31 @@ void main() {
     expect(backend.opened.single, Uri.parse('https://tajirika.co.ke/delete-account/'));
   });
 
+  testWidgets('a player asks for a copy of their data and is told where it was emailed; a second ask is refused', (
+    t,
+  ) async {
+    final backend = FakeBackend();
+    final h = await pumpApp(t, backend);
+    h.container.read(routerProvider).go('/account/data');
+    await t.pumpAndSettle();
+    expect(find.text('It will be sent to'), findsOneWidget);
+    expect(find.textContaining('last three digits of your ID number'), findsOneWidget);
+    await tapVisible(t, find.widgetWithText(FilledButton, 'Email me my data'));
+    await t.pumpAndSettle();
+    expect(backend.dataCopies, 1);
+    expect(find.text('Sent to j***@example.com'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'Email me my data'), findsNothing, reason: 'nothing more to press');
+
+    // opened again the same day: the server refuses, and the screen says why
+    h.container.read(routerProvider).go('/account');
+    await t.pumpAndSettle();
+    h.container.read(routerProvider).go('/account/data');
+    await t.pumpAndSettle();
+    await tapVisible(t, find.widgetWithText(FilledButton, 'Email me my data'));
+    await t.pumpAndSettle();
+    expect(find.text('A copy was sent in the last 24 hours'), findsOneWidget);
+  });
+
   testWidgets('a demo service says the money is not real; a live one says nothing', (t) async {
     await pumpApp(t, FakeBackend()..operatingMode = 'sandbox');
     expect(find.text('Demo: test money only, no real prizes'), findsOneWidget);

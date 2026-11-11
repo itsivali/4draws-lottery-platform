@@ -6,6 +6,7 @@ import '../core/auth/session_manager.dart';
 import '../core/widgets/inline_banner.dart';
 import '../features/account/presentation/account_screen.dart';
 import '../features/account/presentation/closure_screen.dart';
+import '../features/account/presentation/data_copy_screen.dart';
 import '../features/account/presentation/details_screen.dart';
 import '../features/account/presentation/devices_screen.dart';
 import '../features/account/presentation/email_screen.dart';
@@ -158,6 +159,7 @@ final routerProvider = Provider<GoRouter>((ref) {
                   GoRoute(path: 'email', pageBuilder: _page((_, _) => const EmailScreen())),
                   GoRoute(path: 'fairness', pageBuilder: _page((_, _) => const FairnessScreen())),
                   GoRoute(path: 'how-it-works', pageBuilder: _page((_, _) => const HowItWorksScreen())),
+                  GoRoute(path: 'data', pageBuilder: _page((_, _) => const DataCopyScreen())),
                   GoRoute(path: 'close', pageBuilder: _page((_, _) => const ClosureScreen())),
                 ],
               ),

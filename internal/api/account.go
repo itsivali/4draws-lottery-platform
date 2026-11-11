@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/itsivali/lottery-platform/internal/dataexport"
 	"github.com/itsivali/lottery-platform/internal/identity"
 	"github.com/itsivali/lottery-platform/internal/kyc"
 	"github.com/itsivali/lottery-platform/internal/payments/daraja"
@@ -256,6 +257,35 @@ func (h *handlers) requestClosure(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpx.WriteJSON(w, http.StatusAccepted, map[string]any{"closure_requested_at": at})
+}
+
+// requestDataExport emails the player a copy of their data (ADR 0038), at most once a day.
+func (h *handlers) requestDataExport(w http.ResponseWriter, r *http.Request) {
+	if h.DataExport == nil {
+		httpx.WriteProblem(w, http.StatusServiceUnavailable, "data-export-unavailable", "Copies of your data cannot be emailed right now",
+			"Write to privacy@4draws.co.ke for a copy.")
+		return
+	}
+	p, _ := principalFrom(r.Context())
+	if !h.limit(w, r, "data-export:user:"+p.UserID, 5, time.Hour) {
+		return
+	}
+	rc, err := h.DataExport.Send(r.Context(), p.UserID)
+	var soon dataexport.TooSoonError
+	switch {
+	case errors.Is(err, dataexport.ErrNoEmail):
+		httpx.WriteProblem(w, http.StatusConflict, "no-email", "Add an email address first", "Your copy is sent to the email address on your account.")
+	case errors.Is(err, dataexport.ErrNotActive):
+		httpx.WriteProblem(w, http.StatusConflict, "account-closed", "This account is closed", "")
+	case errors.As(err, &soon):
+		secs := int(time.Until(soon.Next).Seconds()) //nolint:forbidigo // Retry-After is wall-clock seconds
+		httpx.WriteProblemRetry(w, http.StatusTooManyRequests, "data-export-too-soon", "A copy was sent in the last 24 hours",
+			"Check your inbox and junk folder. You can ask again after "+soon.Next.UTC().Format(time.RFC3339)+".", max(secs, 1))
+	case err != nil:
+		internalError(w, err)
+	default:
+		httpx.WriteJSON(w, http.StatusAccepted, map[string]any{"sent_to": rc.SentTo, "requested_at": rc.RequestedAt, "next_allowed_at": rc.Next})
+	}
 }
 
 func (h *handlers) listPayments(w http.ResponseWriter, r *http.Request) {

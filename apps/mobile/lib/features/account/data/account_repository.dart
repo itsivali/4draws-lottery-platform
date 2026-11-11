@@ -97,4 +97,8 @@ class AccountRepository {
     await _api.post('/v1/account/closure', idempotencyKey: idempotencyKey),
     (j) => j.instant('closure_requested_at'),
   );
+
+  /// Asks for a copy of the player's data to be emailed to them (ADR 0038); returns the address it went to, masked.
+  Future<String> requestDataCopy({required String idempotencyKey}) async =>
+      parse(await _api.post('/v1/account/data-export', idempotencyKey: idempotencyKey), (j) => j.str('sent_to'));
 }

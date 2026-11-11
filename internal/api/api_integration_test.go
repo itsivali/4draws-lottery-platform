@@ -28,6 +28,7 @@ import (
 	"github.com/itsivali/lottery-platform/internal/api"
 	"github.com/itsivali/lottery-platform/internal/audit"
 	"github.com/itsivali/lottery-platform/internal/compliance"
+	"github.com/itsivali/lottery-platform/internal/dataexport"
 	"github.com/itsivali/lottery-platform/internal/draws"
 	"github.com/itsivali/lottery-platform/internal/finance"
 	"github.com/itsivali/lottery-platform/internal/game"
@@ -133,7 +134,9 @@ type env struct {
 	pay   *payQueue
 	staff *fakeStaff
 	deps  api.Deps
-	keys  int
+	// mail holds what the data-export service sent (ADR 0038)
+	mail *outbox
+	keys int
 	// header is sent with every request (a test playing the edge, such as Cloudflare's CF-IPCountry)
 	header map[string]string
 }
@@ -248,6 +251,8 @@ func setupWith(t *testing.T, mutate func(*apiDeps)) *env {
 		Idem:         idempotency.NewStore(pool),
 		Limiter:      ratelimit.New(vk.Client(t)),
 	}
+	mailbox := &outbox{}
+	deps.DataExport = dataexport.NewService(pool, clk, aw, deps.KYC, mailbox)
 	if mutate != nil {
 		mutate(&deps)
 	}
@@ -258,7 +263,7 @@ func setupWith(t *testing.T, mutate func(*apiDeps)) *env {
 	enq.process = func(ctx context.Context, id string) error { return deps.KYC.Process(ctx, id) }
 	t.Cleanup(srv.Close)
 	t.Cleanup(live.Close) // before srv.Close (cleanups run last-in first-out), so open streams end
-	return &env{pool: pool, clk: clk, kyc: mock, vk: vk, srv: srv, live: live, enq: enq, pay: pay, staff: staffAuth, deps: deps}
+	return &env{pool: pool, clk: clk, kyc: mock, vk: vk, srv: srv, live: live, enq: enq, pay: pay, staff: staffAuth, deps: deps, mail: mailbox}
 }
 
 type resp struct {

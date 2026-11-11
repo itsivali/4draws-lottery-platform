@@ -27,6 +27,7 @@ import (
 	"github.com/itsivali/lottery-platform/internal/api"
 	"github.com/itsivali/lottery-platform/internal/audit"
 	"github.com/itsivali/lottery-platform/internal/compliance"
+	"github.com/itsivali/lottery-platform/internal/dataexport"
 	"github.com/itsivali/lottery-platform/internal/draws"
 	"github.com/itsivali/lottery-platform/internal/draws/drand"
 	"github.com/itsivali/lottery-platform/internal/finance"
@@ -151,6 +152,7 @@ func New(ctx context.Context, cfg config.Config, pool *pgxpool.Pool) (*App, erro
 		Gate:             svc.gate,
 		Geo:              geo(pool, sh.clk, c.GeoCountryHeader, cfg.Operating.Mode),
 		GeoCountryHeader: c.GeoCountryHeader,
+		DataExport:       dataExport(pool, sh, a.kyc, cfg.Mail),
 		AttestationMode:  c.Attestation.Mode,
 		AttestationWeb:   c.Attestation.Web,
 		SignIn: api.SignInProviders{GoogleClientID: c.SignIn.GoogleClientID, GoogleIOSClientID: c.SignIn.GoogleIOSClientID,
@@ -412,6 +414,15 @@ func (a *App) StartWorkers(ctx context.Context) error {
 }
 
 // mailer sends through the configured SMTP server, or only logs when there is none.
+// dataExport emails players copies of their data (ADR 0038). Without a mail server there is nothing to send with,
+// and the route says so (503) instead of pretending.
+func dataExport(pool *pgxpool.Pool, sh shared, k *kyc.Service, m config.Mail) *dataexport.Service {
+	if !m.Enabled() {
+		return nil
+	}
+	return dataexport.NewService(pool, sh.clk, sh.aw, k, mailer(m))
+}
+
 func mailer(m config.Mail) mail.Sender {
 	if !m.Enabled() {
 		return mail.Log{}

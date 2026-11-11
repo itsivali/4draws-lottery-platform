@@ -121,6 +121,17 @@ class AccountScreen extends ConsumerWidget {
             PolicyRow(PolicyPage.deleteAccount),
           ],
         ),
+        const SectionHeader(title: 'Your data'),
+        RowGroup(
+          children: [
+            link(
+              Icons.download_rounded,
+              'Get a copy of your data',
+              '/account/data',
+              subtitle: 'A report you can read, emailed to you',
+            ),
+          ],
+        ),
         const SectionHeader(title: 'Preferences'),
         RowGroup(
           children: [

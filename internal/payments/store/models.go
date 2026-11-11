@@ -283,6 +283,14 @@ type IdentityClosureRequest struct {
 	ClosedBy    *string
 }
 
+type IdentityDataExport struct {
+	ID          string
+	UserID      string
+	RequestedAt time.Time
+	Bytes       int32
+	Sha256      string
+}
+
 type IdentityDevice struct {
 	ID                 string
 	UserID             string

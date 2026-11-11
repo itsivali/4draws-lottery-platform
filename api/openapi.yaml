@@ -1071,6 +1071,33 @@ paths:
                 properties:
                   closure_requested_at: { type: string, format: date-time }
         "401": { $ref: "#/components/responses/Problem" }
+  /v1/account/data-export:
+    post:
+      operationId: requestDataExport
+      tags: [auth]
+      summary: Email the player a copy of their data
+      description: |
+        Builds a file of the personal data held about the player (account, top-ups, plays, draws, prizes, withdrawals,
+        limits, devices; the ID number as its last three digits) and emails it to the address on the account, at most
+        once in 24 hours (ADR 0038). `no-email` (409) when the account has no address; `data-export-too-soon` (429,
+        with Retry-After); `data-export-unavailable` (503) when the deployment has no mail server.
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      responses:
+        "202":
+          description: Sent
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [sent_to, requested_at, next_allowed_at]
+                properties:
+                  sent_to: { type: string, description: "The address, masked: j***@example.com" }
+                  requested_at: { type: string, format: date-time }
+                  next_allowed_at: { type: string, format: date-time }
+        "401": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
   /v1/staff/session:
     post:
       operationId: staffSignIn

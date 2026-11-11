@@ -13,6 +13,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/itsivali/lottery-platform/internal/compliance"
+	"github.com/itsivali/lottery-platform/internal/dataexport"
 	"github.com/itsivali/lottery-platform/internal/draws"
 	"github.com/itsivali/lottery-platform/internal/game"
 	"github.com/itsivali/lottery-platform/internal/identity"
@@ -73,6 +74,8 @@ type Deps struct {
 	// (ADR 0031); nil records nothing. GeoCountryHeader is the header the edge sets (GEO_COUNTRY_HEADER).
 	Geo              *compliance.Geo
 	GeoCountryHeader string
+	// DataExport emails a player a copy of their data (ADR 0038); nil (no mail server) answers 503.
+	DataExport *dataexport.Service
 }
 
 type ctxKey struct{}
@@ -157,6 +160,7 @@ func Mount(d Deps) func(chi.Router) {
 				r.Get("/wallet", h.getWallet)
 				r.Get("/account", h.getAccount)
 				r.Post("/account/closure", h.requestClosure)
+				r.Post("/account/data-export", h.requestDataExport)
 				r.Put("/account/email", h.setEmail)
 				r.Post("/account/identity", h.declareIdentity)
 				r.Get("/account/sessions", h.listSessions)

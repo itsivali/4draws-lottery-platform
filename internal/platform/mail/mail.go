@@ -4,13 +4,17 @@ package mail
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/tls"
+	"encoding/base64"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"log/slog"
 	"net"
 	"net/mail"
 	"net/smtp"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -22,6 +26,17 @@ type Message struct {
 	To      []string
 	Subject string
 	Text    string
+	// Attachments ride with the text as files (a player's copy of their data, ADR 0038).
+	Attachments []Attachment
+}
+
+// Attachment is one file sent with a message.
+type Attachment struct {
+	// Name is the file name shown to the recipient: letters, digits, dots, dashes and underscores only.
+	Name string
+	// ContentType is its media type, such as application/json.
+	ContentType string
+	Data        []byte
 }
 
 // Sender delivers messages.
@@ -73,7 +88,10 @@ func (s SMTP) Send(ctx context.Context, m Message) error {
 		}
 		rcpts = append(rcpts, a.Address)
 	}
-	body := Render(from.String(), rcpts, m.Subject, m.Text, time.Now()) //nolint:forbidigo // the Date header is the wall clock, not business time
+	body, err := RenderMessage(from.String(), rcpts, m, time.Now()) //nolint:forbidigo // the Date header is the wall clock, not business time
+	if err != nil {
+		return err
+	}
 
 	timeout := s.Timeout
 	if timeout <= 0 {
@@ -154,4 +172,54 @@ func Render(from string, to []string, subject, text string, at time.Time) string
 		b.WriteString(line + "\r\n")
 	}
 	return b.String()
+}
+
+var (
+	attachmentName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$`)
+	attachmentType = regexp.MustCompile(`^[a-z0-9.+-]+/[a-z0-9.+-]+$`)
+)
+
+// RenderMessage renders m as Render does and, when it carries attachments, as multipart/mixed: the text first, then
+// each file base64-encoded. It refuses a file name or media type that could break out of its header.
+func RenderMessage(from string, to []string, m Message, at time.Time) (string, error) {
+	if len(m.Attachments) == 0 {
+		return Render(from, to, m.Subject, m.Text, at), nil
+	}
+	for _, a := range m.Attachments {
+		if !attachmentName.MatchString(a.Name) || !attachmentType.MatchString(a.ContentType) {
+			return "", errors.New("mail: bad attachment name or type")
+		}
+	}
+	var seed [16]byte
+	if _, err := rand.Read(seed[:]); err != nil {
+		return "", errors.New("mail: no randomness for the boundary")
+	}
+	boundary := "b" + hex.EncodeToString(seed[:])
+	var b strings.Builder
+	b.WriteString("From: " + from + "\r\n")
+	b.WriteString("To: " + strings.Join(to, ", ") + "\r\n")
+	b.WriteString("Subject: " + m.Subject + "\r\n")
+	b.WriteString("Date: " + at.UTC().Format(time.RFC1123Z) + "\r\n")
+	b.WriteString("MIME-Version: 1.0\r\n")
+	b.WriteString("Content-Type: multipart/mixed; boundary=\"" + boundary + "\"\r\n\r\n")
+	b.WriteString("--" + boundary + "\r\n")
+	b.WriteString("Content-Type: text/plain; charset=utf-8\r\n")
+	b.WriteString("Content-Transfer-Encoding: 8bit\r\n\r\n")
+	for _, line := range strings.Split(strings.ReplaceAll(m.Text, "\r\n", "\n"), "\n") {
+		b.WriteString(line + "\r\n")
+	}
+	for _, a := range m.Attachments {
+		b.WriteString("--" + boundary + "\r\n")
+		b.WriteString("Content-Type: " + a.ContentType + "; name=\"" + a.Name + "\"\r\n")
+		b.WriteString("Content-Disposition: attachment; filename=\"" + a.Name + "\"\r\n")
+		b.WriteString("Content-Transfer-Encoding: base64\r\n\r\n")
+		enc := base64.StdEncoding.EncodeToString(a.Data)
+		for len(enc) > 76 {
+			b.WriteString(enc[:76] + "\r\n")
+			enc = enc[76:]
+		}
+		b.WriteString(enc + "\r\n")
+	}
+	b.WriteString("--" + boundary + "--\r\n")
+	return b.String(), nil
 }

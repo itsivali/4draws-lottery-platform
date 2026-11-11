@@ -28,6 +28,7 @@ stay.
 | Payouts | `payouts.*` | Withdrawals, prizes, refunds; withholding tax | Receipts, numbers paid |
 | Responsible-gambling limits, breaks, self-exclusions | `rg.*` | Player protection (LN 112) | |
 | Account status history, closure requests | `identity.user_status_history`, `identity.closure_requests` | Audit (ADR 0030) | |
+| When a copy of the player's data was emailed (time, size, hash; not the contents) | `identity.data_exports` | Legal obligation (showing an access request was answered; ADR 0038) | |
 | Country of the connection | `compliance.geo_signals` | Kenya-only rule (ADR 0031) | From the IP address, via Cloudflare; the address itself is not stored |
 | Monitoring cases | `compliance.aml_*` | Anti-money-laundering (ADR 0033) | Not shown to the player |
 | Audit log | `audit.audit_log` | Who did what, for regulators and disputes | Append-only |

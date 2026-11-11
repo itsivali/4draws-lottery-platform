@@ -34,6 +34,9 @@ class FakeBackend {
   Map<String, Object?>? withdrawBounds = {'min_kes': 50, 'max_kes': 150000};
   Map<String, Object?>? restriction;
   String? closureRequestedAt;
+
+  /// How many copies of the player's data were asked for.
+  int dataCopies = 0;
   int plays = 0;
 
   /// The player's own draw periods (GET /v1/draws/periods); empty before the first play.
@@ -410,6 +413,16 @@ class FakeBackend {
         return http.Response('', 204);
       case ('GET', '/v1/account/sign-ins'):
         return _ok({'password': hasPassword, 'providers': linkedSignIns});
+      case ('POST', '/v1/account/data-export'):
+        dataCopies++;
+        if (dataCopies > 1) {
+          return _problem(429, 'data-export-too-soon', 'A copy was sent in the last 24 hours');
+        }
+        return _ok({
+          'sent_to': 'j***@example.com',
+          'requested_at': '2026-10-26T12:00:00+03:00',
+          'next_allowed_at': '2026-10-27T12:00:00+03:00',
+        }, 202);
       case ('POST', '/v1/account/closure'):
         closureRequestedAt ??= '2026-10-26T12:00:00+03:00';
         return _ok({'closure_requested_at': closureRequestedAt}, 202);
