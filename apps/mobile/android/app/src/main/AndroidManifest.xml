@@ -1,10 +1,15 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- The app talks to the API; Flutter's template only grants this in debug and profile builds. -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Nothing is backed up or carried to another device: the session and device identity belong to this install
+         (docs/mobile/android-release.md). -->
     <application
         android:label="Tajirika"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:allowBackup="false"
+        android:fullBackupContent="@xml/backup_rules"
+        android:dataExtractionRules="@xml/data_extraction_rules">
         <activity
             android:name=".MainActivity"
             android:exported="true"

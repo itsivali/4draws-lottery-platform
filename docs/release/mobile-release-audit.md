@@ -7,15 +7,15 @@ Read from `apps/mobile` on `main` at `9e11bf4`. Flutter is pinned to 3.47.7 (`mi
 
 | Item | Current | Evidence | Status |
 |---|---|---|---|
-| applicationId / namespace | `ke.tajirika.lottery_mobile` | `android/app/build.gradle.kts:8,19` | OK; template TODO comment remains (`:18`) |
+| applicationId / namespace | `ke.tajirika.lottery_mobile` | `android/app/build.gradle.kts:8,19` | OK; template TODOs removed (S6) |
 | Label | Tajirika | `src/main/AndroidManifest.xml:5` | OK |
-| min / target / compile SDK | `flutter.*` defaults | `build.gradle.kts:9,10,22,23` | **Verify** the resolved numbers from a release build; Play requires target API 36 for new apps and updates (recheck at submission) |
+| min / target / compile SDK | `flutter.*` defaults | `build.gradle.kts:9,10,22,23` | Fixed (S6): compile and target 36 pinned, min 24 (Flutter 3.47.7) |
 | AGP / Gradle / Kotlin / JVM | 9.1.0 / 9.3.1 / 2.4.0 / 17 | `settings.gradle.kts:22-23`, `gradle-wrapper.properties:5` | OK |
-| versionCode | `flutter.versionCode` from `pubspec.yaml` `1.0.0+1`; CI never passes `--build-number` | `build.gradle.kts:28-29` | **Gap**: every build is versionCode 1 |
-| Release signing | **debug key** | `build.gradle.kts:33-37` | **Blocker** |
+| versionCode | `flutter.versionCode` from `pubspec.yaml` `1.0.0+1`; CI never passes `--build-number` | `build.gradle.kts:28-29` | Fixed (S6): CI passes the run number as `--build-number`, the tag as `--build-name` |
+| Release signing | **debug key** | `build.gradle.kts:33-37` | Fixed (S6): upload key from `key.properties` or CI secrets; a release build without it stops (`docs/mobile/android-release.md`) |
 | Permissions | `INTERNET` only | `src/main/AndroidManifest.xml:3` | OK |
 | Network security | release: platform default (https only); debug: cleartext to local hosts | `src/debug/res/xml/network_security_config.xml` | OK |
-| Backup | `allowBackup` unset (true), no rules | manifest | **Gap** |
+| Backup | `allowBackup=false`, backup and device-transfer rules exclude everything | manifest, `res/xml/` | Fixed (S6) |
 | Deep / app links | none; `signinwithapple://callback` only | manifest `:32-42` | OK for launch; app links later |
 | Play Integrity | verifier on server, no client plugin | ADR 0014 | Owner dependency |
 

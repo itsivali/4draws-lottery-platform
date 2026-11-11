@@ -11,5 +11,9 @@ No real values are created by the agent. Add with `gh secret set NAME [--env ENV
 | `RENDER_API_KEY` | env `production` | deploy-prod.yml | Scoped key |
 | `RENDER_API_SERVICE_IDS` | env `production` | deploy-prod.yml | JSON map service name → id of the Blueprint services, e.g. `{"api":"srv-…"}`; each gets a deploy of the tagged commit |
 | `RELEASE_PLEASE_TOKEN` | repo (optional) | release.yml | PAT so release PRs trigger CI; falls back to `GITHUB_TOKEN` |
+| `ANDROID_UPLOAD_KEYSTORE_BASE64` | repo | mobile.yml (tags) | The Play upload keystore, `base64 -w0 upload.jks`; see `docs/mobile/android-release.md`. A tag build fails without it |
+| `ANDROID_KEYSTORE_PASSWORD` | repo | mobile.yml (tags) | The keystore's password |
+| `ANDROID_KEY_ALIAS` | repo | mobile.yml (tags) | The upload key's alias, e.g. `upload` |
+| `ANDROID_KEY_PASSWORD` | repo | mobile.yml (tags) | The upload key's password |
 
 Keyless cosign and ghcr pushes use the workflow `GITHUB_TOKEN` / OIDC; no secret needed.

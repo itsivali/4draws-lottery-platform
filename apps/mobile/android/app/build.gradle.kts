@@ -1,12 +1,33 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+// The upload key that signs release builds (docs/mobile/android-release.md). Read from android/key.properties on a
+// developer's machine, else from the environment in CI; never committed. Without it a release build stops: it is
+// never signed with the debug key.
+val keyProperties = Properties().apply {
+    val file = rootProject.file("key.properties")
+    if (file.exists()) file.inputStream().use { load(it) }
+}
+
+fun signingValue(property: String, env: String): String? =
+    keyProperties.getProperty(property)?.takeIf { it.isNotBlank() } ?: System.getenv(env)?.takeIf { it.isNotBlank() }
+
+val uploadKeystore = signingValue("storeFile", "ANDROID_KEYSTORE_PATH")
+val uploadKeystorePassword = signingValue("storePassword", "ANDROID_KEYSTORE_PASSWORD")
+val uploadKeyAlias = signingValue("keyAlias", "ANDROID_KEY_ALIAS")
+val uploadKeyPassword = signingValue("keyPassword", "ANDROID_KEY_PASSWORD")
+val uploadKeyConfigured = listOf(uploadKeystore, uploadKeystorePassword, uploadKeyAlias, uploadKeyPassword).all { it != null }
+
 android {
     namespace = "ke.tajirika.lottery_mobile"
-    compileSdk = flutter.compileSdkVersion
+    // Pinned (Flutter 3.47.7's defaults) so that a Flutter upgrade cannot change them unnoticed: Google Play requires
+    // new apps and updates to target API 36 (recheck at each submission).
+    compileSdk = 36
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
@@ -15,26 +36,42 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
+        // The store identity of the app: never changes once published.
         applicationId = "ke.tajirika.lottery_mobile"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
-        targetSdk = flutter.targetSdkVersion
-        // Uses the version code from pubspec.yaml. When using split APKs, 1000 * ABI_VERSION
-        // is added automatically by Flutter. (https://developer.android.com/studio/build/configure-apk-splits#configure-APK-versions)
-        // You can force using the value of versionCode by specifying the `-P force-version-code-ignoring-abi=true`
-        // flag during build.
+        targetSdk = 36
+        // From --build-number and --build-name (CI passes the run number and the tag), else pubspec.yaml's version.
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        create("release") {
+            if (uploadKeyConfigured) {
+                storeFile = file(uploadKeystore!!)
+                storePassword = uploadKeystorePassword
+                keyAlias = uploadKeyAlias
+                keyPassword = uploadKeyPassword
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("release")
         }
+    }
+}
+
+// A release build without the upload key stops here, before anything is built.
+gradle.taskGraph.whenReady {
+    val release = allTasks.any { it.project == project && it.name.contains("Release") }
+    if (release && !uploadKeyConfigured) {
+        throw GradleException(
+            "Release builds are signed with the upload key: set android/key.properties (storeFile, storePassword, " +
+                "keyAlias, keyPassword) or ANDROID_KEYSTORE_PATH, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS and " +
+                "ANDROID_KEY_PASSWORD. See docs/mobile/android-release.md.",
+        )
     }
 }
 

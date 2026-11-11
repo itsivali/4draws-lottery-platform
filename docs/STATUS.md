@@ -97,6 +97,10 @@ Read this first at the start of every session.
   back office (Google's image host only; migration 00054); a Google or Apple account can set a password within 10
   minutes of signing in.
 
+- **Android release readiness (S6, 2026-11-11):** release builds are signed with the upload key or stop (never the
+  debug key); target and compile SDK 36 pinned; no backup or device transfer; the version code is the CI run number.
+  Tag builds need the owner's upload key in GitHub secrets (`docs/mobile/android-release.md`).
+
 ## Before the API is exposed to players
 
 1. **Trusted proxy: fixed.** Measured on the live service (`docs/runbooks/trusted-proxy.md`): the rightmost
