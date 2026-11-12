@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="4draws">
+  <defs>
+    <linearGradient id="indigo" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#5B4FE9"/>
+      <stop offset="0.55" stop-color="#4338CA"/>
+      <stop offset="1" stop-color="#2A2385"/>
+    </linearGradient>
+  </defs>
+  <!-- the mark for small sizes (browser tabs, 16 to 48 px): the 4 alone, bold, with the gold segment as one thick arc;
+       the ring's other three segments would blur at this size -->
+  <rect width="64" height="64" rx="14" fill="url(#indigo)"/>
+  <path d="M38 8.6 A24 24 0 0 1 55.4 26" fill="none" stroke="#FFC53D" stroke-width="7" stroke-linecap="round"/>
+  <path d="M37 51 V17 L15 42 H48" fill="none" stroke="#FFFFFF" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

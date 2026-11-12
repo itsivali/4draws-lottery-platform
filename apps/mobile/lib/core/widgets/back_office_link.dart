@@ -29,6 +29,9 @@ class BackOfficeLink extends ConsumerWidget {
         style: TextButton.styleFrom(
           foregroundColor: onHero ? c.onHeroMuted : c.inkMuted,
           padding: const EdgeInsets.symmetric(horizontal: Space.sm),
+          // on the signed-out page it is small print under the card, not a row of its own
+          minimumSize: onHero ? const Size(Breakpoints.minTouch, 36) : null,
+          tapTargetSize: onHero ? MaterialTapTargetSize.shrinkWrap : null,
         ),
         icon: const Icon(Icons.admin_panel_settings_outlined, size: 18),
         label: const Text('Staff? Open the back office'),

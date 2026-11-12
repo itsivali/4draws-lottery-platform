@@ -253,6 +253,9 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
     final providers = ref.watch(signInProvidersProvider).value ?? SignInProviders.none;
     if (providers.any && !_prepared) unawaited(_prepare(providers));
     final signIn = ref.read(providerSignInProvider);
+    final shown = _prepared ? providers : SignInProviders.none;
+    // a wide screen has room for Google and Apple beside the form: the card grows sideways instead of downwards
+    final side = shown.any && _step == _Step.form && MediaQuery.sizeOf(context).width >= 900;
     final form = _Form(
       formKey: _form,
       phone: _phone,
@@ -276,7 +279,8 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
       expired: ref.watch(sessionManagerProvider).endReason == SessionEndReason.expired,
       selfExcluded: ref.watch(sessionManagerProvider).endReason == SessionEndReason.selfExcluded,
       justReset: GoRouterState.of(context).uri.queryParameters['reset'] == '1',
-      providers: _prepared ? providers : SignInProviders.none,
+      providers: shown,
+      side: side,
       googleButton: _prepared ? signIn.googleButton() : null,
       onMode: (m) => setState(() => _mode = m),
       onObscure: () => setState(() => _obscure = !_obscure),
@@ -296,7 +300,20 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
       child: AuthPage(
         title: heading.title,
         lead: heading.lead,
-        footer: const BackOfficeLink(onHero: true),
+        maxWidth: side ? 800 : AuthPage.cardWidth,
+        // under the card, on the colour: the form itself stays short enough to sit in the middle of a laptop screen
+        // without scrolling (owner, 2026-11-12)
+        footer: Column(
+          children: [
+            Text(
+              'Play responsibly. Lottery plays cost money and most plays do not win a prize. '
+              'You can set deposit limits, take a break or self-exclude at any time from your account.',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: c.onHeroMuted),
+            ),
+            const BackOfficeLink(onHero: true),
+          ],
+        ),
         child: form,
       ),
     );
@@ -354,6 +371,7 @@ class _Form extends StatelessWidget {
     this.selfExcluded = false,
     required this.justReset,
     required this.providers,
+    required this.side,
     required this.googleButton,
     required this.onMode,
     required this.onObscure,
@@ -388,6 +406,10 @@ class _Form extends StatelessWidget {
   final bool selfExcluded;
   final bool justReset;
   final SignInProviders providers;
+
+  /// On a wide screen Google and Apple stand beside the form, not under it, so the card stays short enough to sit
+  /// in the middle of a laptop screen without scrolling.
+  final bool side;
   final Widget? googleButton;
   final ValueChanged<_Mode> onMode;
   final VoidCallback onObscure;
@@ -414,7 +436,7 @@ class _Form extends StatelessWidget {
       inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9+ ]'))],
       decoration: InputDecoration(
         labelText: 'M-Pesa phone number',
-        helperText: 'For example 0712 345 678',
+        hintText: 'For example 0712 345 678',
         errorText: phoneError,
         prefixIcon: const Icon(Icons.phone_iphone_rounded),
       ),
@@ -439,7 +461,7 @@ class _Form extends StatelessWidget {
     final errorBanner = formError == null
         ? null
         : InlineBanner(tone: StatusTone.error, live: true, title: formError!, message: formDetail);
-    return AutofillGroup(
+    final form = AutofillGroup(
       child: Form(
         key: formKey,
         child: Column(
@@ -494,7 +516,7 @@ class _Form extends StatelessWidget {
                 selected: mode,
                 onChanged: busy ? null : onMode,
               ),
-              const SizedBox(height: Space.xl),
+              const SizedBox(height: Space.lg),
               if (creating) ...[identityFields, const SizedBox(height: Space.lg)],
               phoneField,
               if (creating) ...[
@@ -514,7 +536,7 @@ class _Form extends StatelessWidget {
                   validator: emailFieldError,
                 ),
               ],
-              const SizedBox(height: Space.lg),
+              const SizedBox(height: Space.md),
               TextFormField(
                 controller: password,
                 obscureText: obscure,
@@ -536,13 +558,13 @@ class _Form extends StatelessWidget {
               ),
               if (creating) ...[const SizedBox(height: Space.md), adultTile],
               if (errorBanner != null) ...[const SizedBox(height: Space.lg), errorBanner],
-              const SizedBox(height: Space.xl),
+              const SizedBox(height: Space.lg),
               BusyButton(label: creating ? 'Create account' : 'Sign in', busy: busy, onPressed: onSubmit),
               if (!creating) ...[
                 const SizedBox(height: Space.sm),
                 TextButton(onPressed: busy ? null : onForgot, child: const Text('Forgotten your password?')),
               ],
-              if (providers.any) ...[
+              if (providers.any && !side) ...[
                 const SizedBox(height: Space.xl),
                 const _OrDivider(label: 'or continue with'),
                 const SizedBox(height: Space.lg),
@@ -555,14 +577,44 @@ class _Form extends StatelessWidget {
                 ),
               ],
             ],
-            const SizedBox(height: Space.xl),
-            Text(
-              'Play responsibly. Lottery plays cost money and most plays do not win a prize. '
-              'You can set deposit limits, take a break or self-exclude at any time from your account.',
-              style: t.bodySmall,
-            ),
           ],
         ),
+      ),
+    );
+    if (!side || phoneStep || !providers.any) return form;
+    final c = context.colors;
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(child: form),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: Space.xl),
+            child: VerticalDivider(width: 1, color: c.border),
+          ),
+          SizedBox(
+            width: 280,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'OR CONTINUE WITH',
+                  textAlign: TextAlign.center,
+                  style: t.labelSmall?.copyWith(color: c.inkMuted, letterSpacing: 1),
+                ),
+                const SizedBox(height: Space.lg),
+                _ProviderButtons(
+                  providers: providers,
+                  googleButton: googleButton,
+                  busy: busy,
+                  onGoogle: onGoogle,
+                  onApple: onApple,
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

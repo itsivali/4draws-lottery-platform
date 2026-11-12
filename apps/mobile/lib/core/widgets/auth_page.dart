@@ -9,7 +9,14 @@ import 'reveal.dart';
 /// of it, on one white card with a deep shadow. Sign-in, create account and the password-reset screens share it, on
 /// phones and on wide screens alike. The card carries its own heading; the mark stands above it in white.
 class AuthPage extends StatelessWidget {
-  const AuthPage({super.key, required this.title, required this.lead, required this.child, this.footer});
+  const AuthPage({
+    super.key,
+    required this.title,
+    required this.lead,
+    required this.child,
+    this.footer,
+    this.maxWidth = cardWidth,
+  });
 
   final String title;
   final String lead;
@@ -20,7 +27,13 @@ class AuthPage extends StatelessWidget {
   /// Under the card, on the colour (a quiet link, a line of small print).
   final Widget? footer;
 
-  static const _cardWidth = 440.0;
+  static const _footerWidth = 640.0;
+
+  /// The card's width when the form is one column.
+  static const cardWidth = 440.0;
+
+  /// The widest the card grows (a form with something beside it asks for more).
+  final double maxWidth;
 
   @override
   Widget build(BuildContext context) {
@@ -55,49 +68,60 @@ class AuthPage extends StatelessWidget {
             ),
             SafeArea(
               child: Center(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.symmetric(horizontal: Space.lg, vertical: Space.xl),
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: _cardWidth),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Center(child: BrandMark(height: 40, wordmarkColor: c.onHero)),
-                        const SizedBox(height: Space.xl),
-                        Reveal(
-                          child: DecoratedBox(
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(Radii.xl),
-                              boxShadow: Elevation.sheet(c),
-                            ),
-                            child: Material(
-                              color: c.surface,
-                              borderRadius: BorderRadius.circular(Radii.xl),
-                              clipBehavior: Clip.antiAlias,
-                              child: Padding(
-                                padding: const EdgeInsets.all(Space.xl),
-                                // the card grows and shrinks smoothly as the form changes (sign in ↔ create account)
-                                child: AnimatedSize(
-                                  duration: context.reduceMotion ? Duration.zero : Motion.emphasis,
-                                  curve: Motion.settle,
-                                  alignment: Alignment.topCenter,
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                                    children: [
-                                      Semantics(header: true, child: Text(title, style: t.headlineMedium)),
-                                      const SizedBox(height: Space.xs),
-                                      Text(lead, style: t.bodyMedium?.copyWith(color: c.inkMuted)),
-                                      const SizedBox(height: Space.xl),
-                                      child,
-                                    ],
+                // a long form (create account) scrolls with the wheel, a finger or the keyboard, but shows no scroll
+                // bar: a grey bar down the side of the brand colour looked like a fault (owner, 2026-11-12)
+                child: ScrollConfiguration(
+                  behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.symmetric(horizontal: Space.lg, vertical: Space.md),
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(maxWidth: maxWidth > _footerWidth ? maxWidth : _footerWidth),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Center(child: BrandMark(height: 34, wordmarkColor: c.onHero)),
+                          const SizedBox(height: Space.md),
+                          Center(
+                            child: ConstrainedBox(
+                              constraints: BoxConstraints(maxWidth: maxWidth),
+                              child: Reveal(
+                                child: DecoratedBox(
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(Radii.xl),
+                                    boxShadow: Elevation.sheet(c),
+                                  ),
+                                  child: Material(
+                                    color: c.surface,
+                                    borderRadius: BorderRadius.circular(Radii.xl),
+                                    clipBehavior: Clip.antiAlias,
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(Space.xl),
+                                      // the card grows and shrinks smoothly as the form changes (sign in ↔ create account)
+                                      child: AnimatedSize(
+                                        duration: context.reduceMotion ? Duration.zero : Motion.emphasis,
+                                        curve: Motion.settle,
+                                        alignment: Alignment.topCenter,
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                                          children: [
+                                            Semantics(header: true, child: Text(title, style: t.headlineSmall)),
+                                            const SizedBox(height: Space.xs),
+                                            Text(lead, style: t.bodyMedium?.copyWith(color: c.inkMuted)),
+                                            const SizedBox(height: Space.lg),
+                                            child,
+                                          ],
+                                        ),
+                                      ),
+                                    ),
                                   ),
                                 ),
                               ),
                             ),
                           ),
-                        ),
-                        if (footer != null) ...[const SizedBox(height: Space.lg), footer!],
-                      ],
+                          // the small print may run wider than a one-column card, so it takes fewer lines
+                          if (footer != null) ...[const SizedBox(height: Space.md), footer!],
+                        ],
+                      ),
                     ),
                   ),
                 ),

@@ -93,7 +93,8 @@ void main() {
     await t.pumpAndSettle();
     expect(find.text('This number already has an account'), findsOneWidget);
     expect(find.text('Sign in with that number and its password instead.'), findsOneWidget);
-    await t.tap(find.text('Sign in another way'));
+    // the button may be below the fold on a phone: scroll to it, as a player would
+    await tapVisible(t, find.text('Sign in another way'));
     await t.pumpAndSettle();
     expect(find.text('Good to see you'), findsOneWidget);
     expect(find.text('Continue with Google'), findsOneWidget);
