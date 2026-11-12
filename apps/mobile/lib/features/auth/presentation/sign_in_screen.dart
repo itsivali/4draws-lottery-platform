@@ -300,7 +300,7 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
       child: AuthPage(
         title: heading.title,
         lead: heading.lead,
-        maxWidth: side ? 800 : AuthPage.cardWidth,
+        maxWidth: side ? 840 : AuthPage.cardWidth,
         // under the card, on the colour: the form itself stays short enough to sit in the middle of a laptop screen
         // without scrolling (owner, 2026-11-12)
         footer: Column(
@@ -592,8 +592,9 @@ class _Form extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: Space.xl),
             child: VerticalDivider(width: 1, color: c.border),
           ),
+          // wide enough for Google's own button, which is drawn at a fixed 300 (google_button_web.dart)
           SizedBox(
-            width: 280,
+            width: 320,
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.stretch,

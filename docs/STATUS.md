@@ -75,6 +75,12 @@ Read this first at the start of every session.
   origins. Still to do, in order: register the paybill (C2B) addresses again on the new host; Search Console change
   of address; verify `4draws.co.ke` with the mail provider and move `SMTP_FROM` (it is `4draws
   <noreply@tajirika.co.ke>`); sign-in providers' origins. `docs/runbooks/domain-cutover.md`.
+- **Google sign-in for players (2026-11-12):** on, Apple off. `GOOGLE_CLIENT_ID` on `lottery-api` is the OAuth web
+  client "4draws web" (origins `https://4draws.co.ke`, `https://tajirika.co.ke`); an Android client "4draws Android
+  (upload key)" exists for `ke.co.fourdraws.app` with the upload key's SHA-1. Still the owner's: the Google project's
+  consent screen is in **Testing** (only listed test users can sign in) and is named "Lottery back office"; publish
+  it after completing Branding. Once the app is on Play, add a second Android client with Play App Signing's SHA-1
+  (Play Console → App integrity), or Google sign-in fails in the store build. No `APPLE_*` setting is set.
 - **Play Console (2026-11-11):** the owner's developer account is a personal one ("willis ivali"). The app is to be
   created as 4draws, `ke.co.fourdraws.app`, English (UK), App, Free; the three declarations are the owner's to
   accept. A release build signed with the upload key builds locally. Not yet possible: production release (needs

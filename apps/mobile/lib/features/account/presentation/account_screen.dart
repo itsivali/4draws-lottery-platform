@@ -152,21 +152,13 @@ class AccountScreen extends ConsumerWidget {
         Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            // the brand's indigo, as every other outlined button: signing out loses nothing, so it is not red (owner,
+            // 2026-11-12; red is kept for what cannot be undone)
             OutlinedButton.icon(
-              style: OutlinedButton.styleFrom(
-                foregroundColor: c.error,
-                side: BorderSide(color: c.error),
-              ),
               icon: const Icon(Icons.logout_rounded),
               label: const Text('Sign out'),
               onPressed: () async {
-                final ok = await confirmAction(
-                  context,
-                  title: 'Sign out?',
-                  facts: const [],
-                  confirmLabel: 'Sign out',
-                  destructive: true,
-                );
+                final ok = await confirmAction(context, title: 'Sign out?', facts: const [], confirmLabel: 'Sign out');
                 if (ok) await ref.read(sessionManagerProvider).signOut();
               },
             ),
