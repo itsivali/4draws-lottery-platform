@@ -92,9 +92,10 @@ class FactRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final t = Theme.of(context).textTheme;
     final style = mono ? t.bodySmall?.copyWith(fontFamily: AppType.mono, color: context.colors.ink) : t.titleMedium;
-    return MergeSemantics(
+    final fact = MergeSemantics(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Text(label, style: t.labelSmall),
           const SizedBox(height: Space.xxs),
@@ -102,6 +103,14 @@ class FactRow extends StatelessWidget {
         ],
       ),
     );
+    // a value that can be selected is something to touch, so it is at least 48 dp tall (Play's pre-launch report
+    // flags smaller touch targets)
+    return selectable
+        ? ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: Breakpoints.minTouch),
+            child: fact,
+          )
+        : fact;
   }
 }
 

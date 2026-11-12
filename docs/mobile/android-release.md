@@ -14,7 +14,7 @@ safety form are S10 (`docs/release/store-submission-checklist.md`, to come).
 | Version name | the tag without its `v` (`v1.2.0` → `1.2.0`), else `pubspec.yaml` | same |
 | Signing | the upload key, or the build stops; never the debug key | `build.gradle.kts` |
 | Backup | none: `allowBackup=false`, and the backup and device-transfer rules exclude everything | `AndroidManifest.xml`, `res/xml/` |
-| Permissions | `INTERNET` only | `AndroidManifest.xml` |
+| Permissions | `INTERNET`, plus `USE_BIOMETRIC` and `USE_FINGERPRINT`, which the secure-storage plugin declares (the app never asks for a fingerprint) | `AndroidManifest.xml`, merged from plugins |
 
 The app keeps a session and a per-install device fingerprint. A backup restored on another phone would carry a session
 that nobody signed in to there, so nothing is backed up. A player on a new phone signs in again.
@@ -79,3 +79,21 @@ Google's app signing key.
 - the SDK levels are no longer pinned;
 - backup is allowed;
 - CI no longer sets the build number.
+
+## Checks before an upload (what Play tests)
+
+Run on the signed bundle and the code it was built from (last run 2026-11-12, build 4: all pass):
+
+| Play checks | How we check it here |
+|---|---|
+| The bundle is well formed | `bundletool validate --bundle=<aab>` (the jar is in the Gradle cache) |
+| Package, version code, target SDK 36, not debuggable, no backup | `bundletool dump manifest --bundle=<aab>` |
+| Signed with the upload key | `keytool -printcert -jarfile <aab>` |
+| 64-bit code, and 16 KB memory pages (required when targeting Android 15 or later) | every `arm64-v8a` and `x86_64` library's `LOAD` alignment from `readelf -lW` is `0x4000` or more |
+| Native debug symbols and the R8 mapping are in the bundle | `BUNDLE-METADATA/` holds `debugsymbols/` and `obfuscation/proguard.map` |
+| Fatal lint errors | `lintVitalRelease` runs inside `flutter build appbundle`; its report must say "No issues found" |
+| Pre-launch report, accessibility: touch targets of 48 dp, labels, text contrast | `test/app/play_prelaunch_accessibility_test.dart`, on every screen |
+| Pre-launch report, crashes on real devices | not checkable here: no emulator or device on the build machine. Play runs it on upload to a testing track |
+
+Play's robot cannot get past sign-in on its own. Give it a test account under *App content → App access* before
+relying on the pre-launch report.
