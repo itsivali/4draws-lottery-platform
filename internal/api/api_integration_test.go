@@ -20,6 +20,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -91,6 +92,31 @@ func (fakeOIDC) VerifyIDToken(_ context.Context, _, token, nonce string) (string
 		return "", errors.New("bad token")
 	}
 	return sub, nil
+}
+
+// VerifyIDTokenClaims gives the token's claims: "ok:<sub>", optionally followed by ";email=<address>" (an address
+// Google has verified), ";unverified" (it has not) and ";hd=<domain>" (a Google Workspace account).
+func (f fakeOIDC) VerifyIDTokenClaims(ctx context.Context, provider, token, nonce string) (jwt.MapClaims, error) {
+	parts := strings.Split(token, ";")
+	sub, err := f.VerifyIDToken(ctx, provider, parts[0], nonce)
+	if err != nil {
+		return nil, err
+	}
+	claims := jwt.MapClaims{"sub": sub}
+	for _, p := range parts[1:] {
+		switch {
+		case strings.HasPrefix(p, "email="):
+			claims["email"] = strings.TrimPrefix(p, "email=")
+			if _, set := claims["email_verified"]; !set {
+				claims["email_verified"] = true
+			}
+		case p == "unverified":
+			claims["email_verified"] = false
+		case strings.HasPrefix(p, "hd="):
+			claims["hd"] = strings.TrimPrefix(p, "hd=")
+		}
+	}
+	return claims, nil
 }
 
 // kycQueue stands in for River: it remembers enqueued checks so a test can run them when it chooses.
@@ -856,6 +882,64 @@ func TestAPI_PaybillHooksNeedTheSecretPathAndAnswerDaraja(t *testing.T) {
 	}
 	if code, _ := e.hook(t, base+"/status-timeout", `not json`); code != http.StatusOK {
 		t.Fatalf("status timeout: %d", code)
+	}
+}
+
+func TestAPI_GoogleSignsInTheAccountThatHasItsEmailAddress(t *testing.T) {
+	e := setup(t)
+	s := e.signIn(t) // an account made with a phone number, a password and an email address
+	user := e.userID(t, s)
+	gmail := "jane.wanjiru.test@gmail.com"
+	if _, err := e.pool.Exec(context.Background(), `UPDATE identity.users SET email = $2 WHERE id = $1`, user, gmail); err != nil {
+		t.Fatal(err)
+	}
+	dev := map[string]any{"fingerprint": "fp-google", "platform": "web"}
+	sso := func(token string) resp {
+		return e.do(t, http.MethodPost, "/v1/auth/sso/google", "", map[string]any{"id_token": token, "nonce": "n1", "device": dev})
+	}
+	// an address Google has not verified, one it is not the authority for, and another person's address: no account
+	for name, token := range map[string]string{
+		"unverified":            "ok:g-1;email=" + gmail + ";unverified",
+		"not Google's to vouch": "ok:g-2;email=jane@example.com",
+		"another address":       "ok:g-3;email=someone.else@gmail.com",
+		"no address":            "ok:g-4",
+	} {
+		if r := sso(token); r.Code != http.StatusConflict || !hasType(r, "sso-not-linked") {
+			t.Fatalf("%s: %d %s", name, r.Code, r.Raw)
+		}
+	}
+	// the Google account with the account's own address signs it in, in whatever case Google spells it
+	r := sso("ok:g-jane;email=Jane.Wanjiru.Test@Gmail.com")
+	if r.Code != http.StatusOK || r.Body["access_token"] == nil {
+		t.Fatalf("sign in by email: %d %s", r.Code, r.Raw)
+	}
+	acct := e.do(t, http.MethodGet, "/v1/account", r.Body["access_token"].(string), nil)
+	if acct.Code != http.StatusOK || acct.Body["user_id"] != user || acct.Body["msisdn"] != s.msisdn {
+		t.Fatalf("signed in to %s, want the existing account %s", acct.Raw, user)
+	}
+	// linked once, and audited; the next sign-in finds the link and needs no address at all
+	var links, audited int
+	if err := e.pool.QueryRow(context.Background(), `SELECT (SELECT count(*) FROM identity.auth_identities WHERE user_id = $1 AND provider = 'google' AND subject = 'g-jane'),
+		(SELECT count(*) FROM audit.audit_log WHERE action = 'sso.linked_by_email' AND entity_id = $1::text)`, user).Scan(&links, &audited); err != nil || links != 1 || audited != 1 {
+		t.Fatalf("links %d, audited %d (%v)", links, audited, err)
+	}
+	if r := sso("ok:g-jane"); r.Code != http.StatusOK {
+		t.Fatalf("second sign-in: %d %s", r.Code, r.Raw)
+	}
+	// a Workspace account is vouched for by its domain
+	other := e.signIn(t)
+	if _, err := e.pool.Exec(context.Background(), `UPDATE identity.users SET email = 'amina@firm.example' WHERE id = $1`, e.userID(t, other)); err != nil {
+		t.Fatal(err)
+	}
+	if r := sso("ok:g-amina;email=amina@firm.example;hd=firm.example"); r.Code != http.StatusOK {
+		t.Fatalf("workspace account: %d %s", r.Code, r.Raw)
+	}
+	// a suspended account is not signed in this way either
+	if _, err := e.pool.Exec(context.Background(), `UPDATE identity.users SET status = 'suspended', email = 'held.test@gmail.com' WHERE id = $1`, e.userID(t, e.signIn(t))); err != nil {
+		t.Fatal(err)
+	}
+	if r := sso("ok:g-held;email=held.test@gmail.com"); r.Code == http.StatusOK {
+		t.Fatalf("a suspended account signed in: %s", r.Raw)
 	}
 }
 

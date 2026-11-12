@@ -3,6 +3,7 @@ package identity
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -18,23 +19,47 @@ type claimsVerifier interface {
 	VerifyIDTokenClaims(ctx context.Context, provider, idToken, nonce string) (jwt.MapClaims, error)
 }
 
-// verifyIDToken returns the token's subject and, for Google, the account's photo (ADR 0035).
-func (s *Service) verifyIDToken(ctx context.Context, provider, idToken, nonce string) (sub, photo string, err error) {
+// verifyIDToken returns the token's subject and, for Google, the account's photo (ADR 0035) and the email address
+// Google vouches for (ADR 0039; "" when it vouches for none).
+func (s *Service) verifyIDToken(ctx context.Context, provider, idToken, nonce string) (sub, photo, email string, err error) {
 	if cv, ok := s.oidc.(claimsVerifier); ok {
 		claims, err := cv.VerifyIDTokenClaims(ctx, provider, idToken, nonce)
 		if err != nil {
-			return "", "", errors.Join(ErrTokenInvalid, err)
+			return "", "", "", errors.Join(ErrTokenInvalid, err)
 		}
 		if sub, _ = claims.GetSubject(); sub == "" {
-			return "", "", ErrTokenInvalid
+			return "", "", "", ErrTokenInvalid
 		}
-		return sub, GooglePhoto(provider, claims), nil
+		return sub, GooglePhoto(provider, claims), GoogleEmail(provider, claims), nil
 	}
 	sub, err = s.oidc.VerifyIDToken(ctx, provider, idToken, nonce)
 	if err != nil || sub == "" {
-		return "", "", errors.Join(ErrTokenInvalid, err)
+		return "", "", "", errors.Join(ErrTokenInvalid, err)
 	}
-	return sub, "", nil
+	return sub, "", "", nil
+}
+
+// GoogleEmail returns the email address of a verified Google ID token when Google is the authority for it: the
+// token says the address is verified, and it is a gmail.com address or belongs to a Google Workspace domain (the hd
+// claim). Any other address on a Google account proves only that someone once received a message there, so it is
+// not returned. Lower-cased, as accounts store theirs.
+func GoogleEmail(provider string, claims jwt.MapClaims) string {
+	if provider != "google" {
+		return ""
+	}
+	if v, _ := claims["email_verified"].(bool); !v {
+		if sv, _ := claims["email_verified"].(string); sv != "true" {
+			return ""
+		}
+	}
+	email, _ := claims["email"].(string)
+	email = strings.ToLower(strings.TrimSpace(email))
+	hd, _ := claims["hd"].(string)
+	vouched := strings.HasSuffix(email, "@gmail.com") || hd != ""
+	if email == "" || len(email) > 254 || !vouched {
+		return ""
+	}
+	return email
 }
 
 // keepPhoto records the photo of the Google account the player signed in with; a Google account without one clears
@@ -50,25 +75,46 @@ func keepPhoto(ctx context.Context, q *store.Queries, userID, provider, photo st
 	return q.SetPhoto(ctx, store.SetPhotoParams{PhotoUrl: p, ID: userID})
 }
 
-// SignInSSO signs in an already-linked Google or Apple identity. An unlinked identity must first sign in with phone
-// and password, complete KYC and then link (SSO never creates an account).
+// SignInSSO signs in a Google or Apple identity. One already linked to an account signs that account in. A Google
+// identity linked to none signs in the account that has its email address, and is linked to it from then on
+// (ADR 0039): the owner of an address can already take the account over with a password-reset link, so this gives
+// them nothing new. Otherwise ErrSSONotLinked, and the app offers to create an account (SignupSSO).
 func (s *Service) SignInSSO(ctx context.Context, provider, idToken, nonce string, dev Device) (Tokens, error) {
-	sub, photo, err := s.verifyIDToken(ctx, provider, idToken, nonce)
+	sub, photo, email, err := s.verifyIDToken(ctx, provider, idToken, nonce)
 	if err != nil {
 		return Tokens{}, err
 	}
 	verdict := s.verdict(ctx, dev)
 	var tokens Tokens
-	err = s.withTx(ctx, func(_ pgx.Tx, q *store.Queries, now time.Time) error {
+	err = s.withTx(ctx, func(tx pgx.Tx, q *store.Queries, now time.Time) error {
 		userID, err := q.FindAuthIdentity(ctx, store.FindAuthIdentityParams{Provider: provider, Subject: sub})
+		linkedNow := false
 		if errors.Is(err, pgx.ErrNoRows) {
-			return ErrSSONotLinked
-		}
-		if err != nil {
+			if email == "" {
+				return ErrSSONotLinked
+			}
+			u, err := q.UserByEmail(ctx, email)
+			if errors.Is(err, pgx.ErrNoRows) {
+				return ErrSSONotLinked
+			}
+			if err != nil {
+				return err
+			}
+			userID, linkedNow = u.ID, true
+		} else if err != nil {
 			return err
 		}
 		if err := s.assertActive(ctx, q, userID); err != nil {
 			return err
+		}
+		if linkedNow {
+			if err := q.InsertAuthIdentity(ctx, store.InsertAuthIdentityParams{UserID: userID, Provider: provider, Subject: sub}); err != nil {
+				return err
+			}
+			if err := s.audit.Record(ctx, tx, audit.Event{ActorType: audit.Player, ActorID: userID, Action: "sso.linked_by_email",
+				EntityType: "user", EntityID: userID, Details: map[string]any{"provider": provider}}); err != nil {
+				return err
+			}
 		}
 		if err := keepPhoto(ctx, q, userID, provider, photo); err != nil {
 			return err
@@ -92,7 +138,7 @@ func (s *Service) LinkSSO(ctx context.Context, userID, provider, idToken, nonce 
 		if !u.PhoneVerified {
 			return ErrPhoneNotVerified
 		}
-		sub, photo, err := s.verifyIDToken(ctx, provider, idToken, nonce)
+		sub, photo, _, err := s.verifyIDToken(ctx, provider, idToken, nonce)
 		if err != nil {
 			return err
 		}
@@ -120,7 +166,7 @@ func (s *Service) SignupSSO(ctx context.Context, provider, idToken, nonce, rawMS
 	if err != nil {
 		return Tokens{}, err
 	}
-	sub, photo, err := s.verifyIDToken(ctx, provider, idToken, nonce)
+	sub, photo, _, err := s.verifyIDToken(ctx, provider, idToken, nonce)
 	if err != nil {
 		return Tokens{}, err
 	}

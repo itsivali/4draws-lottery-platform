@@ -81,6 +81,9 @@ Read this first at the start of every session.
   consent screen is in **Testing** (only listed test users can sign in) and is named "Lottery back office"; publish
   it after completing Branding. Once the app is on Play, add a second Android client with Play App Signing's SHA-1
   (Play Console → App integrity), or Google sign-in fails in the store build. No `APPLE_*` setting is set.
+- **Google sign-in finds the account by its email (2026-11-12, ADR 0039):** a Google identity not yet linked signs
+  in the account that has its Google-verified address (gmail.com or a Workspace domain) and is linked to it; only
+  with no such account is a new one offered. Email addresses are still not verified at sign-up.
 - **Play Console (2026-11-11):** the owner's developer account is a personal one ("willis ivali"). The app is to be
   created as 4draws, `ke.co.fourdraws.app`, English (UK), App, Free; the three declarations are the owner's to
   accept. A release build signed with the upload key builds locally. Not yet possible: production release (needs

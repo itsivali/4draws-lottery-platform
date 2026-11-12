@@ -305,8 +305,10 @@ paths:
       tags: [auth]
       summary: Sign in with a linked Google or Apple identity
       description: |
-        The ID token is checked against the provider's keys (issuer, audience, expiry, nonce). An identity with no
-        account gets 409 `sso-not-linked`: the app then asks for a phone number and calls `/signup` with the same token.
+        The ID token is checked against the provider's keys (issuer, audience, expiry, nonce). A Google identity
+        linked to no account signs in the account that has its Google-verified email address and is linked to it
+        (ADR 0039). An identity with no account gets 409 `sso-not-linked`: the app then asks for a phone number and
+        calls `/signup` with the same token.
       security: []
       parameters:
         - { $ref: "#/components/parameters/IdempotencyKey" }

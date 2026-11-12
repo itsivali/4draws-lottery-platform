@@ -56,7 +56,9 @@ the iOS URL scheme above is the one thing that needs a build.
 
 1. The app gets an ID token from Google's or Apple's own sign-in, bound to a random nonce (Apple is given its SHA-256).
 2. `POST /v1/auth/sso/{provider}` with the token, the nonce and the device. The API checks signature, issuer,
-   audience, expiry and nonce. Bound to an account: signed in. Not bound: 409 `sso-not-linked`.
+   audience, expiry and nonce. Bound to an account: signed in. Not bound, but a Google token whose verified
+   address is on an account: that account is signed in and the identity bound to it (ADR 0039). Otherwise 409
+   `sso-not-linked`.
 3. The app asks for the M-Pesa number and the 18+ confirmation; `POST /v1/auth/sso/{provider}/signup` with the same
    token creates the account (no password; the number a claim until the first top-up proves it). The provider's tokens
    are short-lived (Apple's ten minutes): a player who dawdles is sent back to start again.
