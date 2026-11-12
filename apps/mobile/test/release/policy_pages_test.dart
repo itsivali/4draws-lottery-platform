@@ -12,7 +12,7 @@ void main() {
   for (final slug in slugs) {
     test('/$slug/ is a complete page with its canonical address, linked from the others', () {
       final html = File('web/$slug/index.html').readAsStringSync();
-      expect(html, contains('<link rel="canonical" href="https://tajirika.co.ke/$slug/">'));
+      expect(html, contains('<link rel="canonical" href="https://4draws.co.ke/$slug/">'));
       expect(html, contains('class="notice"'));
       expect(html, contains('not yet licensed'), reason: 'the service status is stated on every page');
       expect(html, contains('4 DRAWS TICKET LTD'), reason: "the operator's legal name");
@@ -22,7 +22,7 @@ void main() {
       for (final other in slugs) {
         expect(html, contains('href="/$other/"'), reason: 'links to /$other/');
       }
-      expect(sitemap, contains('<loc>https://tajirika.co.ke/$slug/</loc>'));
+      expect(sitemap, contains('<loc>https://4draws.co.ke/$slug/</loc>'));
     });
   }
 

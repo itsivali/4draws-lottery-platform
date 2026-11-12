@@ -173,11 +173,11 @@ sandbox cannot prompt the seeded number). Its identity submission then waits in 
 
 | Service | Address | Sign-in |
 |---|---|---|
-| `lottery-api` | https://api.tajirika.co.ke | the API |
-| `lottery-web` | https://tajirika.co.ke (www redirects there): the player web app | players' own accounts |
-| `lottery-backoffice` | https://backoffice.tajirika.co.ke: the back office | **admin@tajirika.co.ke** (shown as "Administrator") is the bootstrap administrator; their first password is `STAFF_BOOTSTRAP_PASSWORD` (a Render secret, changed at the first sign-in). Google and Apple sign-in work once the client ids are configured (`docs/runbooks/back-office.md`). |
+| `lottery-api` | https://api.4draws.co.ke | the API |
+| `lottery-web` | https://4draws.co.ke (www redirects there): the player web app | players' own accounts |
+| `lottery-backoffice` | https://backoffice.4draws.co.ke: the back office | **admin@tajirika.co.ke** (shown as "Administrator") is the bootstrap administrator; their first password is `STAFF_BOOTSTRAP_PASSWORD` (a Render secret, changed at the first sign-in). Google and Apple sign-in work once the client ids are configured (`docs/runbooks/back-office.md`). |
 
-The domain `tajirika.co.ke` is registered with Safaricom, whose DNS holds the records (an A record for the bare domain,
+The domain `4draws.co.ke` is registered with Safaricom, whose DNS holds the records (an A record for the bare domain,
 CNAMEs for `www`, `api` and `backoffice` to the services' onrender.com addresses, which keep working). Deployment is
 described by `render.yaml` (a Blueprint). Secrets are set in the Render dashboard, never in the
 repository; `docs/ci-secrets.md` lists what CI needs.

@@ -38,10 +38,10 @@ class AppConfig {
   final Uri? backOfficeUrl;
 
   /// The public site with the privacy policy, terms, responsible gambling and account deletion pages (`SITE_URL`);
-  /// tajirika.co.ke when the build names none.
+  /// 4draws.co.ke when the build names none.
   final Uri? siteUrl;
 
-  static final _defaultSite = Uri.parse('https://tajirika.co.ke');
+  static final _defaultSite = Uri.parse('https://4draws.co.ke');
 
   /// The address of a public page, such as `privacy` (S8: apps/mobile/web/`page`/).
   Uri page(String slug) => (siteUrl ?? _defaultSite).resolve('/$slug/');

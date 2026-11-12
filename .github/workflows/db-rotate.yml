@@ -31,7 +31,7 @@ jobs:
       SERVICE_ID: srv-dbe9gavb9u1s738ttucg
       DB_NAME: lottery-db
       ROTATE_WITHIN_DAYS: "3"
-      HEALTH_URL: https://api.tajirika.co.ke/readyz
+      HEALTH_URL: https://api.4draws.co.ke/readyz
       WORK: ${{ github.workspace }}/.db-rotate
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

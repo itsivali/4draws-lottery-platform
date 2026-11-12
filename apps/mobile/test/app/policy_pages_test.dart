@@ -25,7 +25,7 @@ void main() {
     ]) {
       await tapVisible(t, find.text(title));
       await t.pumpAndSettle();
-      expect(backend.opened.last, Uri.parse('https://tajirika.co.ke/$slug/'), reason: title);
+      expect(backend.opened.last, Uri.parse('https://4draws.co.ke/$slug/'), reason: title);
     }
   });
 
@@ -36,7 +36,7 @@ void main() {
     await t.pumpAndSettle();
     expect(find.textContaining('the law makes gambling operators keep records'), findsOneWidget);
     await tapVisible(t, find.widgetWithText(TextButton, 'What is kept, and why'));
-    expect(backend.opened.single, Uri.parse('https://tajirika.co.ke/delete-account/'));
+    expect(backend.opened.single, Uri.parse('https://4draws.co.ke/delete-account/'));
   });
 
   testWidgets('a player asks for a copy of their data and is told where it was emailed; a second ask is refused', (

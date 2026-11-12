@@ -1,6 +1,6 @@
 # Runbook: the web app in search
 
-The player web app (`apps/mobile`, Flutter, served by Render at https://tajirika.co.ke) is a single page: crawlers get
+The player web app (`apps/mobile`, Flutter, served by Render at https://4draws.co.ke) is a single page: crawlers get
 `index.html` and little else, so everything search engines and link previews use lives in `apps/mobile/web/`.
 
 ## What is where
@@ -26,13 +26,13 @@ The player web app (`apps/mobile`, Flutter, served by Render at https://tajirika
 - **Addresses:** the app uses path URLs (`/sign-in`, `/reset-password?token=…`), not `/#/…`, since 2026-10-30
   (`usePathUrlStrategy` in `main.dart`; Render rewrites every path to `index.html`). Each screen sets the document
   title ("Wallet · 4draws") through `PageScaffold`.
-- **The back office** (https://backoffice.tajirika.co.ke) stays out of search: `<meta name="robots" content="noindex">`,
+- **The back office** (https://backoffice.4draws.co.ke) stays out of search: `<meta name="robots" content="noindex">`,
   `public/robots.txt` disallows everything, and Render sends `X-Robots-Tag: noindex, nofollow`.
 
 ## After a change
 
 - Changed the landing or the tags: a normal deploy; then **Google Search Console → URL inspection → Request indexing**
-  for `https://tajirika.co.ke/`. (Search Console needs the site verified once: add the `google-site-verification`
+  for `https://4draws.co.ke/`. (Search Console needs the site verified once: add the `google-site-verification`
   meta tag it gives you to `index.html`, or the DNS record at Safaricom.)
 - Changed the share image: share the link once in WhatsApp or X to see the new card; Facebook's and LinkedIn's
   debuggers refresh their cache on request.

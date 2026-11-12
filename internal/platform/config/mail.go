@@ -21,9 +21,9 @@ type Mail struct {
 	From string
 	// KYCReviewTo is who is emailed when an identity submission waits for review; empty means nobody.
 	KYCReviewTo string
-	// BackOfficeURL is the back office's origin, for the links in notices (https://backoffice.tajirika.co.ke).
+	// BackOfficeURL is the back office's origin, for the links in notices (https://backoffice.4draws.co.ke).
 	BackOfficeURL string
-	// WebAppURL is the player web app's origin (https://tajirika.co.ke), for the password-reset links players are
+	// WebAppURL is the player web app's origin (https://4draws.co.ke), for the password-reset links players are
 	// emailed (ADR 0021); unset, players cannot reset a forgotten password themselves.
 	WebAppURL string
 }

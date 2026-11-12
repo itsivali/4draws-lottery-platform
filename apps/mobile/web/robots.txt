@@ -3,4 +3,4 @@ Allow: /
 Disallow: /reset-password
 Disallow: /forgot-password
 
-Sitemap: https://tajirika.co.ke/sitemap.xml
+Sitemap: https://4draws.co.ke/sitemap.xml

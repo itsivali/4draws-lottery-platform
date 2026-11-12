@@ -76,7 +76,7 @@ These are the back office's own client ids. The player apps' Google and Apple si
 `docs/runbooks/player-sign-in.md`.
 
 **Google** (Google Cloud console → APIs & Services → Credentials → Create OAuth client ID → Web application):
-authorised JavaScript origins = the back office's address (`https://backoffice.tajirika.co.ke`) and
+authorised JavaScript origins = the back office's address (`https://backoffice.4draws.co.ke`) and
 `http://localhost:5173` for local testing; no redirect URI is needed (popup). The consent
 screen needs the app name and a support email. The client id goes into `STAFF_GOOGLE_CLIENT_ID` (api) and
 `VITE_GOOGLE_CLIENT_ID` (back office).

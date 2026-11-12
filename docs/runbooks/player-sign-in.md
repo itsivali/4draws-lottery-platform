@@ -11,12 +11,12 @@ The back office's own Google and Apple sign-in (staff) is a separate set of clie
 
 Google Cloud console → APIs & Services. One project (it may be the back office's).
 
-1. **OAuth consent screen:** External; app name 4draws, support email, authorised domain `tajirika.co.ke`, the
+1. **OAuth consent screen:** External; app name 4draws, support email, authorised domain `4draws.co.ke`, the
    privacy policy address. Scopes: only the default `openid`, `email`, `profile`. **Publish** it: in testing, only
    listed test users can sign in. (Non-sensitive scopes need no verification.)
 2. **Credentials → Create OAuth client ID**, three times:
-   - **Web application** "4draws player web": authorised JavaScript origins `https://tajirika.co.ke`,
-     `https://www.tajirika.co.ke` and `http://localhost:8088` (local web app). No redirect URI (popup). Its client id
+   - **Web application** "4draws player web": authorised JavaScript origins `https://4draws.co.ke`,
+     `https://www.4draws.co.ke` and `http://localhost:8088` (local web app). No redirect URI (popup). Its client id
      is `GOOGLE_CLIENT_ID`. The phone apps name it too, as the server the token is for.
    - **Android** "4draws Android": package `ke.co.fourdraws.app` and the SHA-1 of every signing certificate
      (the debug keystore, the upload key and Play App Signing's key, from Play Console → App integrity). No setting
@@ -32,8 +32,8 @@ Apple Developer → Certificates, Identifiers & Profiles → Identifiers.
 1. **App ID** `ke.co.fourdraws.app` with the *Sign in with Apple* capability (the app's entitlements file,
    `apps/mobile/ios/Runner/Runner.entitlements`, already asks for it; Xcode's automatic signing adds it to the profile).
 2. **Services ID** `ke.co.fourdraws.web` with *Sign in with Apple* configured: primary App ID the one above; domains
-   `tajirika.co.ke` and `api.tajirika.co.ke`; return URLs `https://tajirika.co.ke/` (the web app's popup) and
-   `https://api.tajirika.co.ke/auth/apple/android` (the Android app's way back). Its identifier is `APPLE_CLIENT_ID`;
+   `4draws.co.ke` and `api.4draws.co.ke`; return URLs `https://4draws.co.ke/` (the web app's popup) and
+   `https://api.4draws.co.ke/auth/apple/android` (the Android app's way back). Its identifier is `APPLE_CLIENT_ID`;
    the App ID's bundle is `APPLE_BUNDLE_ID`. Apple needs https, so it cannot be tried on localhost.
 
 ## Configuration
@@ -67,7 +67,7 @@ the iOS URL scheme above is the one thing that needs a build.
 
 Players give an email address at sign-up. "Forgotten your password?" on the sign-in screen emails a link to
 `WEB_APP_URL/reset-password?token=…` (30 minutes, once) through the same SMTP as the staff notices; the answer is
-the same whether or not the address has an account. `WEB_APP_URL` (`https://tajirika.co.ke`) must be set on
+the same whether or not the address has an account. `WEB_APP_URL` (`https://4draws.co.ke`) must be set on
 `lottery-api`, else the app says reset by email is not configured. A player with no address (an account from before,
 or a Google or Apple one) adds one under Account → Email address; until then staff reset them with a temporary
 password (below). The back office's Players page shows the address and searches by it.

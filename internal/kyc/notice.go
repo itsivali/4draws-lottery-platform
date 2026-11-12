@@ -66,7 +66,7 @@ func (s *Service) SendReviewNotice(ctx context.Context, checkID, userID string) 
 type MailReviewNotifier struct {
 	Sender mail.Sender
 	To     string
-	// BackOfficeURL is the back office's origin (https://backoffice.tajirika.co.ke).
+	// BackOfficeURL is the back office's origin (https://backoffice.4draws.co.ke).
 	BackOfficeURL string
 }
 

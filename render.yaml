@@ -74,7 +74,7 @@ services:
         sync: false
       - key: ANDROID_PACKAGE
         value: ke.co.fourdraws.app
-      # Browser origins (comma-separated, exact, https): https://tajirika.co.ke and https://backoffice.tajirika.co.ke, plus
+      # Browser origins (comma-separated, exact, https): https://4draws.co.ke and https://backoffice.4draws.co.ke, plus
       # the static sites' onrender.com addresses, which keep working. The phone apps need no entry.
       - key: CORS_ALLOWED_ORIGINS
         sync: false
@@ -82,6 +82,7 @@ services:
       # while there is none and gets STAFF_BOOTSTRAP_PASSWORD as a temporary password (changed at the first sign-in),
       # then invites everyone else from the Staff page. Google and Apple are optional (ADR 0018, the back office's own
       # client ids; docs/runbooks/back-office.md).
+      # an account's sign-in address, not a link: it stays as it was created (the domain moved to 4draws.co.ke later)
       - key: STAFF_BOOTSTRAP_ADMIN
         value: admin@tajirika.co.ke
       - key: STAFF_BOOTSTRAP_PASSWORD
@@ -103,7 +104,7 @@ services:
       - key: DARAJA_BASE_URL
         value: https://sandbox.safaricom.co.ke
       - key: PUBLIC_BASE_URL
-        value: https://api.tajirika.co.ke
+        value: https://api.4draws.co.ke
       # Smallest top-up, whole KES (default 10). KES 1 while the owner tests the apps with M-Pesa (owner, 2026-10-26);
       # the apps read it from GET /v1/wallet, so raising it needs no store release. Plays cost KES 1 from 2026-10-29
       # (migration 00036; the owner's choice, so a shilling is enough to play).
@@ -167,10 +168,10 @@ services:
       - key: KYC_REVIEW_NOTIFY_TO
         value: itsivali@outlook.com
       - key: BACKOFFICE_URL
-        value: https://backoffice.tajirika.co.ke
+        value: https://backoffice.4draws.co.ke
       # the player web app, for the password-reset links players are emailed (ADR 0021)
       - key: WEB_APP_URL
-        value: https://tajirika.co.ke
+        value: https://4draws.co.ke
       - key: SMTP_HOST
         sync: false
       - key: SMTP_PORT
@@ -182,7 +183,7 @@ services:
       - key: SMTP_FROM
         sync: false
 
-  # The player web app (Flutter web) at https://tajirika.co.ke (www redirects there), against https://api.tajirika.co.ke.
+  # The player web app (Flutter web) at https://4draws.co.ke (www redirects there), against https://api.4draws.co.ke.
   # Free static
   # site: Render's build image has no Flutter, so the build fetches the pinned SDK (mise.toml) the first time and reuses
   # it from the build cache afterwards (a second clone into the cached directory fails).
@@ -196,10 +197,10 @@ services:
     staticPublishPath: apps/mobile/build/web
     envVars:
       - key: API_BASE_URL
-        value: https://api.tajirika.co.ke
+        value: https://api.4draws.co.ke
       # the staff back office the web app links to
       - key: BACKOFFICE_URL
-        value: https://backoffice.tajirika.co.ke
+        value: https://backoffice.4draws.co.ke
     routes:
       - type: rewrite
         source: /*
@@ -209,7 +210,7 @@ services:
         name: X-Frame-Options
         value: DENY
 
-  # The staff back office (React) at https://backoffice.tajirika.co.ke, against https://api.tajirika.co.ke. Staff sign in with
+  # The staff back office (React) at https://backoffice.4draws.co.ke, against https://api.4draws.co.ke. Staff sign in with
   # Google or Apple: the same client ids as the api's STAFF_GOOGLE_CLIENT_ID / STAFF_APPLE_CLIENT_ID.
   - type: web
     name: lottery-backoffice
@@ -218,7 +219,7 @@ services:
     staticPublishPath: apps/backoffice/dist
     envVars:
       - key: VITE_API_BASE_URL
-        value: https://api.tajirika.co.ke
+        value: https://api.4draws.co.ke
       - key: VITE_GOOGLE_CLIENT_ID
         sync: false
       - key: VITE_APPLE_CLIENT_ID

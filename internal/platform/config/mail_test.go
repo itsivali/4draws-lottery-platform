@@ -45,7 +45,7 @@ func TestLoad_MailRefusesHalfConfiguration(t *testing.T) {
 		"back office with a path":       {"KYC_REVIEW_NOTIFY_TO": "ops@example.com", "BACKOFFICE_URL": "https://x.example.com/kyc"},
 		"recipient not an address":      {"KYC_REVIEW_NOTIFY_TO": "ops", "BACKOFFICE_URL": "https://x.example.com"},
 		"web app with a path":           {"WEB_APP_URL": "https://x.example.com/app"},
-		"web app not a url":             {"WEB_APP_URL": "tajirika.co.ke"},
+		"web app not a url":             {"WEB_APP_URL": "4draws.co.ke"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			for _, k := range []string{"SMTP_HOST", "SMTP_PORT", "SMTP_FROM", "KYC_REVIEW_NOTIFY_TO", "BACKOFFICE_URL", "WEB_APP_URL"} {

@@ -37,7 +37,7 @@ placeholder nothing answers, so Google sign-in on iOS stays off. Phone sign-in a
    (`docs/runbooks/player-sign-in.md`).
 2. App Store Connect: create the app with that bundle id.
 3. On a Mac with Xcode and `Local.xcconfig` in place:
-   `flutter build ipa --release --build-number=<n> --dart-define=API_BASE_URL=https://api.tajirika.co.ke`. Then
+   `flutter build ipa --release --build-number=<n> --dart-define=API_BASE_URL=https://api.4draws.co.ke`. Then
    upload `build/ios/ipa/*.ipa` with Transporter, or `xcrun altool`.
 4. TestFlight first. Real-money gambling apps need Apple's approval under guideline 5.3 and the licence before the
    review: S10, and Milestone 7 is blocked on licensing.

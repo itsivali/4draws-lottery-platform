@@ -19,7 +19,7 @@ import (
 type Email struct {
 	Sender mail.Sender
 	To     []string
-	// BackOfficeURL is the back office's origin (https://backoffice.tajirika.co.ke); empty leaves the link out.
+	// BackOfficeURL is the back office's origin (https://backoffice.4draws.co.ke); empty leaves the link out.
 	BackOfficeURL string
 }
 

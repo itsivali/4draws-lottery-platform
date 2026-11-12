@@ -1,41 +1,41 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
   <url>
-    <loc>https://tajirika.co.ke/</loc>
+    <loc>https://4draws.co.ke/</loc>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
     <image:image>
-      <image:loc>https://tajirika.co.ke/og-image.png</image:loc>
+      <image:loc>https://4draws.co.ke/og-image.png</image:loc>
       <image:title>4draws: a spin for a shilling, paid with M-Pesa</image:title>
     </image:image>
   </url>
   <url>
-    <loc>https://tajirika.co.ke/sign-in</loc>
+    <loc>https://4draws.co.ke/sign-in</loc>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://tajirika.co.ke/create-account</loc>
+    <loc>https://4draws.co.ke/create-account</loc>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://tajirika.co.ke/privacy/</loc>
+    <loc>https://4draws.co.ke/privacy/</loc>
     <changefreq>monthly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
-    <loc>https://tajirika.co.ke/terms/</loc>
+    <loc>https://4draws.co.ke/terms/</loc>
     <changefreq>monthly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
-    <loc>https://tajirika.co.ke/responsible-gambling/</loc>
+    <loc>https://4draws.co.ke/responsible-gambling/</loc>
     <changefreq>monthly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
-    <loc>https://tajirika.co.ke/delete-account/</loc>
+    <loc>https://4draws.co.ke/delete-account/</loc>
     <changefreq>monthly</changefreq>
     <priority>0.5</priority>
   </url>

@@ -67,6 +67,14 @@ Read this first at the start of every session.
   (`POST /v1/account/data-export`) emails the player a readable report (an HTML page with a table per kind of record)
   and the same data as JSON, to the account's own address, once a day; the ID number as its last three digits. Recorded in `identity.data_exports` and the audit log.
   **Does nothing in production until SMTP is configured** (the route answers 503 and names the privacy address).
+- **Moved to 4draws.co.ke (2026-11-12):** Safaricom repaired the domain's DNS zone (their cPanel refused every record
+  with "the serial argument cannot be empty"; a support ticket fixed it). The records point at Render (`@` A
+  216.24.57.1; `www`, `api`, `backoffice` CNAMEs to the services' onrender.com names), Render issued certificates,
+  and the repository's addresses moved: `PUBLIC_BASE_URL` (M-Pesa callbacks), the apps' API address, links in mail,
+  the canonical address, sitemap, robots.txt and policy pages. `tajirika.co.ke` keeps serving; the API allows both
+  origins. Still to do, in order: register the paybill (C2B) addresses again on the new host; Search Console change
+  of address; verify `4draws.co.ke` with the mail provider and move `SMTP_FROM` (it is `4draws
+  <noreply@tajirika.co.ke>`); sign-in providers' origins. `docs/runbooks/domain-cutover.md`.
 - **Play Console (2026-11-11):** the owner's developer account is a personal one ("willis ivali"). The app is to be
   created as 4draws, `ke.co.fourdraws.app`, English (UK), App, Free; the three declarations are the owner's to
   accept. A release build signed with the upload key builds locally. Not yet possible: production release (needs
