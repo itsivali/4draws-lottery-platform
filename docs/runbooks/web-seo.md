@@ -17,10 +17,11 @@ The player web app (`apps/mobile`, Flutter, served by Render at https://4draws.c
   `design-system/lottery-platform/logo/4draws-og.svg`.
 - **`robots.txt`** (allow all but the reset pages) and **`sitemap.xml`** (the root, `/sign-in` and `/create-account`).
 - **`manifest.json`:** the installable app's name, description, colours and categories.
-- **Favicon** (the icon beside the result in Google): `favicon.ico` (48/32/16, made with
-  `magick icons/Icon-512.png -background none -define icon:auto-resize=48,32,16 favicon.ico`), `favicon.png` (48) and
-  `icons/Icon-192.png` are linked first; Google wants a square ICO or PNG of 48 px or more and does not list SVG, so
-  `favicon.svg` comes last. Render serves a file that exists before rewriting to `index.html`, so `/favicon.ico` is
+- **Favicon** (the browser tab, and the icon beside the result in Google): `favicon.ico` (16/32/48), `favicon.svg`
+  and `favicon.png` (48), all rendered by `scripts/gen-icons.sh` from the small mark (`4draws-favicon.svg`). The player
+  web app, its policy pages and the back office link the same three files in the same order, each with `?v=N`; raise
+  N everywhere when the mark changes, because browsers keep a tab icon for a long time. Google wants a square ICO or
+  PNG of 48 px or more. Render serves a file that exists before rewriting to `index.html`, so `/favicon.ico` is
   the icon, not the page. Google picks the icon up when it next crawls the home page: days to weeks, sooner after
   "Request indexing" in Search Console. It shows one icon per hostname.
 - **Addresses:** the app uses path URLs (`/sign-in`, `/reset-password?token=…`), not `/#/…`, since 2026-10-30

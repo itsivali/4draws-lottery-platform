@@ -34,7 +34,7 @@ png "$SQUARE" 512 "$W/icons/Icon-maskable-512.png"
 B=apps/backoffice/public
 mkdir -p "$B"
 cp "$FAV" "$B/favicon.svg"
-png "$FAV" 32 "$B/favicon-32.png"
+png "$FAV" 48 "$B/favicon.png"
 ico "$B/favicon.ico"
 png "$SQUARE" 180 "$B/apple-touch-icon.png"
 
