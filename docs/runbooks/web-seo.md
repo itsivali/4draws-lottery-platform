@@ -18,7 +18,7 @@ The player web app (`apps/mobile`, Flutter, served by Render at https://4draws.c
 - **`robots.txt`** (allow all but the reset pages) and **`sitemap.xml`** (the root, `/sign-in` and `/create-account`).
 - **`manifest.json`:** the installable app's name, description, colours and categories.
 - **Favicon** (the browser tab, and the icon beside the result in Google): `favicon.ico` (16/32/48), `favicon.svg`
-  and `favicon.png` (48), all rendered by `scripts/gen-icons.sh` from the small mark (`4draws-favicon.svg`). The player
+  and `favicon.png` (48), all rendered by `scripts/gen-icons.sh` from the app's logo (`4draws-mark.svg`). The player
   web app, its policy pages and the back office link the same three files in the same order, each with `?v=N`; raise
   N everywhere when the mark changes, because browsers keep a tab icon for a long time. Google wants a square ICO or
   PNG of 48 px or more. Render serves a file that exists before rewriting to `index.html`, so `/favicon.ico` is

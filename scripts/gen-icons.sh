@@ -4,8 +4,8 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 LOGO=design-system/lottery-platform/logo
-MARK=$LOGO/4draws-mark.svg          # rounded tile: web icons (192 and up), Android legacy launcher icons
-FAV=$LOGO/4draws-favicon.svg        # the 4 alone, bold: browser tabs and anything under 64 px, where the ring would blur
+MARK=$LOGO/4draws-mark.svg          # rounded tile: web icons, Android legacy launcher icons
+FAV=$MARK                           # the browser tab shows the app's logo itself (owner's decision, 2026-11-13)
 SQUARE=$LOGO/4draws-mark-square.svg # full-bleed: iOS (rounds its own corners), maskable web icons
 png() { rsvg-convert -w "$2" -h "$2" "$1" -o "$3"; }
 
