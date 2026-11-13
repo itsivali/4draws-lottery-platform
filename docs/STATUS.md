@@ -88,6 +88,9 @@ Read this first at the start of every session.
   whatever is configured (`SignInProviders.appleShelved` in the app; the back office reads no Apple client id). The
   API still has the code and no `APPLE_*` setting. To bring it back, see ADR 0020. Apple requires it of an iOS app
   that offers Google sign-in, so it returns before any App Store submission.
+- **Winners are told by email (2026-11-13, ADR 0042):** when a draw is approved, each winner with a confirmed
+  address gets one email per prize (amount, draw, how it is paid, a link to the draw). Others are skipped and that is
+  recorded (`draws.prize_notices`). No SMS: no gateway is configured.
 - **Email addresses are confirmed by an emailed link (2026-11-13, ADR 0040):** sent at sign-up, on a change of
   address and on request (24 hours, once; `/verify-email`). Until confirmed, an address still gets password-reset
   links, but Google sign-in does not find the account by it and a copy of the player's data is not sent to it.

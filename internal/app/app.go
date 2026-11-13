@@ -52,6 +52,7 @@ import (
 	"github.com/itsivali/lottery-platform/internal/rg"
 	"github.com/itsivali/lottery-platform/internal/staff"
 	"github.com/itsivali/lottery-platform/internal/wallet"
+	"github.com/itsivali/lottery-platform/internal/winnotice"
 )
 
 const (
@@ -75,6 +76,7 @@ type App struct {
 	payouts   *payouts.Service
 	gate      *compliance.Gate
 	aml       *aml.Service
+	winNotice *winnotice.Service // nil without a mail server: winners are then told in the app only
 	live      *payments.Live
 	stopLive  context.CancelFunc
 	workers   *river.Client[pgx.Tx]
@@ -126,6 +128,10 @@ func New(ctx context.Context, cfg config.Config, pool *pgxpool.Pool) (*App, erro
 	svc := buildServices(pool, sh)
 	idSvc, rgSvc := svc.identity, svc.rg
 	a.kyc, a.payments, a.game, a.payouts, a.draws, a.gate, a.aml = svc.kyc, svc.payments, svc.game, svc.payouts, svc.draws, svc.gate, svc.aml
+
+	if m := cfg.Mail; m.Enabled() { // winners of draw prizes are told by email (ADR 0042)
+		a.winNotice = winnotice.NewService(pool, clk, aw, mailer(m), m.WebAppURL)
+	}
 
 	staffAuth, staffSvc, err := a.staff(ctx, sh, svc)
 	if err != nil {
@@ -398,9 +404,14 @@ func (a *App) StartWorkers(ctx context.Context) error {
 	payouts.AddWorkers(workers, a.payouts)
 	alerts.AddWorkers(workers, a.alerts())
 	aml.AddWorkers(workers, a.aml)
+	periodic := slices.Concat(payments.PeriodicJobs(), game.PeriodicJobs(), draws.PeriodicJobs(), payouts.PeriodicJobs(), alerts.PeriodicJobs(), aml.PeriodicJobs())
+	if a.winNotice != nil {
+		winnotice.AddWorkers(workers, a.winNotice)
+		periodic = append(periodic, winnotice.PeriodicJobs()...)
+	}
 	wc, err := river.NewClient(riverpgxv5.New(a.pool), &river.Config{
 		Schema: db.RiverSchema, Workers: workers,
-		PeriodicJobs: slices.Concat(payments.PeriodicJobs(), game.PeriodicJobs(), draws.PeriodicJobs(), payouts.PeriodicJobs(), alerts.PeriodicJobs(), aml.PeriodicJobs()),
+		PeriodicJobs: periodic,
 		Queues:       map[string]river.QueueConfig{river.QueueDefault: {MaxWorkers: 10}},
 	})
 	if err != nil {

@@ -196,6 +196,13 @@ type DrawsDrawSignoff struct {
 	SignedAt     pgtype.Timestamptz
 }
 
+type DrawsPrizeNotice struct {
+	ResultID  string
+	Outcome   string
+	Reason    *string
+	CreatedAt pgtype.Timestamptz
+}
+
 type DrawsPrizeStructure struct {
 	ID            string
 	DrawType      string

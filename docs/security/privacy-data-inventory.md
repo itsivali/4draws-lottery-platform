@@ -17,6 +17,7 @@ stay.
 | Phone number (M-Pesa) | `identity.users.msisdn` | Account, sign-in, top-ups and payouts | Proved by the first top-up |
 | Email address, and when it was confirmed | `identity.users.email`, `email_verified_at` | Password reset links, copies of the player's data, finding the account at Google sign-in (ADR 0040) | |
 | Links sent to confirm an address (the token's hash, the address, expiry) | `identity.email_verifications` | Confirming the address is the player's (ADR 0040) | Erased when the account is closed |
+| Whether a winner was emailed about a prize, or why not (no content) | `draws.prize_notices` | Telling a winner once (ADR 0042) | |
 | Password | `identity.users.password_hash` | Sign-in | Argon2id hash with a server pepper; never the password |
 | First and second name, national ID number | `kyc.declared_identities` (sign-up), `kyc.kyc_checks` (verification) | Identity (ADR 0009, 0022) | Encrypted at rest (AES-GCM, `DATA_KEYS`); ID number also as a keyed hash for lookups |
 | Date of birth, 18+ declaration | `kyc.age_declarations` | Age (ADR 0029) | Encrypted |

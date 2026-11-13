@@ -198,6 +198,13 @@ type DrawsDrawSignoff struct {
 	SignedAt     time.Time
 }
 
+type DrawsPrizeNotice struct {
+	ResultID  string
+	Outcome   string
+	Reason    *string
+	CreatedAt time.Time
+}
+
 type DrawsPrizeStructure struct {
 	ID            string
 	DrawType      string

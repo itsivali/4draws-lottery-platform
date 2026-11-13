@@ -69,3 +69,10 @@ entry list, which is not public: export it for the regulator with `go run ./cmd/
 `-entries entries.jsonl`. Players see their own entries and prizes with `GET /v1/draws/{id}/entries/mine`. A
 certificate issued before winners were left out (it names them) cannot be changed, since it is hashed and signed off, so
 the public endpoint withholds it (`403 certificate-withheld`); read it from the database for the regulator.
+
+## Telling winners (ADR 0042)
+
+Once a draw is approved, the worker emails each winner who has a confirmed address, once per prize, within about five
+minutes. `SELECT outcome, reason, count(*) FROM draws.prize_notices GROUP BY 1, 2` shows what was done; the audit
+log has `draws.prize_notice` per prize. A winner who was skipped (no confirmed address) sees the prize in the app.
+A notice the mail server refuses is tried again for 72 hours ("a prize notice could not be sent" in the worker log).
