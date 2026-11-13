@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../app/providers.dart';
 import '../../../app/theme/tokens.dart';
 import '../../../core/api/api_failure.dart';
 import '../../../core/api/idempotency.dart';
+import '../../../core/auth/session_manager.dart';
 import '../../../core/widgets/auth_page.dart';
 import '../../../core/widgets/busy_button.dart';
 import '../../../core/widgets/failure_text.dart';
@@ -151,6 +153,9 @@ class _ResetPasswordScreenState extends ConsumerState<ResetPasswordScreen> {
       await ref
           .read(authRepositoryProvider)
           .resetPassword(token: widget.token, password: _password.text, idempotencyKey: newIdempotencyKey());
+      // the reset ended every session, this device's too if it was signed in: forget it here, then say so on sign-in
+      final session = ref.read(sessionManagerProvider);
+      if (session.status.value == SessionStatus.signedIn) await session.endedByServer(SessionEndReason.signedOut);
       if (!mounted) return;
       context.go('/sign-in?reset=1');
     } on ApiFailure catch (f) {

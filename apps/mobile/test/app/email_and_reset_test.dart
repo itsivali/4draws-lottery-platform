@@ -18,8 +18,8 @@ void main() {
       expect(sessionRedirect(SessionStatus.signedOut, Uri.parse('/reset-password?token=abc')), isNull);
       expect(sessionRedirect(SessionStatus.signedOut, Uri.parse('/account/email')), startsWith('/sign-in'));
     });
-    test('a signed-in player opening a reset link lands on Home', () {
-      expect(sessionRedirect(SessionStatus.signedIn, Uri.parse('/reset-password?token=abc')), '/home');
+    test('a signed-in player may open a reset link too: they can ask for one from Account', () {
+      expect(sessionRedirect(SessionStatus.signedIn, Uri.parse('/reset-password?token=abc')), isNull);
     });
     test('the link that confirms an address opens signed in or out (ADR 0040)', () {
       expect(sessionRedirect(SessionStatus.signedOut, Uri.parse('/verify-email?token=abc')), isNull);
@@ -33,9 +33,8 @@ void main() {
       }
       final starting = sessionRedirect(SessionStatus.restoring, Uri.parse('/verify-email?token=abc'))!;
       expect(sessionRedirect(SessionStatus.signedIn, Uri.parse(starting)), '/verify-email?token=abc');
-      // a reset link is for someone signed out: signed in, it still lands on Home
       final reset = sessionRedirect(SessionStatus.restoring, Uri.parse('/reset-password?token=abc'))!;
-      expect(sessionRedirect(SessionStatus.signedIn, Uri.parse(reset)), '/home');
+      expect(sessionRedirect(SessionStatus.signedIn, Uri.parse(reset)), '/reset-password?token=abc');
       // and nothing else rides through "from"
       expect(
         sessionRedirect(SessionStatus.signedOut, Uri.parse('/starting?from=https%3A%2F%2Fevil.example%2Fverify-email')),
@@ -245,5 +244,34 @@ void main() {
     await t.pumpAndSettle();
     expect(find.text('This address is confirmed'), findsOneWidget);
     expect(find.text('Send the link again'), findsNothing);
+  });
+
+  testWidgets('a signed-in player who forgot their password is emailed the reset link, and the link works', (t) async {
+    final backend = FakeBackend();
+    final h = await pumpApp(t, backend);
+    h.container.read(routerProvider).go('/account/password');
+    await t.pumpAndSettle();
+    expect(find.text('Forgotten your current password?'), findsOneWidget);
+    await tapVisible(t, find.widgetWithText(FilledButton, 'Email me a reset link'));
+    await t.pumpAndSettle();
+    expect(backend.resetRequests, ['jane@example.com']);
+    expect(find.text('A link is on its way to jane@example.com'), findsOneWidget);
+
+    // the link opens while signed in; using it ends this session and lands on sign-in
+    h.container.read(routerProvider).go('/reset-password?token=good-link');
+    await t.pumpAndSettle();
+    expect(find.text('Choose a new password'), findsOneWidget);
+    await t.enterText(find.widgetWithText(TextFormField, 'New password'), 'a brand new password');
+    await t.tap(find.widgetWithText(FilledButton, 'Save new password'));
+    await t.pumpAndSettle();
+    expect(find.text('Your password is changed. Sign in with it.'), findsOneWidget);
+  });
+
+  testWidgets('without an email address the screen offers to add one', (t) async {
+    final h = await pumpApp(t, FakeBackend()..email = null);
+    h.container.read(routerProvider).go('/account/password');
+    await t.pumpAndSettle();
+    expect(find.text('Email me a reset link'), findsNothing);
+    expect(find.widgetWithText(FilledButton, 'Add an email address'), findsOneWidget);
   });
 }

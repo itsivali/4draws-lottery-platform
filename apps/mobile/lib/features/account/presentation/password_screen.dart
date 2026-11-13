@@ -13,6 +13,7 @@ import '../../../core/widgets/content_frame.dart';
 import '../../../core/widgets/failure_text.dart';
 import '../../../core/widgets/inline_banner.dart';
 import '../../../core/widgets/status_pill.dart';
+import '../../auth/application/auth_providers.dart';
 import '../application/account_providers.dart';
 
 class PasswordScreen extends ConsumerStatefulWidget {
@@ -29,6 +30,8 @@ class _PasswordScreenState extends ConsumerState<PasswordScreen> {
   var _busy = false;
   var _obscure = true;
   String? _error;
+  var _sendingLink = false;
+  String? _linkSentTo, _linkError;
 
   @override
   void dispose() {
@@ -72,6 +75,25 @@ class _PasswordScreenState extends ConsumerState<PasswordScreen> {
       setState(() => _error = [d.title, ?d.detail].join(': '));
     } finally {
       if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// A signed-in player who forgot their current password is emailed the same reset link the sign-in screen offers
+  /// (ADR 0021), to the address on their account.
+  Future<void> _emailResetLink(String email) async {
+    setState(() {
+      _linkError = null;
+      _sendingLink = true;
+    });
+    try {
+      await ref.read(authRepositoryProvider).forgotPassword(email: email, idempotencyKey: newIdempotencyKey());
+      if (mounted) setState(() => _linkSentTo = email);
+    } on ApiFailure catch (f) {
+      if (!mounted) return;
+      final d = describeFailure(f);
+      setState(() => _linkError = [d.title, ?d.detail].join(': '));
+    } finally {
+      if (mounted) setState(() => _sendingLink = false);
     }
   }
 
@@ -159,6 +181,55 @@ class _PasswordScreenState extends ConsumerState<PasswordScreen> {
           ),
         ),
       ),
+      if (!_first(context) && !_required(context)) ..._forgotten(context),
     ],
   );
+
+  /// "Forgotten your current password?": the reset link, emailed to the address on the account.
+  List<Widget> _forgotten(BuildContext context) {
+    final email = ref.watch(accountProvider).value?.email;
+    return [
+      const SizedBox(height: Space.lg),
+      AppCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text('Forgotten your current password?', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: Space.xs),
+            Text(
+              email == null
+                  ? 'Add an email address to your account and we can email you a link to choose a new password.'
+                  : 'We can email a link to $email. It works for 30 minutes, and using it signs out every device.',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+            if (_linkSentTo != null) ...[
+              const SizedBox(height: Space.md),
+              InlineBanner(
+                tone: StatusTone.success,
+                icon: Icons.mark_email_read_rounded,
+                live: true,
+                title: 'A link is on its way to $_linkSentTo',
+                message: 'Not there? Check the junk folder.',
+              ),
+            ],
+            if (_linkError != null) ...[
+              const SizedBox(height: Space.md),
+              InlineBanner(tone: StatusTone.error, live: true, title: _linkError!),
+            ],
+            const SizedBox(height: Space.md),
+            if (email == null)
+              FilledButton.tonal(
+                onPressed: () => context.go('/account/email'),
+                child: const Text('Add an email address'),
+              )
+            else
+              FilledButton.tonal(
+                onPressed: _sendingLink || _linkSentTo != null ? null : () => _emailResetLink(email),
+                child: Text(_sendingLink ? 'Sending…' : 'Email me a reset link'),
+              ),
+          ],
+        ),
+      ),
+    ];
+  }
 }

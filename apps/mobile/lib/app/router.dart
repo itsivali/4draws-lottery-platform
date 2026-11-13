@@ -30,17 +30,19 @@ import '../features/wallet/presentation/withdraw_screen.dart';
 import 'providers.dart';
 import 'shell.dart';
 
-const _sessionRoutes = {'/sign-in', '/create-account', '/forgot-password', '/reset-password', '/starting', '/offline'};
+/// Pages about the session itself: a signed-in player has no business on them and is sent on.
+const _sessionRoutes = {'/sign-in', '/create-account', '/forgot-password', '/starting', '/offline'};
 
 /// Where a signed-out player may be besides sign-in: asking for, and using, a password-reset link (ADR 0021).
 const _signedOutRoutes = {'/sign-in', '/create-account', '/forgot-password', '/reset-password', '/verify-email'};
 
-/// Whether [from] is the page of an emailed link, which must survive the moment the app spends starting: the link
-/// that confirms an address works signed in or out (ADR 0040), the one that resets a password only signed out.
-bool _isLinkPage(String from, {required bool signedIn}) {
+/// Whether [from] is the page of an emailed link, which must survive the moment the app spends starting. Both links
+/// work signed in or out: the one that confirms an address (ADR 0040) and the one that resets a password, which a
+/// signed-in player can ask for from Account (owner, 2026-11-13).
+bool _isLinkPage(String from) {
   final uri = Uri.tryParse(from);
   if (uri == null || uri.hasScheme || uri.hasAuthority) return false; // a page of this app, never another site
-  return uri.path == '/verify-email' || (!signedIn && uri.path == '/reset-password');
+  return uri.path == '/verify-email' || uri.path == '/reset-password';
 }
 
 /// Where the session says the player may be: nowhere but sign-in while signed out; never on sign-in while signed in.
@@ -78,14 +80,14 @@ String? sessionRedirect(SessionStatus status, Uri location, {bool mustChangePass
     case SessionStatus.signedOut:
       if (_signedOutRoutes.contains(path)) return null;
       final from = _sessionRoutes.contains(path) ? location.queryParameters['from'] : location.toString();
-      if (from != null && _isLinkPage(from, signedIn: false)) return from;
+      if (from != null && _isLinkPage(from)) return from;
       // only a real page is worth coming back to; anything else returns home after sign-in
       return from == null || !_isAppPage(from) ? '/sign-in' : '/sign-in?from=${Uri.encodeComponent(from)}';
     case SessionStatus.signedIn:
       if (mustChangePassword) return path == '/account/password' ? null : requiredPasswordRoute;
       if (!_sessionRoutes.contains(path)) return path == '/' ? '/home' : null;
       final from = location.queryParameters['from'];
-      if (from != null && _isLinkPage(from, signedIn: true)) return from;
+      if (from != null && _isLinkPage(from)) return from;
       return from != null && _isAppPage(from) ? from : '/home';
   }
 }
