@@ -18,6 +18,7 @@ import '../features/account/presentation/sign_ins_screen.dart';
 import '../features/auth/presentation/password_reset_screens.dart';
 import '../features/auth/presentation/session_screens.dart';
 import '../features/auth/presentation/sign_in_screen.dart';
+import '../features/auth/presentation/verify_email_screen.dart';
 import '../features/draws/presentation/draw_detail_screen.dart';
 import '../features/draws/presentation/draws_screen.dart';
 import '../features/fairness/presentation/fairness_screen.dart';
@@ -32,7 +33,15 @@ import 'shell.dart';
 const _sessionRoutes = {'/sign-in', '/create-account', '/forgot-password', '/reset-password', '/starting', '/offline'};
 
 /// Where a signed-out player may be besides sign-in: asking for, and using, a password-reset link (ADR 0021).
-const _signedOutRoutes = {'/sign-in', '/create-account', '/forgot-password', '/reset-password'};
+const _signedOutRoutes = {'/sign-in', '/create-account', '/forgot-password', '/reset-password', '/verify-email'};
+
+/// Whether [from] is the page of an emailed link, which must survive the moment the app spends starting: the link
+/// that confirms an address works signed in or out (ADR 0040), the one that resets a password only signed out.
+bool _isLinkPage(String from, {required bool signedIn}) {
+  final uri = Uri.tryParse(from);
+  if (uri == null || uri.hasScheme || uri.hasAuthority) return false; // a page of this app, never another site
+  return uri.path == '/verify-email' || (!signedIn && uri.path == '/reset-password');
+}
 
 /// Where the session says the player may be: nowhere but sign-in while signed out; never on sign-in while signed in.
 /// Deep links survive the detour through sign-in (`from`).
@@ -69,12 +78,14 @@ String? sessionRedirect(SessionStatus status, Uri location, {bool mustChangePass
     case SessionStatus.signedOut:
       if (_signedOutRoutes.contains(path)) return null;
       final from = _sessionRoutes.contains(path) ? location.queryParameters['from'] : location.toString();
+      if (from != null && _isLinkPage(from, signedIn: false)) return from;
       // only a real page is worth coming back to; anything else returns home after sign-in
       return from == null || !_isAppPage(from) ? '/sign-in' : '/sign-in?from=${Uri.encodeComponent(from)}';
     case SessionStatus.signedIn:
       if (mustChangePassword) return path == '/account/password' ? null : requiredPasswordRoute;
       if (!_sessionRoutes.contains(path)) return path == '/' ? '/home' : null;
       final from = location.queryParameters['from'];
+      if (from != null && _isLinkPage(from, signedIn: true)) return from;
       return from != null && _isAppPage(from) ? from : '/home';
   }
 }
@@ -108,6 +119,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/reset-password',
         pageBuilder: _page((_, state) => ResetPasswordScreen(token: state.uri.queryParameters['token'] ?? '')),
+      ),
+      GoRoute(
+        path: '/verify-email',
+        pageBuilder: _page((_, state) => VerifyEmailScreen(token: state.uri.queryParameters['token'] ?? '')),
       ),
       StatefulShellRoute.indexedStack(
         builder: (_, _, shell) => AppShell(shell: shell),

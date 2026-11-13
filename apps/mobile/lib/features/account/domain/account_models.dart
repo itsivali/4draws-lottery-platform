@@ -64,6 +64,7 @@ class Account {
     required this.closureRequestedAt,
     this.mustChangePassword = false,
     this.email,
+    this.emailVerified = false,
     this.hasPassword = true,
     this.photoUrl,
     this.firstName,
@@ -74,6 +75,7 @@ class Account {
   factory Account.fromJson(JsonObject j) => Account(
     mustChangePassword: j.raw['must_change_password'] == true,
     email: j.strOrNull('email'),
+    emailVerified: j.raw['email_verified'] == true,
     hasPassword: j.raw['has_password'] != false,
     photoUrl: switch (j.strOrNull('photo_url')) {
       // only Google's image host, as the server keeps it (ADR 0035)
@@ -117,6 +119,12 @@ class Account {
 
   /// Where a forgotten password's reset link goes; null for an account from before addresses were asked for.
   final String? email;
+
+  /// Whether the player opened the link sent to that address (ADR 0040). A changed address starts unconfirmed.
+  final bool emailVerified;
+
+  /// An address is on the account and its link has not been opened yet.
+  bool get emailNeedsConfirming => email != null && !emailVerified;
 
   /// False for an account that signs in with Google or Apple only.
   final bool hasPassword;

@@ -30,7 +30,9 @@ class _EmailScreenState extends ConsumerState<EmailScreen> {
   var _busy = false;
   var _obscure = true;
   var _prefilled = false;
-  String? _emailError, _passwordError, _error;
+  var _sending = false;
+  var _linkSent = false;
+  String? _emailError, _passwordError, _error, _linkError;
 
   @override
   void dispose() {
@@ -49,7 +51,8 @@ class _EmailScreenState extends ConsumerState<EmailScreen> {
           .setEmail(email: _email.text.trim(), currentPassword: _password.text, idempotencyKey: newIdempotencyKey());
       ref.invalidate(accountProvider);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Email address saved.')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Email address saved. We emailed you a link to confirm it.')));
       context.go('/account');
     } on ApiFailure catch (f) {
       if (!mounted) return;
@@ -69,6 +72,28 @@ class _EmailScreenState extends ConsumerState<EmailScreen> {
     }
   }
 
+  /// Emails the link that confirms the address again (ADR 0040).
+  Future<void> _sendLink() async {
+    setState(() {
+      _linkError = null;
+      _sending = true;
+    });
+    try {
+      await ref.read(accountRepositoryProvider).sendEmailVerification(idempotencyKey: newIdempotencyKey());
+      if (mounted) setState(() => _linkSent = true);
+    } on ApiFailure catch (f) {
+      if (!mounted) return;
+      if (f case ProblemFailure(slug: 'email-already-verified')) {
+        ref.invalidate(accountProvider); // confirmed since this screen opened
+      } else {
+        final d = describeFailure(f);
+        setState(() => _linkError = [d.title, ?d.detail].join(': '));
+      }
+    } finally {
+      if (mounted) setState(() => _sending = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final account = ref.watch(accountProvider).value;
@@ -81,6 +106,42 @@ class _EmailScreenState extends ConsumerState<EmailScreen> {
     return PageScaffold(
       title: adding ? 'Add an email address' : 'Email address',
       children: [
+        if (account != null && account.emailNeedsConfirming) ...[
+          AppCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                InlineBanner(
+                  tone: _linkSent ? StatusTone.success : StatusTone.warning,
+                  icon: _linkSent ? Icons.mark_email_read_rounded : Icons.mark_email_unread_rounded,
+                  live: _linkSent,
+                  title: _linkSent ? 'A new link is on its way' : 'Confirm this address',
+                  message:
+                      'We emailed a link to ${account.email}. Open it to confirm the address is yours. It works for '
+                      '24 hours. Not there? Check the junk folder.',
+                ),
+                if (_linkError != null) ...[
+                  const SizedBox(height: Space.md),
+                  InlineBanner(tone: StatusTone.error, live: true, title: _linkError!),
+                ],
+                const SizedBox(height: Space.md),
+                FilledButton.tonal(
+                  onPressed: _sending || _linkSent ? null : _sendLink,
+                  child: Text(_sending ? 'Sending…' : 'Send the link again'),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: Space.lg),
+        ] else if (account != null && account.email != null) ...[
+          const InlineBanner(
+            tone: StatusTone.success,
+            icon: Icons.verified_rounded,
+            title: 'This address is confirmed',
+            message: 'A different address has to be confirmed again.',
+          ),
+          const SizedBox(height: Space.lg),
+        ],
         Form(
           key: _form,
           child: AppCard(

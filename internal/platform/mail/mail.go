@@ -1,5 +1,6 @@
-// Package mail sends plain-text email over SMTP, for the few notices the platform emails to its own staff. Messages
-// never carry personal data of players: they say that something is waiting and where to look.
+// Package mail sends email over SMTP: the notices the platform emails to its own staff, and the few it sends players
+// (a link to confirm an address or reset a password, a copy of their data). A message is plain text, optionally with
+// an HTML version of the same words (the branded layout of Notice) for mail programs that show it.
 package mail
 
 import (
@@ -26,6 +27,11 @@ type Message struct {
 	To      []string
 	Subject string
 	Text    string
+	// HTML is the same message as a web page, for mail programs that show it; Text stays the fallback. Empty: the
+	// message is plain text only.
+	HTML string
+	// Inline are the images HTML shows, each referred to as cid:<its Name> (the logo). They are not listed as files.
+	Inline []Attachment
 	// Attachments ride with the text as files (a player's copy of their data, ADR 0038).
 	Attachments []Attachment
 }
@@ -179,13 +185,14 @@ var (
 	attachmentType = regexp.MustCompile(`^[a-z0-9.+-]+/[a-z0-9.+-]+$`)
 )
 
-// RenderMessage renders m as Render does and, when it carries attachments, as multipart/mixed: the text first, then
-// each file base64-encoded. It refuses a file name or media type that could break out of its header.
+// RenderMessage renders m as Render does when it is plain text alone. Otherwise it nests the parts as mail programs
+// expect: the text and its HTML version as alternatives, the images the HTML shows related to them, and files mixed
+// in after. It refuses a file name or media type that could break out of its header.
 func RenderMessage(from string, to []string, m Message, at time.Time) (string, error) {
-	if len(m.Attachments) == 0 {
+	if len(m.Attachments) == 0 && m.HTML == "" {
 		return Render(from, to, m.Subject, m.Text, at), nil
 	}
-	for _, a := range m.Attachments {
+	for _, a := range append(append([]Attachment{}, m.Attachments...), m.Inline...) {
 		if !attachmentName.MatchString(a.Name) || !attachmentType.MatchString(a.ContentType) {
 			return "", errors.New("mail: bad attachment name or type")
 		}
@@ -194,32 +201,76 @@ func RenderMessage(from string, to []string, m Message, at time.Time) (string, e
 	if _, err := rand.Read(seed[:]); err != nil {
 		return "", errors.New("mail: no randomness for the boundary")
 	}
-	boundary := "b" + hex.EncodeToString(seed[:])
+	id := hex.EncodeToString(seed[:])
+
+	// the innermost part: the text, or the text and the HTML as alternatives
+	body := part{header: "Content-Type: text/plain; charset=utf-8\r\nContent-Transfer-Encoding: 8bit\r\n", content: crlf(m.Text)}
+	if m.HTML != "" {
+		html := part{header: "Content-Type: text/html; charset=utf-8\r\nContent-Transfer-Encoding: base64\r\n", content: wrap76(m.HTML)}
+		body = multipart("alternative", "a"+id, body, html)
+		if len(m.Inline) > 0 {
+			parts := []part{body}
+			for _, a := range m.Inline {
+				parts = append(parts, part{
+					header: "Content-Type: " + a.ContentType + "; name=\"" + a.Name + "\"\r\nContent-ID: <" + a.Name + ">\r\n" +
+						"Content-Disposition: inline; filename=\"" + a.Name + "\"\r\nContent-Transfer-Encoding: base64\r\n",
+					content: wrap76(string(a.Data)),
+				})
+			}
+			body = multipart("related", "r"+id, parts...)
+		}
+	}
+	if len(m.Attachments) > 0 {
+		parts := []part{body}
+		for _, a := range m.Attachments {
+			parts = append(parts, part{
+				header: "Content-Type: " + a.ContentType + "; name=\"" + a.Name + "\"\r\nContent-Disposition: attachment; filename=\"" + a.Name + "\"\r\n" +
+					"Content-Transfer-Encoding: base64\r\n",
+				content: wrap76(string(a.Data)),
+			})
+		}
+		body = multipart("mixed", "b"+id, parts...)
+	}
 	var b strings.Builder
 	b.WriteString("From: " + from + "\r\n")
 	b.WriteString("To: " + strings.Join(to, ", ") + "\r\n")
 	b.WriteString("Subject: " + m.Subject + "\r\n")
 	b.WriteString("Date: " + at.UTC().Format(time.RFC1123Z) + "\r\n")
 	b.WriteString("MIME-Version: 1.0\r\n")
-	b.WriteString("Content-Type: multipart/mixed; boundary=\"" + boundary + "\"\r\n\r\n")
-	b.WriteString("--" + boundary + "\r\n")
-	b.WriteString("Content-Type: text/plain; charset=utf-8\r\n")
-	b.WriteString("Content-Transfer-Encoding: 8bit\r\n\r\n")
-	for _, line := range strings.Split(strings.ReplaceAll(m.Text, "\r\n", "\n"), "\n") {
-		b.WriteString(line + "\r\n")
-	}
-	for _, a := range m.Attachments {
-		b.WriteString("--" + boundary + "\r\n")
-		b.WriteString("Content-Type: " + a.ContentType + "; name=\"" + a.Name + "\"\r\n")
-		b.WriteString("Content-Disposition: attachment; filename=\"" + a.Name + "\"\r\n")
-		b.WriteString("Content-Transfer-Encoding: base64\r\n\r\n")
-		enc := base64.StdEncoding.EncodeToString(a.Data)
-		for len(enc) > 76 {
-			b.WriteString(enc[:76] + "\r\n")
-			enc = enc[76:]
-		}
-		b.WriteString(enc + "\r\n")
+	b.WriteString(body.header + "\r\n" + body.content)
+	return b.String(), nil
+}
+
+// part is one MIME part: its header lines (each ending in CRLF) and its content (ending in CRLF).
+type part struct{ header, content string }
+
+// multipart joins parts as one multipart/<kind> part.
+func multipart(kind, boundary string, parts ...part) part {
+	var b strings.Builder
+	for _, p := range parts {
+		b.WriteString("--" + boundary + "\r\n" + p.header + "\r\n" + p.content)
 	}
 	b.WriteString("--" + boundary + "--\r\n")
-	return b.String(), nil
+	return part{header: "Content-Type: multipart/" + kind + "; boundary=\"" + boundary + "\"\r\n", content: b.String()}
+}
+
+// crlf gives text CRLF line endings.
+func crlf(text string) string {
+	var b strings.Builder
+	for _, line := range strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n") {
+		b.WriteString(line + "\r\n")
+	}
+	return b.String()
+}
+
+// wrap76 is data in base64, 76 characters a line.
+func wrap76(data string) string {
+	enc := base64.StdEncoding.EncodeToString([]byte(data))
+	var b strings.Builder
+	for len(enc) > 76 {
+		b.WriteString(enc[:76] + "\r\n")
+		enc = enc[76:]
+	}
+	b.WriteString(enc + "\r\n")
+	return b.String()
 }

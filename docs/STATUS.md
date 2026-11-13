@@ -83,7 +83,13 @@ Read this first at the start of every session.
   (Play Console → App integrity), or Google sign-in fails in the store build. No `APPLE_*` setting is set.
 - **Google sign-in finds the account by its email (2026-11-12, ADR 0039):** a Google identity not yet linked signs
   in the account that has its Google-verified address (gmail.com or a Workspace domain) and is linked to it; only
-  with no such account is a new one offered. Email addresses are still not verified at sign-up.
+  with no such account is a new one offered.
+- **Email addresses are confirmed by an emailed link (2026-11-13, ADR 0040):** sent at sign-up, on a change of
+  address and on request (24 hours, once; `/verify-email`). Until confirmed, an address still gets password-reset
+  links, but Google sign-in does not find the account by it and a copy of the player's data is not sent to it.
+  Addresses given before this are unconfirmed; the app says so under Account. Player emails and the staff password
+  reset now use one branded layout with the logo inside the message (`internal/platform/mail/notice.go`). Not
+  built: letting the owner of an address take it from an account that typed it and never confirmed it.
 - **Play Console (2026-11-11):** the owner's developer account is a personal one ("willis ivali"). The app is to be
   created as 4draws, `ke.co.fourdraws.app`, English (UK), App, Free; the three declarations are the owner's to
   accept. A release build signed with the upload key builds locally. Not yet possible: production release (needs

@@ -70,6 +70,10 @@ class AccountRepository {
         body: {'email': email, 'current_password': currentPassword},
       );
 
+  /// Emails the link that confirms the address on the account again (ADR 0040).
+  Future<void> sendEmailVerification({required String idempotencyKey}) =>
+      _api.post('/v1/account/email/verification', idempotencyKey: idempotencyKey);
+
   /// Gives the names and ID number of an account that gave none at sign-up (owner, 2026-10-31): once, and only until
   /// an identity submission exists (409 `identity-declared` / `kyc-state`).
   Future<void> declareIdentity({

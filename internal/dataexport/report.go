@@ -224,6 +224,7 @@ func Report(file []byte) ([]byte, error) {
 	add("Account status", cell(account["status"], kWords))
 	add("Account opened", cell(account["opened_at"], kTime))
 	add("Phone number confirmed", cell(account["phone_confirmed_at"], kTime))
+	add("Email address confirmed", cell(account["email_confirmed_at"], kTime))
 	add("Asked to close the account", cell(account["closure_requested_at"], kTime))
 	add("Account reference", cell(account["user_id"], kText))
 

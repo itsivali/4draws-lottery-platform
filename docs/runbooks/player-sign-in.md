@@ -74,6 +74,23 @@ the same whether or not the address has an account. `WEB_APP_URL` (`https://4dra
 or a Google or Apple one) adds one under Account → Email address; until then staff reset them with a temporary
 password (below). The back office's Players page shows the address and searches by it.
 
+## Confirming an email address (ADR 0040)
+
+- **The link:** sign-up, a change of address, and Account → Email address → *Send the link again* each email
+  `WEB_APP_URL/verify-email?token=…` (24 hours, once). It needs `WEB_APP_URL` and the SMTP settings, as resets do;
+  without them accounts are still created and the app says the link cannot be sent.
+- **Until it is opened:** password-reset links still go to the address. Google sign-in answers
+  `sso-email-unverified` instead of finding the account, and a copy of the player's data is refused
+  (`email-not-verified`).
+- **A player says the email never came:** check the junk folder, then the address on the Players page for a typo.
+  They can correct it under Account → Email address (a new link goes to the new address) or ask for the link again
+  (5 an hour). The API logs "the email confirmation link was not sent" when the mail server refused it.
+- **Someone's address is on an account that is not theirs:** it is unconfirmed, so it opens nothing but reset
+  links. Remove it on request: `UPDATE identity.users SET email = NULL WHERE id = …` as a recorded support action.
+- **Audit log:** `identity.email_verification_sent`, `identity.email_verified`.
+- **The look of emails:** `internal/platform/mail/notice.go` (layout and footer) and `logo.png` beside it, rendered
+  by `scripts/gen-icons.sh` from the brand mark.
+
 ## Operations
 
 - A player who lost access to their Google or Apple account signs in again only with a password: the Players page →

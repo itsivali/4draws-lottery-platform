@@ -77,8 +77,9 @@ func keepPhoto(ctx context.Context, q *store.Queries, userID, provider, photo st
 
 // SignInSSO signs in a Google or Apple identity. One already linked to an account signs that account in. A Google
 // identity linked to none signs in the account that has its email address, and is linked to it from then on
-// (ADR 0039): the owner of an address can already take the account over with a password-reset link, so this gives
-// them nothing new. Otherwise ErrSSONotLinked, and the app offers to create an account (SignupSSO).
+// (ADR 0039), but only once the account has confirmed that address (ADR 0040): until then the address is only what
+// someone typed, and ErrSSOEmailUnverified tells its owner to sign in the other way and confirm it. With no such
+// account it is ErrSSONotLinked, and the app offers to create one (SignupSSO).
 func (s *Service) SignInSSO(ctx context.Context, provider, idToken, nonce string, dev Device) (Tokens, error) {
 	sub, photo, email, err := s.verifyIDToken(ctx, provider, idToken, nonce)
 	if err != nil {
@@ -100,6 +101,9 @@ func (s *Service) SignInSSO(ctx context.Context, provider, idToken, nonce string
 			if err != nil {
 				return err
 			}
+			if !u.EmailVerified { // whoever typed the address has not shown it is theirs (ADR 0040)
+				return ErrSSOEmailUnverified
+			}
 			userID, linkedNow = u.ID, true
 		} else if err != nil {
 			return err
@@ -118,6 +122,13 @@ func (s *Service) SignInSSO(ctx context.Context, provider, idToken, nonce string
 		}
 		if err := keepPhoto(ctx, q, userID, provider, photo); err != nil {
 			return err
+		}
+		if email != "" && !linkedNow {
+			// Google vouches for this address and the identity is already the account's: if the account has the same
+			// address, it is confirmed (a no-op when the address differs or is confirmed already)
+			if _, err := q.MarkEmailVerified(ctx, store.MarkEmailVerifiedParams{At: &now, ID: userID, Email: email}); err != nil {
+				return err
+			}
 		}
 		tokens, err = s.startSession(ctx, q, userID, dev, verdict, now)
 		return err
@@ -166,7 +177,7 @@ func (s *Service) SignupSSO(ctx context.Context, provider, idToken, nonce, rawMS
 	if err != nil {
 		return Tokens{}, err
 	}
-	sub, photo, _, err := s.verifyIDToken(ctx, provider, idToken, nonce)
+	sub, photo, email, err := s.verifyIDToken(ctx, provider, idToken, nonce)
 	if err != nil {
 		return Tokens{}, err
 	}
@@ -196,6 +207,17 @@ func (s *Service) SignupSSO(ctx context.Context, provider, idToken, nonce, rawMS
 		}
 		if err := keepPhoto(ctx, q, id, provider, photo); err != nil {
 			return err
+		}
+		if email != "" {
+			// the address Google vouches for becomes the account's, already confirmed (ADR 0040), unless another
+			// account has it: then this account has none until the player adds one
+			if _, err := q.UserByEmail(ctx, email); errors.Is(err, pgx.ErrNoRows) {
+				if err := q.SetVerifiedEmail(ctx, store.SetVerifiedEmailParams{Email: email, At: &now, ID: id}); err != nil {
+					return emailError(err)
+				}
+			} else if err != nil {
+				return err
+			}
 		}
 		if err := q.InsertAuthIdentity(ctx, store.InsertAuthIdentityParams{UserID: id, Provider: provider, Subject: sub}); err != nil {
 			var pe *pgconn.PgError

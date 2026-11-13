@@ -208,7 +208,7 @@ func buildServices(pool *pgxpool.Pool, sh shared) services {
 	if compliance.Mode(cfg.Operating.Mode) == compliance.Live { // real money: verified ID before money in (ADR 0029)
 		s.identity.RequireVerifiedIDFirst()
 	}
-	if m := cfg.Mail; m.WebAppURL != "" { // forgotten passwords are reset through an emailed link (ADR 0021)
+	if m := cfg.Mail; m.WebAppURL != "" { // emailed links: a forgotten password is reset (ADR 0021), an address is confirmed (ADR 0040)
 		s.identity.WithPasswordResets(identity.PasswordResets{Sender: mailer(m), WebAppURL: m.WebAppURL})
 	}
 	s.rg = rg.NewService(pool, sh.clk, sh.aw, rg.Config{CoolingOff: 24 * time.Hour}).WithSessionEnder(s.identity)
@@ -420,7 +420,7 @@ func dataExport(pool *pgxpool.Pool, sh shared, k *kyc.Service, m config.Mail) *d
 	if !m.Enabled() {
 		return nil
 	}
-	return dataexport.NewService(pool, sh.clk, sh.aw, k, mailer(m))
+	return dataexport.NewService(pool, sh.clk, sh.aw, k, mailer(m)).WithSite(m.WebAppURL)
 }
 
 func mailer(m config.Mail) mail.Sender {

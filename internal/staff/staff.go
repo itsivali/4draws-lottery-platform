@@ -226,15 +226,23 @@ func (s *Service) RequestPasswordReset(ctx context.Context, email string) error 
 		return err
 	}
 	link := strings.TrimRight(s.resets.BackOfficeURL, "/") + "/reset-password?token=" + url.QueryEscape(token)
-	return s.resets.Sender.Send(ctx, mail.Message{To: []string{email}, Subject: "4draws back office: reset your password",
-		Text: resetText(link, expires)})
+	return s.resets.Sender.Send(ctx, resetNotice(link, expires).Message([]string{email}, "4draws back office: reset your password"))
 }
 
-func resetText(link string, expires time.Time) string {
+func resetNotice(link string, expires time.Time) mail.Notice {
 	nairobi := time.FixedZone("EAT", 3*60*60)
-	return "Someone asked to reset the password of the 4draws back-office account with this email address.\n\n" +
-		"If it was you, choose a new password here (the link works until " + expires.In(nairobi).Format("15:04 MST") + "):\n" + link + "\n\n" +
-		"If it was not you, ignore this email: nothing changes until the link is used, and it is sent only to this address.\n"
+	return mail.Notice{
+		Staff:     true,
+		Preheader: "Choose a new password for the 4draws back office.",
+		Heading:   "Reset your back-office password",
+		Intro: []string{
+			"Someone asked to reset the password of the 4draws back-office account with this email address. If it was you, choose a new password now.",
+		},
+		Action:     &mail.Action{Label: "Choose a new password", URL: link},
+		ActionNote: "The link works until " + expires.In(nairobi).Format("15:04 MST") + " (30 minutes) and can be used once.",
+		Outro:      []string{"When the password changes, every back-office session of the account ends."},
+		Safety:     "Ignore this email and tell an administrator. Nothing changes until the link is used, and it is sent only to this address.",
+	}
 }
 
 // ResetPasswordWithToken sets the password of the member an emailed link belongs to, ends their sessions and spends

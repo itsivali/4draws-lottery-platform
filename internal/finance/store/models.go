@@ -301,6 +301,16 @@ type IdentityDevice struct {
 	LastSeenAt         time.Time
 }
 
+type IdentityEmailVerification struct {
+	ID        string
+	UserID    string
+	Email     string
+	TokenHash []byte
+	ExpiresAt time.Time
+	UsedAt    pgtype.Timestamptz
+	CreatedAt time.Time
+}
+
 type IdentityPasswordReset struct {
 	ID        string
 	UserID    string
@@ -348,6 +358,7 @@ type IdentityUser struct {
 	Email              pgtype.Text
 	PhotoUrl           pgtype.Text
 	ErasedAt           pgtype.Timestamptz
+	EmailVerifiedAt    pgtype.Timestamptz
 }
 
 type IdentityUserStatusHistory struct {

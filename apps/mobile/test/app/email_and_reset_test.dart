@@ -21,6 +21,27 @@ void main() {
     test('a signed-in player opening a reset link lands on Home', () {
       expect(sessionRedirect(SessionStatus.signedIn, Uri.parse('/reset-password?token=abc')), '/home');
     });
+    test('the link that confirms an address opens signed in or out (ADR 0040)', () {
+      expect(sessionRedirect(SessionStatus.signedOut, Uri.parse('/verify-email?token=abc')), isNull);
+      expect(sessionRedirect(SessionStatus.signedIn, Uri.parse('/verify-email?token=abc')), isNull);
+    });
+    test('an emailed link survives the moment the app spends starting', () {
+      for (final link in ['/verify-email?token=abc', '/reset-password?token=abc']) {
+        final starting = sessionRedirect(SessionStatus.restoring, Uri.parse(link))!;
+        expect(starting, startsWith('/starting?from='));
+        expect(sessionRedirect(SessionStatus.signedOut, Uri.parse(starting)), link, reason: link);
+      }
+      final starting = sessionRedirect(SessionStatus.restoring, Uri.parse('/verify-email?token=abc'))!;
+      expect(sessionRedirect(SessionStatus.signedIn, Uri.parse(starting)), '/verify-email?token=abc');
+      // a reset link is for someone signed out: signed in, it still lands on Home
+      final reset = sessionRedirect(SessionStatus.restoring, Uri.parse('/reset-password?token=abc'))!;
+      expect(sessionRedirect(SessionStatus.signedIn, Uri.parse(reset)), '/home');
+      // and nothing else rides through "from"
+      expect(
+        sessionRedirect(SessionStatus.signedOut, Uri.parse('/starting?from=https%3A%2F%2Fevil.example%2Fverify-email')),
+        '/sign-in',
+      );
+    });
   });
 
   testWidgets('creating an account asks for an email address and sends it', (t) async {
@@ -130,8 +151,11 @@ void main() {
     await t.enterText(find.widgetWithText(TextFormField, 'Your password'), 'correct horse battery');
     await t.tap(find.widgetWithText(FilledButton, 'Save'));
     await t.pumpAndSettle();
-    expect(find.text('Email address saved.'), findsOneWidget);
+    expect(find.text('Email address saved. We emailed you a link to confirm it.'), findsOneWidget);
     expect(backend.email, 'jane2@example.com');
+    // a changed address is a new claim: the account says it is not confirmed yet (ADR 0040)
+    expect(find.text('Email not confirmed yet'), findsOneWidget);
+    expect(find.text('Not confirmed yet: open the link we emailed you'), findsOneWidget);
   });
 
   testWidgets('an account from before, or one that signs in with Google, adds an address without a password', (
@@ -152,5 +176,74 @@ void main() {
     await t.tap(find.widgetWithText(FilledButton, 'Add email address'));
     await t.pumpAndSettle();
     expect(backend.email, 'g@example.com');
+  });
+
+  testWidgets('the emailed link confirms the address, signed out, and says so', (t) async {
+    final backend = FakeBackend()..emailVerified = false;
+    final h = await pumpApp(t, backend, signedIn: false);
+    h.container.read(routerProvider).go('/verify-email?token=good-link');
+    await t.pumpAndSettle();
+    expect(find.text('Your email address is confirmed'), findsOneWidget);
+    expect(backend.emailVerified, isTrue);
+    final sent = backend.requests.where((r) => r.url.path == '/v1/auth/email/verify');
+    expect(sent, hasLength(1), reason: 'the link is used once');
+    expect(sent.single.body, contains('"token":"good-link"'));
+    await t.tap(find.widgetWithText(FilledButton, 'Open 4draws'));
+    await t.pumpAndSettle();
+    expect(find.text('Sign in'), findsWidgets);
+  });
+
+  testWidgets('a used or expired confirmation link says what to do', (t) async {
+    final backend = FakeBackend()..emailVerified = false;
+    final h = await pumpApp(t, backend, signedIn: false);
+    h.container.read(routerProvider).go('/verify-email?token=stale');
+    await t.pumpAndSettle();
+    expect(find.text('This link no longer works'), findsOneWidget);
+    expect(backend.emailVerified, isFalse);
+    h.container.read(routerProvider).go('/verify-email');
+    await t.pumpAndSettle();
+    expect(find.text('This link no longer works'), findsOneWidget);
+  });
+
+  testWidgets('signed in, the link confirms the address and the account shows it', (t) async {
+    final backend = FakeBackend()..emailVerified = false;
+    final h = await pumpApp(t, backend);
+    await t.tap(find.text('Account').last);
+    await t.pumpAndSettle();
+    expect(find.text('Email not confirmed yet'), findsOneWidget);
+    h.container.read(routerProvider).go('/verify-email?token=good-link');
+    await t.pumpAndSettle();
+    expect(find.text('Your email address is confirmed'), findsOneWidget);
+    await t.tap(find.widgetWithText(FilledButton, 'Open 4draws'));
+    await t.pumpAndSettle();
+    await t.tap(find.text('Account').last);
+    await t.pumpAndSettle();
+    expect(find.text('Email not confirmed yet'), findsNothing);
+    expect(find.text('Where a reset link goes'), findsOneWidget);
+  });
+
+  testWidgets('an unconfirmed address can be sent its link again, and a copy of the data waits for it', (t) async {
+    final backend = FakeBackend()..emailVerified = false;
+    final h = await pumpApp(t, backend);
+    h.container.read(routerProvider).go('/account/email');
+    await t.pumpAndSettle();
+    expect(find.text('Confirm this address'), findsOneWidget);
+    await t.tap(find.widgetWithText(FilledButton, 'Send the link again'));
+    await t.pumpAndSettle();
+    expect(backend.verificationLinks, 1);
+    expect(find.text('A new link is on its way'), findsOneWidget);
+
+    h.container.read(routerProvider).go('/account/data');
+    await t.pumpAndSettle();
+    expect(find.text('Confirm your email address first'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'Email me my data'), findsNothing);
+  });
+
+  testWidgets('a confirmed address says so', (t) async {
+    final h = await pumpApp(t, FakeBackend());
+    h.container.read(routerProvider).go('/account/email');
+    await t.pumpAndSettle();
+    expect(find.text('This address is confirmed'), findsOneWidget);
+    expect(find.text('Send the link again'), findsNothing);
   });
 }

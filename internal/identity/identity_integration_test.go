@@ -759,6 +759,12 @@ func TestEmail_SignupNeedsAUniqueAddressAndAForgottenPasswordIsResetThroughALink
 		t.Fatalf("account: %+v %v", a, err)
 	}
 
+	// sign-up emailed the link that confirms the address (ADR 0040); until it is opened the address is a claim
+	if len(sent.msgs) != 1 || sent.msgs[0].To[0] != "jane@example.com" || !strings.Contains(sent.msgs[0].Text, "https://app.example.com/verify-email?token=") || a.EmailVerified {
+		t.Fatalf("confirmation link: %+v, verified %v", sent.msgs, a.EmailVerified)
+	}
+	sent.msgs = nil
+
 	// an unknown address is answered like a known one, and nothing is sent
 	if err := e.svc.RequestPasswordReset(ctx, "nobody@example.com"); err != nil || len(sent.msgs) != 0 {
 		t.Fatalf("unknown: %v, sent %d", err, len(sent.msgs))

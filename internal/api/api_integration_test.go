@@ -400,7 +400,7 @@ var authedRoutes = []route{
 	{http.MethodGet, "/v1/draws/0192f000-0000-7000-8000-000000000000/entries/mine"},
 	{http.MethodPost, "/v1/payouts/withdrawals"}, {http.MethodGet, "/v1/payouts"},
 	{http.MethodGet, "/v1/payouts/0192f000-0000-7000-8000-000000000000"},
-	{http.MethodGet, "/v1/wallet"}, {http.MethodGet, "/v1/account"}, {http.MethodPost, "/v1/account/closure"}, {http.MethodPut, "/v1/account/email"},
+	{http.MethodGet, "/v1/wallet"}, {http.MethodGet, "/v1/account"}, {http.MethodPost, "/v1/account/closure"}, {http.MethodPut, "/v1/account/email"}, {http.MethodPost, "/v1/account/email/verification"},
 	{http.MethodGet, "/v1/payments"},
 	{http.MethodPost, "/v1/auth/logout"}, // last: it ends the session used for the valid-token check
 }
@@ -442,6 +442,7 @@ func TestAPI_EveryWriteRequiresAnIdempotencyKey(t *testing.T) {
 		{http.MethodPost, "/v1/auth/signup"}, {http.MethodPost, "/v1/auth/login"},
 		{http.MethodPost, "/v1/auth/refresh"}, {http.MethodPost, "/v1/auth/sso/google"}, {http.MethodPost, "/v1/auth/sso/google/signup"},
 		{http.MethodPost, "/v1/auth/attestation/challenge"}, {http.MethodPost, "/v1/auth/password/forgot"}, {http.MethodPost, "/v1/auth/password/reset"},
+		{http.MethodPost, "/v1/auth/email/verify"},
 	}, authedRoutes...)
 	for _, rt := range writes {
 		if rt.method == http.MethodGet {
@@ -893,6 +894,12 @@ func TestAPI_GoogleSignsInTheAccountThatHasItsEmailAddress(t *testing.T) {
 	if _, err := e.pool.Exec(context.Background(), `UPDATE identity.users SET email = $2 WHERE id = $1`, user, gmail); err != nil {
 		t.Fatal(err)
 	}
+	confirm := func(id string) {
+		t.Helper()
+		if _, err := e.pool.Exec(context.Background(), `UPDATE identity.users SET email_verified_at = now() WHERE id = $1`, id); err != nil {
+			t.Fatal(err)
+		}
+	}
 	dev := map[string]any{"fingerprint": "fp-google", "platform": "web"}
 	sso := func(token string) resp {
 		return e.do(t, http.MethodPost, "/v1/auth/sso/google", "", map[string]any{"id_token": token, "nonce": "n1", "device": dev})
@@ -908,6 +915,12 @@ func TestAPI_GoogleSignsInTheAccountThatHasItsEmailAddress(t *testing.T) {
 			t.Fatalf("%s: %d %s", name, r.Code, r.Raw)
 		}
 	}
+	// until the account has confirmed the address it is only what someone typed: Google does not sign it in, links
+	// nothing, and says what to do (ADR 0040)
+	if r := sso("ok:g-jane;email=" + gmail); r.Code != http.StatusConflict || !hasType(r, "sso-email-unverified") {
+		t.Fatalf("an unconfirmed address: %d %s", r.Code, r.Raw)
+	}
+	confirm(user)
 	// the Google account with the account's own address signs it in, in whatever case Google spells it
 	r := sso("ok:g-jane;email=Jane.Wanjiru.Test@Gmail.com")
 	if r.Code != http.StatusOK || r.Body["access_token"] == nil {
@@ -928,14 +941,14 @@ func TestAPI_GoogleSignsInTheAccountThatHasItsEmailAddress(t *testing.T) {
 	}
 	// a Workspace account is vouched for by its domain
 	other := e.signIn(t)
-	if _, err := e.pool.Exec(context.Background(), `UPDATE identity.users SET email = 'amina@firm.example' WHERE id = $1`, e.userID(t, other)); err != nil {
+	if _, err := e.pool.Exec(context.Background(), `UPDATE identity.users SET email = 'amina@firm.example', email_verified_at = now() WHERE id = $1`, e.userID(t, other)); err != nil {
 		t.Fatal(err)
 	}
 	if r := sso("ok:g-amina;email=amina@firm.example;hd=firm.example"); r.Code != http.StatusOK {
 		t.Fatalf("workspace account: %d %s", r.Code, r.Raw)
 	}
 	// a suspended account is not signed in this way either
-	if _, err := e.pool.Exec(context.Background(), `UPDATE identity.users SET status = 'suspended', email = 'held.test@gmail.com' WHERE id = $1`, e.userID(t, e.signIn(t))); err != nil {
+	if _, err := e.pool.Exec(context.Background(), `UPDATE identity.users SET status = 'suspended', email = 'held.test@gmail.com', email_verified_at = now() WHERE id = $1`, e.userID(t, e.signIn(t))); err != nil {
 		t.Fatal(err)
 	}
 	if r := sso("ok:g-held;email=held.test@gmail.com"); r.Code == http.StatusOK {
@@ -1014,6 +1027,7 @@ func TestAPI_AForgottenPasswordIsResetThroughAnEmailedLinkOnce(t *testing.T) {
 		d.Identity.WithPasswordResets(identity.PasswordResets{Sender: sent, WebAppURL: "https://app.example.com"})
 	})
 	s := e.signIn(t)
+	sent.msgs = nil // sign-up emailed the link that confirms the address (ADR 0040)
 	if r := e.do(t, http.MethodGet, "/v1/account", s.access, nil); r.Code != http.StatusOK || r.Body["email"] != s.email || r.Body["has_password"] != true {
 		t.Fatalf("account: %d %s", r.Code, r.Raw)
 	}

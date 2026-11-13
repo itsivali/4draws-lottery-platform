@@ -377,6 +377,10 @@ func TestStaffAPI_AnAccountClosesOnlyOnceItsMoneyIsOut(t *testing.T) {
 	}
 	// M-Pesa's answer is the payouts tests' business; here the payout is settled as the worker would
 	e.ownerExec(t, `UPDATE payouts.payouts SET status = 'succeeded', mpesa_receipt = 'SGH0000001', settled_at = now() WHERE id = $1`, payout)
+	// a confirmed address with a link once sent to it (ADR 0040): both go at closure
+	e.ownerExec(t, `UPDATE identity.users SET email_verified_at = now() WHERE id = $1`, user)
+	e.ownerExec(t, `INSERT INTO identity.email_verifications (user_id, email, token_hash, expires_at, created_at)
+		SELECT id, email, '\x01', now() + interval '1 day', now() FROM identity.users WHERE id = $1`, user)
 	r = e.do(t, http.MethodPost, "/v1/staff/closures/"+user+"/close", support, map[string]any{})
 	if r.Code != http.StatusOK || r.Body["closed_at"] == nil {
 		t.Fatalf("close: %d %s", r.Code, r.Raw)
@@ -397,8 +401,8 @@ func TestStaffAPI_AnAccountClosesOnlyOnceItsMoneyIsOut(t *testing.T) {
 		(SELECT count(*) FROM identity.refresh_tokens r JOIN identity.sessions x ON x.id = r.session_id WHERE x.user_id = $1),
 		(SELECT count(*) FROM identity.devices WHERE user_id = $1),
 		(SELECT count(*) FROM identity.auth_identities WHERE user_id = $1),
-		(SELECT count(*) FROM identity.password_resets WHERE user_id = $1),
-		u.password_hash IS NOT NULL, u.email IS NOT NULL, u.photo_url IS NOT NULL, u.erased_at IS NOT NULL
+		(SELECT count(*) FROM identity.password_resets WHERE user_id = $1) + (SELECT count(*) FROM identity.email_verifications WHERE user_id = $1),
+		u.password_hash IS NOT NULL, u.email IS NOT NULL OR u.email_verified_at IS NOT NULL, u.photo_url IS NOT NULL, u.erased_at IS NOT NULL
 		FROM identity.users u WHERE u.id = $1`, user).Scan(&sessions, &tokens, &devices, &links, &resets, &hasPassword, &hasEmail, &hasPhoto, &erased); err != nil {
 		t.Fatal(err)
 	}

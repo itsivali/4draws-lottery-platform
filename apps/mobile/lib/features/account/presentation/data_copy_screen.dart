@@ -99,6 +99,16 @@ class _DataCopyScreenState extends ConsumerState<DataCopyScreen> {
                     actionLabel: 'Add an email address',
                     onAction: () => context.go('/account/email'),
                   )
+                else if (!a.emailVerified)
+                  InlineBanner(
+                    tone: StatusTone.warning,
+                    title: 'Confirm your email address first',
+                    message:
+                        'Your copy is sent only to an address you have confirmed. Open the link we emailed to '
+                        '${a.email}, or ask for a new one.',
+                    actionLabel: 'Go to email address',
+                    onAction: () => context.go('/account/email'),
+                  )
                 else ...[
                   FactRow(label: 'It will be sent to', value: a.email!),
                   if (_error != null) ...[

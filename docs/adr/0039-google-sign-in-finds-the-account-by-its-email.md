@@ -1,6 +1,6 @@
 # 0039. Google sign-in finds the account by its email address
 
-Status: accepted
+Status: accepted (narrowed by ADR 0040: only an address the account has confirmed is matched)
 Date: 2026-11-12
 
 ## Context

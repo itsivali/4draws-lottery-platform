@@ -41,6 +41,10 @@ class AuthRepository {
         body: {'token': token, 'new_password': password},
       );
 
+  /// Confirms an email address from the token in an emailed link (ADR 0040); no session is needed.
+  Future<void> verifyEmail({required String token, required String idempotencyKey}) =>
+      _api.post('/v1/auth/email/verify', idempotencyKey: idempotencyKey, authenticated: false, body: {'token': token});
+
   Future<Tokens> logIn({required String msisdn, required String password, required String idempotencyKey}) =>
       _credentials('/v1/auth/login', msisdn, password, idempotencyKey);
 

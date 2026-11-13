@@ -47,10 +47,41 @@ VALUES (sqlc.arg(msisdn), sqlc.narg(email), sqlc.arg(password_hash), sqlc.arg(at
 RETURNING id;
 
 -- name: UserByEmail :one
-SELECT id, msisdn, status FROM identity.users WHERE email = sqlc.arg(email)::text;
+SELECT id, msisdn, status, (email_verified_at IS NOT NULL)::boolean AS email_verified
+FROM identity.users WHERE email = sqlc.arg(email)::text;
 
 -- name: SetUserEmail :exec
-UPDATE identity.users SET email = sqlc.arg(email)::text, updated_at = sqlc.arg(at) WHERE id = sqlc.arg(id);
+-- a changed address is a new claim: it is not confirmed until its own link is opened (ADR 0040)
+UPDATE identity.users
+   SET email = sqlc.arg(email)::text, updated_at = sqlc.arg(at),
+       email_verified_at = CASE WHEN email = sqlc.arg(email)::text THEN email_verified_at END
+ WHERE id = sqlc.arg(id);
+
+-- name: SetVerifiedEmail :exec
+-- an address its provider vouches for (Google, ADR 0040): kept and confirmed in one step
+UPDATE identity.users SET email = sqlc.arg(email)::text, email_verified_at = sqlc.arg(at), updated_at = sqlc.arg(at) WHERE id = sqlc.arg(id);
+
+-- name: MarkEmailVerified :execrows
+UPDATE identity.users SET email_verified_at = sqlc.arg(at), updated_at = sqlc.arg(at)
+ WHERE id = sqlc.arg(id) AND email = sqlc.arg(email)::text AND email_verified_at IS NULL AND status <> 'closed';
+
+-- name: UserEmail :one
+SELECT email, status, (email_verified_at IS NOT NULL)::boolean AS email_verified FROM identity.users WHERE id = $1;
+
+-- Emailed confirmation links (ADR 0040): the token's SHA-256 only, 24 hours, used at most once.
+-- name: InsertEmailVerification :exec
+INSERT INTO identity.email_verifications (user_id, email, token_hash, expires_at, created_at)
+VALUES (sqlc.arg(user_id), sqlc.arg(email), sqlc.arg(token_hash), sqlc.arg(expires_at), sqlc.arg(at));
+
+-- name: EmailVerificationByHash :one
+SELECT v.id, v.user_id, v.email, v.expires_at, v.used_at
+FROM identity.email_verifications v
+WHERE v.token_hash = $1
+FOR UPDATE OF v;
+
+-- name: UseEmailVerifications :exec
+-- confirming spends every open link of the player, not only the one used
+UPDATE identity.email_verifications SET used_at = sqlc.arg(at) WHERE user_id = sqlc.arg(user_id) AND used_at IS NULL;
 
 -- Emailed password-reset links (ADR 0021): the token's SHA-256 only, 30 minutes, used at most once.
 -- name: InsertPlayerPasswordReset :exec
@@ -111,7 +142,8 @@ SELECT id, status, kyc_status FROM identity.users WHERE msisdn = $1 AND msisdn_v
 
 -- name: GetAccount :one
 SELECT u.id, u.msisdn, u.email, u.kyc_status, u.status, (u.msisdn_verified_at IS NOT NULL)::boolean AS phone_verified, u.created_at,
-  u.must_change_password, (u.password_hash IS NOT NULL)::boolean AS has_password, c.requested_at AS closure_requested_at, u.photo_url
+  u.must_change_password, (u.password_hash IS NOT NULL)::boolean AS has_password, c.requested_at AS closure_requested_at, u.photo_url,
+  (u.email_verified_at IS NOT NULL)::boolean AS email_verified
 FROM identity.users u LEFT JOIN identity.closure_requests c ON c.user_id = u.id
 WHERE u.id = $1;
 

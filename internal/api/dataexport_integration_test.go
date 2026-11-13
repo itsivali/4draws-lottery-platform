@@ -23,6 +23,11 @@ func TestAPI_APlayerIsEmailedACopyOfTheirDataOnceADay(t *testing.T) {
 		t.Fatalf("play: %d %s", r.Code, r.Raw)
 	}
 
+	// a copy goes only to an address the player has confirmed (ADR 0040)
+	if r := e.do(t, http.MethodPost, "/v1/account/data-export", s.access, nil); r.Code != http.StatusConflict || !hasType(r, "email-not-verified") || len(e.mail.msgs) != 0 {
+		t.Fatalf("to an unconfirmed address: %d %s", r.Code, r.Raw)
+	}
+	e.exec(t, `UPDATE identity.users SET email_verified_at = now() WHERE id = $1`, user)
 	r := e.do(t, http.MethodPost, "/v1/account/data-export", s.access, nil)
 	if r.Code != http.StatusAccepted || r.Body["next_allowed_at"] == nil {
 		t.Fatalf("export: %d %s", r.Code, r.Raw)

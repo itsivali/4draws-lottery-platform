@@ -163,6 +163,12 @@ class FakeBackend {
   /// The account's email address (null for one from before addresses were asked for) and whether it has a password.
   String? email = 'jane@example.com';
 
+  /// Whether the address is confirmed (ADR 0040); changing it makes it a new claim.
+  bool emailVerified = true;
+
+  /// How many times the confirmation link was asked for again.
+  int verificationLinks = 0;
+
   /// The player's names, from the identity submission (null before any).
   String? firstName = 'Jane';
   String? secondName = 'Wanjiru';
@@ -219,6 +225,7 @@ class FakeBackend {
         path == '/v1/status' ||
         path == '/v1/auth/password/forgot' ||
         path == '/v1/auth/password/reset' ||
+        path == '/v1/auth/email/verify' ||
         path.startsWith('/v1/auth/sso/') ||
         (method == 'GET' && path.startsWith('/v1/draws') && !path.endsWith('/mine') && path != '/v1/draws/periods');
     if (!public && r.headers['Authorization'] != 'Bearer $access') {
@@ -302,7 +309,18 @@ class FakeBackend {
             'sign in instead, or use another address',
           );
         }
+        if (email != body['email']) emailVerified = false;
         email = body['email'] as String;
+        return http.Response('', 204);
+      case ('POST', '/v1/account/email/verification'):
+        if (emailVerified) return _problem(409, 'email-already-verified', 'Your email address is already confirmed');
+        verificationLinks++;
+        return http.Response('', 202);
+      case ('POST', '/v1/auth/email/verify'):
+        if (body['token'] != 'good-link') {
+          return _problem(410, 'invalid-token', 'This link has expired or was already used');
+        }
+        emailVerified = true;
         return http.Response('', 204);
       case ('GET', '/v1/auth/providers'):
         return _ok(providers);
@@ -360,6 +378,7 @@ class FakeBackend {
             closureRequestedAt: closureRequestedAt,
           ),
           'email': email,
+          'email_verified': emailVerified && email != null,
           'has_password': hasPassword,
           'photo_url': photoUrl,
           'first_name': firstName,

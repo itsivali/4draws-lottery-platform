@@ -31,6 +31,9 @@ const Operator = "4 DRAWS TICKET LTD"
 var (
 	// ErrNoEmail means the account has no email address to send to.
 	ErrNoEmail = errors.New("dataexport: the account has no email address")
+	// ErrEmailNotVerified means the player has not confirmed the address (ADR 0040): personal data is not sent to an
+	// address that is only what someone typed.
+	ErrEmailNotVerified = errors.New("dataexport: the email address is not confirmed")
 	// ErrNotActive means the account is closed (its email address is erased, ADR 0037).
 	ErrNotActive = errors.New("dataexport: the account is closed")
 )
@@ -52,11 +55,18 @@ type Service struct {
 	audit  *audit.Writer
 	ident  Identity
 	sender mail.Sender
+	site   string // the web app's origin, for the links at the foot of the email
 }
 
 // NewService returns a Service that sends through sender. ident may be nil (the file then has no identity section).
 func NewService(pool *pgxpool.Pool, clk clock.Clock, a *audit.Writer, ident Identity, sender mail.Sender) *Service {
 	return &Service{pool: pool, clk: clk, audit: a, ident: ident, sender: sender}
+}
+
+// WithSite sets the player web app's origin (https://4draws.co.ke), which the email's footer links to.
+func (s *Service) WithSite(origin string) *Service {
+	s.site = origin
+	return s
 }
 
 // Receipt says where a copy went.
@@ -73,7 +83,7 @@ type Receipt struct {
 const sections = `
 SELECT jsonb_build_object(
   'account', (SELECT jsonb_build_object('user_id', u.id, 'phone_number', u.msisdn, 'email', u.email, 'status', u.status,
-      'identity_status', u.kyc_status, 'language', u.language, 'opened_at', u.created_at,
+      'email_confirmed_at', u.email_verified_at, 'identity_status', u.kyc_status, 'language', u.language, 'opened_at', u.created_at,
       'phone_confirmed_at', u.msisdn_verified_at,
       'closure_requested_at', (SELECT c.requested_at FROM identity.closure_requests c WHERE c.user_id = u.id))
     FROM identity.users u WHERE u.id = $1),
@@ -124,7 +134,8 @@ func (s *Service) Send(ctx context.Context, userID string) (Receipt, error) {
 		// the account row is held, so two requests cannot both pass the once-a-day check
 		var email *string
 		var status string
-		if err := tx.QueryRow(ctx, `SELECT email, status FROM identity.users WHERE id = $1 FOR UPDATE`, userID).Scan(&email, &status); err != nil {
+		var verified bool
+		if err := tx.QueryRow(ctx, `SELECT email, status, email_verified_at IS NOT NULL FROM identity.users WHERE id = $1 FOR UPDATE`, userID).Scan(&email, &status, &verified); err != nil {
 			return err
 		}
 		if status == "closed" {
@@ -132,6 +143,9 @@ func (s *Service) Send(ctx context.Context, userID string) (Receipt, error) {
 		}
 		if email == nil || *email == "" {
 			return ErrNoEmail
+		}
+		if !verified {
+			return ErrEmailNotVerified
 		}
 		var last *time.Time
 		if err := tx.QueryRow(ctx, `SELECT max(requested_at) FROM identity.data_exports WHERE user_id = $1`, userID).Scan(&last); err != nil {
@@ -188,20 +202,24 @@ func (s *Service) Send(ctx context.Context, userID string) (Receipt, error) {
 		}
 		name := "4draws-data-" + now.In(eat).Format("2006-01-02")
 		// sent before the record commits: if the mail server refuses it, nothing is recorded and the player may try again
-		if err := s.sender.Send(ctx, mail.Message{
-			To:      []string{*email},
-			Subject: "4draws: a copy of your data",
-			Text: "You asked for a copy of the personal data 4draws holds about you. Two files are attached.\n\n" +
-				"1. " + name + ".html is the one to read. Open it and it shows in your browser as a page with your account, your top-ups, " +
-				"plays, draws, prizes and withdrawals, your limits and breaks, and the devices you signed in with. You can print it or save it as a PDF.\n\n" +
-				"2. " + name + ".json holds the same data for use by another service or program.\n\n" +
-				"For your safety the files show only the last three digits of your ID number.\n\n" +
-				"If you did not ask for this, change your password and write to support@4draws.co.ke.\n\n" + Operator + "\n",
-			Attachments: []mail.Attachment{
-				{Name: name + ".html", ContentType: "text/html", Data: page},
-				{Name: name + ".json", ContentType: "application/json", Data: file},
+		msg := mail.Notice{
+			Preheader: "Two files are attached: one to read, one for other programs.",
+			Heading:   "A copy of your data",
+			Intro:     []string{"You asked for a copy of the personal data 4draws holds about you. Two files are attached to this email."},
+			Steps: []string{
+				name + ".html is the one to read. Open it and it shows in your browser as a page with your account, your top-ups, plays, draws, prizes and withdrawals, your limits and breaks, and the devices you signed in with. You can print it or save it as a PDF.",
+				name + ".json holds the same data for use by another service or program.",
 			},
-		}); err != nil {
+			Outro:   []string{"For your safety the files show only the last three digits of your ID number. You can ask for another copy after 24 hours."},
+			Safety:  "Change your password and write to " + mail.SupportAddress + ".",
+			Reason:  "You are receiving this email because a copy of your data was asked for from your 4draws account.",
+			SiteURL: s.site,
+		}.Message([]string{*email}, "4draws: a copy of your data")
+		msg.Attachments = []mail.Attachment{
+			{Name: name + ".html", ContentType: "text/html", Data: page},
+			{Name: name + ".json", ContentType: "application/json", Data: file},
+		}
+		if err := s.sender.Send(ctx, msg); err != nil {
 			return fmt.Errorf("dataexport: send: %w", err)
 		}
 		out = Receipt{SentTo: Mask(*email), RequestedAt: now, Next: now.Add(Every)}

@@ -83,6 +83,17 @@ func authError(w http.ResponseWriter, err error) {
 	case errors.Is(err, identity.ErrSSONotLinked):
 		httpx.WriteProblem(w, http.StatusConflict, "sso-not-linked", "No account is linked to this identity",
 			"give your phone number to create one, or sign in with your phone number and password")
+	case errors.Is(err, identity.ErrSSOEmailUnverified):
+		httpx.WriteProblem(w, http.StatusConflict, "sso-email-unverified", "Confirm your email address first",
+			"An account already has this email address but has not confirmed it. Sign in with your phone number and password, confirm the address under Account, then Google will sign you in.")
+	case errors.Is(err, identity.ErrVerifyLinkInvalid):
+		httpx.WriteProblem(w, http.StatusGone, "invalid-token", "This link has expired or was already used", "sign in and ask for a new one under Account")
+	case errors.Is(err, identity.ErrVerificationUnavailable):
+		httpx.WriteProblemRetry(w, http.StatusServiceUnavailable, "unavailable", "Email confirmation is not available right now", "try again later", 60)
+	case errors.Is(err, identity.ErrNoEmail):
+		httpx.WriteProblem(w, http.StatusConflict, "no-email", "Add an email address first", "")
+	case errors.Is(err, identity.ErrEmailAlreadyVerified):
+		httpx.WriteProblem(w, http.StatusConflict, "email-already-verified", "Your email address is already confirmed", "")
 	case errors.Is(err, identity.ErrSSOAlreadyLinked):
 		httpx.WriteProblem(w, http.StatusConflict, "sso-already-linked", "This identity already signs in to an account", "sign in with it instead")
 	case errors.Is(err, identity.ErrKYCRequired):
@@ -513,4 +524,20 @@ func (h *handlers) deviceTrusted(w http.ResponseWriter, r *http.Request) bool {
 	}
 	authError(w, err)
 	return false
+}
+
+// verifyEmail confirms the email address an emailed link was sent to (ADR 0040). No session is needed: the link is
+// opened wherever the player reads their mail.
+func (h *handlers) verifyEmail(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Token string `json:"token"`
+	}
+	if !httpx.DecodeJSON(w, r, &in) || !h.limit(w, r, "verify-email:ip:"+h.clientIP(r), 30, time.Hour) {
+		return
+	}
+	if err := h.Identity.VerifyEmail(r.Context(), in.Token); err != nil {
+		authError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }

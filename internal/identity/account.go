@@ -29,6 +29,8 @@ type Account struct {
 	MustChangePassword bool
 	// Email is nil for an account from before addresses were asked for (ADR 0021).
 	Email *string
+	// EmailVerified is whether the player opened the link sent to that address (ADR 0040).
+	EmailVerified bool
 	// HasPassword is false for an account that signs in with Google or Apple only (ADR 0020).
 	HasPassword bool
 	// PhotoURL is the photo of the Google account the player signs in with, or "" (ADR 0035).
@@ -42,7 +44,7 @@ func (s *Service) Account(ctx context.Context, userID string) (Account, error) {
 		return Account{}, err
 	}
 	return Account{UserID: u.ID, MSISDN: u.Msisdn, PhoneVerified: u.PhoneVerified, KYCStatus: u.KycStatus, Status: u.Status, MustChangePassword: u.MustChangePassword,
-		CreatedAt: u.CreatedAt, ClosureRequestedAt: u.ClosureRequestedAt, Email: u.Email, HasPassword: u.HasPassword, PhotoURL: deref(u.PhotoUrl)}, nil
+		CreatedAt: u.CreatedAt, ClosureRequestedAt: u.ClosureRequestedAt, Email: u.Email, EmailVerified: u.EmailVerified, HasPassword: u.HasPassword, PhotoURL: deref(u.PhotoUrl)}, nil
 }
 
 // RequestClosure records that the player wants their account closed and returns when they first asked. Asking again

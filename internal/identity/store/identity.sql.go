@@ -71,6 +71,34 @@ func (q *Queries) CountOtherAccountsOnDevice(ctx context.Context, arg CountOther
 	return count, err
 }
 
+const emailVerificationByHash = `-- name: EmailVerificationByHash :one
+SELECT v.id, v.user_id, v.email, v.expires_at, v.used_at
+FROM identity.email_verifications v
+WHERE v.token_hash = $1
+FOR UPDATE OF v
+`
+
+type EmailVerificationByHashRow struct {
+	ID        string
+	UserID    string
+	Email     string
+	ExpiresAt time.Time
+	UsedAt    *time.Time
+}
+
+func (q *Queries) EmailVerificationByHash(ctx context.Context, tokenHash []byte) (EmailVerificationByHashRow, error) {
+	row := q.db.QueryRow(ctx, emailVerificationByHash, tokenHash)
+	var i EmailVerificationByHashRow
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Email,
+		&i.ExpiresAt,
+		&i.UsedAt,
+	)
+	return i, err
+}
+
 const endSessionsFor = `-- name: EndSessionsFor :exec
 UPDATE identity.sessions SET revoked_at = $1, revoked_reason = $2
 WHERE user_id = $3 AND revoked_at IS NULL
@@ -124,7 +152,8 @@ func (q *Queries) FindAuthIdentity(ctx context.Context, arg FindAuthIdentityPara
 
 const getAccount = `-- name: GetAccount :one
 SELECT u.id, u.msisdn, u.email, u.kyc_status, u.status, (u.msisdn_verified_at IS NOT NULL)::boolean AS phone_verified, u.created_at,
-  u.must_change_password, (u.password_hash IS NOT NULL)::boolean AS has_password, c.requested_at AS closure_requested_at, u.photo_url
+  u.must_change_password, (u.password_hash IS NOT NULL)::boolean AS has_password, c.requested_at AS closure_requested_at, u.photo_url,
+  (u.email_verified_at IS NOT NULL)::boolean AS email_verified
 FROM identity.users u LEFT JOIN identity.closure_requests c ON c.user_id = u.id
 WHERE u.id = $1
 `
@@ -141,6 +170,7 @@ type GetAccountRow struct {
 	HasPassword        bool
 	ClosureRequestedAt *time.Time
 	PhotoUrl           *string
+	EmailVerified      bool
 }
 
 func (q *Queries) GetAccount(ctx context.Context, id string) (GetAccountRow, error) {
@@ -158,6 +188,7 @@ func (q *Queries) GetAccount(ctx context.Context, id string) (GetAccountRow, err
 		&i.HasPassword,
 		&i.ClosureRequestedAt,
 		&i.PhotoUrl,
+		&i.EmailVerified,
 	)
 	return i, err
 }
@@ -305,6 +336,31 @@ type InsertAuthIdentityParams struct {
 
 func (q *Queries) InsertAuthIdentity(ctx context.Context, arg InsertAuthIdentityParams) error {
 	_, err := q.db.Exec(ctx, insertAuthIdentity, arg.UserID, arg.Provider, arg.Subject)
+	return err
+}
+
+const insertEmailVerification = `-- name: InsertEmailVerification :exec
+INSERT INTO identity.email_verifications (user_id, email, token_hash, expires_at, created_at)
+VALUES ($1, $2, $3, $4, $5)
+`
+
+type InsertEmailVerificationParams struct {
+	UserID    string
+	Email     string
+	TokenHash []byte
+	ExpiresAt time.Time
+	At        time.Time
+}
+
+// Emailed confirmation links (ADR 0040): the token's SHA-256 only, 24 hours, used at most once.
+func (q *Queries) InsertEmailVerification(ctx context.Context, arg InsertEmailVerificationParams) error {
+	_, err := q.db.Exec(ctx, insertEmailVerification,
+		arg.UserID,
+		arg.Email,
+		arg.TokenHash,
+		arg.ExpiresAt,
+		arg.At,
+	)
 	return err
 }
 
@@ -556,6 +612,25 @@ func (q *Queries) LoginCandidates(ctx context.Context, msisdn string) ([]LoginCa
 		return nil, err
 	}
 	return items, nil
+}
+
+const markEmailVerified = `-- name: MarkEmailVerified :execrows
+UPDATE identity.users SET email_verified_at = $1, updated_at = $1
+ WHERE id = $2 AND email = $3::text AND email_verified_at IS NULL AND status <> 'closed'
+`
+
+type MarkEmailVerifiedParams struct {
+	At    *time.Time
+	ID    string
+	Email string
+}
+
+func (q *Queries) MarkEmailVerified(ctx context.Context, arg MarkEmailVerifiedParams) (int64, error) {
+	result, err := q.db.Exec(ctx, markEmailVerified, arg.At, arg.ID, arg.Email)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const markPhoneVerified = `-- name: MarkPhoneVerified :exec
@@ -947,7 +1022,10 @@ func (q *Queries) SetUserClosed(ctx context.Context, arg SetUserClosedParams) er
 }
 
 const setUserEmail = `-- name: SetUserEmail :exec
-UPDATE identity.users SET email = $1::text, updated_at = $2 WHERE id = $3
+UPDATE identity.users
+   SET email = $1::text, updated_at = $2,
+       email_verified_at = CASE WHEN email = $1::text THEN email_verified_at END
+ WHERE id = $3
 `
 
 type SetUserEmailParams struct {
@@ -956,6 +1034,7 @@ type SetUserEmailParams struct {
 	ID    string
 }
 
+// a changed address is a new claim: it is not confirmed until its own link is opened (ADR 0040)
 func (q *Queries) SetUserEmail(ctx context.Context, arg SetUserEmailParams) error {
 	_, err := q.db.Exec(ctx, setUserEmail, arg.Email, arg.At, arg.ID)
 	return err
@@ -985,6 +1064,22 @@ func (q *Queries) SetUserSuspended(ctx context.Context, arg SetUserSuspendedPara
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const setVerifiedEmail = `-- name: SetVerifiedEmail :exec
+UPDATE identity.users SET email = $1::text, email_verified_at = $2, updated_at = $2 WHERE id = $3
+`
+
+type SetVerifiedEmailParams struct {
+	Email string
+	At    *time.Time
+	ID    string
+}
+
+// an address its provider vouches for (Google, ADR 0040): kept and confirmed in one step
+func (q *Queries) SetVerifiedEmail(ctx context.Context, arg SetVerifiedEmailParams) error {
+	_, err := q.db.Exec(ctx, setVerifiedEmail, arg.Email, arg.At, arg.ID)
+	return err
 }
 
 const statusHistory = `-- name: StatusHistory :many
@@ -1058,6 +1153,21 @@ func (q *Queries) UpsertDevice(ctx context.Context, arg UpsertDeviceParams) (str
 	return id, err
 }
 
+const useEmailVerifications = `-- name: UseEmailVerifications :exec
+UPDATE identity.email_verifications SET used_at = $1 WHERE user_id = $2 AND used_at IS NULL
+`
+
+type UseEmailVerificationsParams struct {
+	At     *time.Time
+	UserID string
+}
+
+// confirming spends every open link of the player, not only the one used
+func (q *Queries) UseEmailVerifications(ctx context.Context, arg UseEmailVerificationsParams) error {
+	_, err := q.db.Exec(ctx, useEmailVerifications, arg.At, arg.UserID)
+	return err
+}
+
 const usePlayerPasswordResets = `-- name: UsePlayerPasswordResets :exec
 UPDATE identity.password_resets SET used_at = $1 WHERE user_id = $2 AND used_at IS NULL
 `
@@ -1074,19 +1184,43 @@ func (q *Queries) UsePlayerPasswordResets(ctx context.Context, arg UsePlayerPass
 }
 
 const userByEmail = `-- name: UserByEmail :one
-SELECT id, msisdn, status FROM identity.users WHERE email = $1::text
+SELECT id, msisdn, status, (email_verified_at IS NOT NULL)::boolean AS email_verified
+FROM identity.users WHERE email = $1::text
 `
 
 type UserByEmailRow struct {
-	ID     string
-	Msisdn string
-	Status string
+	ID            string
+	Msisdn        string
+	Status        string
+	EmailVerified bool
 }
 
 func (q *Queries) UserByEmail(ctx context.Context, email string) (UserByEmailRow, error) {
 	row := q.db.QueryRow(ctx, userByEmail, email)
 	var i UserByEmailRow
-	err := row.Scan(&i.ID, &i.Msisdn, &i.Status)
+	err := row.Scan(
+		&i.ID,
+		&i.Msisdn,
+		&i.Status,
+		&i.EmailVerified,
+	)
+	return i, err
+}
+
+const userEmail = `-- name: UserEmail :one
+SELECT email, status, (email_verified_at IS NOT NULL)::boolean AS email_verified FROM identity.users WHERE id = $1
+`
+
+type UserEmailRow struct {
+	Email         *string
+	Status        string
+	EmailVerified bool
+}
+
+func (q *Queries) UserEmail(ctx context.Context, id string) (UserEmailRow, error) {
+	row := q.db.QueryRow(ctx, userEmail, id)
+	var i UserEmailRow
+	err := row.Scan(&i.Email, &i.Status, &i.EmailVerified)
 	return i, err
 }
 

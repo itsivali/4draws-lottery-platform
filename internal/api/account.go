@@ -135,7 +135,7 @@ func (h *handlers) getAccount(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusOK, map[string]any{
 		"user_id": a.UserID, "msisdn": a.MSISDN, "phone_verified": a.PhoneVerified, "kyc_status": a.KYCStatus, "status": a.Status,
 		"created_at": a.CreatedAt, "restriction": restriction, "closure_requested_at": a.ClosureRequestedAt,
-		"must_change_password": a.MustChangePassword, "email": a.Email, "has_password": a.HasPassword, "photo_url": nonEmpty(a.PhotoURL),
+		"must_change_password": a.MustChangePassword, "email": a.Email, "email_verified": a.EmailVerified, "has_password": a.HasPassword, "photo_url": nonEmpty(a.PhotoURL),
 		"first_name": first, "second_name": second, "identity": ident,
 	})
 }
@@ -249,6 +249,19 @@ func (h *handlers) setEmail(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// sendEmailVerification emails the player the link that confirms their address again (ADR 0040).
+func (h *handlers) sendEmailVerification(w http.ResponseWriter, r *http.Request) {
+	p, _ := principalFrom(r.Context())
+	if !h.limit(w, r, "verify-email:user:"+p.UserID, 5, time.Hour) {
+		return
+	}
+	if err := h.Identity.SendEmailVerification(r.Context(), p.UserID); err != nil {
+		authError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusAccepted)
+}
+
 func (h *handlers) requestClosure(w http.ResponseWriter, r *http.Request) {
 	p, _ := principalFrom(r.Context())
 	at, err := h.Identity.RequestClosure(r.Context(), p.UserID)
@@ -275,6 +288,9 @@ func (h *handlers) requestDataExport(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case errors.Is(err, dataexport.ErrNoEmail):
 		httpx.WriteProblem(w, http.StatusConflict, "no-email", "Add an email address first", "Your copy is sent to the email address on your account.")
+	case errors.Is(err, dataexport.ErrEmailNotVerified):
+		httpx.WriteProblem(w, http.StatusConflict, "email-not-verified", "Confirm your email address first",
+			"Your copy is sent only to an address you have confirmed. Open the link we emailed you, or ask for a new one.")
 	case errors.Is(err, dataexport.ErrNotActive):
 		httpx.WriteProblem(w, http.StatusConflict, "account-closed", "This account is closed", "")
 	case errors.As(err, &soon):

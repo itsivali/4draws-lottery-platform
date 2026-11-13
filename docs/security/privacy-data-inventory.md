@@ -15,7 +15,8 @@ stay.
 | Data | Where | Why | Notes |
 |---|---|---|---|
 | Phone number (M-Pesa) | `identity.users.msisdn` | Account, sign-in, top-ups and payouts | Proved by the first top-up |
-| Email address | `identity.users.email` | Password reset links | |
+| Email address, and when it was confirmed | `identity.users.email`, `email_verified_at` | Password reset links, copies of the player's data, finding the account at Google sign-in (ADR 0040) | |
+| Links sent to confirm an address (the token's hash, the address, expiry) | `identity.email_verifications` | Confirming the address is the player's (ADR 0040) | Erased when the account is closed |
 | Password | `identity.users.password_hash` | Sign-in | Argon2id hash with a server pepper; never the password |
 | First and second name, national ID number | `kyc.declared_identities` (sign-up), `kyc.kyc_checks` (verification) | Identity (ADR 0009, 0022) | Encrypted at rest (AES-GCM, `DATA_KEYS`); ID number also as a keyed hash for lookups |
 | Date of birth, 18+ declaration | `kyc.age_declarations` | Age (ADR 0029) | Encrypted |
@@ -42,7 +43,7 @@ stay.
 | Render (hosting) | Everything above (database, api, workers) | Hosting | **United States (Oregon)**: a cross-border transfer; S12 moves hosting to Kenya (LN 112 reg 42) |
 | Cloudflare | Connection metadata (IP, country) | TLS, protection | Global edge |
 | Google, Apple | The sign-in exchange | Sign in with Google or Apple | |
-| The SMTP provider (`SMTP_HOST`) | Email address, reset links | Password resets, staff notices | Whichever the owner configures |
+| The SMTP provider (`SMTP_HOST`) | Email address, reset and confirmation links, the player's copy of their data | Password resets, confirming addresses, data copies, staff notices | Whichever the owner configures |
 | Staff (back office) | What their role needs; identity documents are audited when viewed | Operations, KYC review | |
 | Regulators, the FRC, KRA | As the law requires | Licensing, AML reports, tax | |
 

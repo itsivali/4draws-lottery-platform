@@ -205,6 +205,33 @@ paths:
         "400": { $ref: "#/components/responses/Problem" }
         "410": { $ref: "#/components/responses/Problem" }
         "429": { $ref: "#/components/responses/Problem" }
+  /v1/auth/email/verify:
+    post:
+      operationId: verifyEmail
+      tags: [auth]
+      summary: Confirm an email address from an emailed link
+      description: |
+        ADR 0040. No token needed: the one from the link identifies the account and the address it was sent to. It
+        confirms that address if it is still the one on the account, and spends every open link of the account. 410
+        `invalid-token` for an unknown, used or expired link, or one sent to an address the account no longer has.
+        Audited.
+      security: []
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [token]
+              properties:
+                token: { type: string }
+      responses:
+        "204": { description: Address confirmed }
+        "400": { $ref: "#/components/responses/Problem" }
+        "410": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
   /v1/auth/refresh:
     post:
       operationId: refreshTokens
@@ -307,8 +334,9 @@ paths:
       description: |
         The ID token is checked against the provider's keys (issuer, audience, expiry, nonce). A Google identity
         linked to no account signs in the account that has its Google-verified email address and is linked to it
-        (ADR 0039). An identity with no account gets 409 `sso-not-linked`: the app then asks for a phone number and
-        calls `/signup` with the same token.
+        (ADR 0039), once the account has confirmed that address (ADR 0040); until then 409 `sso-email-unverified`.
+        An identity with no account gets 409 `sso-not-linked`: the app then asks for a phone number and calls
+        `/signup` with the same token.
       security: []
       parameters:
         - { $ref: "#/components/parameters/IdempotencyKey" }
@@ -949,7 +977,8 @@ paths:
       tags: [account]
       summary: Change or add the email address
       description: |
-        ADR 0021. An account with a password must give it (403 `wrong-password`), since the address is a way to reset
+        ADR 0021. A changed address is not confirmed until the link emailed to it is opened (ADR 0040). An account
+        with a password must give it (403 `wrong-password`), since the address is a way to reset
         that password; an account that signs in with Google or Apple only gives none. 409 `email-registered` when
         another account uses the address. Audited.
       parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
@@ -971,6 +1000,22 @@ paths:
         "403": { $ref: "#/components/responses/Problem" }
         "409": { $ref: "#/components/responses/Problem" }
         "429": { $ref: "#/components/responses/Problem" }
+  /v1/account/email/verification:
+    post:
+      operationId: sendEmailVerification
+      tags: [account]
+      summary: Email the link that confirms the address again
+      description: |
+        ADR 0040. The link is sent at sign-up and when the address changes; this sends another (24 hours, used once).
+        409 `no-email` when the account has no address, 409 `email-already-verified` when it is confirmed, 503 when
+        the deployment has no mail server. Rate limited per account.
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      responses:
+        "202": { description: Link sent }
+        "401": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
   /v1/account/identity:
     post:
       operationId: declareIdentity
@@ -1081,7 +1126,8 @@ paths:
       description: |
         Builds a file of the personal data held about the player (account, top-ups, plays, draws, prizes, withdrawals,
         limits, devices; the ID number as its last three digits) and emails it to the address on the account, at most
-        once in 24 hours (ADR 0038). `no-email` (409) when the account has no address; `data-export-too-soon` (429,
+        once in 24 hours (ADR 0038). `no-email` (409) when the account has no address; `email-not-verified` (409)
+        when the address is not confirmed (ADR 0040); `data-export-too-soon` (429,
         with Retry-After); `data-export-unavailable` (503) when the deployment has no mail server.
       parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
       responses:
@@ -4528,6 +4574,7 @@ components:
         closure_requested_at: { type: [string, "null"], format: date-time }
         must_change_password: { type: boolean, description: Staff gave the player a temporary password they have not replaced yet; the app asks for a new one first. }
         email: { type: [string, "null"], format: email, description: "Null for an account from before addresses were asked for (ADR 0021)." }
+        email_verified: { type: boolean, description: "Whether the player opened the link sent to the address (ADR 0040). A changed address starts unconfirmed." }
         has_password: { type: boolean, description: "False for an account that signs in with Google or Apple only (ADR 0020); it may set one (`/v1/auth/password/set`, ADR 0035)." }
         photo_url:
           type: [string, "null"]

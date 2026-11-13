@@ -5,6 +5,7 @@ import (
 	"crypto/ed25519"
 	"crypto/sha256"
 	"errors"
+	"log/slog"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -93,6 +94,7 @@ func (s *Service) Signup(ctx context.Context, rawMSISDN, rawEmail, pw string, de
 	}
 	verdict := s.verdict(ctx, dev)
 	var tokens Tokens
+	var id string
 	err = s.withTx(ctx, func(tx pgx.Tx, q *store.Queries, now time.Time) error {
 		taken, err := q.VerifiedAccountExists(ctx, msisdn)
 		if err != nil {
@@ -101,7 +103,7 @@ func (s *Service) Signup(ctx context.Context, rawMSISDN, rawEmail, pw string, de
 		if taken {
 			return ErrPhoneRegistered
 		}
-		id, err := q.InsertAccount(ctx, store.InsertAccountParams{Msisdn: msisdn, Email: &email, PasswordHash: &hash, At: &now})
+		id, err = q.InsertAccount(ctx, store.InsertAccountParams{Msisdn: msisdn, Email: &email, PasswordHash: &hash, At: &now})
 		if err != nil {
 			return emailError(err)
 		}
@@ -116,7 +118,22 @@ func (s *Service) Signup(ctx context.Context, rawMSISDN, rawEmail, pw string, de
 		tokens, err = s.startSession(ctx, q, id, dev, verdict, now)
 		return err
 	})
-	return tokens, err
+	if err != nil {
+		return Tokens{}, err
+	}
+	s.sendVerificationAfter(ctx, id, "sign-up")
+	return tokens, nil
+}
+
+// sendVerificationAfter emails the confirmation link after an account was created or its address changed (ADR 0040).
+// The account or the change stands whether or not the email leaves: the player can ask for the link again.
+func (s *Service) sendVerificationAfter(ctx context.Context, userID, after string) {
+	if s.resets == nil {
+		return
+	}
+	if err := s.SendEmailVerification(ctx, userID); err != nil && !errors.Is(err, ErrEmailAlreadyVerified) {
+		slog.WarnContext(ctx, "the email confirmation link was not sent", "after", after, "user_id", userID, "error", err)
+	}
 }
 
 // Created runs in the transaction that creates an account, with its id: what else must exist with the account (the

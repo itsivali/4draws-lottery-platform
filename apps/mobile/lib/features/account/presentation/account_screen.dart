@@ -83,7 +83,9 @@ class AccountScreen extends ConsumerWidget {
               'Email address',
               '/account/email',
               // the address itself is in the header above
-              subtitle: a?.email == null ? 'Add one so you can reset a forgotten password' : 'Where a reset link goes',
+              subtitle: a?.email == null
+                  ? 'Add one so you can reset a forgotten password'
+                  : (a!.emailVerified ? 'Where a reset link goes' : 'Not confirmed yet: open the link we emailed you'),
             ),
             link(
               Icons.devices_rounded,
@@ -261,6 +263,8 @@ class _ProfileHeader extends StatelessWidget {
                   a.phoneVerified
                       ? const StatusPill(tone: StatusTone.success, label: 'Number confirmed')
                       : const StatusPill(tone: StatusTone.warning, label: 'Number not confirmed yet'),
+                  if (a.emailNeedsConfirming)
+                    const StatusPill(tone: StatusTone.warning, label: 'Email not confirmed yet'),
                   if (a.status == 'suspended') const StatusPill(tone: StatusTone.error, label: 'Account suspended'),
                   if (a.status == 'closed') const StatusPill(tone: StatusTone.neutral, label: 'Account closed'),
                   if (a.restriction case final r?)

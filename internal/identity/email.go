@@ -95,14 +95,26 @@ func (s *Service) RequestPasswordReset(ctx context.Context, raw string) error {
 		return err
 	}
 	link := strings.TrimRight(s.resets.WebAppURL, "/") + "/reset-password?token=" + url.QueryEscape(token)
-	return s.resets.Sender.Send(ctx, mail.Message{To: []string{email}, Subject: "4draws: reset your password", Text: resetText(link, expires)})
+	return s.resets.Sender.Send(ctx, resetNotice(link, s.resets.WebAppURL, expires).Message([]string{email}, "4draws: reset your password"))
 }
 
-func resetText(link string, expires time.Time) string {
+func resetNotice(link, site string, expires time.Time) mail.Notice {
 	nairobi := time.FixedZone("EAT", 3*60*60)
-	return "Someone asked to reset the password of the 4draws account with this email address.\n\n" +
-		"If it was you, choose a new password here (the link works until " + expires.In(nairobi).Format("15:04 MST") + "):\n" + link + "\n\n" +
-		"If it was not you, ignore this email: nothing changes until the link is used, and it is sent only to this address.\n"
+	return mail.Notice{
+		Preheader: "Choose a new password for your 4draws account.",
+		Heading:   "Reset your password",
+		Intro: []string{
+			"Someone asked to reset the password of the 4draws account with this email address. If it was you, choose a new password now.",
+		},
+		Action:     &mail.Action{Label: "Choose a new password", URL: link},
+		ActionNote: "The link works until " + expires.In(nairobi).Format("15:04 MST") + " (30 minutes) and can be used once.",
+		Outro: []string{
+			"When the password changes, every device signed in to the account is signed out.",
+		},
+		Safety:  "Ignore this email. Nothing changes until the link is used, and it is sent only to this address.",
+		Reason:  "You are receiving this email because a password reset was asked for with this address.",
+		SiteURL: site,
+	}
 }
 
 // ResetPasswordWithToken sets the password of the account an emailed link belongs to, ends its sessions and spends
@@ -161,12 +173,17 @@ func (s *Service) SetEmail(ctx context.Context, userID, raw, currentPassword str
 			return ErrInvalidCredentials
 		}
 	}
-	return s.withTx(ctx, func(tx pgx.Tx, q *store.Queries, now time.Time) error {
+	err = s.withTx(ctx, func(tx pgx.Tx, q *store.Queries, now time.Time) error {
 		if err := q.SetUserEmail(ctx, store.SetUserEmailParams{Email: email, At: now, ID: userID}); err != nil {
 			return emailError(err)
 		}
 		return s.audit.Record(ctx, tx, audit.Event{ActorType: audit.Player, ActorID: userID, Action: "identity.email_changed", EntityType: "user", EntityID: userID})
 	})
+	if err != nil {
+		return err
+	}
+	s.sendVerificationAfter(ctx, userID, "address change") // a new address is not confirmed until its own link is opened
+	return nil
 }
 
 // emailError turns the unique index on addresses into ErrEmailRegistered.
