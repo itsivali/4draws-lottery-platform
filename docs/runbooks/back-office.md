@@ -91,7 +91,7 @@ Services ID goes into `STAFF_APPLE_CLIENT_ID` (api) and `VITE_APPLE_CLIENT_ID` (
 API (`render.yaml`, `lottery-api`):
 
 ```
-STAFF_BOOTSTRAP_ADMIN=admin@tajirika.co.ke           # made an admin while there is none
+STAFF_BOOTSTRAP_ADMIN=admin@4draws.co.ke             # made an admin while there is none
 STAFF_BOOTSTRAP_PASSWORD=<a long temporary password>   # their temporary password while they have none; change it at the first sign-in
 STAFF_GOOGLE_CLIENT_ID=<google web client id>         # optional, either or both
 STAFF_APPLE_CLIENT_ID=<apple services id>

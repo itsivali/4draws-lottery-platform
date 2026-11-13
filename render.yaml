@@ -82,9 +82,9 @@ services:
       # while there is none and gets STAFF_BOOTSTRAP_PASSWORD as a temporary password (changed at the first sign-in),
       # then invites everyone else from the Staff page. Google and Apple are optional (ADR 0018, the back office's own
       # client ids; docs/runbooks/back-office.md).
-      # an account's sign-in address, not a link: it stays as it was created (the domain moved to 4draws.co.ke later)
+      # the member's address moved to 4draws.co.ke with migration 00060 (owner, 2026-11-13)
       - key: STAFF_BOOTSTRAP_ADMIN
-        value: admin@tajirika.co.ke
+        value: admin@4draws.co.ke
       - key: STAFF_BOOTSTRAP_PASSWORD
         sync: false
       - key: STAFF_GOOGLE_CLIENT_ID
