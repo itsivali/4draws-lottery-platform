@@ -38,6 +38,7 @@ function StatusPills({ p }: { p: Player }) {
       <Pill tone={statusTone[p.status]}><span className="capitalize">{p.status}</span></Pill>
       <Pill tone={tone}>{label}</Pill>
       {p.phone_verified ? null : <Pill tone="neutral">Phone not proved</Pill>}
+      {p.email && !p.email_verified ? <Pill tone="neutral">Email not confirmed</Pill> : null}
       {p.closure_requested_at ? <Pill tone="pending">Asked to close</Pill> : null}
     </div>
   )

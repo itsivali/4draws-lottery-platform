@@ -84,7 +84,22 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
     super.dispose();
   }
 
-  void _clearErrors() => _phoneError = _emailError = _passwordError = _identityError = _formError = _formDetail = null;
+  /// A Google token whose address is on an account that has not confirmed it (ADR 0041): the player may sign in to
+  /// that account the other way, or make a new one with this token.
+  ProviderToken? _unconfirmedToken;
+
+  void _clearErrors() {
+    _phoneError = _emailError = _passwordError = _identityError = _formError = _formDetail = null;
+    _unconfirmedToken = null;
+  }
+
+  void _createWith(ProviderToken t) {
+    _clearErrors();
+    _providerToken = t;
+    _step = _Step.phone;
+    _adult = false;
+    _phone.clear();
+  }
 
   SignUpIdentity get _identity => SignUpIdentity(
     firstName: _firstName.text,
@@ -181,10 +196,13 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
       if (!mounted) return;
       setState(() {
         if (f case ProblemFailure(slug: 'sso-not-linked')) {
-          _providerToken = t;
-          _step = _Step.phone;
-          _adult = false;
-          _phone.clear();
+          _createWith(t);
+        } else if (f case ProblemFailure(slug: 'sso-email-unverified', :final title)) {
+          _formError = title;
+          _formDetail =
+              'An account has this email address but has not confirmed it. If it is yours, sign in with your phone '
+              'number and password, then confirm the address under Account. If it is not, create a new account.';
+          _unconfirmedToken = t;
         } else {
           final d = describeFailure(f);
           _formError = d.title;
@@ -276,6 +294,10 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
       passwordError: _passwordError,
       formError: _formError,
       formDetail: _formDetail,
+      onCreateInstead: switch (_unconfirmedToken) {
+        final t? => () => setState(() => _createWith(t)),
+        null => null,
+      },
       expired: ref.watch(sessionManagerProvider).endReason == SessionEndReason.expired,
       selfExcluded: ref.watch(sessionManagerProvider).endReason == SessionEndReason.selfExcluded,
       justReset: GoRouterState.of(context).uri.queryParameters['reset'] == '1',
@@ -367,6 +389,7 @@ class _Form extends StatelessWidget {
     required this.passwordError,
     required this.formError,
     required this.formDetail,
+    required this.onCreateInstead,
     required this.expired,
     this.selfExcluded = false,
     required this.justReset,
@@ -402,6 +425,9 @@ class _Form extends StatelessWidget {
   final String? passwordError;
   final String? formError;
   final String? formDetail;
+
+  /// Offered with the error when a Google address is on an account that has not confirmed it (ADR 0041).
+  final VoidCallback? onCreateInstead;
   final bool expired;
   final bool selfExcluded;
   final bool justReset;
@@ -460,7 +486,14 @@ class _Form extends StatelessWidget {
     );
     final errorBanner = formError == null
         ? null
-        : InlineBanner(tone: StatusTone.error, live: true, title: formError!, message: formDetail);
+        : InlineBanner(
+            tone: StatusTone.error,
+            live: true,
+            title: formError!,
+            message: formDetail,
+            actionLabel: onCreateInstead == null ? null : 'Create a new account instead',
+            onAction: onCreateInstead,
+          );
     final form = AutofillGroup(
       child: Form(
         key: formKey,

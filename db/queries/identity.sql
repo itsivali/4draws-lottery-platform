@@ -47,8 +47,22 @@ VALUES (sqlc.arg(msisdn), sqlc.narg(email), sqlc.arg(password_hash), sqlc.arg(at
 RETURNING id;
 
 -- name: UserByEmail :one
+-- Several accounts may claim one address; at most one holds it confirmed (ADR 0041). The confirmed one comes first,
+-- then the oldest claim.
 SELECT id, msisdn, status, (email_verified_at IS NOT NULL)::boolean AS email_verified
-FROM identity.users WHERE email = sqlc.arg(email)::text;
+FROM identity.users WHERE email = sqlc.arg(email)::text
+ORDER BY (email_verified_at IS NOT NULL) DESC, id
+LIMIT 1;
+
+-- name: EmailConfirmedByAnother :one
+SELECT EXISTS (SELECT 1 FROM identity.users
+  WHERE email = sqlc.arg(email)::text AND email_verified_at IS NOT NULL AND id <> sqlc.narg(except_id)::uuid IS NOT FALSE)::boolean AS taken;
+
+-- name: ReleaseEmailClaims :many
+-- the address has a confirmed owner now: every other account that only claimed it loses it (ADR 0041)
+UPDATE identity.users SET email = NULL, updated_at = sqlc.arg(at)
+ WHERE email = sqlc.arg(email)::text AND email_verified_at IS NULL AND id <> sqlc.arg(owner_id)
+RETURNING id;
 
 -- name: SetUserEmail :exec
 -- a changed address is a new claim: it is not confirmed until its own link is opened (ADR 0040)
@@ -188,6 +202,7 @@ SELECT 1 FROM identity.users WHERE id = $1 FOR UPDATE;
 -- the back office's player list (ADR 0019): newest first (ids are uuid v7), narrowed by a phone-number or email
 -- fragment and a status; before (a user id) continues a page. Shows each player's balance, plays and last sign-in.
 SELECT u.id, u.msisdn, u.email, u.kyc_status, u.status, (u.msisdn_verified_at IS NOT NULL)::boolean AS phone_verified, u.created_at,
+       (u.email_verified_at IS NOT NULL)::boolean AS email_verified,
        coalesce(w.balance_kes, 0)::bigint AS balance_kes,
        (SELECT count(*) FROM tickets.tickets t WHERE t.user_id = u.id AND t.status = 'paid')::bigint AS plays,
        (SELECT max(s.created_at) FROM identity.sessions s WHERE s.user_id = u.id) AS last_sign_in_at,

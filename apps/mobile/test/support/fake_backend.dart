@@ -161,6 +161,9 @@ class FakeBackend {
   final ssoAccounts = <String>{};
 
   /// The account's email address (null for one from before addresses were asked for) and whether it has a password.
+  /// Google tokens whose address is on an account that has not confirmed it (ADR 0041).
+  final ssoUnconfirmed = <String>{};
+
   String? email = 'jane@example.com';
 
   /// Whether the address is confirmed (ADR 0040); changing it makes it a new claim.
@@ -327,6 +330,9 @@ class FakeBackend {
       case ('POST', '/v1/auth/sso/google') || ('POST', '/v1/auth/sso/apple'):
         if (body['nonce'] == null || body['id_token'] == null) {
           return _problem(400, 'invalid-body', 'Invalid body');
+        }
+        if (ssoUnconfirmed.contains(body['id_token'])) {
+          return _problem(409, 'sso-email-unverified', 'Confirm your email address first');
         }
         if (!ssoAccounts.contains(body['id_token'])) {
           return _problem(

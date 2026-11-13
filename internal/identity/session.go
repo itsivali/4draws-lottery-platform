@@ -103,6 +103,9 @@ func (s *Service) Signup(ctx context.Context, rawMSISDN, rawEmail, pw string, de
 		if taken {
 			return ErrPhoneRegistered
 		}
+		if err := emailFree(ctx, q, email, nil); err != nil {
+			return err
+		}
 		id, err = q.InsertAccount(ctx, store.InsertAccountParams{Msisdn: msisdn, Email: &email, PasswordHash: &hash, At: &now})
 		if err != nil {
 			return emailError(err)

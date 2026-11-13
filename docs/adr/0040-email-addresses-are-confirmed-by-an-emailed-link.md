@@ -49,8 +49,7 @@ of data) and the staff password reset use it. Alert and review notices to staff 
 - **Existing accounts are unconfirmed.** Google sign-in by address (ADR 0039) stops working for them until the
   player signs in the other way and confirms. The app shows "Email not confirmed yet" on Account and offers the link
   again. No email is sent to existing players by the migration.
-- An address someone typed and never confirmed still blocks another sign-up with it (`email-registered`). Support
-  removes it on request. Letting unconfirmed addresses be claimed by their owner is not built.
+- An address someone typed and never confirmed blocked another sign-up with it; ADR 0041 ends that.
 - Closing an account erases the links and the confirmation with the address (ADR 0037, the function is replaced in
   migration 00058).
 - The player's copy of their data shows when the address was confirmed.

@@ -751,6 +751,14 @@ func TestEmail_SignupNeedsAUniqueAddressAndAForgottenPasswordIsResetThroughALink
 		t.Fatalf("sign-up: %v", err)
 	}
 	p, _ := e.svc.Authenticate(ctx, tok.Access)
+	// once an account has confirmed an address, no other may give it (ADR 0041)
+	confirm := func(userID string) {
+		t.Helper()
+		if _, err := e.pool.Exec(ctx, `UPDATE identity.users SET email_verified_at = now() WHERE id = $1`, userID); err != nil {
+			t.Fatal(err)
+		}
+	}
+	confirm(p.UserID)
 	if _, err := e.svc.Signup(ctx, e.newMSISDN(), "jane@example.com", goodPassword, identity.Device{Fingerprint: "fp-other", Platform: "android"}); !errors.Is(err, identity.ErrEmailRegistered) {
 		t.Fatalf("second account with the address err = %v", err)
 	}
@@ -760,8 +768,8 @@ func TestEmail_SignupNeedsAUniqueAddressAndAForgottenPasswordIsResetThroughALink
 	}
 
 	// sign-up emailed the link that confirms the address (ADR 0040); until it is opened the address is a claim
-	if len(sent.msgs) != 1 || sent.msgs[0].To[0] != "jane@example.com" || !strings.Contains(sent.msgs[0].Text, "https://app.example.com/verify-email?token=") || a.EmailVerified {
-		t.Fatalf("confirmation link: %+v, verified %v", sent.msgs, a.EmailVerified)
+	if len(sent.msgs) != 1 || sent.msgs[0].To[0] != "jane@example.com" || !strings.Contains(sent.msgs[0].Text, "https://app.example.com/verify-email?token=") {
+		t.Fatalf("confirmation link: %+v", sent.msgs)
 	}
 	sent.msgs = nil
 
@@ -819,6 +827,7 @@ func TestEmail_SignupNeedsAUniqueAddressAndAForgottenPasswordIsResetThroughALink
 	if a, _ := e.svc.Account(ctx, p.UserID); a.Email == nil || *a.Email != "jane2@example.com" {
 		t.Fatalf("address after change: %+v", a)
 	}
+	confirm(p.UserID)
 	other, _ := e.svc.Signup(ctx, e.newMSISDN(), "other@example.com", goodPassword, identity.Device{Fingerprint: "fp-3", Platform: "android"})
 	op, _ := e.svc.Authenticate(ctx, other.Access)
 	if err := e.svc.SetEmail(ctx, op.UserID, "jane2@example.com", goodPassword); !errors.Is(err, identity.ErrEmailRegistered) {

@@ -165,9 +165,11 @@ func (s *Service) erase(ctx context.Context, tx pgx.Tx, q *store.Queries, userID
 
 // Player is a registered account as the back office lists it.
 type Player struct {
-	UserID             string     `json:"user_id"`
-	MSISDN             string     `json:"msisdn"`
-	Email              *string    `json:"email"`
+	UserID string  `json:"user_id"`
+	MSISDN string  `json:"msisdn"`
+	Email  *string `json:"email"`
+	// EmailVerified is whether the player opened the link sent to that address (ADR 0040).
+	EmailVerified      bool       `json:"email_verified"`
 	KYCStatus          string     `json:"kyc_status"`
 	Status             string     `json:"status"`
 	PhoneVerified      bool       `json:"phone_verified"`
@@ -222,7 +224,7 @@ func (s *Service) Players(ctx context.Context, f PlayerFilter, limit int, before
 		}
 		page.Players = make([]Player, 0, len(rows))
 		for _, r := range rows {
-			page.Players = append(page.Players, Player{UserID: r.ID, MSISDN: r.Msisdn, Email: r.Email, KYCStatus: r.KycStatus, Status: r.Status,
+			page.Players = append(page.Players, Player{UserID: r.ID, MSISDN: r.Msisdn, Email: r.Email, EmailVerified: r.EmailVerified, KYCStatus: r.KycStatus, Status: r.Status,
 				PhoneVerified: r.PhoneVerified, BalanceKES: r.BalanceKes, Plays: r.Plays, CreatedAt: r.CreatedAt,
 				LastSignInAt: timePtr(r.LastSignInAt), ClosureRequestedAt: r.ClosureRequestedAt})
 		}

@@ -107,6 +107,8 @@ export interface Player {
   msisdn: string
   /** where a forgotten password's reset link goes (ADR 0021); null for accounts from before addresses were asked for */
   email: string | null
+  /** whether the player opened the link sent to that address (ADR 0040) */
+  email_verified: boolean
   kyc_status: 'none' | 'pending' | 'verified' | 'manual_review' | 'rejected'
   status: 'active' | 'suspended' | 'closed'
   phone_verified: boolean

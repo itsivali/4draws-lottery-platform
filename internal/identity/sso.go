@@ -126,7 +126,7 @@ func (s *Service) SignInSSO(ctx context.Context, provider, idToken, nonce string
 		if email != "" && !linkedNow {
 			// Google vouches for this address and the identity is already the account's: if the account has the same
 			// address, it is confirmed (a no-op when the address differs or is confirmed already)
-			if _, err := q.MarkEmailVerified(ctx, store.MarkEmailVerifiedParams{At: &now, ID: userID, Email: email}); err != nil {
+			if _, err := s.confirmEmail(ctx, tx, q, userID, email, now); err != nil {
 				return err
 			}
 		}
@@ -209,13 +209,17 @@ func (s *Service) SignupSSO(ctx context.Context, provider, idToken, nonce, rawMS
 			return err
 		}
 		if email != "" {
-			// the address Google vouches for becomes the account's, already confirmed (ADR 0040), unless another
-			// account has it: then this account has none until the player adds one
-			if _, err := q.UserByEmail(ctx, email); errors.Is(err, pgx.ErrNoRows) {
+			// the address Google vouches for becomes the account's, already confirmed (ADR 0040), and is taken from
+			// accounts that only claimed it (ADR 0041). If another account has confirmed it, this one has none until
+			// the player adds one.
+			if err := emailFree(ctx, q, email, nil); err == nil {
 				if err := q.SetVerifiedEmail(ctx, store.SetVerifiedEmailParams{Email: email, At: &now, ID: id}); err != nil {
 					return emailError(err)
 				}
-			} else if err != nil {
+				if err := s.releaseClaims(ctx, tx, q, id, email, now); err != nil {
+					return err
+				}
+			} else if !errors.Is(err, ErrEmailRegistered) {
 				return err
 			}
 		}

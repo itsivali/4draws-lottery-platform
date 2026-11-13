@@ -142,15 +142,34 @@ func TestAPI_AnAccountMadeWithGoogleHasItsGoogleAddressAlreadyConfirmed(t *testi
 	if a := e.do(t, http.MethodGet, "/v1/account", r.Body["access_token"].(string), nil); r.Code != http.StatusCreated || a.Body["email"] != nil || a.Body["email_verified"] != false {
 		t.Fatalf("unvouched: %d %s", r.Code, a.Raw)
 	}
-	// an address another account typed and never confirmed stays with that account: the new one has none
+	// an address another account typed and never confirmed moves to the account Google vouches for (ADR 0041): the
+	// first is told to confirm, and may instead sign up; the claim is released and recorded
 	s := e.signIn(t)
-	e.exec(t, `UPDATE identity.users SET email = 'taken.test@gmail.com' WHERE id = $1`, e.userID(t, s))
+	claimer := e.userID(t, s)
+	e.exec(t, `UPDATE identity.users SET email = 'taken.test@gmail.com' WHERE id = $1`, claimer)
+	if r := e.do(t, http.MethodPost, "/v1/auth/sso/google", "", map[string]any{"id_token": "ok:g-taken;email=taken.test@gmail.com", "nonce": "n1", "device": device()}); r.Code != http.StatusConflict || !hasType(r, "sso-email-unverified") {
+		t.Fatalf("an address only claimed: %d %s", r.Code, r.Raw)
+	}
 	r = signup("ok:g-taken;email=taken.test@gmail.com", e.msisdn())
 	if r.Code != http.StatusCreated {
 		t.Fatalf("taken sign-up: %d %s", r.Code, r.Raw)
 	}
+	if a := e.do(t, http.MethodGet, "/v1/account", r.Body["access_token"].(string), nil); a.Body["email"] != "taken.test@gmail.com" || a.Body["email_verified"] != true {
+		t.Fatalf("the Google account: %s", a.Raw)
+	}
+	if a := e.do(t, http.MethodGet, "/v1/account", s.access, nil); a.Code != http.StatusOK || a.Body["email"] != nil {
+		t.Fatalf("the account that only claimed it: %s", a.Raw)
+	}
+	var released int
+	if err := e.pool.QueryRow(t.Context(), `SELECT count(*) FROM audit.audit_log WHERE action = 'identity.email_claim_released' AND entity_id = $1::text`, claimer).Scan(&released); err != nil || released != 1 {
+		t.Fatalf("released %d (%v)", released, err)
+	}
+	// an address another account has confirmed stays there: a Google sign-up asked for directly gets none
+	owner := e.signIn(t)
+	e.exec(t, `UPDATE identity.users SET email = 'owned.test@gmail.com', email_verified_at = now() WHERE id = $1`, e.userID(t, owner))
+	r = signup("ok:g-owned;email=owned.test@gmail.com", e.msisdn())
 	if a := e.do(t, http.MethodGet, "/v1/account", r.Body["access_token"].(string), nil); r.Code != http.StatusCreated || a.Body["email"] != nil {
-		t.Fatalf("taken: %d %s", r.Code, a.Raw)
+		t.Fatalf("an owned address: %d %s", r.Code, a.Raw)
 	}
 	// a Google identity already linked to an account confirms the account's address when it is the same one
 	linked := e.signIn(t)
@@ -160,5 +179,72 @@ func TestAPI_AnAccountMadeWithGoogleHasItsGoogleAddressAlreadyConfirmed(t *testi
 	r = e.do(t, http.MethodPost, "/v1/auth/sso/google", "", map[string]any{"id_token": "ok:g-linked;email=linked.test@gmail.com", "nonce": "n1", "device": device()})
 	if a := e.do(t, http.MethodGet, "/v1/account", r.Body["access_token"].(string), nil); r.Code != http.StatusOK || a.Body["email_verified"] != true {
 		t.Fatalf("linked: %d %s", r.Code, a.Raw)
+	}
+}
+
+func TestAPI_AnAddressOnlyClaimedDoesNotBlockItsOwner(t *testing.T) {
+	sent := &outbox{}
+	e := setupWith(t, func(d *apiDeps) {
+		d.Identity.WithPasswordResets(identity.PasswordResets{Sender: sent, WebAppURL: "https://app.example.com"})
+	})
+	signup := func(email, fp string) resp {
+		return e.do(t, http.MethodPost, "/v1/auth/signup", "", map[string]any{"first_name": "Amina", "second_name": "Otieno", "national_id": "24681357",
+			"date_of_birth": "1990-05-17", "adult_declaration": true, "msisdn": e.msisdn(), "email": email, "password": strongPassword,
+			"device": map[string]any{"fingerprint": fp, "platform": "android"}})
+	}
+	account := func(access string) resp { return e.do(t, http.MethodGet, "/v1/account", access, nil) }
+	linkTo := func(i int) string {
+		t.Helper()
+		m := verifyLink.FindStringSubmatch(sent.msgs[i].Text)
+		if m == nil {
+			t.Fatalf("no link in message %d", i)
+		}
+		return m[1]
+	}
+	verify := func(tok string) resp {
+		return e.do(t, http.MethodPost, "/v1/auth/email/verify", "", map[string]any{"token": tok})
+	}
+
+	// someone gives an address that is not theirs and never confirms it; its owner can still sign up with it
+	squatter := signup("wanjiru@example.com", "fp-squatter")
+	owner := signup("wanjiru@example.com", "fp-owner")
+	if squatter.Code != http.StatusCreated || owner.Code != http.StatusCreated || len(sent.msgs) != 2 {
+		t.Fatalf("two claims: %d %s / %d %s, sent %d", squatter.Code, squatter.Raw, owner.Code, owner.Raw, len(sent.msgs))
+	}
+	sAccess, oAccess := squatter.Body["access_token"].(string), owner.Body["access_token"].(string)
+
+	// the owner opens their link: the address is theirs, and the other account loses it
+	if r := verify(linkTo(1)); r.Code != http.StatusNoContent {
+		t.Fatalf("verify: %d %s", r.Code, r.Raw)
+	}
+	if a := account(oAccess); a.Body["email"] != "wanjiru@example.com" || a.Body["email_verified"] != true {
+		t.Fatalf("the owner: %s", a.Raw)
+	}
+	if a := account(sAccess); a.Body["email"] != nil || a.Body["email_verified"] != false {
+		t.Fatalf("the other account: %s", a.Raw)
+	}
+	// the link sent to the other account confirms nothing now
+	if r := verify(linkTo(0)); r.Code != http.StatusGone {
+		t.Fatalf("the other account's link: %d %s", r.Code, r.Raw)
+	}
+	// a confirmed address is taken: not at sign-up, not by a change of address
+	if r := signup("wanjiru@example.com", "fp-third"); r.Code != http.StatusConflict || !hasType(r, "email-registered") {
+		t.Fatalf("sign-up with a confirmed address: %d %s", r.Code, r.Raw)
+	}
+	if r := e.do(t, http.MethodPut, "/v1/account/email", sAccess, map[string]any{"email": "wanjiru@example.com", "current_password": strongPassword}); r.Code != http.StatusConflict || !hasType(r, "email-registered") {
+		t.Fatalf("change to a confirmed address: %d %s", r.Code, r.Raw)
+	}
+	// a password-reset link for an address goes to the account that confirmed it
+	sent.msgs = nil
+	if r := e.do(t, http.MethodPost, "/v1/auth/password/forgot", "", map[string]any{"email": "wanjiru@example.com"}); r.Code != http.StatusAccepted || len(sent.msgs) != 1 {
+		t.Fatalf("forgot: %d %s, sent %d", r.Code, r.Raw, len(sent.msgs))
+	}
+	var resetFor string
+	if err := e.pool.QueryRow(t.Context(), `SELECT user_id::text FROM identity.password_resets ORDER BY created_at DESC LIMIT 1`).Scan(&resetFor); err != nil {
+		t.Fatal(err)
+	}
+	var ownerID string
+	if err := e.pool.QueryRow(t.Context(), `SELECT id::text FROM identity.users WHERE email = 'wanjiru@example.com'`).Scan(&ownerID); err != nil || resetFor != ownerID {
+		t.Fatalf("the reset link is for %s, want %s (%v)", resetFor, ownerID, err)
 	}
 }

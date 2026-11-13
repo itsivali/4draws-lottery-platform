@@ -88,8 +88,10 @@ Read this first at the start of every session.
   address and on request (24 hours, once; `/verify-email`). Until confirmed, an address still gets password-reset
   links, but Google sign-in does not find the account by it and a copy of the player's data is not sent to it.
   Addresses given before this are unconfirmed; the app says so under Account. Player emails and the staff password
-  reset now use one branded layout with the logo inside the message (`internal/platform/mail/notice.go`). Not
-  built: letting the owner of an address take it from an account that typed it and never confirmed it.
+  reset now use one branded layout with the logo inside the message (`internal/platform/mail/notice.go`).
+- **An unconfirmed address is only a claim (2026-11-13, ADR 0041):** several accounts may give one address; the one
+  that confirms it keeps it and the others lose it. Only a confirmed address refuses another sign-up. The back
+  office marks players whose address is not confirmed.
 - **Play Console (2026-11-11):** the owner's developer account is a personal one ("willis ivali"). The app is to be
   created as 4draws, `ke.co.fourdraws.app`, English (UK), App, Free; the three declarations are the owner's to
   accept. A release build signed with the upload key builds locally. Not yet possible: production release (needs

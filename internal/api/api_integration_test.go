@@ -1071,8 +1071,9 @@ func TestAPI_AForgottenPasswordIsResetThroughAnEmailedLinkOnce(t *testing.T) {
 	}
 	access := r.Body["access_token"].(string)
 
-	// the address is changed with the password in hand, and cannot be another account's
+	// the address is changed with the password in hand, and cannot be one another account has confirmed (ADR 0041)
 	other := e.signIn(t)
+	e.exec(t, `UPDATE identity.users SET email_verified_at = now() WHERE id = $1`, e.userID(t, other))
 	if r := e.do(t, http.MethodPut, "/v1/account/email", access, map[string]any{"email": "new@example.com", "current_password": "wrong"}); r.Code != http.StatusForbidden || !hasType(r, "wrong-password") {
 		t.Fatalf("change without the password: %d %s", r.Code, r.Raw)
 	}
@@ -1085,7 +1086,8 @@ func TestAPI_AForgottenPasswordIsResetThroughAnEmailedLinkOnce(t *testing.T) {
 	if r := e.do(t, http.MethodGet, "/v1/account", access, nil); r.Code != http.StatusOK || r.Body["email"] != "new@example.com" {
 		t.Fatalf("account after change: %d %s", r.Code, r.Raw)
 	}
-	// signing up with an address in use is refused
+	// signing up with an address an account has confirmed is refused
+	e.exec(t, `UPDATE identity.users SET email_verified_at = now() WHERE email = 'new@example.com'`)
 	if r := e.do(t, http.MethodPost, "/v1/auth/signup", "", map[string]any{"first_name": "Amina", "second_name": "Otieno", "national_id": "24681357", "date_of_birth": "1990-05-17", "adult_declaration": true, "msisdn": e.msisdn(), "email": "new@example.com", "password": strongPassword, "device": map[string]any{"fingerprint": "fp-dup", "platform": "android"}}); r.Code != http.StatusConflict || !hasType(r, "email-registered") {
 		t.Fatalf("duplicate address sign-up: %d %s", r.Code, r.Raw)
 	}

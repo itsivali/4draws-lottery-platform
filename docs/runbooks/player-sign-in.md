@@ -85,8 +85,10 @@ password (below). The back office's Players page shows the address and searches 
 - **A player says the email never came:** check the junk folder, then the address on the Players page for a typo.
   They can correct it under Account → Email address (a new link goes to the new address) or ask for the link again
   (5 an hour). The API logs "the email confirmation link was not sent" when the mail server refused it.
-- **Someone's address is on an account that is not theirs:** it is unconfirmed, so it opens nothing but reset
-  links. Remove it on request: `UPDATE identity.users SET email = NULL WHERE id = …` as a recorded support action.
+- **Someone's address is on an account that is not theirs:** it is only a claim (ADR 0041). The owner signs up or
+  adds the address to their own account and confirms it; the other account then loses it
+  (`identity.email_claim_released` in the audit log). Nothing is needed from support.
+- **The Players page** shows "Email not confirmed" on a player whose address is only a claim.
 - **Audit log:** `identity.email_verification_sent`, `identity.email_verified`.
 - **The look of emails:** `internal/platform/mail/notice.go` (layout and footer) and `logo.png` beside it, rendered
   by `scripts/gen-icons.sh` from the brand mark.

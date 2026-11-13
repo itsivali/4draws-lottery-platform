@@ -174,6 +174,9 @@ func (s *Service) SetEmail(ctx context.Context, userID, raw, currentPassword str
 		}
 	}
 	err = s.withTx(ctx, func(tx pgx.Tx, q *store.Queries, now time.Time) error {
+		if err := emailFree(ctx, q, email, &userID); err != nil {
+			return err
+		}
 		if err := q.SetUserEmail(ctx, store.SetUserEmailParams{Email: email, At: now, ID: userID}); err != nil {
 			return emailError(err)
 		}
@@ -186,10 +189,38 @@ func (s *Service) SetEmail(ctx context.Context, userID, raw, currentPassword str
 	return nil
 }
 
-// emailError turns the unique index on addresses into ErrEmailRegistered.
+// emailFree refuses an address another account has confirmed (ADR 0041). An address others have only claimed is
+// free to claim too: whoever confirms it keeps it.
+func emailFree(ctx context.Context, q *store.Queries, email string, except *string) error {
+	taken, err := q.EmailConfirmedByAnother(ctx, store.EmailConfirmedByAnotherParams{Email: email, ExceptID: except})
+	if err != nil {
+		return err
+	}
+	if taken {
+		return ErrEmailRegistered
+	}
+	return nil
+}
+
+// releaseClaims takes a now-confirmed address from every other account that only claimed it, and records each.
+func (s *Service) releaseClaims(ctx context.Context, tx pgx.Tx, q *store.Queries, ownerID, email string, now time.Time) error {
+	lost, err := q.ReleaseEmailClaims(ctx, store.ReleaseEmailClaimsParams{At: now, Email: email, OwnerID: ownerID})
+	if err != nil {
+		return err
+	}
+	for _, id := range lost {
+		if err := s.audit.Record(ctx, tx, audit.Event{ActorType: audit.System, Action: "identity.email_claim_released", EntityType: "user", EntityID: id,
+			Details: map[string]any{"reason": "another account confirmed the address"}}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// emailError turns the unique index on confirmed addresses into ErrEmailRegistered.
 func emailError(err error) error {
 	var pe *pgconn.PgError
-	if errors.As(err, &pe) && pe.Code == "23505" && pe.ConstraintName == "users_email_key" {
+	if errors.As(err, &pe) && pe.Code == "23505" && pe.ConstraintName == "users_email_confirmed_key" {
 		return ErrEmailRegistered
 	}
 	return err

@@ -106,11 +106,11 @@ func (s *Service) VerifyEmail(ctx context.Context, token string) error {
 		if v.UsedAt != nil || !now.Before(v.ExpiresAt) {
 			return ErrVerifyLinkInvalid
 		}
-		n, err := q.MarkEmailVerified(ctx, store.MarkEmailVerifiedParams{At: &now, ID: v.UserID, Email: v.Email})
+		ok, err := s.confirmEmail(ctx, tx, q, v.UserID, v.Email, now)
 		if err != nil {
 			return err
 		}
-		if n == 0 { // the address changed since, the account closed, or it is confirmed already
+		if !ok { // the address changed since, the account closed, it is confirmed already, or another account confirmed it
 			return ErrVerifyLinkInvalid
 		}
 		if err := q.UseEmailVerifications(ctx, store.UseEmailVerificationsParams{At: &now, UserID: v.UserID}); err != nil {
@@ -118,4 +118,20 @@ func (s *Service) VerifyEmail(ctx context.Context, token string) error {
 		}
 		return s.audit.Record(ctx, tx, audit.Event{ActorType: audit.Player, ActorID: v.UserID, Action: "identity.email_verified", EntityType: "user", EntityID: v.UserID})
 	})
+}
+
+// confirmEmail marks email as the confirmed address of userID if it is the address on that account and no other
+// account has confirmed it, and takes it from the accounts that only claimed it (ADR 0041). It reports whether the
+// account's address became confirmed.
+func (s *Service) confirmEmail(ctx context.Context, tx pgx.Tx, q *store.Queries, userID, email string, now time.Time) (bool, error) {
+	if err := emailFree(ctx, q, email, &userID); errors.Is(err, ErrEmailRegistered) {
+		return false, nil
+	} else if err != nil {
+		return false, err
+	}
+	n, err := q.MarkEmailVerified(ctx, store.MarkEmailVerifiedParams{At: &now, ID: userID, Email: email})
+	if err != nil || n == 0 {
+		return false, err
+	}
+	return true, s.releaseClaims(ctx, tx, q, userID, email, now)
 }

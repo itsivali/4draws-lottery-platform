@@ -64,7 +64,7 @@ func authError(w http.ResponseWriter, err error) {
 	case errors.Is(err, identity.ErrInvalidEmail):
 		httpx.WriteProblem(w, http.StatusBadRequest, "invalid-email", "Invalid email address", "use an address like name@example.com")
 	case errors.Is(err, identity.ErrEmailRegistered):
-		httpx.WriteProblem(w, http.StatusConflict, "email-registered", "This email address already has an account", "sign in instead, or use another address")
+		httpx.WriteProblem(w, http.StatusConflict, "email-registered", "This email address belongs to another account", "sign in to that account instead, or use another address")
 	case errors.Is(err, identity.ErrResetLinkInvalid):
 		httpx.WriteProblem(w, http.StatusGone, "invalid-token", "This link has expired or was already used", "ask for a new one")
 	case errors.Is(err, identity.ErrResetUnavailable):
@@ -85,7 +85,7 @@ func authError(w http.ResponseWriter, err error) {
 			"give your phone number to create one, or sign in with your phone number and password")
 	case errors.Is(err, identity.ErrSSOEmailUnverified):
 		httpx.WriteProblem(w, http.StatusConflict, "sso-email-unverified", "Confirm your email address first",
-			"An account already has this email address but has not confirmed it. Sign in with your phone number and password, confirm the address under Account, then Google will sign you in.")
+			"An account has this email address but has not confirmed it. If it is yours, sign in with your phone number and password and confirm the address under Account; Google will then sign you in. If it is not yours, create a new account with Google: the address moves to it.")
 	case errors.Is(err, identity.ErrVerifyLinkInvalid):
 		httpx.WriteProblem(w, http.StatusGone, "invalid-token", "This link has expired or was already used", "sign in and ask for a new one under Account")
 	case errors.Is(err, identity.ErrVerificationUnavailable):

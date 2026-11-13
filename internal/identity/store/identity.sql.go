@@ -71,6 +71,23 @@ func (q *Queries) CountOtherAccountsOnDevice(ctx context.Context, arg CountOther
 	return count, err
 }
 
+const emailConfirmedByAnother = `-- name: EmailConfirmedByAnother :one
+SELECT EXISTS (SELECT 1 FROM identity.users
+  WHERE email = $1::text AND email_verified_at IS NOT NULL AND id <> $2::uuid IS NOT FALSE)::boolean AS taken
+`
+
+type EmailConfirmedByAnotherParams struct {
+	Email    string
+	ExceptID *string
+}
+
+func (q *Queries) EmailConfirmedByAnother(ctx context.Context, arg EmailConfirmedByAnotherParams) (bool, error) {
+	row := q.db.QueryRow(ctx, emailConfirmedByAnother, arg.Email, arg.ExceptID)
+	var taken bool
+	err := row.Scan(&taken)
+	return taken, err
+}
+
 const emailVerificationByHash = `-- name: EmailVerificationByHash :one
 SELECT v.id, v.user_id, v.email, v.expires_at, v.used_at
 FROM identity.email_verifications v
@@ -436,6 +453,7 @@ func (q *Queries) InsertSession(ctx context.Context, arg InsertSessionParams) (s
 
 const listPlayers = `-- name: ListPlayers :many
 SELECT u.id, u.msisdn, u.email, u.kyc_status, u.status, (u.msisdn_verified_at IS NOT NULL)::boolean AS phone_verified, u.created_at,
+       (u.email_verified_at IS NOT NULL)::boolean AS email_verified,
        coalesce(w.balance_kes, 0)::bigint AS balance_kes,
        (SELECT count(*) FROM tickets.tickets t WHERE t.user_id = u.id AND t.status = 'paid')::bigint AS plays,
        (SELECT max(s.created_at) FROM identity.sessions s WHERE s.user_id = u.id) AS last_sign_in_at,
@@ -466,6 +484,7 @@ type ListPlayersRow struct {
 	Status             string
 	PhoneVerified      bool
 	CreatedAt          time.Time
+	EmailVerified      bool
 	BalanceKes         int64
 	Plays              int64
 	LastSignInAt       interface{}
@@ -496,6 +515,7 @@ func (q *Queries) ListPlayers(ctx context.Context, arg ListPlayersParams) ([]Lis
 			&i.Status,
 			&i.PhoneVerified,
 			&i.CreatedAt,
+			&i.EmailVerified,
 			&i.BalanceKes,
 			&i.Plays,
 			&i.LastSignInAt,
@@ -807,6 +827,39 @@ func (q *Queries) ProvedPhoneOwner(ctx context.Context, msisdn string) (ProvedPh
 	var i ProvedPhoneOwnerRow
 	err := row.Scan(&i.ID, &i.Status, &i.KycStatus)
 	return i, err
+}
+
+const releaseEmailClaims = `-- name: ReleaseEmailClaims :many
+UPDATE identity.users SET email = NULL, updated_at = $1
+ WHERE email = $2::text AND email_verified_at IS NULL AND id <> $3
+RETURNING id
+`
+
+type ReleaseEmailClaimsParams struct {
+	At      time.Time
+	Email   string
+	OwnerID string
+}
+
+// the address has a confirmed owner now: every other account that only claimed it loses it (ADR 0041)
+func (q *Queries) ReleaseEmailClaims(ctx context.Context, arg ReleaseEmailClaimsParams) ([]string, error) {
+	rows, err := q.db.Query(ctx, releaseEmailClaims, arg.At, arg.Email, arg.OwnerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const requestClosure = `-- name: RequestClosure :one
@@ -1186,6 +1239,8 @@ func (q *Queries) UsePlayerPasswordResets(ctx context.Context, arg UsePlayerPass
 const userByEmail = `-- name: UserByEmail :one
 SELECT id, msisdn, status, (email_verified_at IS NOT NULL)::boolean AS email_verified
 FROM identity.users WHERE email = $1::text
+ORDER BY (email_verified_at IS NOT NULL) DESC, id
+LIMIT 1
 `
 
 type UserByEmailRow struct {
@@ -1195,6 +1250,8 @@ type UserByEmailRow struct {
 	EmailVerified bool
 }
 
+// Several accounts may claim one address; at most one holds it confirmed (ADR 0041). The confirmed one comes first,
+// then the oldest claim.
 func (q *Queries) UserByEmail(ctx context.Context, email string) (UserByEmailRow, error) {
 	row := q.db.QueryRow(ctx, userByEmail, email)
 	var i UserByEmailRow

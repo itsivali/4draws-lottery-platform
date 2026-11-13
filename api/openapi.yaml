@@ -57,8 +57,8 @@ paths:
       description: |
         There is no SMS code. The number is only a claim until the player proves they control it with the M-Pesa
         confirmation of their first top-up, so several people may claim one number; a number that already has a proved
-        owner cannot be claimed (409 `phone-registered`). The email address is unique among accounts (409
-        `email-registered`) and is how a forgotten password is reset (ADR 0021). Passwords need 8 to 128 characters and
+        owner cannot be claimed (409 `phone-registered`). An email address another account has confirmed is refused (409
+        `email-registered`, ADR 0041) and is how a forgotten password is reset (ADR 0021). Passwords need 8 to 128 characters and
         must not be common or contain the number. A new account also gives `first_name`, `second_name` and `national_id`
         (400 `invalid-identity` when missing or malformed): kept encrypted, shown back to the player, and the start of
         the identity verification before the first withdrawal. It also gives `date_of_birth` and
@@ -980,7 +980,7 @@ paths:
         ADR 0021. A changed address is not confirmed until the link emailed to it is opened (ADR 0040). An account
         with a password must give it (403 `wrong-password`), since the address is a way to reset
         that password; an account that signs in with Google or Apple only gives none. 409 `email-registered` when
-        another account uses the address. Audited.
+        another account has confirmed the address (ADR 0041). Audited.
       parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
       requestBody:
         required: true
@@ -1731,6 +1731,7 @@ paths:
                         closure_requested_at: { type: [string, "null"], format: date-time }
                         full_name: { type: string, description: From the latest identity submission; empty when none. Each view is audited as unmasked. }
                         email: { type: [string, "null"], description: "The player's email address (ADR 0021); null for accounts from before." }
+                        email_verified: { type: boolean, description: "Whether the player opened the link sent to the address (ADR 0040)." }
                         national_id: { type: string, description: From the latest identity submission; empty when none. }
                   next_before: { type: [string, "null"] }
         "400": { $ref: "#/components/responses/Problem" }
@@ -3978,6 +3979,7 @@ paths:
                       user_id: { type: string }
                       msisdn: { type: string }
                       email: { type: [string, "null"] }
+                      email_verified: { type: boolean }
                       kyc_status: { type: string, enum: [none, pending, verified, manual_review, rejected] }
                       status: { type: string, enum: [active, suspended, closed] }
                       phone_verified: { type: boolean }
@@ -4574,7 +4576,7 @@ components:
         closure_requested_at: { type: [string, "null"], format: date-time }
         must_change_password: { type: boolean, description: Staff gave the player a temporary password they have not replaced yet; the app asks for a new one first. }
         email: { type: [string, "null"], format: email, description: "Null for an account from before addresses were asked for (ADR 0021)." }
-        email_verified: { type: boolean, description: "Whether the player opened the link sent to the address (ADR 0040). A changed address starts unconfirmed." }
+        email_verified: { type: boolean, description: "Whether the player opened the link sent to the address (ADR 0040). A changed address starts unconfirmed. Several accounts may claim one address; only one holds it confirmed (ADR 0041)." }
         has_password: { type: boolean, description: "False for an account that signs in with Google or Apple only (ADR 0020); it may set one (`/v1/auth/password/set`, ADR 0035)." }
         photo_url:
           type: [string, "null"]

@@ -75,6 +75,18 @@ void main() {
     expect(backend.requests.where((r) => r.url.path.endsWith('/signup')), isEmpty);
   });
 
+  testWidgets('a Google address an account only claimed: sign in the other way, or make a new account', (t) async {
+    final backend = FakeBackend()..ssoUnconfirmed.add('google-id-token');
+    await pumpApp(t, backend, signedIn: false);
+    await tapGoogle(t);
+    expect(find.text('Confirm your email address first'), findsOneWidget);
+    expect(find.text('Almost there'), findsNothing, reason: 'a new account is offered, not assumed');
+    await tapVisible(t, find.text('Create a new account instead'));
+    await t.pumpAndSettle();
+    expect(find.text('Almost there'), findsOneWidget);
+    expect(find.text('Confirm your email address first'), findsNothing);
+  });
+
   testWidgets('Apple works the same way', (t) async {
     final h = await pumpApp(t, FakeBackend(), signedIn: false);
     h.providerSignIn.nextToken = 'apple-id-token';
