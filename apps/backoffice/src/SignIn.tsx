@@ -100,7 +100,7 @@ export function SignIn({ config, api, onSignedIn, providers = realProviders, not
   return (
     <AuthShell labelledBy="signin-title">
           <h1 id="signin-title" className="font-display text-3xl font-extrabold tracking-tight">Sign in</h1>
-          <p className="mt-2 text-[15px] leading-relaxed text-muted-foreground">With the email address an administrator invited and your password. Every action you take is recorded under your name.</p>
+          <p className="mt-2 text-[15px] leading-relaxed text-muted-foreground">Use your staff email and password. Your actions are logged under your name.</p>
           {notice ? (
             <Alert role="status" className="mt-6 border-pending/40 bg-pending/10 [&>svg]:text-pending">
               <ShieldCheck />

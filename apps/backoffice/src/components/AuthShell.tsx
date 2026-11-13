@@ -19,7 +19,6 @@ export function AuthShell({ children, bare = false, labelledBy }: { children: Re
         {bare ? children : (
           <section aria-labelledby={labelledBy} className="rounded-3xl bg-card p-7 shadow-sheet animate-swing-in md:p-9">{children}</section>
         )}
-        <p className="m-0 mt-5 text-center text-xs text-white/75">Staff back office · Nairobi time</p>
       </div>
     </main>
   )
