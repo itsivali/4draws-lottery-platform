@@ -93,7 +93,7 @@ class AccountScreen extends ConsumerWidget {
               '/account/devices',
               subtitle: 'See every device with this account open; sign the others out',
             ),
-            link(Icons.login_rounded, 'Sign-in methods', '/account/sign-ins', subtitle: 'Password, Google and Apple'),
+            link(Icons.login_rounded, 'Sign-in methods', '/account/sign-ins', subtitle: 'Password and Google'),
           ],
         ),
         const SectionHeader(title: 'Play safely'),

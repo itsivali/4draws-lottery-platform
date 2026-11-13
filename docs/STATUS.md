@@ -84,6 +84,10 @@ Read this first at the start of every session.
 - **Google sign-in finds the account by its email (2026-11-12, ADR 0039):** a Google identity not yet linked signs
   in the account that has its Google-verified address (gmail.com or a Workspace domain) and is linked to it; only
   with no such account is a new one offered.
+- **Sign in with Apple is shelved (2026-11-13, owner):** the player apps and the back office no longer offer it,
+  whatever is configured (`SignInProviders.appleShelved` in the app; the back office reads no Apple client id). The
+  API still has the code and no `APPLE_*` setting. To bring it back, see ADR 0020. Apple requires it of an iOS app
+  that offers Google sign-in, so it returns before any App Store submission.
 - **Email addresses are confirmed by an emailed link (2026-11-13, ADR 0040):** sent at sign-up, on a change of
   address and on request (24 hours, once; `/verify-email`). Until confirmed, an address still gets password-reset
   links, but Google sign-in does not find the account by it and a copy of the player's data is not sent to it.

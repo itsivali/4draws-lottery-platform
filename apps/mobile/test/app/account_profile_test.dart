@@ -51,7 +51,7 @@ void main() {
     expect(t.widget<OutlinedButton>(find.widgetWithText(OutlinedButton, 'Sign out other devices')).enabled, isFalse);
   });
 
-  testWidgets('the sign-in methods show the password and the linked Google or Apple identity with its date', (t) async {
+  testWidgets('the sign-in methods show the password and the linked Google identity with its date', (t) async {
     final backend = FakeBackend()..linkedSignIns.add({'provider': 'google', 'linked_at': '2026-10-20T10:00:00Z'});
     final h = await pumpApp(t, backend);
     h.container.read(routerProvider).go('/account/sign-ins');
@@ -59,18 +59,18 @@ void main() {
     expect(find.text('Password'), findsOneWidget);
     expect(find.text('Set'), findsOneWidget);
     expect(find.text('Linked 20 Oct 2026, 13:00 EAT'), findsOneWidget);
-    expect(find.text('Not linked'), findsOneWidget, reason: 'Apple');
+    expect(find.text('Not linked'), findsNothing);
+    expect(find.text('Apple'), findsNothing, reason: 'shelved');
     expect(find.textContaining('linked from the sign-in screen'), findsOneWidget);
   });
 
   testWidgets('an account without a password says so on its sign-in methods', (t) async {
     final backend = FakeBackend()
       ..hasPassword = false
-      ..linkedSignIns.add({'provider': 'apple', 'linked_at': '2026-10-20T10:00:00Z'});
+      ..linkedSignIns.add({'provider': 'google', 'linked_at': '2026-10-20T10:00:00Z'});
     final h = await pumpApp(t, backend);
     h.container.read(routerProvider).go('/account/sign-ins');
     await t.pumpAndSettle();
-    expect(find.text('Not set: you sign in with Google or Apple. Tap to set one'), findsOneWidget);
-    expect(find.text('Not linked'), findsOneWidget, reason: 'Google');
+    expect(find.text('Not set: you sign in with Google. Tap to set one'), findsOneWidget);
   });
 }

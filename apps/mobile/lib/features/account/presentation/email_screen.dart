@@ -152,7 +152,7 @@ class _EmailScreenState extends ConsumerState<EmailScreen> {
                   Text(
                     hasPassword
                         ? 'If you forget your password, the link to choose a new one is emailed here.'
-                        : 'You sign in with Google or Apple; the address is kept in case you ever need a password.',
+                        : 'You sign in with Google; the address is kept in case you ever need a password.',
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
                   const SizedBox(height: Space.lg),

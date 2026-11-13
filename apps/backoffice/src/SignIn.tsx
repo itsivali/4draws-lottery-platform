@@ -4,7 +4,7 @@ import { ProblemError, type ApiClient } from './api'
 import { AuthShell } from './components/AuthShell'
 import { rememberCredential } from './credentials'
 import type { Config } from './config'
-import { cancelled, renderGoogle, signInWithApple, signInWithDevRealm, type IDToken } from './providers'
+import { cancelled, renderGoogle, signInWithDevRealm, type IDToken } from './providers'
 import type { Me } from './types'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -16,14 +16,13 @@ export interface StaffSession { token: string; expires_at: string; member: Me }
 
 export interface Providers {
   google: (clientId: string, el: HTMLElement, onToken: (t: IDToken) => void) => Promise<void> | void
-  apple: (clientId: string, redirectUri: string) => Promise<IDToken>
   dev: (dev: NonNullable<Config['dev']>) => Promise<IDToken>
 }
 
-const realProviders: Providers = { google: renderGoogle, apple: signInWithApple, dev: signInWithDevRealm }
+const realProviders: Providers = { google: renderGoogle, dev: signInWithDevRealm }
 
 /**
- * The sign-in page: email address and password (ADR 0019), with Google, Apple and the local staff realm offered when
+ * The sign-in page: email address and password (ADR 0019), with Google and the local staff realm offered when
  * configured (ADR 0018). The API decides who is staff and what they may do.
  */
 export function SignIn({ config, api, onSignedIn, providers = realProviders, notice }: {
@@ -57,7 +56,7 @@ export function SignIn({ config, api, onSignedIn, providers = realProviders, not
     }
   }
 
-  // one sign-in at a time: a second click (or Google's callback during an Apple popup) is ignored, not run alongside
+  // one sign-in at a time: a second click (or Google's callback during another sign-in) is ignored, not run alongside
   const running = useRef(false)
   const exchange = async (provider: string, body: () => Promise<Record<string, string>>) => {
     if (running.current) return
@@ -69,7 +68,7 @@ export function SignIn({ config, api, onSignedIn, providers = realProviders, not
       try {
         b = await body()
       } catch (e) {
-        if (!cancelled(e)) setProblem({ title: `${provider === 'apple' ? 'Apple' : 'The sign-in window'} could not sign you in. Try again.` })
+        if (!cancelled(e)) setProblem({ title: 'The sign-in window could not sign you in. Try again.' })
         return
       }
       try {
@@ -95,8 +94,8 @@ export function SignIn({ config, api, onSignedIn, providers = realProviders, not
       .catch(() => { setProblem({ title: 'Google sign-in could not load. Check the connection and reload.' }) })
   }, [config.google, providers])
 
-  const { apple, dev } = config
-  const others = Boolean(config.google || apple || dev)
+  const { dev } = config
+  const others = Boolean(config.google || dev)
   return (
     <AuthShell labelledBy="signin-title">
           <h1 id="signin-title" className="font-display text-3xl font-extrabold tracking-tight">Sign in</h1>
@@ -159,13 +158,6 @@ export function SignIn({ config, api, onSignedIn, providers = realProviders, not
             <div className="mt-6 grid gap-3">
               <p className="flex items-center gap-3 text-xs uppercase tracking-wide text-muted-foreground before:h-px before:flex-1 before:bg-border after:h-px after:flex-1 after:bg-border">or continue with</p>
               {config.google ? <div ref={google} className="min-h-10" /> : null}
-              {apple ? (
-                <Button type="button" size="lg" variant="outline" disabled={busy} className="h-11 w-full rounded-xl border-foreground/80 bg-foreground text-background hover:bg-foreground/90 hover:text-background"
-                  onClick={() => { void exchange('apple', () => providers.apple(apple.clientId, apple.redirectUri).then(withToken)) }}>
-                  <svg aria-hidden="true" viewBox="0 0 14 17" width="14" height="17"><path fill="currentColor" d="M11.6 9c0-2 1.7-3 1.8-3-1-1.4-2.5-1.6-3-1.6-1.3-.1-2.5.8-3.2.8-.7 0-1.7-.8-2.8-.7C3 3.5 1.7 4.4 1 5.7c-1.5 2.6-.4 6.4 1 8.5.7 1 1.5 2.2 2.6 2.1 1 0 1.4-.7 2.7-.7 1.2 0 1.6.7 2.7.7s1.8-1 2.5-2.1c.8-1.2 1.1-2.3 1.1-2.4 0 0-2.1-.8-2.1-3.2zM9.6 3c.6-.7 1-1.7.9-2.7-.8 0-1.9.6-2.5 1.3-.5.6-1 1.6-.9 2.6.9.1 1.9-.5 2.5-1.2z" /></svg>
-                  Sign in with Apple
-                </Button>
-              ) : null}
               {dev ? (
                 <Button type="button" variant="outline" size="lg" disabled={busy} className="h-11 w-full rounded-xl" onClick={() => { void exchange('dev', () => providers.dev(dev).then(withToken)) }}>
                   Sign in with the local staff realm (development)

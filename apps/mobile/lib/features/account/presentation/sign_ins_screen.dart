@@ -29,7 +29,6 @@ class SignInsScreen extends ConsumerWidget {
           onRetry: () => ref.invalidate(signInsProvider),
           data: (m) {
             final google = m.linked('google');
-            final apple = m.linked('apple');
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -38,7 +37,7 @@ class SignInsScreen extends ConsumerWidget {
                     ListRow(
                       icon: Icons.lock_rounded,
                       title: 'Password',
-                      subtitle: m.password ? 'Set' : 'Not set: you sign in with Google or Apple. Tap to set one',
+                      subtitle: m.password ? 'Set' : 'Not set: you sign in with Google. Tap to set one',
                       chevron: true,
                       onTap: () => context.go(m.password ? '/account/password' : '/account/password?set=1'),
                     ),
@@ -47,19 +46,14 @@ class SignInsScreen extends ConsumerWidget {
                       title: 'Google',
                       subtitle: google == null ? 'Not linked' : 'Linked ${formatEat(google.linkedAt)}',
                     ),
-                    ListRow(
-                      icon: Icons.apple_rounded,
-                      title: 'Apple',
-                      subtitle: apple == null ? 'Not linked' : 'Linked ${formatEat(apple.linkedAt)}',
-                    ),
                   ],
                 ),
                 const SizedBox(height: Space.lg),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: Space.xs),
                   child: Text(
-                    'Google and Apple are linked from the sign-in screen, with "Continue with Google" or "Continue '
-                    'with Apple", not from here. A linked identity signs in to this account with no password.',
+                    'Google is linked from the sign-in screen, with "Continue with Google", not from here. A linked '
+                    'identity signs in to this account with no password.',
                     style: t.bodySmall?.copyWith(color: c.inkMuted),
                   ),
                 ),

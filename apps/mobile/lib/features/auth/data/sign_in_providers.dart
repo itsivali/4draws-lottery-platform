@@ -7,9 +7,13 @@ import '../../../core/api/json.dart';
 class SignInProviders {
   const SignInProviders({this.googleClientId, this.googleIosClientId, this.appleClientId, this.apple = false});
 
+  /// Sign in with Apple is shelved (owner, 2026-11-13): the apps do not offer it, whatever the API answers. The code
+  /// behind it stays for the day it returns; turn this off then.
+  static const appleShelved = true;
+
   factory SignInProviders.fromJson(JsonObject j) {
     final google = j.objectOrNull('google');
-    final apple = j.objectOrNull('apple');
+    final apple = appleShelved ? null : j.objectOrNull('apple');
     return SignInProviders(
       googleClientId: google?.str('client_id'),
       googleIosClientId: google?.strOrNull('ios_client_id'),

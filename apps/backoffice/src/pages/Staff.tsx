@@ -158,7 +158,7 @@ export function StaffPage() {
             onClick={() => {
               ask({
                 title: 'Invite a member',
-                body: <p>Their email address is their username. Give them a temporary password, or leave it empty if they will sign in with the Google or Apple account of that address.</p>,
+                body: <p>Their email address is their username. Give them a temporary password, or leave it empty if they will sign in with the Google account of that address.</p>,
                 fields: [
                   { name: 'email', label: 'Email address', required: true, type: 'email' },
                   { ...nameField },

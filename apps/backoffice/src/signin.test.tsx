@@ -7,12 +7,12 @@ import { TIMED_OUT } from './sessionNotices'
 import { SignIn, type Providers } from './SignIn'
 
 describe('config', () => {
-  it('needs a server over https (http on localhost); Google, Apple and the dev realm are optional', () => {
+  it('needs a server over https (http on localhost); Google and the dev realm are optional; Apple is shelved', () => {
     expect(loadConfig({})).toBeNull()
     expect(loadConfig({ VITE_API_BASE_URL: 'https://api.example.com' })).toEqual({ apiBaseUrl: 'https://api.example.com' })
     expect(loadConfig({ VITE_API_BASE_URL: 'http://api.example.com', VITE_GOOGLE_CLIENT_ID: 'g' })).toBeNull()
-    const c = loadConfig({ VITE_API_BASE_URL: 'https://api.example.com', VITE_GOOGLE_CLIENT_ID: 'g', VITE_APPLE_CLIENT_ID: 'ke.co.fourdraws.backoffice' }, 'https://bo.example.com')
-    expect(c).toEqual({ apiBaseUrl: 'https://api.example.com', google: { clientId: 'g' }, apple: { clientId: 'ke.co.fourdraws.backoffice', redirectUri: 'https://bo.example.com/' } })
+    const c = loadConfig({ VITE_API_BASE_URL: 'https://api.example.com', VITE_GOOGLE_CLIENT_ID: 'g', VITE_APPLE_CLIENT_ID: 'ke.co.fourdraws.backoffice' })
+    expect(c).toEqual({ apiBaseUrl: 'https://api.example.com', google: { clientId: 'g' } }) // an Apple client id is ignored (owner, 2026-11-13)
     expect(loadConfig({ VITE_API_BASE_URL: 'http://localhost:8080', VITE_DEV_OIDC_AUTHORITY: 'http://localhost:8081/realms/lottery-staff', VITE_DEV_OIDC_CLIENT_ID: 'lottery-backoffice' })?.dev)
       .toEqual({ authority: 'http://localhost:8081/realms/lottery-staff', clientId: 'lottery-backoffice' })
   })
@@ -29,11 +29,10 @@ function setup(route: (body: unknown) => { status: number; body?: unknown }, pro
   const onSignedIn = vi.fn()
   const all: Providers = {
     google: vi.fn(),
-    apple: vi.fn(() => Promise.resolve({ idToken: 'apple-id-token', nonce: 'raw-nonce' })),
     dev: vi.fn(() => Promise.resolve({ idToken: 'dev-id-token', nonce: '' })),
     ...providers,
   }
-  render(<SignIn config={{ apiBaseUrl: 'https://api.test', google: { clientId: 'g' }, apple: { clientId: 'a', redirectUri: 'https://bo.test/' } }}
+  render(<SignIn config={{ apiBaseUrl: 'https://api.test', google: { clientId: 'g' }, dev: { authority: 'http://localhost:8081/realms/lottery-staff', clientId: 'lottery-backoffice' } }}
     api={api} providers={all} onSignedIn={onSignedIn} />)
   return { fetch, onSignedIn, all }
 }
@@ -85,15 +84,15 @@ describe('sign in', () => {
     expect(JSON.parse(init?.body as string)).toEqual({ email: 'owner@example.com' })
   })
 
-  it('offers Google and Apple and exchanges the ID token for a back-office session', async () => {
+  it('offers Google, not Apple, and exchanges an ID token for a back-office session', async () => {
     const session = { token: 'stf_x', expires_at: '2026-10-26T21:00:00Z', member: { id: 'm1', name: 'Owner', email: 'owner@example.com', roles: ['admin'], must_change_password: false } }
     const { fetch, onSignedIn, all } = setup(() => ({ status: 201, body: session }))
     expect(all.google).toHaveBeenCalled() // Google renders its own button into the page
-    await userEvent.setup().click(screen.getByRole('button', { name: 'Sign in with Apple' }))
+    expect(screen.queryByRole('button', { name: /Apple/ })).not.toBeInTheDocument()
+    await userEvent.setup().click(screen.getByRole('button', { name: /local staff realm/ }))
     expect(onSignedIn).toHaveBeenCalledWith(session)
     const [, init] = fetch.mock.calls[0] ?? []
-    expect(JSON.parse(init?.body as string)).toEqual({ provider: 'apple', id_token: 'apple-id-token', nonce: 'raw-nonce' })
-    expect(screen.queryByRole('button', { name: /local staff realm/ })).not.toBeInTheDocument()
+    expect(JSON.parse(init?.body as string)).toMatchObject({ id_token: 'dev-id-token' })
   })
 
   it('explains a refusal in the server’s words', async () => {
@@ -101,16 +100,16 @@ describe('sign in', () => {
       status: 403,
       body: { type: 'https://lottery.example/problems/not-invited', title: 'This account is not a staff member', detail: 'ask an admin to invite the email address', status: 403 },
     }))
-    await userEvent.setup().click(screen.getByRole('button', { name: 'Sign in with Apple' }))
+    await userEvent.setup().click(screen.getByRole('button', { name: /local staff realm/ }))
     const alert = await screen.findByRole('alert')
     expect(within(alert).getByText('This account is not a staff member')).toBeInTheDocument()
     expect(alert).toHaveTextContent('ask an admin to invite the email address')
     expect(onSignedIn).not.toHaveBeenCalled()
   })
 
-  it('a cancelled Apple window is not an error', async () => {
-    const { fetch } = setup(() => ({ status: 201 }), { apple: vi.fn(() => Promise.reject(new Error('popup_closed_by_user'))) })
-    await userEvent.setup().click(screen.getByRole('button', { name: 'Sign in with Apple' }))
+  it('a cancelled sign-in window is not an error', async () => {
+    const { fetch } = setup(() => ({ status: 201 }), { dev: vi.fn(() => Promise.reject(new Error('popup_closed_by_user'))) })
+    await userEvent.setup().click(screen.getByRole('button', { name: /local staff realm/ }))
     expect(fetch).not.toHaveBeenCalled()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })

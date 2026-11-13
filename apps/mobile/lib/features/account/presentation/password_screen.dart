@@ -111,8 +111,8 @@ class _PasswordScreenState extends ConsumerState<PasswordScreen> {
                     icon: Icons.key_rounded,
                     title: 'With a password you can also sign in with your phone number, on the web too.',
                     message:
-                        'For your security this works within 10 minutes of signing in with Google or Apple. If it '
-                        'is refused, sign out, sign in with Google or Apple again, and come straight back here.',
+                        'For your security this works within 10 minutes of signing in with Google. If it '
+                        'is refused, sign out, sign in with Google again, and come straight back here.',
                   ),
                   const SizedBox(height: Space.lg),
                 ] else ...[

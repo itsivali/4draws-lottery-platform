@@ -22,7 +22,7 @@ const actorTone: Record<AuditEvent['actor_type'], Tone> = { staff: 'pending', pl
 
 /** The families of actions, by the prefix every action of the family starts with. */
 const actionFamilies: [string, string][] = [
-  ['identity.', 'Identity (accounts, sign-ins, closures)'], ['auth.', 'Authentication'], ['sso.', 'Google and Apple sign-in'], ['user.', 'Player self-service'],
+  ['identity.', 'Identity (accounts, sign-ins, closures)'], ['auth.', 'Authentication'], ['sso.', 'Google sign-in'], ['user.', 'Player self-service'],
   ['kyc.', 'Identity verification'], ['payment.', 'Payments and top-ups'], ['wallet.', 'Wallet'], ['payout.', 'Payouts'], ['draw.', 'Draws'], ['game.', 'Game'],
   ['kra.', 'KRA tax'], ['alert.', 'Alerts'], ['rg.', 'Responsible gaming'], ['staff.', 'Staff members'], ['finance.', 'Finance exports'],
   ['ledger.', 'Ledger exports'], ['activity.', 'Activity exports'],

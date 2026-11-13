@@ -1,4 +1,4 @@
-// The sign-in providers' own scripts: Google Identity Services and Sign in with Apple JS. Each returns an ID token and
+// The sign-in providers' own scripts: Google Identity Services. It returns an ID token and
 // the nonce it was bound to; the API checks both (ADR 0018). Nothing here decides who may sign in: the API does.
 import { UserManager, WebStorageStateStore } from 'oidc-client-ts'
 import type { Config } from './config'
@@ -11,10 +11,6 @@ function randomNonce(): string {
   return Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('')
 }
 
-async function sha256Hex(s: string): Promise<string> {
-  const d = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s))
-  return Array.from(new Uint8Array(d), (x) => x.toString(16).padStart(2, '0')).join('')
-}
 
 const loaded = new Map<string, Promise<void>>()
 
@@ -41,13 +37,9 @@ interface GoogleAccounts {
   }
 }
 
-interface AppleIDAuth {
-  init(o: { clientId: string; scope: string; redirectURI: string; usePopup: boolean; nonce: string }): void
-  signIn(): Promise<{ authorization: { id_token: string } }>
-}
 
 declare global {
-  interface Window { google?: { accounts: GoogleAccounts }; AppleID?: { auth: AppleIDAuth } }
+  interface Window { google?: { accounts: GoogleAccounts } }
 }
 
 /** Google renders its own button into el and calls back with each ID token. */
@@ -58,17 +50,6 @@ export async function renderGoogle(clientId: string, el: HTMLElement, onToken: (
   const nonce = randomNonce()
   g.id.initialize({ client_id: clientId, nonce, ux_mode: 'popup', auto_select: false, callback: (r) => { onToken({ idToken: r.credential, nonce }) } })
   g.id.renderButton(el, { type: 'standard', theme: 'outline', size: 'large', text: 'signin_with', width: 280, logo_alignment: 'left' })
-}
-
-/** Apple opens its own window; Apple puts the SHA-256 of the nonce in the token (the API hashes what it is given). */
-export async function signInWithApple(clientId: string, redirectUri: string): Promise<IDToken> {
-  await loadScript('https://appleid.cdn-apple.com/appleauth/static/jsapi/appleid/1/en_US/appleid.auth.js')
-  const a = window.AppleID?.auth
-  if (!a) throw new Error('Sign in with Apple did not load')
-  const nonce = randomNonce()
-  a.init({ clientId, scope: 'email', redirectURI: redirectUri, usePopup: true, nonce: await sha256Hex(nonce) })
-  const r = await a.signIn()
-  return { idToken: r.authorization.id_token, nonce }
 }
 
 /** The local staff realm, in development only: a popup to Keycloak, whose ID token carries no nonce we check. */

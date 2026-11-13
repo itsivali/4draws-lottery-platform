@@ -112,7 +112,6 @@ export function SystemPage() {
                       <Row label="Price of a play">{st.play_price_kes === null ? '—' : kes(st.play_price_kes)}</Row>
                       <Row label="Wheel">{st.wheel_slots === null ? '—' : `${st.wheel_slots} slots, ${st.wheel_lucky_slots ?? 0} lucky`}</Row>
                       <Row label="Google sign-in"><On on={st.google_sign_in} /></Row>
-                      <Row label="Apple sign-in"><On on={st.apple_sign_in} /></Row>
                       <Row label="Identity checks">{st.kyc_registry ? <Pill tone="success">Automatic registry</Pill> : <Pill tone="neutral">Manual review</Pill>}</Row>
                       <Row label="Device attestation"><span className="capitalize">{st.attestation || 'record'}</span></Row>
                     </dl>

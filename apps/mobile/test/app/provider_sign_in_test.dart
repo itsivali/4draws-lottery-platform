@@ -16,12 +16,13 @@ void main() {
     await t.pumpAndSettle();
   }
 
-  testWidgets('Google and Apple are offered beside the form, with the client ids the API gave', (t) async {
+  testWidgets('Google is offered beside the form, with the client id the API gave; Apple is shelved', (t) async {
     final h = await pumpApp(t, FakeBackend(), signedIn: false);
     expect(find.text('Good to see you'), findsOneWidget);
     expect(find.text('OR CONTINUE WITH'), findsOneWidget);
     expect(find.text('Continue with Google'), findsOneWidget);
-    expect(find.text('Continue with Apple'), findsOneWidget);
+    // the API in this test offers Apple too: the apps do not show it (owner, 2026-11-13)
+    expect(find.text('Continue with Apple'), findsNothing);
     expect(h.providerSignIn.prepared?.googleClientId, 'web-client.apps.googleusercontent.com');
   });
 
@@ -85,14 +86,6 @@ void main() {
     await t.pumpAndSettle();
     expect(find.text('Almost there'), findsOneWidget);
     expect(find.text('Confirm your email address first'), findsNothing);
-  });
-
-  testWidgets('Apple works the same way', (t) async {
-    final h = await pumpApp(t, FakeBackend(), signedIn: false);
-    h.providerSignIn.nextToken = 'apple-id-token';
-    await t.tap(find.text('Continue with Apple'));
-    await t.pumpAndSettle();
-    expect(find.textContaining('Your Apple account is ready'), findsOneWidget);
   });
 
   testWidgets('a number with an account already is refused, with a way back to the form', (t) async {

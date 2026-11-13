@@ -16,7 +16,7 @@ import { Label } from '@/components/ui/label'
  */
 export function PasswordForm({ onDone, forced = false }: { onDone: () => void; forced?: boolean }) {
   const { api, me, updateMe } = useSession()
-  // a member who signs in with Google or Apple only has no current password to give (ADR 0035)
+  // a member who signs in with Google only has no current password to give (ADR 0035)
   const first = me.has_password === false && !forced
   const id = useId()
   const [current, setCurrent] = useState('')
@@ -55,7 +55,7 @@ export function PasswordForm({ onDone, forced = false }: { onDone: () => void; f
     >
       {first ? (
         <p className="text-sm text-muted-foreground">
-          You sign in with Google or Apple. A password lets you sign in with your email address too. For your security this
+          You sign in with Google. A password lets you sign in with your email address too. For your security this
           works within 10 minutes of signing in: if it is refused, sign out, sign in again and come straight back.
         </p>
       ) : (
