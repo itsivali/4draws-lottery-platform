@@ -72,6 +72,6 @@ export async function completeDevPopup(dev: NonNullable<Config['dev']>): Promise
 
 /** Errors that mean the person closed the provider's window: not a failure to report. */
 export function cancelled(e: unknown): boolean {
-  const s = e instanceof Error ? e.message : typeof e === 'object' && e && 'error' in e ? String((e as { error: unknown }).error) : ''
+  const s = e instanceof Error ? e.message : typeof e === 'object' && e && 'error' in e ? String(e.error) : ''
   return /popup_closed|closed by user|user_cancelled|user_trigger_new_signin_flow/i.test(s)
 }
