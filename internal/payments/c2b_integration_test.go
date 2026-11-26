@@ -541,3 +541,77 @@ func TestC2B_IsRefusedWhenNotConfigured(t *testing.T) {
 		t.Fatal("enabled")
 	}
 }
+
+// One receipt, one credit, whichever path saw it first: a paybill receipt the player claimed for an uncredited prompt
+// credits that prompt; when Safaricom's confirmation for the same receipt finally arrives it is not credited again.
+func TestC2B_AReceiptAlreadyCreditedThroughAClaimIsNotCreditedAgain(t *testing.T) {
+	e := setup(t)
+	ctx := context.Background()
+	user, msisdn := e.provedPlayer(t)
+	tu, _ := paidWithoutCallback(t, e, user, 100)
+	receipt := paybillReceipt(t, e, 100, msisdn, darajamock.C2BFault{})
+	if _, err := e.svc.ClaimReceipt(ctx, user, tu.ID, receipt); err != nil {
+		t.Fatal(err)
+	}
+	e.run(t)
+	if got := e.get(t, user, tu.ID); got.Status != payments.StatusCredited || e.balance(t, user) != 100 {
+		t.Fatalf("claim: %+v balance %d", got, e.balance(t, user))
+	}
+
+	e.postHook(t, "/confirm", confirmationBody(receipt, 100, msisdn, msisdn))
+	e.run(t)
+	if row := e.c2b(t, receipt); row.status != "unverified" || row.reason != "receipt_reused" || row.paymentID != nil {
+		t.Fatalf("late confirmation = %+v", row)
+	}
+	if e.balance(t, user) != 100 {
+		t.Fatalf("balance %d: the receipt was credited twice", e.balance(t, user))
+	}
+	// and the job running again for it does nothing more
+	var id string
+	if err := e.pool.QueryRow(ctx, `SELECT id::text FROM payments.c2b_confirmations WHERE trans_id = $1`, receipt).Scan(&id); err != nil {
+		t.Fatal(err)
+	}
+	before := len(e.mock.StatusRequests())
+	if d, err := e.svc.VerifyC2B(ctx, id); err != nil || d != 0 || len(e.mock.StatusRequests()) != before {
+		t.Fatalf("verify of a settled confirmation: %v %v", d, err)
+	}
+}
+
+// Daraja refusing the Transaction Status request (HTTP 4xx) is usually our initiator or credential, not the payment:
+// the confirmation is left unverified for an operator at once rather than retried, and nothing is credited. A
+// request whose answer Daraja's queue gives up on (timeout) leaves the confirmation waiting for the next ask.
+func TestC2B_AStatusRequestDarajaRefusesOrTimesOutIsNotCredited(t *testing.T) {
+	e := setup(t)
+	user, msisdn := e.provedPlayer(t)
+
+	e.mock.SetNextC2BFault(darajamock.C2BFault{StatusHTTP: http.StatusBadRequest})
+	refused := e.payBill(t, 100, msisdn)
+	if row := e.c2b(t, refused); row.status != "unverified" || row.reason != "status_request_rejected" {
+		t.Fatalf("refused: confirmation = %+v", row)
+	}
+
+	e.mock.SetNextC2BFault(darajamock.C2BFault{StatusTimeout: true})
+	timedOut := e.payBill(t, 100, msisdn)
+	if row := e.c2b(t, timedOut); row.status != "status_requested" || row.requests != 1 {
+		t.Fatalf("timed out: confirmation = %+v", row)
+	}
+	if e.balance(t, user) != 0 {
+		t.Fatalf("balance %d", e.balance(t, user))
+	}
+}
+
+// A suspended account receives nothing from the paybill: the money is parked in suspense for an operator.
+func TestC2B_APaymentToASuspendedAccountGoesToSuspense(t *testing.T) {
+	e := setup(t)
+	user, msisdn := e.provedPlayer(t)
+	if _, err := e.pool.Exec(context.Background(), `UPDATE identity.users SET status = 'suspended' WHERE id = $1`, user); err != nil {
+		t.Fatal(err)
+	}
+	receipt := e.payBill(t, 100, msisdn)
+	if row := e.c2b(t, receipt); row.status != "suspense" || row.reason != "account_suspended" {
+		t.Fatalf("confirmation = %+v", row)
+	}
+	if s := e.suspense(t, receipt); s.status != "open" || s.amount != 100 || e.balance(t, user) != 0 {
+		t.Fatalf("suspense = %+v balance %d", s, e.balance(t, user))
+	}
+}

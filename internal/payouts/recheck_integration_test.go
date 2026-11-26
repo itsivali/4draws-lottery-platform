@@ -24,6 +24,7 @@ func TestSend_APayoutWhoseAccountCannotBePaidNowIsHeldNotSent(t *testing.T) {
 	}{
 		{"suspended", `UPDATE identity.users SET status = 'suspended' WHERE id = $1`, "payee_ineligible: account not active"},
 		{"unverified", `UPDATE identity.users SET kyc_status = 'manual_review' WHERE id = $1`, "payee_ineligible: identity not verified"},
+		{"phone not proved", `UPDATE identity.users SET msisdn_verified_at = NULL WHERE id = $1`, "payee_ineligible: phone not proved"},
 		{"number changed", `UPDATE identity.users SET msisdn = '25471' || lpad((abs(hashtext(id::text)) % 10000000)::text, 7, '0') WHERE id = $1`, "payee_ineligible: number changed"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

@@ -12,6 +12,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/itsivali/lottery-platform/internal/aml"
 	"github.com/itsivali/lottery-platform/internal/audit"
 	"github.com/itsivali/lottery-platform/internal/draws"
 	"github.com/itsivali/lottery-platform/internal/draws/drand"
@@ -513,4 +514,41 @@ func TestPrizes_AFailedPrizeOwesItsDebtAgainAndTheRetryRepaysIt(t *testing.T) {
 		t.Fatalf("retry %s debt %d", st, e.debt(t, a))
 	}
 	e.reconcileOK(t)
+}
+
+// ADR 0033: a prize won by a player whose money a monitoring case holds is not paid: no payout is made and the prize
+// stays in its pool, owed. Once the case closes the next run pays it.
+func TestPrizes_AWinnerUnderReviewIsNotPaidAndThePrizeStaysOwed(t *testing.T) {
+	ctx := context.Background()
+	e := setup(t)
+	monitor := aml.NewService(e.pool, e.clk, audit.NewWriter())
+	e.svc.WithHolds(monitor)
+	w := e.player(t, 0)
+	c, err := monitor.OpenManual(ctx, w, "staff:alice", "in and out")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := monitor.Hold(ctx, c.ID, "staff:alice", "pending review"); err != nil {
+		t.Fatal(err)
+	}
+	_, results := e.approvedDraw(t, winner{w, 105})
+	if n, err := e.svc.PayPrizes(ctx); err != nil || n != 0 {
+		t.Fatalf("created %d %v while under review", n, err)
+	}
+	var n int
+	if err := e.pool.QueryRow(ctx, `SELECT count(*) FROM payouts.payouts WHERE draw_result_id = $1`, results[0]).Scan(&n); err != nil || n != 0 {
+		t.Fatalf("%d payouts %v", n, err)
+	}
+	if e.account(t, "PRIZE_POOL_DAILY") != 105 {
+		t.Fatalf("pool %d: the prize stays owed", e.account(t, "PRIZE_POOL_DAILY"))
+	}
+	if _, err := monitor.Close(ctx, c.ID, "staff:bob", "explained"); err != nil {
+		t.Fatal(err)
+	}
+	if n, err := e.svc.PayPrizes(ctx); err != nil || n != 1 {
+		t.Fatalf("created %d %v after the case closed", n, err)
+	}
+	if st := e.run(t, e.prizePayout(t, results[0]).ID); st != "succeeded" || e.account(t, "PRIZE_POOL_DAILY") != 0 {
+		t.Fatalf("prize %s pool %d", st, e.account(t, "PRIZE_POOL_DAILY"))
+	}
 }

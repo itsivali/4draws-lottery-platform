@@ -7,6 +7,8 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/itsivali/lottery-platform/internal/aml"
+	"github.com/itsivali/lottery-platform/internal/audit"
 	"github.com/itsivali/lottery-platform/internal/payouts"
 )
 
@@ -98,5 +100,84 @@ func TestRefundToSource_RejectedGivesTheMoneyBackAndNeedsASource(t *testing.T) {
 	}
 	if b := e.balance(t, u); b != 950 {
 		t.Fatalf("balance %d after the refund was rejected, want 950", b)
+	}
+}
+
+// ADR 0031, 0033, 0007: a refund to source is refused, with nothing debited, while a monitoring case holds the
+// player's money, while the player owes the platform (the debt is settled first), for an account that does not exist,
+// and without B2C.
+func TestRefundToSource_RefusedUnderReviewInDebtOrWithoutB2C(t *testing.T) {
+	ctx := context.Background()
+	e := setup(t)
+	monitor := aml.NewService(e.pool, e.clk, audit.NewWriter())
+	e.svc.WithHolds(monitor)
+	suspend := func(u string) {
+		t.Helper()
+		if _, err := e.pool.Exec(ctx, `UPDATE identity.users SET status = 'suspended' WHERE id = $1`, u); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	reviewed := e.player(t, 1_000)
+	e.topUpFrom(t, reviewed, "254708374149")
+	suspend(reviewed)
+	c, err := monitor.OpenManual(ctx, reviewed, "staff:alice", "in and out")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := monitor.Hold(ctx, c.ID, "staff:alice", "pending review"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.svc.RefundToSource(ctx, reviewed, "staff:admin-a", "fraud check", "k1"); !errors.Is(err, aml.ErrUnderReview) {
+		t.Fatalf("refund under review: %v", err)
+	}
+
+	debtor := e.player(t, 0)
+	e.owe(t, debtor, 100)
+	e.credit(t, debtor, 1_000) // 950, while 100 is still owed
+	e.topUpFrom(t, debtor, "254708374149")
+	suspend(debtor)
+	if _, err := e.svc.RefundToSource(ctx, debtor, "staff:admin-a", "fraud check", "k1"); !errors.Is(err, payouts.ErrInDebt) {
+		t.Fatalf("refund while in debt: %v", err)
+	}
+	if e.balance(t, reviewed) != 950 || e.balance(t, debtor) != 950 || e.debt(t, debtor) != 100 {
+		t.Fatalf("balances %d %d debt %d", e.balance(t, reviewed), e.balance(t, debtor), e.debt(t, debtor))
+	}
+
+	nobody := "0192f000-0000-7000-8000-000000000000"
+	if _, err := e.svc.RefundToSource(ctx, nobody, "staff:admin-a", "fraud check", "k1"); err == nil || errors.Is(err, payouts.ErrPayable) {
+		t.Fatalf("refund for an unknown account: %v", err)
+	}
+	var n int
+	if err := e.pool.QueryRow(ctx, `SELECT count(*) FROM payouts.payouts`).Scan(&n); err != nil || n != 0 {
+		t.Fatalf("%d payouts made %v", n, err)
+	}
+
+	off := setupWith(t, false, payouts.Config{})
+	if _, err := off.svc.RefundToSource(ctx, nobody, "staff:admin-a", "fraud check", "k1"); !errors.Is(err, payouts.ErrUnavailable) {
+		t.Fatalf("refund without B2C: %v", err)
+	}
+}
+
+// A failure in the middle of a refund request rolls it back: nothing is debited and no payout is made.
+func TestRefundToSource_AFailureMidRequestDebitsNothing(t *testing.T) {
+	ctx := context.Background()
+	e := setup(t)
+	broken := e.service(&flakyClock{inner: e.clk}, &fakeDaraja{})
+	u := e.player(t, 1_000)
+	e.topUpFrom(t, u, "254708374149")
+	if _, err := e.pool.Exec(ctx, `UPDATE identity.users SET status = 'suspended' WHERE id = $1`, u); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := broken.RefundToSource(ctx, u, "staff:admin-a", "fraud check", "k1"); err == nil {
+		t.Fatal("refund: no error with a failing clock")
+	}
+	var n int
+	if err := e.pool.QueryRow(ctx, `SELECT count(*) FROM payouts.payouts WHERE user_id = $1`, u).Scan(&n); err != nil || n != 0 || e.balance(t, u) != 950 {
+		t.Fatalf("%d payouts, balance %d %v", n, e.balance(t, u), err)
+	}
+	// the same request goes through once the step can complete
+	if p, err := e.svc.RefundToSource(ctx, u, "staff:admin-a", "fraud check", "k1"); err != nil || p.GrossKES != 950 || e.balance(t, u) != 0 {
+		t.Fatalf("retry: %+v %v balance %d", p, err, e.balance(t, u))
 	}
 }
