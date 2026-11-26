@@ -91,6 +91,8 @@ func Mount(d Deps) func(chi.Router) {
 	return func(r chi.Router) {
 		// Daraja's callback: outside /v1 because it carries no token and no Idempotency-Key (it is authenticated by
 		// its secret path and deduplicated by the payments module).
+		r.Get("/", h.home)
+		r.Get("/openapi.yaml", h.openAPI)
 		r.Post("/hooks/mpesa/stk/{path}", h.stkCallback)
 		// Paybill hooks, under the same secret segment (C2B registration refuses URLs containing "mpesa").
 		r.Post("/hooks/c2b/{path}/validate", h.c2bValidate)
