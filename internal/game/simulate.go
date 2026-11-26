@@ -4,7 +4,7 @@ import (
 	"errors"
 	"math"
 
-	"github.com/itsivali/lottery-platform/internal/game/fair"
+	"github.com/itsivali/4draws-lottery-platform/internal/game/fair"
 )
 
 // SimConfig describes the odds version to simulate and how much to play.

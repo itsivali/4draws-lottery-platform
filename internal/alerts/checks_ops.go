@@ -7,8 +7,8 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/itsivali/lottery-platform/internal/alerts/store"
-	"github.com/itsivali/lottery-platform/internal/platform/clock"
+	"github.com/itsivali/4draws-lottery-platform/internal/alerts/store"
+	"github.com/itsivali/4draws-lottery-platform/internal/platform/clock"
 )
 
 // Kinds of alert about the platform's health and its duties to players.

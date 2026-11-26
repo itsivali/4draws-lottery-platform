@@ -6,7 +6,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/itsivali/lottery-platform/internal/identity/store"
+	"github.com/itsivali/4draws-lottery-platform/internal/identity/store"
 )
 
 // loadActive reads the account and holds its row (FOR SHARE) for the caller's transaction, so a top-up, play or

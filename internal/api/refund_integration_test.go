@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/itsivali/lottery-platform/internal/staff"
+	"github.com/itsivali/4draws-lottery-platform/internal/staff"
 )
 
 // ADR 0031: an admin asks for a refund to source with a reason; the refusals come back as problems the back office

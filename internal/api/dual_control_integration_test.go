@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/itsivali/lottery-platform/internal/staff"
+	"github.com/itsivali/4draws-lottery-platform/internal/staff"
 )
 
 // ADR 0032: staff record a self-exclusion a player asks for, with a reason; it then refuses top-ups like the player's

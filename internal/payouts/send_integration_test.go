@@ -9,13 +9,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/itsivali/lottery-platform/internal/audit"
-	"github.com/itsivali/lottery-platform/internal/identity"
-	"github.com/itsivali/lottery-platform/internal/ledger"
-	"github.com/itsivali/lottery-platform/internal/payments/daraja"
-	"github.com/itsivali/lottery-platform/internal/payouts"
-	"github.com/itsivali/lottery-platform/internal/platform/clock"
-	"github.com/itsivali/lottery-platform/internal/wallet"
+	"github.com/itsivali/4draws-lottery-platform/internal/audit"
+	"github.com/itsivali/4draws-lottery-platform/internal/identity"
+	"github.com/itsivali/4draws-lottery-platform/internal/ledger"
+	"github.com/itsivali/4draws-lottery-platform/internal/payments/daraja"
+	"github.com/itsivali/4draws-lottery-platform/internal/payouts"
+	"github.com/itsivali/4draws-lottery-platform/internal/platform/clock"
+	"github.com/itsivali/4draws-lottery-platform/internal/wallet"
 )
 
 // service is another worker on the env's database and queue, with its own clock and Daraja (nil: no B2C).

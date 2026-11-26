@@ -13,7 +13,7 @@ import (
 	"github.com/riverqueue/river/riverdriver/riverpgxv5"
 	"github.com/riverqueue/river/rivermigrate"
 
-	"github.com/itsivali/lottery-platform/db/migrations"
+	"github.com/itsivali/4draws-lottery-platform/db/migrations"
 )
 
 // Open creates a pgx pool. It does not require the database to be reachable yet.

@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/itsivali/lottery-platform/internal/staff"
+	"github.com/itsivali/4draws-lottery-platform/internal/staff"
 )
 
 // seedJournal posts one balanced journal straight into the ledger at an instant of the test's choosing.

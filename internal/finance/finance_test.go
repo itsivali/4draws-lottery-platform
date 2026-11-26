@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/itsivali/lottery-platform/internal/finance"
-	"github.com/itsivali/lottery-platform/internal/finance/store"
+	"github.com/itsivali/4draws-lottery-platform/internal/finance"
+	"github.com/itsivali/4draws-lottery-platform/internal/finance/store"
 )
 
 func day(s string) time.Time { d, _ := time.Parse(time.DateOnly, s); return d }

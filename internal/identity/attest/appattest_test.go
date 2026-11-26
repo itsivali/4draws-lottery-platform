@@ -18,7 +18,7 @@ import (
 
 	"github.com/fxamacker/cbor/v2"
 
-	"github.com/itsivali/lottery-platform/internal/identity/attest"
+	"github.com/itsivali/4draws-lottery-platform/internal/identity/attest"
 )
 
 var now = time.Date(2026, 10, 26, 12, 0, 0, 0, time.UTC)

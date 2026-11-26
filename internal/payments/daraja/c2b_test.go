@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/itsivali/lottery-platform/internal/payments/daraja"
-	"github.com/itsivali/lottery-platform/internal/platform/clock"
+	"github.com/itsivali/4draws-lottery-platform/internal/payments/daraja"
+	"github.com/itsivali/4draws-lottery-platform/internal/platform/clock"
 )
 
 var c2bConfig = daraja.C2BConfig{

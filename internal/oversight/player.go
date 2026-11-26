@@ -14,7 +14,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/itsivali/lottery-platform/internal/audit"
+	"github.com/itsivali/4draws-lottery-platform/internal/audit"
 )
 
 // One player's timeline (owner, 2026-10-31): what happened to this player and their money, in one place, for an

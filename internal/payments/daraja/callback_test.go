@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/itsivali/lottery-platform/internal/payments/daraja"
+	"github.com/itsivali/4draws-lottery-platform/internal/payments/daraja"
 )
 
 const paidCallback = `{"Body":{"stkCallback":{"MerchantRequestID":"m-1","CheckoutRequestID":"ws_CO_1","ResultCode":0,

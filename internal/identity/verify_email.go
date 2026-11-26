@@ -12,9 +12,9 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/itsivali/lottery-platform/internal/audit"
-	"github.com/itsivali/lottery-platform/internal/identity/store"
-	"github.com/itsivali/lottery-platform/internal/platform/mail"
+	"github.com/itsivali/4draws-lottery-platform/internal/audit"
+	"github.com/itsivali/4draws-lottery-platform/internal/identity/store"
+	"github.com/itsivali/4draws-lottery-platform/internal/platform/mail"
 )
 
 // Email verification (ADR 0040): an address is a claim until the player opens the link sent to it. Until then it

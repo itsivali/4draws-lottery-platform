@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/itsivali/lottery-platform/internal/platform/config"
+	"github.com/itsivali/4draws-lottery-platform/internal/platform/config"
 )
 
 func b64(n int) string { return base64.StdEncoding.EncodeToString([]byte(strings.Repeat("k", n))) }

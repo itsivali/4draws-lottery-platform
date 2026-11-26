@@ -9,8 +9,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/itsivali/lottery-platform/internal/ledger"
-	"github.com/itsivali/lottery-platform/internal/wallet/store"
+	"github.com/itsivali/4draws-lottery-platform/internal/ledger"
+	"github.com/itsivali/4draws-lottery-platform/internal/wallet/store"
 )
 
 // Errors returned by the service.

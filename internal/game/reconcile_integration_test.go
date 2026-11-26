@@ -9,8 +9,8 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/itsivali/lottery-platform/internal/game/fair"
-	"github.com/itsivali/lottery-platform/internal/ledger"
+	"github.com/itsivali/4draws-lottery-platform/internal/game/fair"
+	"github.com/itsivali/4draws-lottery-platform/internal/ledger"
 )
 
 func (e *env) mustExec(t *testing.T, sql string, args ...any) {

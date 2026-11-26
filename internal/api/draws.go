@@ -8,8 +8,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/itsivali/lottery-platform/internal/draws"
-	"github.com/itsivali/lottery-platform/internal/platform/httpx"
+	"github.com/itsivali/4draws-lottery-platform/internal/draws"
+	"github.com/itsivali/4draws-lottery-platform/internal/platform/httpx"
 )
 
 // The public view of a draw: what anyone needs to follow and check it. Officials' names are staff personal data and

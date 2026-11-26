@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/itsivali/lottery-platform/internal/staff"
+	"github.com/itsivali/4draws-lottery-platform/internal/staff"
 )
 
 // ADR 0031: with real money only requests the edge places in Kenya sign up, top up or play (451 outside-kenya, an

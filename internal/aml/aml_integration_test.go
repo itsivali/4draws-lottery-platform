@@ -14,12 +14,12 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/itsivali/lottery-platform/internal/aml"
-	"github.com/itsivali/lottery-platform/internal/audit"
-	"github.com/itsivali/lottery-platform/internal/ledger"
-	"github.com/itsivali/lottery-platform/internal/platform/clock"
-	"github.com/itsivali/lottery-platform/internal/platform/testpg"
-	"github.com/itsivali/lottery-platform/internal/wallet"
+	"github.com/itsivali/4draws-lottery-platform/internal/aml"
+	"github.com/itsivali/4draws-lottery-platform/internal/audit"
+	"github.com/itsivali/4draws-lottery-platform/internal/ledger"
+	"github.com/itsivali/4draws-lottery-platform/internal/platform/clock"
+	"github.com/itsivali/4draws-lottery-platform/internal/platform/testpg"
+	"github.com/itsivali/4draws-lottery-platform/internal/wallet"
 )
 
 type env struct {

@@ -18,12 +18,12 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/itsivali/lottery-platform/internal/audit"
-	"github.com/itsivali/lottery-platform/internal/identity"
-	"github.com/itsivali/lottery-platform/internal/platform/clock"
-	"github.com/itsivali/lottery-platform/internal/platform/mail"
-	"github.com/itsivali/lottery-platform/internal/platform/password"
-	"github.com/itsivali/lottery-platform/internal/platform/testpg"
+	"github.com/itsivali/4draws-lottery-platform/internal/audit"
+	"github.com/itsivali/4draws-lottery-platform/internal/identity"
+	"github.com/itsivali/4draws-lottery-platform/internal/platform/clock"
+	"github.com/itsivali/4draws-lottery-platform/internal/platform/mail"
+	"github.com/itsivali/4draws-lottery-platform/internal/platform/password"
+	"github.com/itsivali/4draws-lottery-platform/internal/platform/testpg"
 )
 
 // fakeOIDC accepts tokens of the form "ok:<subject>" and refuses everything else.

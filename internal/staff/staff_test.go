@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/itsivali/lottery-platform/internal/staff"
+	"github.com/itsivali/4draws-lottery-platform/internal/staff"
 )
 
 func TestParseRoles_KnowsBothRolesAndRefusesOthers(t *testing.T) {

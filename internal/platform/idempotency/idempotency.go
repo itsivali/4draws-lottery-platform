@@ -25,8 +25,8 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/itsivali/lottery-platform/internal/platform/httpx"
-	"github.com/itsivali/lottery-platform/internal/platform/idempotency/store"
+	"github.com/itsivali/4draws-lottery-platform/internal/platform/httpx"
+	"github.com/itsivali/4draws-lottery-platform/internal/platform/idempotency/store"
 )
 
 const (

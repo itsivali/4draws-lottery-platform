@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/itsivali/lottery-platform/internal/payments"
-	"github.com/itsivali/lottery-platform/internal/payments/darajamock"
+	"github.com/itsivali/4draws-lottery-platform/internal/payments"
+	"github.com/itsivali/4draws-lottery-platform/internal/payments/darajamock"
 )
 
 // Owner, 2026-10-31: a top-up M-Pesa completed but the platform never credited is reconciled from the receipt:

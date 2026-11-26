@@ -15,10 +15,10 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/itsivali/lottery-platform/internal/audit"
-	"github.com/itsivali/lottery-platform/internal/kyc/store"
-	"github.com/itsivali/lottery-platform/internal/platform/clock"
-	"github.com/itsivali/lottery-platform/internal/platform/crypto"
+	"github.com/itsivali/4draws-lottery-platform/internal/audit"
+	"github.com/itsivali/4draws-lottery-platform/internal/kyc/store"
+	"github.com/itsivali/4draws-lottery-platform/internal/platform/clock"
+	"github.com/itsivali/4draws-lottery-platform/internal/platform/crypto"
 )
 
 // Status is the account's KYC state (identity.users.kyc_status).

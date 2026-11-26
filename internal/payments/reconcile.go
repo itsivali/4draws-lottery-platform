@@ -9,8 +9,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/itsivali/lottery-platform/internal/ledger"
-	"github.com/itsivali/lottery-platform/internal/payments/store"
+	"github.com/itsivali/4draws-lottery-platform/internal/ledger"
+	"github.com/itsivali/4draws-lottery-platform/internal/payments/store"
 )
 
 // Report is one internal reconciliation run. Mismatches break an invariant between payments, ledger and wallets and

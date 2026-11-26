@@ -18,7 +18,7 @@ import (
 
 	"github.com/valkey-io/valkey-go"
 
-	"github.com/itsivali/lottery-platform/internal/platform/httpx"
+	"github.com/itsivali/4draws-lottery-platform/internal/platform/httpx"
 )
 
 // The script uses Valkey's own clock so that all API instances agree on the window, and runs atomically.

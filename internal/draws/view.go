@@ -9,7 +9,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 
-	"github.com/itsivali/lottery-platform/internal/draws/store"
+	"github.com/itsivali/4draws-lottery-platform/internal/draws/store"
 )
 
 // Draw is what is known about a draw. RevealedSeed, the beacon and the certificate exist once it is conducted.

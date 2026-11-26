@@ -6,7 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/itsivali/lottery-platform/internal/platform/httpx"
+	"github.com/itsivali/4draws-lottery-platform/internal/platform/httpx"
 )
 
 func TestWriteProblem_IsRFC7807(t *testing.T) {

@@ -9,8 +9,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/itsivali/lottery-platform/internal/platform/db"
-	"github.com/itsivali/lottery-platform/internal/platform/testpg"
+	"github.com/itsivali/4draws-lottery-platform/internal/platform/db"
+	"github.com/itsivali/4draws-lottery-platform/internal/platform/testpg"
 )
 
 // A managed Postgres (Render) gives the application a database owner that is NOT a superuser, and the platform does

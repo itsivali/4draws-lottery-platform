@@ -14,12 +14,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/itsivali/lottery-platform/internal/app"
-	"github.com/itsivali/lottery-platform/internal/payments/darajamock"
-	"github.com/itsivali/lottery-platform/internal/platform/config"
-	"github.com/itsivali/lottery-platform/internal/platform/httpx"
-	"github.com/itsivali/lottery-platform/internal/platform/testpg"
-	"github.com/itsivali/lottery-platform/internal/platform/testvalkey"
+	"github.com/itsivali/4draws-lottery-platform/internal/app"
+	"github.com/itsivali/4draws-lottery-platform/internal/payments/darajamock"
+	"github.com/itsivali/4draws-lottery-platform/internal/platform/config"
+	"github.com/itsivali/4draws-lottery-platform/internal/platform/httpx"
+	"github.com/itsivali/4draws-lottery-platform/internal/platform/testpg"
+	"github.com/itsivali/4draws-lottery-platform/internal/platform/testvalkey"
 )
 
 // gateways is a local stand-in for the national-registry vendor.

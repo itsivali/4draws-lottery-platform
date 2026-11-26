@@ -13,8 +13,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/itsivali/lottery-platform/internal/platform/clock"
-	"github.com/itsivali/lottery-platform/internal/staff"
+	"github.com/itsivali/4draws-lottery-platform/internal/platform/clock"
+	"github.com/itsivali/4draws-lottery-platform/internal/staff"
 )
 
 // The back office helps with audits (owner, 2026-10-31): the activity log is filtered by day, action, entity and

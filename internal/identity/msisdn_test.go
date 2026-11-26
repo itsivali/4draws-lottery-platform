@@ -3,7 +3,7 @@ package identity_test
 import (
 	"testing"
 
-	"github.com/itsivali/lottery-platform/internal/identity"
+	"github.com/itsivali/4draws-lottery-platform/internal/identity"
 )
 
 func TestNormalizeMSISDN(t *testing.T) {

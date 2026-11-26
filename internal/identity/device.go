@@ -5,8 +5,8 @@ import (
 
 	"time"
 
-	"github.com/itsivali/lottery-platform/internal/identity/store"
-	"github.com/itsivali/lottery-platform/internal/platform/crypto"
+	"github.com/itsivali/4draws-lottery-platform/internal/identity/store"
+	"github.com/itsivali/4draws-lottery-platform/internal/platform/crypto"
 )
 
 func (s *Service) fingerprintHash(fp string) []byte { return crypto.MAC(s.cfg.AuthKey, "device", fp) }

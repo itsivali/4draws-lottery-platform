@@ -6,9 +6,9 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/itsivali/lottery-platform/internal/kyc"
-	"github.com/itsivali/lottery-platform/internal/platform/httpx"
-	"github.com/itsivali/lottery-platform/internal/rg"
+	"github.com/itsivali/4draws-lottery-platform/internal/kyc"
+	"github.com/itsivali/4draws-lottery-platform/internal/platform/httpx"
+	"github.com/itsivali/4draws-lottery-platform/internal/rg"
 )
 
 func internalError(w http.ResponseWriter, err error) {

@@ -22,7 +22,7 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.37.0"
 	"go.opentelemetry.io/otel/trace"
 
-	"github.com/itsivali/lottery-platform/internal/platform/httpx"
+	"github.com/itsivali/4draws-lottery-platform/internal/platform/httpx"
 )
 
 // Config selects what to export.

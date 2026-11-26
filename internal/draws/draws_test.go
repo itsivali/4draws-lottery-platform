@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/itsivali/lottery-platform/internal/draws"
+	"github.com/itsivali/4draws-lottery-platform/internal/draws"
 )
 
 func day(s string) time.Time { d, _ := time.Parse(time.DateOnly, s); return d }

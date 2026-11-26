@@ -12,9 +12,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/itsivali/lottery-platform/internal/payments"
-	"github.com/itsivali/lottery-platform/internal/payments/darajamock"
-	"github.com/itsivali/lottery-platform/internal/rg"
+	"github.com/itsivali/4draws-lottery-platform/internal/payments"
+	"github.com/itsivali/4draws-lottery-platform/internal/payments/darajamock"
+	"github.com/itsivali/4draws-lottery-platform/internal/rg"
 )
 
 // payer is the sandbox's test customer: anyone may pay into any account number.

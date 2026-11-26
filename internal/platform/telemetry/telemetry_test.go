@@ -13,7 +13,7 @@ import (
 	"go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 
-	"github.com/itsivali/lottery-platform/internal/platform/telemetry"
+	"github.com/itsivali/4draws-lottery-platform/internal/platform/telemetry"
 )
 
 func newTel(t *testing.T) (*telemetry.Telemetry, *tracetest.SpanRecorder) {

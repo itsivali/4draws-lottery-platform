@@ -10,7 +10,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/itsivali/lottery-platform/internal/compliance"
+	"github.com/itsivali/4draws-lottery-platform/internal/compliance"
 )
 
 func (e *env) assertOp(t *testing.T, g *compliance.Gate, op compliance.Op) error {

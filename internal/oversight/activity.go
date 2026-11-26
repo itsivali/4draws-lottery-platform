@@ -16,8 +16,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/itsivali/lottery-platform/internal/audit"
-	"github.com/itsivali/lottery-platform/internal/platform/clock"
+	"github.com/itsivali/4draws-lottery-platform/internal/audit"
+	"github.com/itsivali/4draws-lottery-platform/internal/platform/clock"
 )
 
 // The audit trail as the back office reads it (owner, 2026-10-31: the back office must help with audits). An

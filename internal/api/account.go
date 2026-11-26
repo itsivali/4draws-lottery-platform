@@ -8,12 +8,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/itsivali/lottery-platform/internal/dataexport"
-	"github.com/itsivali/lottery-platform/internal/identity"
-	"github.com/itsivali/lottery-platform/internal/kyc"
-	"github.com/itsivali/lottery-platform/internal/payments/daraja"
-	"github.com/itsivali/lottery-platform/internal/platform/httpx"
-	"github.com/itsivali/lottery-platform/internal/wallet"
+	"github.com/itsivali/4draws-lottery-platform/internal/dataexport"
+	"github.com/itsivali/4draws-lottery-platform/internal/identity"
+	"github.com/itsivali/4draws-lottery-platform/internal/kyc"
+	"github.com/itsivali/4draws-lottery-platform/internal/payments/daraja"
+	"github.com/itsivali/4draws-lottery-platform/internal/platform/httpx"
+	"github.com/itsivali/4draws-lottery-platform/internal/wallet"
 )
 
 // pageLimit reads ?limit (1 to 100, default 20) and writes the problem when it is out of range.

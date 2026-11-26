@@ -17,13 +17,13 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/itsivali/lottery-platform/internal/aml"
-	"github.com/itsivali/lottery-platform/internal/audit"
-	"github.com/itsivali/lottery-platform/internal/compliance"
-	"github.com/itsivali/lottery-platform/internal/ledger"
-	"github.com/itsivali/lottery-platform/internal/payments/daraja"
-	"github.com/itsivali/lottery-platform/internal/payouts/store"
-	"github.com/itsivali/lottery-platform/internal/platform/clock"
+	"github.com/itsivali/4draws-lottery-platform/internal/aml"
+	"github.com/itsivali/4draws-lottery-platform/internal/audit"
+	"github.com/itsivali/4draws-lottery-platform/internal/compliance"
+	"github.com/itsivali/4draws-lottery-platform/internal/ledger"
+	"github.com/itsivali/4draws-lottery-platform/internal/payments/daraja"
+	"github.com/itsivali/4draws-lottery-platform/internal/payouts/store"
+	"github.com/itsivali/4draws-lottery-platform/internal/platform/clock"
 )
 
 // Errors.

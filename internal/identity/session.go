@@ -12,10 +12,10 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 
-	"github.com/itsivali/lottery-platform/internal/audit"
-	"github.com/itsivali/lottery-platform/internal/identity/store"
-	"github.com/itsivali/lottery-platform/internal/platform/crypto"
-	"github.com/itsivali/lottery-platform/internal/platform/password"
+	"github.com/itsivali/4draws-lottery-platform/internal/audit"
+	"github.com/itsivali/4draws-lottery-platform/internal/identity/store"
+	"github.com/itsivali/4draws-lottery-platform/internal/platform/crypto"
+	"github.com/itsivali/4draws-lottery-platform/internal/platform/password"
 )
 
 type accessClaims struct {

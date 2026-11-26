@@ -11,7 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/itsivali/lottery-platform/internal/ledger/store"
+	"github.com/itsivali/4draws-lottery-platform/internal/ledger/store"
 )
 
 // ErrAlreadyPosted means the same (kind, reference) event was already journalled; the repeat is refused.

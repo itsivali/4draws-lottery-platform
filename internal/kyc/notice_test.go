@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/itsivali/lottery-platform/internal/kyc"
-	"github.com/itsivali/lottery-platform/internal/platform/mail"
+	"github.com/itsivali/4draws-lottery-platform/internal/kyc"
+	"github.com/itsivali/4draws-lottery-platform/internal/platform/mail"
 )
 
 type sentMail struct{ msgs []mail.Message }

@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/itsivali/lottery-platform/internal/platform/config"
+	"github.com/itsivali/4draws-lottery-platform/internal/platform/config"
 )
 
 func TestLoad_AlertsDefaultToLoggingWithPlaceholderDeadlines(t *testing.T) {

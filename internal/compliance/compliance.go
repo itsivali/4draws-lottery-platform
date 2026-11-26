@@ -16,9 +16,9 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/itsivali/lottery-platform/internal/audit"
-	"github.com/itsivali/lottery-platform/internal/compliance/store"
-	"github.com/itsivali/lottery-platform/internal/platform/clock"
+	"github.com/itsivali/4draws-lottery-platform/internal/audit"
+	"github.com/itsivali/4draws-lottery-platform/internal/compliance/store"
+	"github.com/itsivali/4draws-lottery-platform/internal/platform/clock"
 )
 
 // Mode is what the service may do with money.

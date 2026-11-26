@@ -14,10 +14,10 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 
-	"github.com/itsivali/lottery-platform/internal/audit"
-	"github.com/itsivali/lottery-platform/internal/identity/store"
-	"github.com/itsivali/lottery-platform/internal/platform/mail"
-	"github.com/itsivali/lottery-platform/internal/platform/password"
+	"github.com/itsivali/4draws-lottery-platform/internal/audit"
+	"github.com/itsivali/4draws-lottery-platform/internal/identity/store"
+	"github.com/itsivali/4draws-lottery-platform/internal/platform/mail"
+	"github.com/itsivali/4draws-lottery-platform/internal/platform/password"
 )
 
 // Email addresses (ADR 0021): given at sign-up, unique among accounts, and the way a player who forgot their password

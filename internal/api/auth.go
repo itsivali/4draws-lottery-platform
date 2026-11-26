@@ -11,11 +11,11 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
 
-	"github.com/itsivali/lottery-platform/internal/compliance"
-	"github.com/itsivali/lottery-platform/internal/identity"
-	"github.com/itsivali/lottery-platform/internal/kyc"
-	"github.com/itsivali/lottery-platform/internal/platform/httpx"
-	"github.com/itsivali/lottery-platform/internal/platform/password"
+	"github.com/itsivali/4draws-lottery-platform/internal/compliance"
+	"github.com/itsivali/4draws-lottery-platform/internal/identity"
+	"github.com/itsivali/4draws-lottery-platform/internal/kyc"
+	"github.com/itsivali/4draws-lottery-platform/internal/platform/httpx"
+	"github.com/itsivali/4draws-lottery-platform/internal/platform/password"
 )
 
 type deviceJSON struct {

@@ -15,12 +15,12 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/itsivali/lottery-platform/internal/compliance"
-	"github.com/itsivali/lottery-platform/internal/game/fair"
-	"github.com/itsivali/lottery-platform/internal/game/store"
-	"github.com/itsivali/lottery-platform/internal/ledger"
-	"github.com/itsivali/lottery-platform/internal/platform/clock"
-	"github.com/itsivali/lottery-platform/internal/platform/crypto"
+	"github.com/itsivali/4draws-lottery-platform/internal/compliance"
+	"github.com/itsivali/4draws-lottery-platform/internal/game/fair"
+	"github.com/itsivali/4draws-lottery-platform/internal/game/store"
+	"github.com/itsivali/4draws-lottery-platform/internal/ledger"
+	"github.com/itsivali/4draws-lottery-platform/internal/platform/clock"
+	"github.com/itsivali/4draws-lottery-platform/internal/platform/crypto"
 )
 
 // DailyPlays is the most a player may play in one Nairobi day (also a database constraint).

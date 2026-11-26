@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/itsivali/lottery-platform/internal/platform/password"
+	"github.com/itsivali/4draws-lottery-platform/internal/platform/password"
 )
 
 var pepper = []byte("0123456789abcdef0123456789abcdef")

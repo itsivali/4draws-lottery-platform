@@ -10,10 +10,10 @@ import (
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/riverdriver/riverpgxv5"
 
-	"github.com/itsivali/lottery-platform/internal/audit"
-	"github.com/itsivali/lottery-platform/internal/oversight"
-	"github.com/itsivali/lottery-platform/internal/platform/db"
-	"github.com/itsivali/lottery-platform/internal/platform/testpg"
+	"github.com/itsivali/4draws-lottery-platform/internal/audit"
+	"github.com/itsivali/4draws-lottery-platform/internal/oversight"
+	"github.com/itsivali/4draws-lottery-platform/internal/platform/db"
+	"github.com/itsivali/4draws-lottery-platform/internal/platform/testpg"
 )
 
 type noopArgs struct{}

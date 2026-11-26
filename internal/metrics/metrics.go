@@ -11,8 +11,8 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/itsivali/lottery-platform/internal/metrics/store"
-	"github.com/itsivali/lottery-platform/internal/platform/clock"
+	"github.com/itsivali/4draws-lottery-platform/internal/metrics/store"
+	"github.com/itsivali/4draws-lottery-platform/internal/platform/clock"
 )
 
 // MaxDays is the longest range one summary covers; DefaultDays the range shown when none is asked for.

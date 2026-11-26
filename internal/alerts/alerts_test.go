@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/itsivali/lottery-platform/internal/alerts"
-	"github.com/itsivali/lottery-platform/internal/platform/mail"
+	"github.com/itsivali/4draws-lottery-platform/internal/alerts"
+	"github.com/itsivali/4draws-lottery-platform/internal/platform/mail"
 )
 
 func TestText_SaysWhatToDo(t *testing.T) {

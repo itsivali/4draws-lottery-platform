@@ -15,7 +15,7 @@ import (
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
 
-	"github.com/itsivali/lottery-platform/internal/platform/db"
+	"github.com/itsivali/4draws-lottery-platform/internal/platform/db"
 )
 
 var (

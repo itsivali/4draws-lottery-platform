@@ -10,13 +10,13 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/itsivali/lottery-platform/internal/audit"
-	"github.com/itsivali/lottery-platform/internal/compliance"
-	"github.com/itsivali/lottery-platform/internal/identity"
-	"github.com/itsivali/lottery-platform/internal/ledger"
-	"github.com/itsivali/lottery-platform/internal/payments/daraja"
-	"github.com/itsivali/lottery-platform/internal/payments/store"
-	"github.com/itsivali/lottery-platform/internal/rg"
+	"github.com/itsivali/4draws-lottery-platform/internal/audit"
+	"github.com/itsivali/4draws-lottery-platform/internal/compliance"
+	"github.com/itsivali/4draws-lottery-platform/internal/identity"
+	"github.com/itsivali/4draws-lottery-platform/internal/ledger"
+	"github.com/itsivali/4draws-lottery-platform/internal/payments/daraja"
+	"github.com/itsivali/4draws-lottery-platform/internal/payments/store"
+	"github.com/itsivali/4draws-lottery-platform/internal/rg"
 )
 
 // Paybill (C2B) payments. A customer pays into the paybill from the M-Pesa menu and types an account number: the

@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/itsivali/lottery-platform/internal/payments"
-	"github.com/itsivali/lottery-platform/internal/platform/httpx"
+	"github.com/itsivali/4draws-lottery-platform/internal/payments"
+	"github.com/itsivali/4draws-lottery-platform/internal/platform/httpx"
 )
 
 // liveHeartbeat (a variable for tests) is how often an idle stream sends a comment (proxies close silent connections) and re-checks the

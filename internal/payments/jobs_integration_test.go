@@ -14,17 +14,17 @@ import (
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/riverdriver/riverpgxv5"
 
-	"github.com/itsivali/lottery-platform/internal/audit"
-	"github.com/itsivali/lottery-platform/internal/identity"
-	"github.com/itsivali/lottery-platform/internal/ledger"
-	"github.com/itsivali/lottery-platform/internal/payments"
-	"github.com/itsivali/lottery-platform/internal/payments/daraja"
-	"github.com/itsivali/lottery-platform/internal/payments/darajamock"
-	"github.com/itsivali/lottery-platform/internal/platform/clock"
-	"github.com/itsivali/lottery-platform/internal/platform/db"
-	"github.com/itsivali/lottery-platform/internal/platform/testpg"
-	"github.com/itsivali/lottery-platform/internal/rg"
-	"github.com/itsivali/lottery-platform/internal/wallet"
+	"github.com/itsivali/4draws-lottery-platform/internal/audit"
+	"github.com/itsivali/4draws-lottery-platform/internal/identity"
+	"github.com/itsivali/4draws-lottery-platform/internal/ledger"
+	"github.com/itsivali/4draws-lottery-platform/internal/payments"
+	"github.com/itsivali/4draws-lottery-platform/internal/payments/daraja"
+	"github.com/itsivali/4draws-lottery-platform/internal/payments/darajamock"
+	"github.com/itsivali/4draws-lottery-platform/internal/platform/clock"
+	"github.com/itsivali/4draws-lottery-platform/internal/platform/db"
+	"github.com/itsivali/4draws-lottery-platform/internal/platform/testpg"
+	"github.com/itsivali/4draws-lottery-platform/internal/rg"
+	"github.com/itsivali/4draws-lottery-platform/internal/wallet"
 )
 
 func waitFor(t *testing.T, what string, ok func() bool) {

@@ -13,9 +13,9 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 
-	"github.com/itsivali/lottery-platform/internal/audit"
-	"github.com/itsivali/lottery-platform/internal/identity"
-	"github.com/itsivali/lottery-platform/internal/platform/password"
+	"github.com/itsivali/4draws-lottery-platform/internal/audit"
+	"github.com/itsivali/4draws-lottery-platform/internal/identity"
+	"github.com/itsivali/4draws-lottery-platform/internal/platform/password"
 )
 
 // claimsOIDC is fakeOIDC that also gives the token's claims, as the real verifier does: "ok:<sub>|<picture>".

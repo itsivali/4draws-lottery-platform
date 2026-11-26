@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/itsivali/lottery-platform/internal/platform/config"
+	"github.com/itsivali/4draws-lottery-platform/internal/platform/config"
 )
 
 var darajaVars = []string{"DARAJA_CONSUMER_KEY", "DARAJA_CONSUMER_SECRET", "DARAJA_SHORTCODE", "DARAJA_PASSKEY", "DARAJA_CALLBACK_TOKEN"}

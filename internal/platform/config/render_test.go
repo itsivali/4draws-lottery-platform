@@ -11,8 +11,8 @@ import (
 
 	"go.yaml.in/yaml/v3"
 
-	"github.com/itsivali/lottery-platform/internal/platform/config"
-	"github.com/itsivali/lottery-platform/internal/platform/httpx"
+	"github.com/itsivali/4draws-lottery-platform/internal/platform/config"
+	"github.com/itsivali/4draws-lottery-platform/internal/platform/httpx"
 )
 
 // The Blueprint must supply everything the API needs to start in full mode, and must make the trusted-proxy decision

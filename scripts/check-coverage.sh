@@ -2,7 +2,7 @@
 # Coverage gate: 85% on money-path packages (once they have code), 70% overall.
 set -euo pipefail
 prof=${1:-coverage.out}
-mod=github.com/itsivali/lottery-platform
+mod=github.com/itsivali/4draws-lottery-platform
 fail=0
 # Entry points (main.go), local mock servers and the testcontainers helper are not unit-testable
 # business code; they are exercised by the compose e2e smoke test instead.

@@ -28,12 +28,12 @@ Verification (all commands were run; outputs summarised):
 - Hooks (lefthook) ran on every commit; the pre-push hook blocked a push when Docker was inaccessible.
 
 Green CI runs on main (`gh run list`):
-- ci (ci-ok green): https://github.com/itsivali/lottery-platform/actions/runs/39155808054
-- ci on 0a46b5d: https://github.com/itsivali/lottery-platform/actions/runs/39156219320
-- images (Trivy, SBOM, cosign keyless, ghcr): https://github.com/itsivali/lottery-platform/actions/runs/39156219412
-- release (release-please): https://github.com/itsivali/lottery-platform/actions/runs/39156219464
+- ci (ci-ok green): https://github.com/itsivali/4draws-lottery-platform/actions/runs/39155808054
+- ci on 0a46b5d: https://github.com/itsivali/4draws-lottery-platform/actions/runs/39156219320
+- images (Trivy, SBOM, cosign keyless, ghcr): https://github.com/itsivali/4draws-lottery-platform/actions/runs/39156219412
+- release (release-please): https://github.com/itsivali/4draws-lottery-platform/actions/runs/39156219464
 
-Blocked failing PR: https://github.com/itsivali/lottery-platform/pull/6 — go-unit, go-integration, coverage and ci-ok failed; `gh pr merge` replied "the base branch policy prohibits the merge"; closed unmerged. A direct push to main is rejected (GH006).
+Blocked failing PR: https://github.com/itsivali/4draws-lottery-platform/pull/6 — go-unit, go-integration, coverage and ci-ok failed; `gh pr merge` replied "the base branch policy prohibits the merge"; closed unmerged. A direct push to main is rejected (GH006).
 
 Repository settings applied: branch protection on main (PR required, `ci-ok` required + up to date, linear history, no force-push/deletion, admins included, 0 approvals); squash-only merges; delete branch on merge; secret scanning + push protection; Dependabot alerts and security updates; private vulnerability reporting; environments `preview` and `production` (required reviewer itsivali, tags `v*.*.*` only).
 

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/itsivali/lottery-platform/internal/staff"
+	"github.com/itsivali/4draws-lottery-platform/internal/staff"
 )
 
 // Owner, 2026-10-31: a top-up M-Pesa completed but the platform never credited is reconciled from the receipt: the

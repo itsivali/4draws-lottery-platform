@@ -13,8 +13,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/itsivali/lottery-platform/internal/platform/idempotency"
-	"github.com/itsivali/lottery-platform/internal/platform/testpg"
+	"github.com/itsivali/4draws-lottery-platform/internal/platform/idempotency"
+	"github.com/itsivali/4draws-lottery-platform/internal/platform/testpg"
 )
 
 type fixture struct {

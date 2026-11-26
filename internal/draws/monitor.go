@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/itsivali/lottery-platform/internal/draws/store"
+	"github.com/itsivali/4draws-lottery-platform/internal/draws/store"
 )
 
 // How late a step may be before it is reported.

@@ -8,8 +8,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/itsivali/lottery-platform/internal/oversight"
-	"github.com/itsivali/lottery-platform/internal/platform/httpx"
+	"github.com/itsivali/4draws-lottery-platform/internal/oversight"
+	"github.com/itsivali/4draws-lottery-platform/internal/platform/httpx"
 )
 
 // The back office's views of the whole system (owner, 2026-10-30): every play and top-up by player and time, the audit

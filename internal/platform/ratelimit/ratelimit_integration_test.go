@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/itsivali/lottery-platform/internal/platform/ratelimit"
-	"github.com/itsivali/lottery-platform/internal/platform/testvalkey"
+	"github.com/itsivali/4draws-lottery-platform/internal/platform/ratelimit"
+	"github.com/itsivali/4draws-lottery-platform/internal/platform/testvalkey"
 )
 
 func TestAllow_PermitsExactlyLimitRequestsPerWindow(t *testing.T) {

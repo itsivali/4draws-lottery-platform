@@ -15,16 +15,16 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/itsivali/lottery-platform/internal/audit"
-	"github.com/itsivali/lottery-platform/internal/game"
-	"github.com/itsivali/lottery-platform/internal/game/fair"
-	"github.com/itsivali/lottery-platform/internal/identity"
-	"github.com/itsivali/lottery-platform/internal/ledger"
-	"github.com/itsivali/lottery-platform/internal/platform/clock"
-	"github.com/itsivali/lottery-platform/internal/platform/crypto"
-	"github.com/itsivali/lottery-platform/internal/platform/testpg"
-	"github.com/itsivali/lottery-platform/internal/rg"
-	"github.com/itsivali/lottery-platform/internal/wallet"
+	"github.com/itsivali/4draws-lottery-platform/internal/audit"
+	"github.com/itsivali/4draws-lottery-platform/internal/game"
+	"github.com/itsivali/4draws-lottery-platform/internal/game/fair"
+	"github.com/itsivali/4draws-lottery-platform/internal/identity"
+	"github.com/itsivali/4draws-lottery-platform/internal/ledger"
+	"github.com/itsivali/4draws-lottery-platform/internal/platform/clock"
+	"github.com/itsivali/4draws-lottery-platform/internal/platform/crypto"
+	"github.com/itsivali/4draws-lottery-platform/internal/platform/testpg"
+	"github.com/itsivali/4draws-lottery-platform/internal/rg"
+	"github.com/itsivali/4draws-lottery-platform/internal/wallet"
 )
 
 // 2026-10-24 23:30 Nairobi (20:30 UTC): late enough to cross midnight in a test.

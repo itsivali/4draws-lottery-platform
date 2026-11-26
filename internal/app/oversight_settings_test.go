@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/itsivali/lottery-platform/internal/platform/config"
+	"github.com/itsivali/4draws-lottery-platform/internal/platform/config"
 )
 
 // The back office's System page reads the settings the api runs with (owner, 2026-10-30).

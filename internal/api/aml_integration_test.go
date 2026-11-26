@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/itsivali/lottery-platform/internal/staff"
+	"github.com/itsivali/4draws-lottery-platform/internal/staff"
 )
 
 // ADR 0033: staff open a case, hold the player's money, and someone else lifts it by closing the case; while held the

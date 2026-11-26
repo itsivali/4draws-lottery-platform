@@ -8,9 +8,9 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/itsivali/lottery-platform/internal/aml"
-	"github.com/itsivali/lottery-platform/internal/audit"
-	"github.com/itsivali/lottery-platform/internal/payments"
+	"github.com/itsivali/4draws-lottery-platform/internal/aml"
+	"github.com/itsivali/4draws-lottery-platform/internal/audit"
+	"github.com/itsivali/4draws-lottery-platform/internal/payments"
 )
 
 // ADR 0030: the prompt job decides again what StartTopUp decided. A player who excluded themself, or whose account was

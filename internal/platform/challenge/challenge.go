@@ -11,7 +11,7 @@ import (
 
 	"github.com/valkey-io/valkey-go"
 
-	"github.com/itsivali/lottery-platform/internal/platform/clock"
+	"github.com/itsivali/4draws-lottery-platform/internal/platform/clock"
 )
 
 // Store issues and consumes challenges.

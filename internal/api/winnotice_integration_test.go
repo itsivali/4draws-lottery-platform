@@ -11,9 +11,9 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/itsivali/lottery-platform/internal/audit"
-	"github.com/itsivali/lottery-platform/internal/platform/mail"
-	"github.com/itsivali/lottery-platform/internal/winnotice"
+	"github.com/itsivali/4draws-lottery-platform/internal/audit"
+	"github.com/itsivali/4draws-lottery-platform/internal/platform/mail"
+	"github.com/itsivali/4draws-lottery-platform/internal/winnotice"
 )
 
 // refusing is a mail server that refuses every message.

@@ -9,13 +9,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/itsivali/lottery-platform/internal/audit"
-	"github.com/itsivali/lottery-platform/internal/platform/clock"
-	"github.com/itsivali/lottery-platform/internal/platform/config"
-	"github.com/itsivali/lottery-platform/internal/platform/crypto"
-	"github.com/itsivali/lottery-platform/internal/platform/db"
-	"github.com/itsivali/lottery-platform/internal/platform/testpg"
-	"github.com/itsivali/lottery-platform/internal/staff"
+	"github.com/itsivali/4draws-lottery-platform/internal/audit"
+	"github.com/itsivali/4draws-lottery-platform/internal/platform/clock"
+	"github.com/itsivali/4draws-lottery-platform/internal/platform/config"
+	"github.com/itsivali/4draws-lottery-platform/internal/platform/crypto"
+	"github.com/itsivali/4draws-lottery-platform/internal/platform/db"
+	"github.com/itsivali/4draws-lottery-platform/internal/platform/testpg"
+	"github.com/itsivali/4draws-lottery-platform/internal/staff"
 )
 
 func TestRun_PaymentsReconcilePrintsACleanReportOnAFreshDatabase(t *testing.T) {

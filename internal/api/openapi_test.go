@@ -10,8 +10,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"go.yaml.in/yaml/v3"
 
-	"github.com/itsivali/lottery-platform/internal/api"
-	"github.com/itsivali/lottery-platform/internal/platform/httpx"
+	"github.com/itsivali/4draws-lottery-platform/internal/api"
+	"github.com/itsivali/4draws-lottery-platform/internal/platform/httpx"
 )
 
 // The OpenAPI file is the contract; this keeps the router and the document from drifting apart in either direction.

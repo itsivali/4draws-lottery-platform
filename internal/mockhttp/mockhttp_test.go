@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/itsivali/lottery-platform/internal/mockhttp"
+	"github.com/itsivali/4draws-lottery-platform/internal/mockhttp"
 )
 
 func TestHandler_HealthzAndNamedRoutes(t *testing.T) {
