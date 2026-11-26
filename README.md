@@ -18,7 +18,8 @@ Read `docs/STATUS.md` first in a new session: it is the running record of what i
 ---
 
 > **Fairness, in public:** the spin and draw protocol and the verifier tool live in the public repository
-> [itsivali/tajirika-fairness](https://github.com/itsivali/tajirika-fairness); this repository (the platform) is private.
+> [itsivali/4draws-fairness](https://github.com/itsivali/4draws-fairness); this repository (the platform) is proprietary
+> (all rights reserved, see `LICENSE`).
 
 ## 1. Prerequisites
 

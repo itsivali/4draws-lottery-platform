@@ -53,7 +53,7 @@ is a bug or tampering: stop approving draws, keep the evidence and investigate b
 
 ## Public verification
 
-The protocol and the verifier are published at https://github.com/itsivali/tajirika-fairness (MIT): the one place to
+The protocol and the verifier are published at https://github.com/itsivali/4draws-fairness (MIT): the one place to
 point players, auditors and the regulator. Anyone can check a conducted draw without trusting the server:
 
 ```sh

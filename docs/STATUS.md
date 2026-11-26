@@ -34,8 +34,8 @@ Read this first at the start of every session.
   `ke.co.fourdraws.web` / `.backoffice` for Apple sign-in; a package segment cannot start with a digit) are 4draws.
   The domain `4draws.co.ke` was registered the same day and has no DNS yet: the sites stay on `tajirika.co.ke` until
   the cutover (its own change: Render custom domains, DNS at Safaricom, `render.yaml` URLs, CORS, canonical and
-  sitemap addresses, the Daraja callback and paybill URLs registered again). The public fairness repository keeps its
-  name (`itsivali/tajirika-fairness`) until the owner renames it.
+  sitemap addresses, the Daraja callback and paybill URLs registered again). The public fairness repository was renamed
+  to `itsivali/4draws-fairness` (2026-11-26, owner), with its Go module path moved to match.
 - **Player app, Material 3 (2026-11-11, owner):** after two same-day redesign passes (soft glows, then a full 3D
   pass that the owner found too much), the app is a native-feeling Material 3 app in the logo's indigo: flat filled,
   outlined and tonal buttons, a standard navigation bar, each platform's own page transition, tonal icon discs, the
