@@ -160,3 +160,147 @@ func TestJobs_APaymentHasOneVerifyJobAndACallbackBringsItForward(t *testing.T) {
 		t.Fatalf("%d verify jobs, due now = %v; want one, brought forward by the callback", n, due)
 	}
 }
+
+// The receipt-claim journey on the real queue (owner, 2026-10-31): a top-up the customer paid whose callback never
+// came settles unconfirmed; the receipt the player types in is checked by the claim job through Transaction Status
+// and credited only on M-Pesa's answer. A claim met by an M-Pesa outage stays open and its job is snoozed, not
+// dropped: the queue asks again.
+func TestJobs_AClaimedReceiptIsCheckedByTheQueue(t *testing.T) {
+	ctx := context.Background()
+	pool := testpg.Pool(t, "app_worker")
+	clk := clock.Postgres{}
+	aw := audit.NewWriter()
+
+	var svc *payments.Service
+	cb := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		raw, _ := io.ReadAll(r.Body)
+		var err error
+		switch r.URL.Path {
+		case "/confirm":
+			err = svc.HandleC2BConfirmation(r.Context(), raw)
+		case "/status-result":
+			err = svc.HandleC2BStatusResult(r.Context(), raw)
+		case "/status-timeout":
+			svc.HandleC2BStatusTimeout(r.Context(), raw)
+		default:
+			err = svc.HandleCallback(r.Context(), raw)
+		}
+		if err != nil {
+			t.Errorf("%s: %v", r.URL.Path, err)
+		}
+	}))
+	t.Cleanup(cb.Close)
+	mock := darajamock.New(darajamock.Options{ConsumerKey: "ck", ConsumerSecret: "cs", ShortCode: "174379", Passkey: "pk",
+		C2BShortCode: "600982", Initiator: "testapi", SecurityCredential: "cred", HTTPClient: cb.Client()})
+	mock.AutoComplete(ctx, 0)
+	ms := httptest.NewServer(mock)
+	t.Cleanup(ms.Close)
+	dc, err := daraja.New(daraja.Config{BaseURL: ms.URL, ConsumerKey: "ck", ConsumerSecret: "cs", ShortCode: "174379", Passkey: "pk", CallbackURL: cb.URL},
+		ms.Client(), clock.Wall{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if dc, err = dc.WithC2B(daraja.C2BConfig{ShortCode: "600982", Initiator: "testapi", SecurityCredential: "cred",
+		ResultURL: cb.URL + "/status-result", TimeoutURL: cb.URL + "/status-timeout"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := dc.RegisterC2BURLs(ctx, cb.URL+"/validate", cb.URL+"/confirm", daraja.C2BCancelOnTimeout); err != nil {
+		t.Fatal(err)
+	}
+
+	insertOnly, err := river.NewClient(riverpgxv5.New(pool), &river.Config{Schema: db.RiverSchema})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ls := ledger.NewStore()
+	ids := identity.NewService(pool, clk, nil, aw, identity.Config{AuthKey: []byte("0123456789abcdef0123456789abcdef")})
+	// short waits so the prompt settles unconfirmed within the test
+	cfg := payments.Config{ShortCode: "174379", VerifyAfter: 200 * time.Millisecond, Expiry: time.Second}
+	svc = payments.NewService(pool, clk, dc, payments.NewRiverEnqueuer(insertOnly), ids,
+		rg.NewService(pool, clk, aw, rg.Config{CoolingOff: 24 * time.Hour}), wallet.NewService(ls), ls, aw, cfg).
+		WithC2B(dc, payments.C2BConfig{ShortCode: "600982", MaxStatusRequests: 3})
+
+	workers := river.NewWorkers()
+	payments.AddWorkers(workers, svc)
+	wc, err := river.NewClient(riverpgxv5.New(pool), &river.Config{
+		Schema: db.RiverSchema, Workers: workers, Queues: map[string]river.QueueConfig{river.QueueDefault: {MaxWorkers: 4}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := wc.Start(ctx); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = wc.Stop(context.Background()) })
+
+	user, msisdn := "", "254700000998"
+	if err := pool.QueryRow(ctx, `INSERT INTO identity.users (msisdn, kyc_status, national_id_hash, password_hash)
+		VALUES ($1, 'verified', 'jobs-claim-test', 'x') RETURNING id::text`, msisdn).Scan(&user); err != nil {
+		t.Fatal(err)
+	}
+	balance := func() int64 {
+		var b int64
+		_ = pool.QueryRow(ctx, `SELECT coalesce((SELECT balance_kes FROM wallet.wallets WHERE user_id = $1), 0)`, user).Scan(&b)
+		return b
+	}
+	unconfirmed := func(key string) payments.TopUp {
+		t.Helper()
+		before := balance()
+		mock.SetNextFault(darajamock.Fault{DropCallback: true})
+		tu, err := svc.StartTopUp(ctx, user, 100, key)
+		if err != nil {
+			t.Fatal(err)
+		}
+		waitFor(t, "the uncalled-back top-up to settle unconfirmed", func() bool {
+			got, err := svc.Get(ctx, user, tu.ID)
+			return err == nil && got.Status != payments.StatusPending
+		})
+		if got, _ := svc.Get(ctx, user, tu.ID); got.Status != payments.StatusUnconfirmed || balance() != before {
+			t.Fatalf("top-up %+v, balance %d: credited without a callback", got, balance())
+		}
+		return tu
+	}
+
+	tu := unconfirmed("claim-key-1")
+	pushes := mock.Pushes()
+	receipt := mock.ReceiptOf(pushes[len(pushes)-1].CheckoutRequestID)
+	if _, err := svc.ClaimReceipt(ctx, user, tu.ID, receipt); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, "the claim job to credit the confirmed receipt", func() bool {
+		got, err := svc.Get(ctx, user, tu.ID)
+		return err == nil && got.Status == payments.StatusCredited
+	})
+	if got, _ := svc.Get(ctx, user, tu.ID); got.Claim == nil || got.Claim.Status != payments.ClaimConfirmed || balance() != 100 {
+		t.Fatalf("claim %+v balance %d", got.Claim, balance())
+	}
+
+	// M-Pesa down for the second claim: the job snoozes and the queue asks again; nothing is credited meanwhile
+	tu2 := unconfirmed("claim-key-2")
+	mock.SetNextC2BFault(darajamock.C2BFault{DropConfirmation: true, StatusHTTP: http.StatusServiceUnavailable})
+	down, err := mock.Pay(ctx, 100, msisdn, msisdn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.ClaimReceipt(ctx, user, tu2.ID, down); err != nil {
+		t.Fatal(err)
+	}
+	asked := func() int {
+		n := 0
+		for _, r := range mock.StatusRequests() {
+			if r == down {
+				n++
+			}
+		}
+		return n
+	}
+	waitFor(t, "the snoozed claim job to ask M-Pesa again", func() bool { return asked() >= 2 })
+	var state string
+	if err := pool.QueryRow(ctx, `SELECT state FROM river.river_job WHERE kind = 'payments.claim_check' AND args->>'payment_id' = $1`, tu2.ID).Scan(&state); err != nil ||
+		(state != "scheduled" && state != "running" && state != "available") {
+		t.Fatalf("claim job state %q (%v): an outage must not end the job", state, err)
+	}
+	if got, _ := svc.Get(ctx, user, tu2.ID); got.Status == payments.StatusCredited || got.Claim == nil || got.Claim.Status != payments.ClaimClaimed || balance() != 100 {
+		t.Fatalf("second top-up %+v claim %+v balance %d", got, got.Claim, balance())
+	}
+}

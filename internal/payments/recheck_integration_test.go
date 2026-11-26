@@ -86,3 +86,22 @@ func TestHold_AMonitoringHoldStopsMoneyComingIn(t *testing.T) {
 		t.Fatalf("paybill validation after the case closed: %s %v", code, err)
 	}
 }
+
+// ADR 0030: the prompt goes only to the number the account claims now. A top-up recorded before the account's number
+// changed sends no prompt to the old one: it fails with why.
+func TestPush_ATopUpRecordedBeforeTheNumberChangedSendsNoPrompt(t *testing.T) {
+	e := setup(t)
+	ctx := context.Background()
+	user, _ := e.player(t)
+	tu := e.topUp(t, user, 100)
+	if _, err := e.pool.Exec(ctx, `UPDATE identity.users SET msisdn = '254799000111' WHERE id = $1`, user); err != nil {
+		t.Fatal(err)
+	}
+	e.run(t)
+	if status, reason := e.status(t, tu.ID); status != "failed" || reason == nil || *reason != "number_changed" {
+		t.Fatalf("top-up: %s %v, want failed number_changed", status, reason)
+	}
+	if p := e.mock.Pushes(); len(p) != 0 {
+		t.Fatalf("prompts = %+v, want none", p)
+	}
+}

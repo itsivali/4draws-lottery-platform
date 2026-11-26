@@ -298,3 +298,30 @@ func TestSend_NothingLeavesWhilePayoutsAreFrozen(t *testing.T) {
 		t.Fatalf("after the freeze: %s %+v", st, e.mock.Payouts())
 	}
 }
+
+// An outbox event's id and time can disagree (a transaction that started earlier commits later): the batch's period
+// still runs from its earliest event to its latest, whatever order they were numbered in, and the file rebuilds to it.
+func TestTaxBatches_ThePeriodSpansEveryEventWhateverTheirOrder(t *testing.T) {
+	ctx := context.Background()
+	e := setup(t)
+	e.paidPrizes(t, 105, 63)
+	var first, last time.Time
+	if err := e.pool.QueryRow(ctx, `SELECT min(created_at), max(created_at) FROM audit.kra_outbox WHERE event_type = 'withholding_tax'`).Scan(&first, &last); err != nil {
+		t.Fatal(err)
+	}
+	// the later-numbered event was recorded an hour before the earlier one
+	e.tamper(t, `UPDATE audit.kra_outbox SET created_at = $1 WHERE id = (SELECT max(id) FROM audit.kra_outbox WHERE event_type = 'withholding_tax')`,
+		first.Add(-time.Hour))
+	earliest := first.Add(-time.Hour)
+	var latest time.Time
+	if err := e.pool.QueryRow(ctx, `SELECT created_at FROM audit.kra_outbox WHERE id = (SELECT min(id) FROM audit.kra_outbox WHERE event_type = 'withholding_tax')`).Scan(&latest); err != nil {
+		t.Fatal(err)
+	}
+	b, file, err := e.svc.PrepareBatch(ctx, "staff:alice", 100)
+	if err != nil || b.Events != 2 || b.TaxKES != 34 || !b.FirstEventAt.Equal(earliest) || !b.LastEventAt.Equal(latest) {
+		t.Fatalf("batch %+v %v, want %s to %s", b, err, earliest, latest)
+	}
+	if _, rebuilt, err := e.svc.BatchFile(ctx, b.No); err != nil || !bytes.Equal(rebuilt, file) {
+		t.Fatalf("rebuilt %v", err)
+	}
+}

@@ -77,12 +77,17 @@ func TestList_FiltersPagesAndCountsKinds(t *testing.T) {
 			sev = alerts.Page
 		}
 		fired = append(fired, alerts.Alert{Kind: "test.k" + strings.Repeat("x", i%2), Subject: sub, Severity: sev, Summary: "s " + sub})
-		e.clk.Advance(time.Minute)
 	}
-	f := &firing{alerts: fired}
+	f := &firing{}
 	svc := e.service(f.check("test", "test.k", "test.kx"), (&firing{}).check("quiet", "test.quiet"))
-	if err := svc.Watch(ctx); err != nil {
-		t.Fatal(err)
+	// Raise them a minute apart, a first, so "newest first" has one right answer: alerts raised in the same Watch
+	// share first_seen_at, and ids made in the same millisecond do not sort in creation order.
+	for i := range fired {
+		f.alerts = fired[:i+1]
+		if err := svc.Watch(ctx); err != nil {
+			t.Fatal(err)
+		}
+		e.clk.Advance(time.Minute)
 	}
 	all, _ := openAlerts(svc)
 	if len(all) != 5 {
