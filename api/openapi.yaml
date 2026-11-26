@@ -1,15 +1,20 @@
 openapi: 3.1.0
 info:
-  title: Lottery Platform API
+  title: 4draws API
   version: 0.0.1
   description: |
+    The API behind 4draws, Kenya's M-Pesa lottery (https://4draws.co.ke).
+
     Public API contract (source of truth). Errors are RFC 7807 problem+json. Every POST, PUT, PATCH and DELETE requires an
     `Idempotency-Key` header; replays return the stored response with `Idempotent-Replay: true`, and reusing a key with a
     different request returns 422.
 servers:
+  - url: https://api.4draws.co.ke
+    description: Production
   - url: http://localhost:8080
+    description: Local development
 tags:
-  - { name: ops, description: "Health probes." }
+  - { name: ops, description: "The home page, this contract and the health probes." }
   - { name: auth, description: "Sign-up, sign-in, sessions and linked identities." }
   - { name: kyc, description: "Identity verification (reviewed by staff)." }
   - { name: responsible-gaming, description: "Deposit limits, time-outs and self-exclusion." }
@@ -20,6 +25,62 @@ tags:
   - { name: wallet, description: "The player's balance and its movements." }
   - { name: back-office, description: "Staff operations (tokens from the staff realm; every route needs a role; audited as the staff member)." }
 paths:
+  /:
+    get:
+      operationId: home
+      tags: [ops]
+      summary: What this API is
+      description: |
+        A page about 4draws and this API: how play and fairness work, the API's sections, links to this contract, and
+        whether money operations are running. A client that asks for `application/json` gets the same facts as JSON.
+      security: []
+      responses:
+        "200":
+          description: The home page
+          content:
+            text/html:
+              schema: { type: string }
+            application/json:
+              schema:
+                type: object
+                required: [name, about, website, contract, base_url, sections, operations, fairness_verifier, source]
+                properties:
+                  name: { type: string }
+                  about: { type: string }
+                  website: { type: string, format: uri }
+                  contract: { type: string, description: "Path of this OpenAPI document." }
+                  base_url: { type: string }
+                  version: { type: string, description: "Short commit of the running build, when known." }
+                  status:
+                    type: object
+                    description: "Absent when the operating state cannot be read."
+                    properties:
+                      operating_mode: { type: string }
+                      real_money: { type: boolean }
+                      money_moves: { type: boolean }
+                      paused: { type: array, items: { type: string } }
+                  sections:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        name: { type: string }
+                        description: { type: string }
+                  operations: { type: integer }
+                  fairness_verifier: { type: string, format: uri }
+                  source: { type: string, format: uri }
+  /openapi.yaml:
+    get:
+      operationId: openapiDocument
+      tags: [ops]
+      summary: This OpenAPI document
+      security: []
+      responses:
+        "200":
+          description: The contract, as YAML
+          content:
+            application/yaml:
+              schema: { type: string }
   /healthz:
     get:
       operationId: healthz

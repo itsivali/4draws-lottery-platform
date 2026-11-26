@@ -25,7 +25,10 @@ func TestSimulate_MatchesTheTheory(t *testing.T) {
 			t.Errorf("chances %+v", r)
 		}
 	}
-	if rep.ChiSquare > 31.26 { // 11 degrees of freedom, p = 0.001
+	// 11 degrees of freedom. Every run draws a fresh seed, so the bar is p ~ 1e-6, like the 5-standard-error bar
+	// above: p = 0.001 (31.26) failed a fair generator once in a thousand CI runs. A slot favoured by even 10% still
+	// scores about 166 over these 200k spins.
+	if rep.ChiSquare > 49.0 {
 		t.Errorf("slots not uniform: chi-square %.2f", rep.ChiSquare)
 	}
 	if math.Abs(rep.Rows[0].LuckyRateWant-1.0/12) > 1e-12 {

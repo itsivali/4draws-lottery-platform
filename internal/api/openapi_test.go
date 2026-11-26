@@ -39,7 +39,10 @@ func TestOpenAPI_DocumentsExactlyTheRoutesTheRouterServes(t *testing.T) {
 	served := map[string]bool{}
 	h := httpx.NewRouterWith(nil, api.Mount(api.Deps{})).(chi.Routes)
 	if err := chi.Walk(h, func(method, route string, _ http.Handler, _ ...func(http.Handler) http.Handler) error {
-		served[method+" "+strings.TrimSuffix(route, "/")] = true
+		if route != "/" {
+			route = strings.TrimSuffix(route, "/")
+		}
+		served[method+" "+route] = true
 		return nil
 	}); err != nil {
 		t.Fatal(err)
