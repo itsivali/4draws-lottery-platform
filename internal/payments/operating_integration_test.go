@@ -8,9 +8,9 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/itsivali/lottery-platform/internal/audit"
-	"github.com/itsivali/lottery-platform/internal/compliance"
-	"github.com/itsivali/lottery-platform/internal/payments"
+	"github.com/itsivali/4draws-lottery-platform/internal/audit"
+	"github.com/itsivali/4draws-lottery-platform/internal/compliance"
+	"github.com/itsivali/4draws-lottery-platform/internal/payments"
 )
 
 // ADR 0027: once operations are stopped no prompt goes out (a top-up recorded before the stop fails without one),

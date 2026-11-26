@@ -8,7 +8,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/itsivali/lottery-platform/internal/game/fair"
+	"github.com/itsivali/4draws-lottery-platform/internal/game/fair"
 )
 
 type vector struct {

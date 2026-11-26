@@ -10,7 +10,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/itsivali/lottery-platform/internal/payouts"
+	"github.com/itsivali/4draws-lottery-platform/internal/payouts"
 )
 
 // payoutQueue records payout jobs alongside the payment ones; the API tests only check what was enqueued.

@@ -14,9 +14,9 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 
-	"github.com/itsivali/lottery-platform/internal/api"
-	"github.com/itsivali/lottery-platform/internal/platform/mail"
-	"github.com/itsivali/lottery-platform/internal/staff"
+	"github.com/itsivali/4draws-lottery-platform/internal/api"
+	"github.com/itsivali/4draws-lottery-platform/internal/platform/mail"
+	"github.com/itsivali/4draws-lottery-platform/internal/staff"
 )
 
 // staffIDTokens plays Google and Apple for the back office: the token names its claims.

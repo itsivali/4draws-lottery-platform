@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/itsivali/lottery-platform/internal/platform/mail"
+	"github.com/itsivali/4draws-lottery-platform/internal/platform/mail"
 )
 
 // Email sends each event to the on-call addresses as plain text: what, since when, the details, and the link into the

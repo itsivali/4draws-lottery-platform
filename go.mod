@@ -1,4 +1,4 @@
-module github.com/itsivali/lottery-platform
+module github.com/itsivali/4draws-lottery-platform
 
 go 1.27.4
 

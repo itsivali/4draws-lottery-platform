@@ -7,10 +7,10 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/itsivali/lottery-platform/internal/aml"
-	"github.com/itsivali/lottery-platform/internal/audit"
-	"github.com/itsivali/lottery-platform/internal/identity"
-	"github.com/itsivali/lottery-platform/internal/payouts"
+	"github.com/itsivali/4draws-lottery-platform/internal/aml"
+	"github.com/itsivali/4draws-lottery-platform/internal/audit"
+	"github.com/itsivali/4draws-lottery-platform/internal/identity"
+	"github.com/itsivali/4draws-lottery-platform/internal/payouts"
 )
 
 // ADR 0030: the send job checks the account again, as the money is about to leave. A payout whose account was

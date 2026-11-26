@@ -9,7 +9,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/itsivali/lottery-platform/internal/payouts/store"
+	"github.com/itsivali/4draws-lottery-platform/internal/payouts/store"
 )
 
 // Report is one payout reconciliation run. Mismatches break an invariant between payouts, their journals, the B2C float,

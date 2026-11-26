@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/itsivali/lottery-platform/internal/alerts"
+	"github.com/itsivali/4draws-lottery-platform/internal/alerts"
 )
 
 func TestAges_SaysDurationsTheWayAPersonWould(t *testing.T) {

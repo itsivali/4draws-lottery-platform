@@ -15,8 +15,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/itsivali/lottery-platform/internal/draws/store"
-	"github.com/itsivali/lottery-platform/internal/ledger"
+	"github.com/itsivali/4draws-lottery-platform/internal/draws/store"
+	"github.com/itsivali/4draws-lottery-platform/internal/ledger"
 )
 
 // Report is one draw reconciliation run. Mismatches break an invariant between entries, hashes, certificates, results

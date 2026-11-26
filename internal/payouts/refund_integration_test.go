@@ -7,9 +7,9 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/itsivali/lottery-platform/internal/aml"
-	"github.com/itsivali/lottery-platform/internal/audit"
-	"github.com/itsivali/lottery-platform/internal/payouts"
+	"github.com/itsivali/4draws-lottery-platform/internal/aml"
+	"github.com/itsivali/4draws-lottery-platform/internal/audit"
+	"github.com/itsivali/4draws-lottery-platform/internal/payouts"
 )
 
 // topUpFrom records a credited top-up paid from msisdn, as the payments module would.

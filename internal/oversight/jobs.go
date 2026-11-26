@@ -9,7 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/riverqueue/river"
 
-	"github.com/itsivali/lottery-platform/internal/audit"
+	"github.com/itsivali/4draws-lottery-platform/internal/audit"
 )
 
 var (

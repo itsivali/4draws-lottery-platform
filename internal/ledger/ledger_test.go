@@ -6,7 +6,7 @@ import (
 
 	"pgregory.net/rapid"
 
-	"github.com/itsivali/lottery-platform/internal/ledger"
+	"github.com/itsivali/4draws-lottery-platform/internal/ledger"
 )
 
 func TestParseRate(t *testing.T) {

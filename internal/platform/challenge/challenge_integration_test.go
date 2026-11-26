@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/itsivali/lottery-platform/internal/platform/testvalkey"
+	"github.com/itsivali/4draws-lottery-platform/internal/platform/testvalkey"
 )
 
 func TestChallenge_IsUsableOnceAndOnlyWhileFresh(t *testing.T) {

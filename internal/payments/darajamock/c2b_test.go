@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/itsivali/lottery-platform/internal/payments/daraja"
-	"github.com/itsivali/lottery-platform/internal/payments/darajamock"
-	"github.com/itsivali/lottery-platform/internal/platform/clock"
+	"github.com/itsivali/4draws-lottery-platform/internal/payments/daraja"
+	"github.com/itsivali/4draws-lottery-platform/internal/payments/darajamock"
+	"github.com/itsivali/4draws-lottery-platform/internal/platform/clock"
 )
 
 // receiver plays our API: it records what Daraja posts to each path and answers validation with verdict.

@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/itsivali/lottery-platform/internal/platform/config"
+	"github.com/itsivali/4draws-lottery-platform/internal/platform/config"
 )
 
 func TestOperating_DefaultsToDisabledAndRefusesUnknownModes(t *testing.T) {

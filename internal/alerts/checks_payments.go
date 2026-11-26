@@ -7,8 +7,8 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/itsivali/lottery-platform/internal/alerts/store"
-	"github.com/itsivali/lottery-platform/internal/platform/clock"
+	"github.com/itsivali/4draws-lottery-platform/internal/alerts/store"
+	"github.com/itsivali/4draws-lottery-platform/internal/platform/clock"
 )
 
 // Kinds of alert about money that needs a human (owner, 2026-10-31: "expand the alerts system").

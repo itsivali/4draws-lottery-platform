@@ -7,7 +7,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/itsivali/lottery-platform/internal/mockhttp"
+	"github.com/itsivali/4draws-lottery-platform/internal/mockhttp"
 )
 
 func main() {

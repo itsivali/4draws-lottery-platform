@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/itsivali/lottery-platform/internal/finance"
-	"github.com/itsivali/lottery-platform/internal/platform/httpx"
+	"github.com/itsivali/4draws-lottery-platform/internal/finance"
+	"github.com/itsivali/4draws-lottery-platform/internal/platform/httpx"
 )
 
 // The back office's Finance tab (owner, 2026-10-31): the ledger's figures by day, week or month with the sections an

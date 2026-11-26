@@ -8,7 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/itsivali/lottery-platform/internal/payments/daraja"
+	"github.com/itsivali/4draws-lottery-platform/internal/payments/daraja"
 )
 
 // TopUpDetail is everything the back office shows about one top-up (owner, 2026-10-31): the payment and its M-Pesa

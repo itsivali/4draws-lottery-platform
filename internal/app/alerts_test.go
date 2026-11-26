@@ -4,8 +4,8 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/itsivali/lottery-platform/internal/alerts"
-	"github.com/itsivali/lottery-platform/internal/platform/config"
+	"github.com/itsivali/4draws-lottery-platform/internal/alerts"
+	"github.com/itsivali/4draws-lottery-platform/internal/platform/config"
 )
 
 // The configuration's defaults are the alert package's (the two structs are kept field for field).

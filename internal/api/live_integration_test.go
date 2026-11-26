@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/itsivali/lottery-platform/internal/api"
+	"github.com/itsivali/4draws-lottery-platform/internal/api"
 )
 
 type sseEvent struct {

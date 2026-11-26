@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/itsivali/lottery-platform/internal/audit"
-	"github.com/itsivali/lottery-platform/internal/identity"
-	"github.com/itsivali/lottery-platform/internal/rg"
+	"github.com/itsivali/4draws-lottery-platform/internal/audit"
+	"github.com/itsivali/4draws-lottery-platform/internal/identity"
+	"github.com/itsivali/4draws-lottery-platform/internal/rg"
 )
 
 // ADR 0030: every status an account has had is kept, with who changed it and why, and the history cannot be rewritten.

@@ -3,7 +3,7 @@ package config_test
 import (
 	"testing"
 
-	"github.com/itsivali/lottery-platform/internal/platform/config"
+	"github.com/itsivali/4draws-lottery-platform/internal/platform/config"
 )
 
 func TestLoad_RequiresDatabaseURL(t *testing.T) {

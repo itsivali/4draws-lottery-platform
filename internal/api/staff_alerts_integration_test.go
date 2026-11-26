@@ -8,8 +8,8 @@ import (
 	"net/url"
 	"testing"
 
-	"github.com/itsivali/lottery-platform/internal/alerts"
-	"github.com/itsivali/lottery-platform/internal/staff"
+	"github.com/itsivali/4draws-lottery-platform/internal/alerts"
+	"github.com/itsivali/4draws-lottery-platform/internal/staff"
 )
 
 // The Alerts page filters, pages and opens alerts (owner, 2026-10-31: "expand the alerts system").

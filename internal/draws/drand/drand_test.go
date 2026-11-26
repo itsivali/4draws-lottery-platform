@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/itsivali/lottery-platform/internal/draws/drand"
+	"github.com/itsivali/4draws-lottery-platform/internal/draws/drand"
 )
 
 // Real quicknet beacons recorded from api.drand.sh.

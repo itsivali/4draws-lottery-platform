@@ -4,7 +4,7 @@ import (
 	"math"
 	"testing"
 
-	"github.com/itsivali/lottery-platform/internal/game"
+	"github.com/itsivali/4draws-lottery-platform/internal/game"
 )
 
 func TestSimulate_MatchesTheTheory(t *testing.T) {

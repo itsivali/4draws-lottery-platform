@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/itsivali/lottery-platform/internal/kyc"
+	"github.com/itsivali/4draws-lottery-platform/internal/kyc"
 )
 
 func TestHTTPProvider_MapsTheRegistryAnswer(t *testing.T) {

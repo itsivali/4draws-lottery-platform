@@ -5,7 +5,7 @@ import (
 	"crypto/rand"
 	"testing"
 
-	"github.com/itsivali/lottery-platform/internal/platform/crypto"
+	"github.com/itsivali/4draws-lottery-platform/internal/platform/crypto"
 )
 
 func key(t *testing.T) []byte {

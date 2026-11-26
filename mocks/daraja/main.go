@@ -12,7 +12,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/itsivali/lottery-platform/internal/payments/darajamock"
+	"github.com/itsivali/4draws-lottery-platform/internal/payments/darajamock"
 )
 
 func main() {

@@ -3,7 +3,7 @@ package compliance_test
 import (
 	"testing"
 
-	"github.com/itsivali/lottery-platform/internal/compliance"
+	"github.com/itsivali/4draws-lottery-platform/internal/compliance"
 )
 
 func TestCountry_IsTwoCharactersOrNothing(t *testing.T) {

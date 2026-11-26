@@ -10,7 +10,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/itsivali/lottery-platform/internal/audit/store"
+	"github.com/itsivali/4draws-lottery-platform/internal/audit/store"
 )
 
 // ActorType says who performed the action.

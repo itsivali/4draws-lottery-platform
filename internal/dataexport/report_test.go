@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/itsivali/lottery-platform/internal/dataexport"
+	"github.com/itsivali/4draws-lottery-platform/internal/dataexport"
 )
 
 const sample = `{

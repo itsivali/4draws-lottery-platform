@@ -9,7 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/itsivali/lottery-platform/internal/wallet/store"
+	"github.com/itsivali/4draws-lottery-platform/internal/wallet/store"
 )
 
 // ErrBadCursor is returned for a page cursor that is not a transaction id.

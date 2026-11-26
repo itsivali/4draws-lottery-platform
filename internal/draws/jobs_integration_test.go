@@ -9,10 +9,10 @@ import (
 
 	"github.com/riverqueue/river"
 
-	"github.com/itsivali/lottery-platform/internal/draws/drand"
-	"github.com/itsivali/lottery-platform/internal/ledger"
-	"github.com/itsivali/lottery-platform/internal/platform/clock"
-	"github.com/itsivali/lottery-platform/internal/platform/testpg"
+	"github.com/itsivali/4draws-lottery-platform/internal/draws/drand"
+	"github.com/itsivali/4draws-lottery-platform/internal/ledger"
+	"github.com/itsivali/4draws-lottery-platform/internal/platform/clock"
+	"github.com/itsivali/4draws-lottery-platform/internal/platform/testpg"
 )
 
 type noBeacon struct{}

@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/itsivali/lottery-platform/internal/notifications"
+	"github.com/itsivali/4draws-lottery-platform/internal/notifications"
 )
 
 func TestHTTPSMS_PostsTheMessageWithBearerAuth(t *testing.T) {

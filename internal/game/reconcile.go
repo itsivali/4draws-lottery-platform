@@ -10,8 +10,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/itsivali/lottery-platform/internal/game/fair"
-	"github.com/itsivali/lottery-platform/internal/game/store"
+	"github.com/itsivali/4draws-lottery-platform/internal/game/fair"
+	"github.com/itsivali/4draws-lottery-platform/internal/game/store"
 )
 
 // Report is one game reconciliation run. Mismatches break an invariant between tickets, the ledger, spins and seed

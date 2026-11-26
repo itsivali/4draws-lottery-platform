@@ -19,7 +19,7 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 
-	"github.com/itsivali/lottery-platform/internal/identity/attest"
+	"github.com/itsivali/4draws-lottery-platform/internal/identity/attest"
 )
 
 const pkg = "ke.co.fourdraws.app"

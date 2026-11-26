@@ -10,9 +10,9 @@ import (
 	"os"
 	"testing"
 
-	"github.com/itsivali/lottery-platform/internal/draws"
-	"github.com/itsivali/lottery-platform/internal/draws/drand"
-	"github.com/itsivali/lottery-platform/internal/ledger"
+	"github.com/itsivali/4draws-lottery-platform/internal/draws"
+	"github.com/itsivali/4draws-lottery-platform/internal/draws/drand"
+	"github.com/itsivali/4draws-lottery-platform/internal/ledger"
 )
 
 var update = flag.Bool("update", false, "rewrite the golden certificate in testdata")

@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/itsivali/lottery-platform/internal/identity"
+	"github.com/itsivali/4draws-lottery-platform/internal/identity"
 )
 
 var verifyLink = regexp.MustCompile(`https://app\.example\.com/verify-email\?token=([A-Za-z0-9_-]+)`)

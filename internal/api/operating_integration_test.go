@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/itsivali/lottery-platform/internal/staff"
+	"github.com/itsivali/4draws-lottery-platform/internal/staff"
 )
 
 // ADR 0027: GET /v1/status tells the apps whether money moves; a stop by any staff member refuses every money path

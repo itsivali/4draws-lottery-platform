@@ -10,8 +10,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/itsivali/lottery-platform/internal/kyc/store"
-	"github.com/itsivali/lottery-platform/internal/platform/mail"
+	"github.com/itsivali/4draws-lottery-platform/internal/kyc/store"
+	"github.com/itsivali/4draws-lottery-platform/internal/platform/mail"
 )
 
 // ReviewNotice says that a player's submission waits for a staff decision. It carries the name on the submitted ID

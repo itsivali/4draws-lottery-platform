@@ -11,11 +11,11 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/itsivali/lottery-platform/internal/app"
-	"github.com/itsivali/lottery-platform/internal/platform/config"
-	"github.com/itsivali/lottery-platform/internal/platform/db"
-	"github.com/itsivali/lottery-platform/internal/platform/httpx"
-	"github.com/itsivali/lottery-platform/internal/platform/telemetry"
+	"github.com/itsivali/4draws-lottery-platform/internal/app"
+	"github.com/itsivali/4draws-lottery-platform/internal/platform/config"
+	"github.com/itsivali/4draws-lottery-platform/internal/platform/db"
+	"github.com/itsivali/4draws-lottery-platform/internal/platform/httpx"
+	"github.com/itsivali/4draws-lottery-platform/internal/platform/telemetry"
 )
 
 func main() {

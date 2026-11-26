@@ -12,8 +12,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/itsivali/lottery-platform/internal/draws"
-	"github.com/itsivali/lottery-platform/internal/ledger"
+	"github.com/itsivali/4draws-lottery-platform/internal/draws"
+	"github.com/itsivali/4draws-lottery-platform/internal/ledger"
 )
 
 // approvedDraw plays a day for three players and takes its daily draw to approved; it returns the draw.

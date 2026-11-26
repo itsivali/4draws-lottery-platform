@@ -8,8 +8,8 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/itsivali/lottery-platform/internal/compliance/store"
-	"github.com/itsivali/lottery-platform/internal/platform/clock"
+	"github.com/itsivali/4draws-lottery-platform/internal/compliance/store"
+	"github.com/itsivali/4draws-lottery-platform/internal/platform/clock"
 )
 
 // ErrOutsideKenya: with real money only requests the edge places in Kenya are served (ADR 0031).

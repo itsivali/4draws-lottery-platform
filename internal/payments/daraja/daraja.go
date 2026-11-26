@@ -23,7 +23,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/itsivali/lottery-platform/internal/platform/clock"
+	"github.com/itsivali/4draws-lottery-platform/internal/platform/clock"
 )
 
 // Errors returned by the client.

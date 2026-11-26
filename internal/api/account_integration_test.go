@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/itsivali/lottery-platform/internal/payments"
-	"github.com/itsivali/lottery-platform/internal/payouts"
-	"github.com/itsivali/lottery-platform/internal/staff"
+	"github.com/itsivali/4draws-lottery-platform/internal/payments"
+	"github.com/itsivali/4draws-lottery-platform/internal/payouts"
+	"github.com/itsivali/4draws-lottery-platform/internal/staff"
 )
 
 // sameInstant compares an RFC 3339 value from a response with want, whatever offset it was written in.

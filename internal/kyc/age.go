@@ -7,8 +7,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/itsivali/lottery-platform/internal/kyc/store"
-	"github.com/itsivali/lottery-platform/internal/platform/clock"
+	"github.com/itsivali/4draws-lottery-platform/internal/kyc/store"
+	"github.com/itsivali/4draws-lottery-platform/internal/platform/clock"
 )
 
 // ErrAgeRequired: sign-up needs a date of birth and the player's declaration that they are 18 or older (ADR 0029).

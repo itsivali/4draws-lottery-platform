@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/itsivali/lottery-platform/internal/dataexport"
+	"github.com/itsivali/4draws-lottery-platform/internal/dataexport"
 )
 
 func TestAPI_APlayerIsEmailedACopyOfTheirDataOnceADay(t *testing.T) {
