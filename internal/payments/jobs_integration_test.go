@@ -29,7 +29,7 @@ import (
 
 func waitFor(t *testing.T, what string, ok func() bool) {
 	t.Helper()
-	deadline := time.Now().Add(30 * time.Second) //nolint:forbidigo // test polling deadline
+	deadline := time.Now().Add(60 * time.Second) //nolint:forbidigo // test polling deadline
 	for !ok() {
 		if time.Now().After(deadline) { //nolint:forbidigo // test polling deadline
 			t.Fatalf("timed out waiting for %s", what)
@@ -77,6 +77,9 @@ func TestJobs_ATopUpIsSettledByTheQueueAlone(t *testing.T) {
 	payments.AddWorkers(workers, svc)
 	wc, err := river.NewClient(riverpgxv5.New(pool), &river.Config{
 		Schema: db.RiverSchema, Workers: workers, PeriodicJobs: payments.PeriodicJobs(),
+		// no jittered start-up for the scheduler and periodic jobs, and quick polling: under -race on a busy runner the
+		// defaults could use up the whole wait (a scheduled verify job waits for the leader's scheduler)
+		TestOnly: true, FetchPollInterval: 100 * time.Millisecond,
 		Queues: map[string]river.QueueConfig{river.QueueDefault: {MaxWorkers: 4}},
 	})
 	if err != nil {
@@ -224,6 +227,9 @@ func TestJobs_AClaimedReceiptIsCheckedByTheQueue(t *testing.T) {
 	payments.AddWorkers(workers, svc)
 	wc, err := river.NewClient(riverpgxv5.New(pool), &river.Config{
 		Schema: db.RiverSchema, Workers: workers, Queues: map[string]river.QueueConfig{river.QueueDefault: {MaxWorkers: 4}},
+		// no jittered start-up for the scheduler and periodic jobs, and quick polling: under -race on a busy runner the
+		// defaults could use up the whole wait (a scheduled verify job waits for the leader's scheduler)
+		TestOnly: true, FetchPollInterval: 100 * time.Millisecond,
 	})
 	if err != nil {
 		t.Fatal(err)

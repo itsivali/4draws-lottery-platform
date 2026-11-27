@@ -628,6 +628,16 @@ func TestReconcile_AClaimMpesaRefusesToLookUpWaitsForAnOperator(t *testing.T) {
 	if got.Status == payments.StatusCredited || e.balance(t, user) != 0 || len(e.retries) != 0 {
 		t.Fatalf("status %s balance %d retries %v", got.Status, e.balance(t, user), e.retries)
 	}
+	// audited like every other unverified claim, with the note the operator sees
+	var n int
+	var note, rcpt string
+	if err := e.pool.QueryRow(ctx, `SELECT count(*), coalesce(max(details->>'note'), ''), coalesce(max(details->>'receipt'), '')
+		FROM audit.audit_log WHERE action = 'payment.topup.receipt_unverified' AND entity_id = $1`, tu.ID).Scan(&n, &note, &rcpt); err != nil {
+		t.Fatal(err)
+	}
+	if n != 1 || note != got.Claim.Note || rcpt != receipt {
+		t.Fatalf("audit: %d rows, note %q receipt %q", n, note, rcpt)
+	}
 	// an operator who finds it on the statement credits it; the claim is confirmed with that receipt
 	if err := e.svc.Resolve(ctx, payments.Resolution{PaymentID: tu.ID, Receipt: receipt, AmountKES: 100, Source: "statement"}, "staff:1"); err != nil {
 		t.Fatal(err)
