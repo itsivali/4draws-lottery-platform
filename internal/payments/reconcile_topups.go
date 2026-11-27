@@ -174,17 +174,21 @@ func (s *Service) CheckClaim(ctx context.Context, paymentID string) (time.Durati
 	}
 	switch {
 	case errors.Is(err, daraja.ErrRejected) || errors.Is(err, daraja.ErrInvalidRequest):
+		// recorded like every other unverified outcome (settleClaim), so the audit trail shows why the claim waits
 		note := "M-Pesa refused to look the receipt up: " + err.Error()
-		return 0, s.setClaim(ctx, paymentID, ClaimUnverified, nil, nil, &note, now)
+		receipt := *d.ClaimedReceipt
+		return 0, pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+			if err := store.New(tx).SetClaimStatus(ctx, store.SetClaimStatusParams{Status: ptr(ClaimUnverified), Note: &note, At: now, ID: paymentID}); err != nil {
+				return err
+			}
+			return s.audit.Record(ctx, tx, audit.Event{ActorType: audit.System, Action: "payment.topup.receipt_unverified", EntityType: "payment",
+				EntityID: paymentID, Details: map[string]any{"receipt": receipt, "note": note, "status_request": "refused"}})
+		})
 	case err != nil:
 		slog.WarnContext(ctx, "receipt claim: transaction status request failed; asking again later", "payment", paymentID, "err", err)
 		return 2 * s.cfg.VerifyAfter, nil
 	}
 	return 0, store.New(s.pool).MarkClaimChecking(ctx, store.MarkClaimCheckingParams{Originator: req.OriginatorConversationID, At: now, ID: paymentID})
-}
-
-func (s *Service) setClaim(ctx context.Context, paymentID, status string, originator *string, result []byte, note *string, now time.Time) error {
-	return store.New(s.pool).SetClaimStatus(ctx, store.SetClaimStatusParams{Status: &status, Originator: originator, Result: result, Note: note, At: now, ID: paymentID})
 }
 
 // settleClaim applies M-Pesa's Transaction Status answer about a claimed receipt, in the caller's transaction (the
